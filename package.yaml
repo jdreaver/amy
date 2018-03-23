@@ -1,0 +1,35 @@
+name: rascal
+
+dependencies:
+  - base
+  - bytestring
+  - containers
+  - llvm-hs
+  - llvm-hs-pure
+  - megaparsec
+  - mtl
+  - text
+
+ghc-options: -Wall
+
+library:
+  source-dirs: library
+
+tests:
+  spec:
+    main: Spec.hs
+    source-dirs:
+      - tests
+    dependencies:
+      - rascal
+      - hspec
+      - hspec-discover
+      - hspec-megaparsec
+
+executables:
+  rascal:
+    source-dirs: executables
+    main: Main.hs
+    dependencies:
+      - rascal
+      - haskeline
