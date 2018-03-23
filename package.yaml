@@ -25,6 +25,7 @@ tests:
       - hspec
       - hspec-discover
       - hspec-megaparsec
+      - shakespeare
 
 executables:
   rascal:
