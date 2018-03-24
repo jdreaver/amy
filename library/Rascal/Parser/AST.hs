@@ -4,7 +4,7 @@ module Rascal.Parser.AST
   , ParserFunctionDeclaration(..)
   , ParserFunctionTypeDeclaration(..)
   , ParserASTExpression(..)
-  , ParserLiteral(..)
+  , Literal(..)
   , ParserFunctionApplication(..)
   ) where
 
@@ -36,14 +36,14 @@ data ParserFunctionTypeDeclaration
   } deriving (Show, Eq)
 
 data ParserASTExpression
-  = ParserASTLiteral ParserLiteral
+  = ParserASTLiteral Literal
   | ParserASTVariable Text
   | ParserASTFunctionApplication ParserFunctionApplication
   | ParserASTExpressionParens ParserASTExpression
   deriving (Show, Eq)
 
-data ParserLiteral
-  = ParserLiteralInt !Int
+data Literal
+  = LiteralInt !Int
   deriving (Show, Eq)
 
 data ParserFunctionApplication

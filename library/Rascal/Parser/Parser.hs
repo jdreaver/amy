@@ -69,9 +69,9 @@ expressionNotApplication =
 expressionParens :: Parser ParserASTExpression
 expressionParens = ParserASTExpressionParens <$> between lparen rparen expression
 
-literal :: Parser ParserLiteral
+literal :: Parser Literal
 literal =
-  ParserLiteralInt <$> integer
+  LiteralInt <$> integer
 
 functionApplication :: Parser ParserFunctionApplication
 functionApplication = do

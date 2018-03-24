@@ -33,7 +33,7 @@ spec = do
           { parserFunctionDeclarationName = "f"
           , parserFunctionDeclarationArgs = ["x"]
           , parserFunctionDeclarationBody =
-            ParserASTLiteral (ParserLiteralInt 1)
+            ParserASTLiteral (LiteralInt 1)
           }
         ]
 
@@ -49,7 +49,7 @@ spec = do
              ParserASTFunctionApplication $
              ParserFunctionApplication "g" [ParserASTVariable "x"]
             )
-          , ParserASTLiteral (ParserLiteralInt 1)
+          , ParserASTLiteral (LiteralInt 1)
           ]
         )
 
@@ -71,7 +71,7 @@ spec = do
       parse functionApplication "" "f x" `shouldParse` ParserFunctionApplication "f" [ParserASTVariable "x"]
       parse functionApplication "" "f x 1"
         `shouldParse`
-        ParserFunctionApplication "f" [ParserASTVariable "x", ParserASTLiteral (ParserLiteralInt 1)]
+        ParserFunctionApplication "f" [ParserASTVariable "x", ParserASTLiteral (LiteralInt 1)]
 
 sampleModule :: Text
 sampleModule = [st|f :: Int -> Double;
