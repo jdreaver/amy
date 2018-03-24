@@ -10,6 +10,7 @@ import Text.Megaparsec
 
 import Rascal.Renamer
 import Rascal.Parser
+import Rascal.TypeCheck
 
 main :: IO ()
 main = runInputT defaultSettings loop
@@ -35,3 +36,9 @@ process input = do
       Left err -> die $ show err
       Right r -> pure r
   print renamed
+
+  typed <-
+    case typeCheck renamed of
+      Left err -> die $ show err
+      Right t -> pure t
+  print typed

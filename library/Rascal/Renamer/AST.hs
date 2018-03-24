@@ -13,8 +13,8 @@ import Data.Text (Text)
 
 import Rascal.Parser.AST (Literal)
 
-data IdName =
-  IdName
+data IdName
+  = IdName
   { idNameText :: !Text
   , idNameId :: !NameId
   } deriving (Show, Eq)
