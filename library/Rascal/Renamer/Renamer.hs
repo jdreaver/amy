@@ -1,9 +1,11 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Rascal.Renamer.Renamer
   ( rename
   ) where
 
+import Control.Monad (void)
 import Control.Monad.Except
 import Data.Either (partitionEithers)
 import Data.List.NonEmpty (NonEmpty)
@@ -21,7 +23,12 @@ import Rascal.Parser.AST
 
 -- | Gives a unique identity to all names in the AST
 rename :: ParserAST -> Either [RenamerError] RenamerAST
-rename = runRenamer emptyRenamerState . rename'
+rename ast = runRenamer emptyRenamerState $ setupDefaultEnvironment >> rename' ast
+
+-- | Add known type definitions
+setupDefaultEnvironment :: Renamer ()
+setupDefaultEnvironment =
+  void $ addTypeToScope "Int"
 
 rename' :: ParserAST -> Renamer RenamerAST
 rename' (ParserAST declarations) = do
