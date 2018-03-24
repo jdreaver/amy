@@ -1,8 +1,8 @@
 module Rascal.Parser.AST
   ( ParserAST(..)
   , ParserASTDeclaration(..)
-  , ParserFunctionDeclaration(..)
-  , ParserFunctionTypeDeclaration(..)
+  , ParserBindingDeclaration(..)
+  , ParserBindingTypeDeclaration(..)
   , ParserASTExpression(..)
   , Literal(..)
   , ParserFunctionApplication(..)
@@ -16,21 +16,21 @@ newtype ParserAST = ParserAST (NonEmpty ParserASTDeclaration)
   deriving (Show, Eq)
 
 data ParserASTDeclaration
-  = ParserASTFunction ParserFunctionDeclaration
-  | ParserASTFunctionType ParserFunctionTypeDeclaration
+  = ParserASTBinding ParserBindingDeclaration
+  | ParserASTBindingType ParserBindingTypeDeclaration
   deriving (Show, Eq)
 
-data ParserFunctionDeclaration
-  = ParserFunctionDeclaration
-  { parserFunctionDeclarationName :: !Text
-  , parserFunctionDeclarationArgs :: ![Text]
-  , parserFunctionDeclarationBody :: !ParserASTExpression
+data ParserBindingDeclaration
+  = ParserBindingDeclaration
+  { parserBindingDeclarationName :: !Text
+  , parserBindingDeclarationArgs :: ![Text]
+  , parserBindingDeclarationBody :: !ParserASTExpression
   } deriving (Show, Eq)
 
-data ParserFunctionTypeDeclaration
-  = ParserFunctionTypeDeclaration
-  { parserFunctionTypeDeclarationName :: !Text
-  , parserFunctionTypeDeclarationTypeNames :: !(NonEmpty Text)
+data ParserBindingTypeDeclaration
+  = ParserBindingTypeDeclaration
+  { parserBindingTypeDeclarationName :: !Text
+  , parserBindingTypeDeclarationTypeNames :: !(NonEmpty Text)
     -- ^ List of type names in order. For example "Int -> Int -> Double" would
     -- be ["Int", "Int", "Double"]
   } deriving (Show, Eq)

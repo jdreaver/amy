@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -20,70 +21,68 @@ typeCheck ast = runTypeCheck emptyTypeCheckState $ typeCheckDefaultNames >> type
 typeCheckDefaultNames :: TypeCheck ()
 typeCheckDefaultNames =
   -- TODO: Assumes Int is type ID 0. Make this more principled please!
-  setPrimitiveType 0 IntType
+  setValuePrimitiveType 0 IntType
 
 typeCheck' :: RenamerAST -> TypeCheck TypeCheckAST
 typeCheck' (RenamerAST declarations) = do
   let
-    functionDeclarations = mapMaybe getFunction (toList declarations)
-    getFunction (RenamerASTFunction f) = Just f
+    bindingDeclarations = mapMaybe getBinding (toList declarations)
+    getBinding (RenamerASTBinding f) = Just f
 
-  -- Check that all declaration types exist and set types for function
-  -- arguments
-  declarationsWithTypedArgs <- mapM (\d -> (d,) <$> setFunctionArgTypes d) functionDeclarations
+  -- Check that all declaration types exist and set types for binding arguments
+  declarationsWithTypedArgs <- mapM (\d -> (d,) <$> setBindingArgTypes d) bindingDeclarations
 
   -- Type check declarations now
   declarations' <- mapM typeCheckDeclaration declarationsWithTypedArgs
 
-  pure $ TypeCheckAST $ TypeCheckASTFunction <$> declarations'
+  pure $ TypeCheckAST $ TypeCheckASTBinding <$> declarations'
 
-setFunctionArgTypes :: RenamerFunctionDeclaration -> TypeCheck FunctionType
-setFunctionArgTypes declaration = do
+setBindingArgTypes :: RenamerBindingDeclaration -> TypeCheck Type
+setBindingArgTypes declaration = do
   let
-    typeNames = renamerFunctionDeclarationTypeNames declaration
-    argNames = renamerFunctionDeclarationArgs declaration
+    typeNames = renamerBindingDeclarationTypeNames declaration
+    argNames = renamerBindingDeclarationArgs declaration
 
     returnTypeName = NE.last typeNames
     argTypeNames = NE.init typeNames
 
-  -- Lookup function argument types and assign these types to the arguments
+  -- Lookup binding argument types and assign these types to the arguments.
+  -- Also ensure that binding types are primitive (no higher order functions...
+  -- yet!)
   argTypes <- forM (zip argNames argTypeNames) $ \(argName, argTypeName) -> do
-    primType <- lookupPrimitiveTypeOrError argTypeName
-    setPrimitiveType (idNameId argName) primType
-    pure $ Typed primType argName
+    argType <- lookupValuePrimitiveTypeOrError argTypeName
+    setValuePrimitiveType (idNameId argName) argType
+    pure argType
 
-  -- Look up return type
-  returnType <- lookupPrimitiveTypeOrError returnTypeName
+  -- Look up return type and ensure it is primitive
+  returnType <- lookupValuePrimitiveTypeOrError returnTypeName
 
-  -- Set function return type
+  -- Set binding return type
   let
-    funcType =
-      FunctionType
-      { functionTypeArgTypes = argTypes
-      , functionTypeReturnType = Typed returnType returnTypeName
-      }
-  setFunctionType (idNameId $ renamerFunctionDeclarationName declaration) funcType
-  pure funcType
+    bindingType = Type $ NE.fromList $ argTypes ++ [returnType]
+  setValueType (idNameId $ renamerBindingDeclarationName declaration) bindingType
+  pure bindingType
 
 typeCheckDeclaration
-  :: (RenamerFunctionDeclaration, FunctionType)
-  -> TypeCheck TypeCheckFunctionDeclaration
-typeCheckDeclaration (declaration, funcType) = do
+  :: (RenamerBindingDeclaration, Type)
+  -> TypeCheck TypeCheckBindingDeclaration
+typeCheckDeclaration (declaration, bindingType) = do
   -- Get type of expression
-  expression <- typeCheckExpression (renamerFunctionDeclarationBody declaration)
+  expression <- typeCheckExpression (renamerBindingDeclarationBody declaration)
 
-  -- Make sure expression type matches function return type
+  -- Make sure expression type matches binding return type
   let
     expressionType = typedType expression
-    returnType = typedType $ functionTypeReturnType funcType
+    returnType = bindingReturnType bindingType
   when (expressionType /= returnType) $
-    throwError [TypeMismatch expressionType returnType]
+    throwError [TypeMismatch (unPrimitiveType expressionType) (unPrimitiveType returnType)]
 
   pure
-    TypeCheckFunctionDeclaration
-    { typeCheckFunctionDeclarationName = renamerFunctionDeclarationName declaration
-    , typeCheckFunctionDeclarationType = funcType
-    , typeCheckFunctionDeclarationBody = expression
+    TypeCheckBindingDeclaration
+    { typeCheckBindingDeclarationName = renamerBindingDeclarationName declaration
+    , typeCheckBindingDeclarationArgs = renamerBindingDeclarationArgs declaration
+    , typeCheckBindingDeclarationType = bindingType
+    , typeCheckBindingDeclarationBody = expression
     }
 
 typeCheckExpression :: RenamerASTExpression -> TypeCheck (Typed TypeCheckASTExpression)
@@ -91,26 +90,26 @@ typeCheckExpression (RenamerASTLiteral lit) = pure $ Typed (litType lit) (TypeCh
  where
   litType (LiteralInt _) = IntType
 typeCheckExpression (RenamerASTVariable idName) = do
-  ty <- lookupPrimitiveTypeOrError idName
+  ty <- lookupValuePrimitiveTypeOrError idName
   pure $ Typed ty (TypeCheckASTVariable idName)
 typeCheckExpression (RenamerASTFunctionApplication app) = do
   -- Compute function return type
-  funcType <- lookupFunctionTypeOrError $ renamerFunctionApplicationFunctionName app
+  funcType <- lookupValueFunctionTypeOrError $ renamerFunctionApplicationFunctionName app
 
   -- Compute types of args
   args <- mapM typeCheckExpression $ renamerFunctionApplicationArgs app
 
   -- Make sure arg types make function types
   let
-    argTypes = typedType <$> toList args
-    funcArgTypes = typedType <$> functionTypeArgTypes funcType
-    mismatchedTypes = fmap (uncurry TypeMismatch) . filter (uncurry (/=)) $ zip argTypes funcArgTypes
+    argTypes = unPrimitiveType . typedType <$> args
+    funcArgTypes = unPrimitiveType <$> unType (functionTypeArgTypes funcType)
+    mismatchedTypes = fmap (uncurry TypeMismatch) . NE.filter (uncurry (/=)) $ NE.zip argTypes funcArgTypes
   unless (null mismatchedTypes) $
     throwError mismatchedTypes
 
   -- Put it all together
   let
-    ty = typedType $ functionTypeReturnType funcType
+    ty = functionTypeReturnType funcType
     funcApp =
       TypeCheckASTFunctionApplication
       TypeCheckFunctionApplication

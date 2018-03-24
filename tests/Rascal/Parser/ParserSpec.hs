@@ -23,21 +23,19 @@ spec = do
       parse parserAST "" sampleModule
         `shouldParse`
         ParserAST
-        [ ParserASTFunctionType
-          ParserFunctionTypeDeclaration
-          { parserFunctionTypeDeclarationName = "f"
-          , parserFunctionTypeDeclarationTypeNames = ["Int", "Double"]
+        [ ParserASTBindingType
+          ParserBindingTypeDeclaration
+          { parserBindingTypeDeclarationName = "f"
+          , parserBindingTypeDeclarationTypeNames = ["Int", "Double"]
           }
-        , ParserASTFunction
-          ParserFunctionDeclaration
-          { parserFunctionDeclarationName = "f"
-          , parserFunctionDeclarationArgs = ["x"]
-          , parserFunctionDeclarationBody =
+        , ParserASTBinding
+          ParserBindingDeclaration
+          { parserBindingDeclarationName = "f"
+          , parserBindingDeclarationArgs = ["x"]
+          , parserBindingDeclarationBody =
             ParserASTLiteral (LiteralInt 1)
           }
         ]
-
-
 
   describe "expression" $ do
     it "parses complex expressions" $ do
@@ -53,11 +51,10 @@ spec = do
           ]
         )
 
-
-  describe "functionType" $ do
-    it "parses function types" $ do
-      parse functionType "" "f :: Int" `shouldParse` ParserFunctionTypeDeclaration "f" ["Int"]
-      parse functionType "" "f :: Int -> Double" `shouldParse` ParserFunctionTypeDeclaration "f" ["Int", "Double"]
+  describe "bindingType" $ do
+    it "parses binding types" $ do
+      parse bindingType "" "f :: Int" `shouldParse` ParserBindingTypeDeclaration "f" ["Int"]
+      parse bindingType "" "f :: Int -> Double" `shouldParse` ParserBindingTypeDeclaration "f" ["Int", "Double"]
 
   describe "expressionParens" $ do
     it "parses expressions in parens" $ do

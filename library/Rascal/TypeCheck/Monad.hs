@@ -5,12 +5,12 @@ module Rascal.TypeCheck.Monad
   , runTypeCheck
   , TypeCheckError(..)
   , emptyTypeCheckState
-  , setPrimitiveType
-  , setFunctionType
-  , lookupPrimitiveType
-  , lookupPrimitiveTypeOrError
-  , lookupFunctionType
-  , lookupFunctionTypeOrError
+  , setValueType
+  , setValuePrimitiveType
+  , lookupValueType
+  , lookupValueTypeOrError
+  , lookupValuePrimitiveTypeOrError
+  , lookupValueFunctionTypeOrError
   , module Control.Monad.Except
   , module Control.Monad.State.Strict
   ) where
@@ -30,59 +30,51 @@ runTypeCheck :: TypeCheckState -> TypeCheck a -> Either [TypeCheckError] a
 runTypeCheck initialState (TypeCheck action) = evalState (runExceptT action) initialState
 
 data TypeCheckError
-  = TypeMismatch !PrimitiveType !PrimitiveType
-  | FunctionTypeMismatch !FunctionType !FunctionType -- Does this make sense? How could this happen?
+  = TypeMismatch !Type !Type
   | UnknownType !IdName
   | CantFindType !IdName
+  | ExpectedPrimitiveType !IdName !Type
+  | ExpectedFunctionType !IdName !Type
   deriving (Show, Eq)
 
 data TypeCheckState
   = TypeCheckState
-  { -- TODO: The distinction between primitive types and function types might
-    -- be muddied with proper currying
-    typeCheckStatePrimitiveTypeMap :: Map NameId PrimitiveType
+  { typeCheckStateValueTypeMap :: Map NameId Type
     -- ^ Type for all values
-  , typeCheckStateFunctionTypeMap :: Map NameId FunctionType
-    -- ^ Type for all functions
   } deriving (Show, Eq)
 
 emptyTypeCheckState :: TypeCheckState
 emptyTypeCheckState =
   TypeCheckState
-  { typeCheckStatePrimitiveTypeMap = Map.empty
-  , typeCheckStateFunctionTypeMap = Map.empty
+  { typeCheckStateValueTypeMap = Map.empty
   }
 
-setPrimitiveType :: NameId -> PrimitiveType -> TypeCheck ()
-setPrimitiveType nameId ty = do
-  mExistingType <- lookupPrimitiveType nameId
+setValueType :: NameId -> Type -> TypeCheck ()
+setValueType nameId ty = do
+  mExistingType <- lookupValueType nameId
   case mExistingType of
     Just ty' -> throwError [TypeMismatch ty ty']
     Nothing ->
-      modify' (\s -> s { typeCheckStatePrimitiveTypeMap = Map.insert nameId ty (typeCheckStatePrimitiveTypeMap s) })
+      modify' (\s -> s { typeCheckStateValueTypeMap = Map.insert nameId ty (typeCheckStateValueTypeMap s) })
 
-setFunctionType :: NameId -> FunctionType -> TypeCheck ()
-setFunctionType nameId ty = do
-  mExistingType <- lookupFunctionType nameId
-  case mExistingType of
-    Just ty' -> throwError [FunctionTypeMismatch ty ty']
-    Nothing ->
-      modify' (\s -> s { typeCheckStateFunctionTypeMap = Map.insert nameId ty (typeCheckStateFunctionTypeMap s) })
+setValuePrimitiveType :: NameId -> PrimitiveType -> TypeCheck ()
+setValuePrimitiveType nameId = setValueType nameId . unPrimitiveType
 
-lookupPrimitiveType :: NameId -> TypeCheck (Maybe PrimitiveType)
-lookupPrimitiveType nameId = Map.lookup nameId <$> gets typeCheckStatePrimitiveTypeMap
+lookupValueType :: NameId -> TypeCheck (Maybe Type)
+lookupValueType nameId = Map.lookup nameId <$> gets typeCheckStateValueTypeMap
 
-lookupPrimitiveTypeOrError :: IdName -> TypeCheck PrimitiveType
-lookupPrimitiveTypeOrError idName =
-  lookupPrimitiveType (idNameId idName) >>= maybe (throwError [err]) pure
+lookupValueTypeOrError :: IdName -> TypeCheck Type
+lookupValueTypeOrError idName =
+  lookupValueType (idNameId idName) >>= maybe (throwError [err]) pure
  where
   err = UnknownType idName
 
-lookupFunctionType :: NameId -> TypeCheck (Maybe FunctionType)
-lookupFunctionType nameId = Map.lookup nameId <$> gets typeCheckStateFunctionTypeMap
+lookupValuePrimitiveTypeOrError :: IdName -> TypeCheck PrimitiveType
+lookupValuePrimitiveTypeOrError idName = do
+  ty <- lookupValueTypeOrError idName
+  maybe (throwError [ExpectedPrimitiveType idName ty]) pure $ primitiveType ty
 
-lookupFunctionTypeOrError :: IdName -> TypeCheck FunctionType
-lookupFunctionTypeOrError idName =
-  lookupFunctionType (idNameId idName) >>= maybe (throwError [err]) pure
- where
-  err = CantFindType idName
+lookupValueFunctionTypeOrError :: IdName -> TypeCheck FunctionType
+lookupValueFunctionTypeOrError idName = do
+  ty <- lookupValueTypeOrError idName
+  maybe (throwError [ExpectedFunctionType idName ty]) pure $ functionType ty

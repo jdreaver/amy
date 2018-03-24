@@ -1,8 +1,8 @@
 module Rascal.Parser.Parser
   ( parserAST
 
-  , functionType
-  , function
+  , bindingType
+  , binding
   , expression
   , expressionNotApplication
   , expressionParens
@@ -25,31 +25,31 @@ parserAST = ParserAST <$> declaration `sepByNonEmpty` semicolon
 
 declaration :: Parser ParserASTDeclaration
 declaration =
-  try (ParserASTFunctionType <$> functionType)
-  <|> try (ParserASTFunction <$> function)
+  try (ParserASTBindingType <$> bindingType)
+  <|> try (ParserASTBinding <$> binding)
 
-functionType :: Parser ParserFunctionTypeDeclaration
-functionType = do
-  functionName <- identifier
+bindingType :: Parser ParserBindingTypeDeclaration
+bindingType = do
+  bindingName <- identifier
   doubleColon
   typeNames <- typeIdentifier `sepByNonEmpty` typeSeparatorArrow
   pure
-    ParserFunctionTypeDeclaration
-    { parserFunctionTypeDeclarationName = functionName
-    , parserFunctionTypeDeclarationTypeNames = typeNames
+    ParserBindingTypeDeclaration
+    { parserBindingTypeDeclarationName = bindingName
+    , parserBindingTypeDeclarationTypeNames = typeNames
     }
 
-function :: Parser ParserFunctionDeclaration
-function = do
-  functionName <- identifier
+binding :: Parser ParserBindingDeclaration
+binding = do
+  bindingName <- identifier
   args <- many identifier
   equals
   expr <- expression
   pure
-    ParserFunctionDeclaration
-    { parserFunctionDeclarationName = functionName
-    , parserFunctionDeclarationArgs = args
-    , parserFunctionDeclarationBody = expr
+    ParserBindingDeclaration
+    { parserBindingDeclarationName = bindingName
+    , parserBindingDeclarationArgs = args
+    , parserBindingDeclarationBody = expr
     }
 
 expression :: Parser ParserASTExpression

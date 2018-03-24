@@ -33,43 +33,43 @@ setupDefaultEnvironment =
 rename' :: ParserAST -> Renamer RenamerAST
 rename' (ParserAST declarations) = do
   -- TODO: Try to do each of these steps in such a way that we can get as many
-  -- errors as possible. For example, we should be able to validate all
-  -- function declarations "in parallel" so if more than one has an error we
-  -- can show all the errors. Currently we fail on the first error. Maybe this
-  -- should be applicative?
+  -- errors as possible. For example, we should be able to validate all binding
+  -- declarations "in parallel" so if more than one has an error we can show
+  -- all the errors. Currently we fail on the first error. Maybe this should be
+  -- applicative?
 
-  -- Ensure that every function has a type declaration and vice versa
-  functionDeclarationsWithTypes <- either throwError pure $ pairFunctionDeclarations (toList declarations)
+  -- Ensure that every binding has a type declaration and vice versa
+  bindingDeclarationsWithTypes <- either throwError pure $ pairBindingDeclarations (toList declarations)
 
-  -- Add function declarations to scope and check types
-  functionDeclarationsWithIds <- mapM (uncurry addFunctionDeclarationToScope) functionDeclarationsWithTypes
+  -- Add binding declarations to scope and check types
+  bindingDeclarationsWithIds <- mapM (uncurry addBindingDeclarationToScope) bindingDeclarationsWithTypes
 
-  -- Validate each function expression
-  declarations' <- mapM renameDeclaration functionDeclarationsWithIds
+  -- Validate each binding expression
+  declarations' <- mapM renameDeclaration bindingDeclarationsWithIds
 
-  pure $ RenamerAST $ RenamerASTFunction <$> declarations'
+  pure $ RenamerAST $ RenamerASTBinding <$> declarations'
 
--- | Pair function declarations with type declarations.
-pairFunctionDeclarations
+-- | Pair binding declarations with type declarations.
+pairBindingDeclarations
   :: [ParserASTDeclaration]
-  -> Either [RenamerError] (NonEmpty (ParserFunctionDeclaration, NonEmpty Text))
-pairFunctionDeclarations declarations =
+  -> Either [RenamerError] (NonEmpty (ParserBindingDeclaration, NonEmpty Text))
+pairBindingDeclarations declarations =
   let
-    -- Get all the functions and type declarations in separate maps by name
-    functionNameMap = Map.fromList $ mapMaybe getFuncName declarations
+    -- Get all the bindings and type declarations in separate maps by name
+    bindingNameMap = Map.fromList $ mapMaybe getFuncName declarations
     typeNameMap = Map.fromList $ mapMaybe getTypeName declarations
 
     -- Combine the two maps
-    combined :: Map Text (Either RenamerError (ParserFunctionDeclaration, NonEmpty Text))
+    combined :: Map Text (Either RenamerError (ParserBindingDeclaration, NonEmpty Text))
     combined =
       Map.merge
-      -- Function declaration but no type declaration
-      (Map.mapMissing $ \name _ -> Left $ FunctionLacksTypeSignature name)
-      -- Types declaration but no function declaration
+      -- Binding declaration but no type declaration
+      (Map.mapMissing $ \name _ -> Left $ BindingLacksTypeSignature name)
+      -- Types declaration but no binding declaration
       (Map.mapMissing $ \name _ -> Left $ TypeSignatureLacksBinding name)
-      -- Both a type and function declaration
-      (Map.zipWithMatched $ \_ f t -> Right (f, parserFunctionTypeDeclarationTypeNames t))
-      functionNameMap
+      -- Both a type and binding declaration
+      (Map.zipWithMatched $ \_ f t -> Right (f, parserBindingTypeDeclarationTypeNames t))
+      bindingNameMap
       typeNameMap
 
     -- Split out any errors
@@ -81,24 +81,24 @@ pairFunctionDeclarations declarations =
     else Left errors
 
  where
-  getFuncName :: ParserASTDeclaration -> Maybe (Text, ParserFunctionDeclaration)
-  getFuncName (ParserASTFunction func@ParserFunctionDeclaration{parserFunctionDeclarationName}) =
-    Just (parserFunctionDeclarationName, func)
+  getFuncName :: ParserASTDeclaration -> Maybe (Text, ParserBindingDeclaration)
+  getFuncName (ParserASTBinding func@ParserBindingDeclaration{parserBindingDeclarationName}) =
+    Just (parserBindingDeclarationName, func)
   getFuncName _ = Nothing
 
-  getTypeName :: ParserASTDeclaration -> Maybe (Text, ParserFunctionTypeDeclaration)
-  getTypeName (ParserASTFunctionType func@ParserFunctionTypeDeclaration{parserFunctionTypeDeclarationName}) =
-    Just (parserFunctionTypeDeclarationName, func)
+  getTypeName :: ParserASTDeclaration -> Maybe (Text, ParserBindingTypeDeclaration)
+  getTypeName (ParserASTBindingType func@ParserBindingTypeDeclaration{parserBindingTypeDeclarationName}) =
+    Just (parserBindingTypeDeclarationName, func)
   getTypeName _ = Nothing
 
--- | Adds the name for a function declaration to the scope
-addFunctionDeclarationToScope
-  :: ParserFunctionDeclaration
+-- | Adds the name for a binding declaration to the scope
+addBindingDeclarationToScope
+  :: ParserBindingDeclaration
   -> NonEmpty Text
-  -> Renamer (IdName, ParserFunctionDeclaration, NonEmpty IdName) -- TODO: Better type than a tuple?
-addFunctionDeclarationToScope declaration typeNames = do
-  -- Add function name to scope
-  idName <- addValueToScope (parserFunctionDeclarationName declaration)
+  -> Renamer (IdName, ParserBindingDeclaration, NonEmpty IdName) -- TODO: Better type than a tuple?
+addBindingDeclarationToScope declaration typeNames = do
+  -- Add binding name to scope
+  idName <- addValueToScope (parserBindingDeclarationName declaration)
 
   -- Make sure all the types exist
   typeIds <- ensureTypesExist typeNames
@@ -114,28 +114,28 @@ ensureTypesExist typeNames = do
     (errors, _) -> throwError errors
 
 renameDeclaration
-  :: (IdName, ParserFunctionDeclaration, NonEmpty IdName)
-  -> Renamer RenamerFunctionDeclaration
+  :: (IdName, ParserBindingDeclaration, NonEmpty IdName)
+  -> Renamer RenamerBindingDeclaration
 renameDeclaration (idName, declaration, typeIds) = withNewScope $ do -- Begin new scope
   -- Check that number of arguments matches types minus 1
   let
     numFuncTypeArgs = NE.length typeIds - 1
-    numFuncArgs = length (parserFunctionDeclarationArgs declaration)
+    numFuncArgs = length (parserBindingDeclarationArgs declaration)
   when (numFuncTypeArgs /= numFuncArgs) $
     throwError [FunctionArgumentMismatch (idNameText idName) numFuncTypeArgs numFuncArgs]
 
-  -- Add function arguments to expression
-  args <- mapM addValueToScope (parserFunctionDeclarationArgs declaration)
+  -- Add binding arguments to expression
+  args <- mapM addValueToScope (parserBindingDeclarationArgs declaration)
 
   -- Run renamer on expression
-  expression <- renameExpression (parserFunctionDeclarationBody declaration)
+  expression <- renameExpression (parserBindingDeclarationBody declaration)
 
   pure
-    RenamerFunctionDeclaration
-    { renamerFunctionDeclarationName = idName
-    , renamerFunctionDeclarationArgs = args
-    , renamerFunctionDeclarationTypeNames = typeIds
-    , renamerFunctionDeclarationBody = expression
+    RenamerBindingDeclaration
+    { renamerBindingDeclarationName = idName
+    , renamerBindingDeclarationArgs = args
+    , renamerBindingDeclarationTypeNames = typeIds
+    , renamerBindingDeclarationBody = expression
     }
 
 renameExpression :: ParserASTExpression -> Renamer RenamerASTExpression

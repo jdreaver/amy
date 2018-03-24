@@ -3,7 +3,7 @@ module Rascal.Renamer.AST
   , NameId
   , RenamerAST(..)
   , RenamerASTDeclaration(..)
-  , RenamerFunctionDeclaration(..)
+  , RenamerBindingDeclaration(..)
   , RenamerASTExpression(..)
   , RenamerFunctionApplication(..)
   ) where
@@ -26,15 +26,15 @@ newtype RenamerAST = RenamerAST (NonEmpty RenamerASTDeclaration)
   deriving (Show, Eq)
 
 data RenamerASTDeclaration
-  = RenamerASTFunction !RenamerFunctionDeclaration
+  = RenamerASTBinding !RenamerBindingDeclaration
   deriving (Show, Eq)
 
-data RenamerFunctionDeclaration
-  = RenamerFunctionDeclaration
-  { renamerFunctionDeclarationName :: !IdName
-  , renamerFunctionDeclarationArgs :: ![IdName]
-  , renamerFunctionDeclarationTypeNames :: !(NonEmpty IdName)
-  , renamerFunctionDeclarationBody :: !RenamerASTExpression
+data RenamerBindingDeclaration
+  = RenamerBindingDeclaration
+  { renamerBindingDeclarationName :: !IdName
+  , renamerBindingDeclarationArgs :: ![IdName]
+  , renamerBindingDeclarationTypeNames :: !(NonEmpty IdName)
+  , renamerBindingDeclarationBody :: !RenamerASTExpression
   } deriving (Show, Eq)
 
 data RenamerASTExpression

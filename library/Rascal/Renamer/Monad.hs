@@ -29,7 +29,7 @@ runRenamer initialState (Renamer action) = evalState (runExceptT action) initial
 
 data RenamerError
   = TypeSignatureLacksBinding !Text
-  | FunctionLacksTypeSignature !Text
+  | BindingLacksTypeSignature !Text
   | UnknownType !Text
   | UnknownVariable !Text
   | FunctionArgumentMismatch !Text !Int !Int
