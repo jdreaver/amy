@@ -33,6 +33,7 @@ data RenamerError
   | UnknownType !Text
   | UnknownVariable !Text
   | FunctionArgumentMismatch !Text !Int !Int
+  | VariableShadowed !Text !IdName
   deriving (Show, Eq)
 
 data RenamerState
@@ -63,14 +64,20 @@ addValueToScope :: Text -> Renamer IdName
 addValueToScope name = do
   nameId <- freshId
   let idName = IdName name nameId
-  modify' (\s -> s { renamerStateValues = Map.insert name idName (renamerStateValues s) })
+  mExistingId <- lookupValueInScope name
+  case mExistingId of
+    Just nid -> throwError [VariableShadowed name nid]
+    Nothing -> modify' (\s -> s { renamerStateValues = Map.insert name idName (renamerStateValues s) })
   pure idName
 
 addTypeToScope :: Text -> Renamer IdName
 addTypeToScope name = do
   nameId <- freshId
   let idName = IdName name nameId
-  modify' (\s -> s { renamerStateTypes = Map.insert name idName (renamerStateTypes s) })
+  mExistingId <- lookupTypeInScope name
+  case mExistingId of
+    Just nid -> throwError [VariableShadowed name nid]
+    Nothing -> modify' (\s -> s { renamerStateTypes = Map.insert name idName (renamerStateTypes s) })
   pure idName
 
 lookupValueInScope :: Text -> Renamer (Maybe IdName)
