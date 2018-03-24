@@ -27,8 +27,9 @@ rename ast = runRenamer emptyRenamerState $ setupDefaultEnvironment >> rename' a
 
 -- | Add known type definitions
 setupDefaultEnvironment :: Renamer ()
-setupDefaultEnvironment =
+setupDefaultEnvironment = do
   void $ addTypeToScope "Int"
+  void $ addTypeToScope "Double"
 
 rename' :: ParserAST -> Renamer RenamerAST
 rename' (ParserAST declarations) = do

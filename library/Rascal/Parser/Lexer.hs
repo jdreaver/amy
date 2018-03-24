@@ -2,6 +2,7 @@
 
 module Rascal.Parser.Lexer
   ( integer
+  , double
   , symbol
   , identifier
   , typeIdentifier
@@ -39,6 +40,9 @@ spaceConsumer = L.space space1 lineComment blockComment
 
 integer :: Lexer Int
 integer = lexeme L.decimal
+
+double :: Lexer Double
+double = lexeme L.float
 
 symbol :: Text -> Lexer Text
 symbol = L.symbol spaceConsumer

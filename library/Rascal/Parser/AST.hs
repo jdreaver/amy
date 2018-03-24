@@ -44,6 +44,7 @@ data ParserASTExpression
 
 data Literal
   = LiteralInt !Int
+  | LiteralDouble !Double
   deriving (Show, Eq)
 
 data ParserFunctionApplication

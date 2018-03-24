@@ -19,9 +19,10 @@ typeCheck :: RenamerAST -> Either [TypeCheckError] TypeCheckAST
 typeCheck ast = runTypeCheck emptyTypeCheckState $ typeCheckDefaultNames >> typeCheck' ast
 
 typeCheckDefaultNames :: TypeCheck ()
-typeCheckDefaultNames =
+typeCheckDefaultNames = do
   -- TODO: Assumes Int is type ID 0. Make this more principled please!
   setValuePrimitiveType 0 IntType
+  setValuePrimitiveType 1 DoubleType
 
 typeCheck' :: RenamerAST -> TypeCheck TypeCheckAST
 typeCheck' (RenamerAST declarations) = do
@@ -89,6 +90,7 @@ typeCheckExpression :: RenamerASTExpression -> TypeCheck (Typed TypeCheckASTExpr
 typeCheckExpression (RenamerASTLiteral lit) = pure $ Typed (litType lit) (TypeCheckASTLiteral lit)
  where
   litType (LiteralInt _) = IntType
+  litType (LiteralDouble _) = DoubleType
 typeCheckExpression (RenamerASTVariable idName) = do
   ty <- lookupValuePrimitiveTypeOrError idName
   pure $ Typed ty (TypeCheckASTVariable idName)

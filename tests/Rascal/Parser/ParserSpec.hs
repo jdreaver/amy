@@ -70,6 +70,12 @@ spec = do
         `shouldParse`
         ParserFunctionApplication "f" [ParserASTVariable "x", ParserASTLiteral (LiteralInt 1)]
 
+  describe "literal" $ do
+    it "can discriminate between integer and double" $ do
+      parse literal "" "1" `shouldParse` LiteralInt 1
+      parse literal "" "1." `shouldParse` LiteralInt 1
+      parse literal "" "1.5" `shouldParse` LiteralDouble 1.5
+
 sampleModule :: Text
 sampleModule = [st|f :: Int -> Double;
 f x = 1

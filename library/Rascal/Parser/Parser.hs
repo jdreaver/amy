@@ -71,7 +71,8 @@ expressionParens = ParserASTExpressionParens <$> between lparen rparen expressio
 
 literal :: Parser Literal
 literal =
-  LiteralInt <$> integer
+  try (LiteralDouble <$> double)
+  <|> (LiteralInt <$> integer)
 
 functionApplication :: Parser ParserFunctionApplication
 functionApplication = do

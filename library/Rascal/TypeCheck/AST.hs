@@ -35,6 +35,7 @@ newtype Type = Type { unType :: NonEmpty PrimitiveType }
 
 data PrimitiveType
   = IntType
+  | DoubleType
   deriving (Show, Eq)
 
 primitiveType :: Type -> Maybe PrimitiveType
