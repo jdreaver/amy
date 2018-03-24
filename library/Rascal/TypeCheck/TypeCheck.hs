@@ -99,10 +99,17 @@ typeCheckExpression (RenamerASTFunctionApplication app) = do
   -- Compute types of args
   args <- mapM typeCheckExpression $ renamerFunctionApplicationArgs app
 
-  -- Make sure arg types make function types
   let
+    funcName = renamerFunctionApplicationFunctionName app
     argTypes = unPrimitiveType . typedType <$> args
     funcArgTypes = unPrimitiveType <$> unType (functionTypeArgTypes funcType)
+
+  -- Make sure there is the right number of arguments
+  unless (length argTypes == length funcArgTypes) $
+    throwError [WrongNumberOfArguments funcName (length funcArgTypes) (length argTypes)]
+
+  -- Make sure arg types make function types
+  let
     mismatchedTypes = fmap (uncurry TypeMismatch) . NE.filter (uncurry (/=)) $ NE.zip argTypes funcArgTypes
   unless (null mismatchedTypes) $
     throwError mismatchedTypes
@@ -113,7 +120,7 @@ typeCheckExpression (RenamerASTFunctionApplication app) = do
     funcApp =
       TypeCheckASTFunctionApplication
       TypeCheckFunctionApplication
-      { typeCheckFunctionApplicationFunctionName = renamerFunctionApplicationFunctionName app
+      { typeCheckFunctionApplicationFunctionName = funcName
       , typeCheckFunctionApplicationArgs = args
       }
   pure $ Typed ty funcApp

@@ -33,6 +33,7 @@ data TypeCheckError
   = TypeMismatch !Type !Type
   | UnknownType !IdName
   | CantFindType !IdName
+  | WrongNumberOfArguments !IdName !Int !Int
   | ExpectedPrimitiveType !IdName !Type
   | ExpectedFunctionType !IdName !Type
   deriving (Show, Eq)
