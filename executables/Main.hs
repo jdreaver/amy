@@ -6,7 +6,9 @@ import qualified Data.ByteString.Char8 as BS8
 import Control.Monad.IO.Class (liftIO)
 import Data.Text (Text, pack)
 import System.Console.Haskeline
-import System.IO
+import System.Environment (getArgs)
+import System.Exit (die)
+import System.IO (hPutStrLn, stderr)
 import Text.Megaparsec
 
 import Rascal.Codegen
@@ -15,7 +17,12 @@ import Rascal.Parser
 import Rascal.TypeCheck
 
 main :: IO ()
-main = runInputT defaultSettings loop
+main = do
+  args <- getArgs
+  case args of
+    [] -> runInputT defaultSettings loop
+    [arg] -> process (pack arg)
+    _ -> die "Usage: rascal [optional program text]"
  where
   loop = do
     minput <- getInputLine "rascal> "
