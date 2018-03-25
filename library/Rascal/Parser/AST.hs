@@ -18,6 +18,8 @@ newtype ParserAST = ParserAST (NonEmpty ParserASTDeclaration)
 data ParserASTDeclaration
   = ParserASTBinding ParserBindingDeclaration
   | ParserASTBindingType ParserBindingTypeDeclaration
+  | ParserASTExtern ParserBindingTypeDeclaration
+    -- ^ An extern is the extern keyword followed by a type signature
   deriving (Show, Eq)
 
 data ParserBindingDeclaration

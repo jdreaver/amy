@@ -51,6 +51,11 @@ spec = do
           ]
         )
 
+  describe "externType" $ do
+    it "parses extern declaration" $ do
+      parse externType "" "extern f :: Int" `shouldParse` ParserBindingTypeDeclaration "f" ["Int"]
+      parse externType "" "extern f :: Int -> Double" `shouldParse` ParserBindingTypeDeclaration "f" ["Int", "Double"]
+
   describe "bindingType" $ do
     it "parses binding types" $ do
       parse bindingType "" "f :: Int" `shouldParse` ParserBindingTypeDeclaration "f" ["Int"]

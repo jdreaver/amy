@@ -39,6 +39,15 @@ rename' (ParserAST declarations) = do
   -- all the errors. Currently we fail on the first error. Maybe this should be
   -- applicative?
 
+  -- Handle extern declarations
+  let
+    getExtern (ParserASTExtern dec) = Just dec
+    getExtern _ = Nothing
+  externDeclarations <-
+    fmap (fmap RenamerASTExtern) $
+    mapM renameExternDeclaration $
+    mapMaybe getExtern (toList declarations)
+
   -- Ensure that every binding has a type declaration and vice versa
   bindingDeclarationsWithTypes <- either throwError pure $ pairBindingDeclarations (toList declarations)
 
@@ -46,14 +55,14 @@ rename' (ParserAST declarations) = do
   bindingDeclarationsWithIds <- mapM (uncurry addBindingDeclarationToScope) bindingDeclarationsWithTypes
 
   -- Validate each binding expression
-  declarations' <- mapM renameDeclaration bindingDeclarationsWithIds
+  bindingDeclarations <- fmap RenamerASTBinding <$> mapM renameBindingDeclaration bindingDeclarationsWithIds
 
-  pure $ RenamerAST $ RenamerASTBinding <$> declarations'
+  pure $ RenamerAST $ externDeclarations ++ bindingDeclarations
 
 -- | Pair binding declarations with type declarations.
 pairBindingDeclarations
   :: [ParserASTDeclaration]
-  -> Either [RenamerError] (NonEmpty (ParserBindingDeclaration, NonEmpty Text))
+  -> Either [RenamerError] [(ParserBindingDeclaration, NonEmpty Text)]
 pairBindingDeclarations declarations =
   let
     -- Get all the bindings and type declarations in separate maps by name
@@ -78,7 +87,7 @@ pairBindingDeclarations declarations =
 
   in
     if null errors
-    then Right (NE.fromList pairs) -- NE.fronlist shouldn't fail because everything was paired
+    then Right pairs
     else Left errors
 
  where
@@ -114,10 +123,26 @@ ensureTypesExist typeNames = do
     ([], ids) -> pure (NE.fromList ids) -- NE.fromList shouldn't fail since all IDs exist
     (errors, _) -> throwError errors
 
-renameDeclaration
+renameExternDeclaration
+  :: ParserBindingTypeDeclaration
+  -> Renamer RenamerExternDeclaration
+renameExternDeclaration declaration = do
+  -- Add extern name to scope
+  idName <- addValueToScope TopLevelDefinition $ parserBindingTypeDeclarationName declaration
+
+  -- Add types to scope
+  typeIds <- ensureTypesExist $ parserBindingTypeDeclarationTypeNames declaration
+
+  pure
+    RenamerExternDeclaration
+    { renamerExternDeclarationName = idName
+    , renamerExternDeclarationTypeNames = typeIds
+    }
+
+renameBindingDeclaration
   :: (IdName, ParserBindingDeclaration, NonEmpty IdName)
   -> Renamer RenamerBindingDeclaration
-renameDeclaration (idName, declaration, typeIds) = withNewScope $ do -- Begin new scope
+renameBindingDeclaration (idName, declaration, typeIds) = withNewScope $ do -- Begin new scope
   -- Check that number of arguments matches types minus 1
   let
     numFuncTypeArgs = NE.length typeIds - 1
@@ -125,7 +150,7 @@ renameDeclaration (idName, declaration, typeIds) = withNewScope $ do -- Begin ne
   when (numFuncTypeArgs /= numFuncArgs) $
     throwError [FunctionArgumentMismatch (idNameText idName) numFuncTypeArgs numFuncArgs]
 
-  -- Add binding arguments to expression
+  -- Add binding arguments to scope
   args <- mapM (addValueToScope LocalDefinition) (parserBindingDeclarationArgs declaration)
 
   -- Run renamer on expression

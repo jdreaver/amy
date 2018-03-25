@@ -55,6 +55,20 @@ codegenDeclaration (TypeCheckASTBinding binding) =
     , returnType = returnType'
     , basicBlocks = [block]
     }
+codegenDeclaration (TypeCheckASTExtern extern) =
+  let
+    bindingType = typeCheckExternDeclarationType extern
+    paramTypes = llvmPrimitiveType <$> maybe [] (toList . functionTypeArgTypes) (functionType bindingType)
+    params =
+      (\ty -> Parameter ty (UnName 0) []) <$> paramTypes
+    returnType' = llvmPrimitiveType $ bindingReturnType bindingType
+  in
+    GlobalDefinition
+    functionDefaults
+    { name = idNameToLLVM $ typeCheckExternDeclarationName extern
+    , parameters = (params, False)
+    , returnType = returnType'
+    }
 
 idNameToLLVM :: IdName -> Name
 idNameToLLVM (IdName name' _ _) = Name $ textToShortBS name'

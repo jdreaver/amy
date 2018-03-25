@@ -29,6 +29,14 @@ typeCheck' (RenamerAST declarations) = do
   let
     bindingDeclarations = mapMaybe getBinding (toList declarations)
     getBinding (RenamerASTBinding f) = Just f
+    getBinding _ = Nothing
+
+    externDeclarations = mapMaybe getExtern (toList declarations)
+    getExtern (RenamerASTExtern f) = Just f
+    getExtern _ = Nothing
+
+  -- Check that all extern types exist
+  externs <- mapM typeCheckExtern externDeclarations
 
   -- Check that all declaration types exist and set types for binding arguments
   declarationsWithTypedArgs <- mapM (\d -> (d,) <$> setBindingArgTypes d) bindingDeclarations
@@ -36,7 +44,9 @@ typeCheck' (RenamerAST declarations) = do
   -- Type check declarations now
   declarations' <- mapM typeCheckDeclaration declarationsWithTypedArgs
 
-  pure $ TypeCheckAST $ TypeCheckASTBinding <$> declarations'
+  pure $ TypeCheckAST $
+    (TypeCheckASTExtern <$> externs)
+    ++ (TypeCheckASTBinding <$> declarations')
 
 setBindingArgTypes :: RenamerBindingDeclaration -> TypeCheck Type
 setBindingArgTypes declaration = do
@@ -63,6 +73,24 @@ setBindingArgTypes declaration = do
     bindingType = Type $ NE.fromList $ argTypes ++ [returnType]
   setValueType (idNameId $ renamerBindingDeclarationName declaration) bindingType
   pure bindingType
+
+typeCheckExtern
+  :: RenamerExternDeclaration
+  -> TypeCheck TypeCheckExternDeclaration
+typeCheckExtern declaration = do
+  -- Validate types
+  type' <- mapM lookupValuePrimitiveTypeOrError $ renamerExternDeclarationTypeNames declaration
+
+  -- Set extern return type
+  let
+    externType = Type type'
+  setValueType (idNameId $ renamerExternDeclarationName declaration) externType
+
+  pure
+    TypeCheckExternDeclaration
+    { typeCheckExternDeclarationName = renamerExternDeclarationName declaration
+    , typeCheckExternDeclarationType = externType
+    }
 
 typeCheckDeclaration
   :: (RenamerBindingDeclaration, Type)

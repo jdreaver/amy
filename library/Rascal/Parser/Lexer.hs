@@ -6,6 +6,7 @@ module Rascal.Parser.Lexer
   , symbol
   , identifier
   , typeIdentifier
+  , extern
   , lparen
   , rparen
   , comma
@@ -18,7 +19,7 @@ module Rascal.Parser.Lexer
   , someNonEmpty
   ) where
 
-import Control.Monad (MonadPlus)
+import Control.Monad (MonadPlus, void)
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import Data.Text (Text, pack)
@@ -57,7 +58,12 @@ identifier = (lexeme . try) (p >>= check)
     else return (pack x)
 
 reservedWords :: [String]
-reservedWords = []
+reservedWords =
+  [ "extern"
+  ]
+
+extern :: Lexer ()
+extern = void $ symbol "extern"
 
 -- | Type names are upper-case, like Int and Double
 typeIdentifier :: Lexer Text

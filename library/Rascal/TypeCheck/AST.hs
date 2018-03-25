@@ -16,6 +16,7 @@ module Rascal.TypeCheck.AST
   , TypeCheckAST(..)
   , TypeCheckASTDeclaration(..)
   , TypeCheckBindingDeclaration(..)
+  , TypeCheckExternDeclaration(..)
   , TypeCheckASTExpression(..)
   , TypeCheckFunctionApplication(..)
   ) where
@@ -75,16 +76,23 @@ data Typed a
 
 data TypeCheckASTDeclaration
   = TypeCheckASTBinding !TypeCheckBindingDeclaration
+  | TypeCheckASTExtern !TypeCheckExternDeclaration
   deriving (Show, Eq)
 
 data TypeCheckBindingDeclaration
   = TypeCheckBindingDeclaration
   { typeCheckBindingDeclarationName :: !IdName
-    -- TODO: Have arguments be paris of (IdName, PrimitiveType) so we
+    -- TODO: Have arguments be pairs of (IdName, PrimitiveType) so we
     -- statically know that there is one argument name per argument.
   , typeCheckBindingDeclarationArgs :: ![IdName]
   , typeCheckBindingDeclarationType :: !Type
   , typeCheckBindingDeclarationBody :: !(Typed TypeCheckASTExpression)
+  } deriving (Show, Eq)
+
+data TypeCheckExternDeclaration
+  = TypeCheckExternDeclaration
+  { typeCheckExternDeclarationName :: !IdName
+  , typeCheckExternDeclarationType :: !Type
   } deriving (Show, Eq)
 
 data TypeCheckASTExpression

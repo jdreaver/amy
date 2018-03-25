@@ -1,6 +1,7 @@
 module Rascal.Parser.Parser
   ( parserAST
 
+  , externType
   , bindingType
   , binding
   , expression
@@ -25,8 +26,14 @@ parserAST = ParserAST <$> declaration `sepByNonEmpty` semicolon
 
 declaration :: Parser ParserASTDeclaration
 declaration =
-  try (ParserASTBindingType <$> bindingType)
+  (ParserASTExtern <$> externType)
+  <|> try (ParserASTBindingType <$> bindingType)
   <|> try (ParserASTBinding <$> binding)
+
+externType :: Parser ParserBindingTypeDeclaration
+externType = do
+  extern
+  bindingType
 
 bindingType :: Parser ParserBindingTypeDeclaration
 bindingType = do
