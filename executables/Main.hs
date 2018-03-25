@@ -5,8 +5,8 @@ module Main
 import qualified Data.ByteString.Char8 as BS8
 import Control.Monad.IO.Class (liftIO)
 import Data.Text (Text, pack)
-import System.Exit (die)
 import System.Console.Haskeline
+import System.IO
 import Text.Megaparsec
 
 import Rascal.Codegen
@@ -26,24 +26,23 @@ main = runInputT defaultSettings loop
         loop
 
 process :: Text -> IO ()
-process input = do
-  parsed <-
-    case parse parserAST "<repl>" input of
-      Left err -> die $ show err
-      Right p -> pure p
-  print parsed
+process input =
+  let
+    mapLeft :: (a -> b) -> Either a c -> Either b c
+    mapLeft _ (Right r) = Right r
+    mapLeft f (Left x) = Left $ f x
 
-  renamed <-
-    case rename parsed of
-      Left err -> die $ show err
-      Right r -> pure r
-  print renamed
+    showLeft errName = mapLeft (\x -> errName ++ " error! " ++ show x)
 
-  typed <-
-    case typeCheck renamed of
-      Left err -> die $ show err
-      Right t -> pure t
-  print typed
-
-  codegenString <- generateLLVMIR typed
-  BS8.putStrLn codegenString
+    eTyped :: Either String TypeCheckAST
+    eTyped = do
+      parsed <- mapLeft parseErrorPretty $ parse parserAST "<repl>" input
+      renamed <- showLeft "Renamer" $ rename parsed
+      typed <- showLeft "TypeCheck" $ typeCheck renamed
+      pure typed
+  in
+    case eTyped of
+      Left err -> hPutStrLn stderr err
+      Right typed -> do
+        codegenString <- generateLLVMIR typed
+        BS8.putStrLn codegenString
