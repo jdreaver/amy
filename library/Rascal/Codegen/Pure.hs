@@ -57,7 +57,7 @@ codegenDeclaration (TypeCheckASTBinding binding) =
     }
 
 idNameToLLVM :: IdName -> Name
-idNameToLLVM (IdName name' _) = Name $ textToShortBS name'
+idNameToLLVM (IdName name' _ _) = Name $ textToShortBS name'
 
 codegenExpression :: Typed TypeCheckASTExpression -> FunctionGen Operand
 codegenExpression (Typed _ (TypeCheckASTLiteral lit)) =
@@ -66,22 +66,36 @@ codegenExpression (Typed _ (TypeCheckASTLiteral lit)) =
       LiteralInt i -> C.Int 32 (fromIntegral i)
       LiteralDouble x -> C.Float (F.Double x)
 codegenExpression (Typed ty (TypeCheckASTVariable idn)) =
-  pure $ LocalReference (llvmPrimitiveType ty) (idNameToLLVM idn)
+  -- We need to use the IdName's provenance to determine whether or not to use
+  -- a local reference to a variable or a function call with no arguments.
+  case idNameProvenance idn of
+    LocalDefinition -> pure $ LocalReference (llvmPrimitiveType ty) (idNameToLLVM idn)
+    TopLevelDefinition -> functionCallInstruction idn [] [] ty
 codegenExpression (Typed ty (TypeCheckASTFunctionApplication app)) = do
   let
-    fnArgs = typeCheckFunctionApplicationArgs app
-  argOps <- mapM codegenExpression fnArgs
-  let
     fnName = typeCheckFunctionApplicationFunctionName app
-    argTypes = llvmPrimitiveType . typedType <$> toList fnArgs
+    fnArgs = typeCheckFunctionApplicationArgs app
+    fnArgTypes = toList $ typedType <$> fnArgs
+  argOps <- mapM codegenExpression fnArgs
+  functionCallInstruction fnName (toList argOps) fnArgTypes ty
+codegenExpression (Typed ty (TypeCheckASTExpressionParens expression)) = codegenExpression (Typed ty expression)
+
+functionCallInstruction
+  :: IdName
+  -> [Operand]
+  -> [PrimitiveType]
+  -> PrimitiveType
+  -> FunctionGen Operand
+functionCallInstruction idName argumentOperands argumentTypes' returnType' = do
+  let
+    argTypes = llvmPrimitiveType <$> argumentTypes'
     fnRef =
       ConstantOperand $
       C.GlobalReference
-      (PointerType (LLVM.FunctionType (llvmPrimitiveType ty) argTypes False) (AddrSpace 0))
-      (idNameToLLVM fnName)
+      (PointerType (LLVM.FunctionType (llvmPrimitiveType returnType') argTypes False) (AddrSpace 0))
+      (idNameToLLVM idName)
     toArg arg = (arg, [])
-    instruction = Call Nothing CC.C [] (Right fnRef) (toArg <$> toList argOps) [] []
+    instruction = Call Nothing CC.C [] (Right fnRef) (toArg <$> argumentOperands) [] []
 
   instructionName <- addUnNamedInstruction instruction
-  pure $ LocalReference (llvmPrimitiveType ty) instructionName
-codegenExpression (Typed ty (TypeCheckASTExpressionParens expression)) = codegenExpression (Typed ty expression)
+  pure $ LocalReference (llvmPrimitiveType returnType') instructionName

@@ -60,10 +60,10 @@ freshId = do
   modify' (\s -> s { renamerStateLastId = 1 + renamerStateLastId s })
   gets renamerStateLastId
 
-addValueToScope :: Text -> Renamer IdName
-addValueToScope name = do
+addValueToScope :: IdNameProvenance -> Text -> Renamer IdName
+addValueToScope provenance name = do
   nameId <- freshId
-  let idName = IdName name nameId
+  let idName = IdName name nameId provenance
   mExistingId <- lookupValueInScope name
   case mExistingId of
     Just nid -> throwError [VariableShadowed name nid]
@@ -73,7 +73,7 @@ addValueToScope name = do
 addTypeToScope :: Text -> Renamer IdName
 addTypeToScope name = do
   nameId <- freshId
-  let idName = IdName name nameId
+  let idName = IdName name nameId TopLevelDefinition
   mExistingId <- lookupTypeInScope name
   case mExistingId of
     Just nid -> throwError [VariableShadowed name nid]

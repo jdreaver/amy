@@ -3,6 +3,7 @@
 module Rascal.TypeCheck.AST
   ( NameId
   , IdName(..)
+  , IdNameProvenance(..)
   , Literal(..)
   , Type(..)
   , PrimitiveType(..)
@@ -23,7 +24,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 
 import Rascal.Parser.AST (Literal(..))
-import Rascal.Renamer.AST (NameId, IdName(..))
+import Rascal.Renamer.AST
 
 -- | A 'Type' is a 'NonEmpty' list of primitive types. A primitive type is just
 -- a single @[PrimitiveType]@. A function is a 'Type' of length greater than

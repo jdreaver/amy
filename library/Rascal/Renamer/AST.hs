@@ -1,5 +1,6 @@
 module Rascal.Renamer.AST
   ( IdName(..)
+  , IdNameProvenance(..)
   , NameId
   , RenamerAST(..)
   , RenamerASTDeclaration(..)
@@ -17,7 +18,13 @@ data IdName
   = IdName
   { idNameText :: !Text
   , idNameId :: !NameId
+  , idNameProvenance :: !IdNameProvenance
   } deriving (Show, Eq)
+
+data IdNameProvenance
+  = LocalDefinition
+  | TopLevelDefinition
+  deriving (Show, Eq)
 
 type NameId = Int
 

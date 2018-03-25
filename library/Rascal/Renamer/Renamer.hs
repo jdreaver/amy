@@ -99,7 +99,7 @@ addBindingDeclarationToScope
   -> Renamer (IdName, ParserBindingDeclaration, NonEmpty IdName) -- TODO: Better type than a tuple?
 addBindingDeclarationToScope declaration typeNames = do
   -- Add binding name to scope
-  idName <- addValueToScope (parserBindingDeclarationName declaration)
+  idName <- addValueToScope TopLevelDefinition (parserBindingDeclarationName declaration)
 
   -- Make sure all the types exist
   typeIds <- ensureTypesExist typeNames
@@ -126,7 +126,7 @@ renameDeclaration (idName, declaration, typeIds) = withNewScope $ do -- Begin ne
     throwError [FunctionArgumentMismatch (idNameText idName) numFuncTypeArgs numFuncArgs]
 
   -- Add binding arguments to expression
-  args <- mapM addValueToScope (parserBindingDeclarationArgs declaration)
+  args <- mapM (addValueToScope LocalDefinition) (parserBindingDeclarationArgs declaration)
 
   -- Run renamer on expression
   expression <- renameExpression (parserBindingDeclarationBody declaration)
