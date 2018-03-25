@@ -104,7 +104,7 @@ typeCheckExpression (RenamerASTFunctionApplication app) = do
   let
     funcName = renamerFunctionApplicationFunctionName app
     argTypes = unPrimitiveType . typedType <$> args
-    funcArgTypes = unPrimitiveType <$> unType (functionTypeArgTypes funcType)
+    funcArgTypes = unPrimitiveType <$> functionTypeArgTypes funcType
 
   -- Make sure there is the right number of arguments
   unless (length argTypes == length funcArgTypes) $

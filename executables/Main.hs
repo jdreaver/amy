@@ -2,12 +2,14 @@ module Main
   ( main
   ) where
 
+import qualified Data.ByteString.Char8 as BS8
 import Control.Monad.IO.Class (liftIO)
 import Data.Text (Text, pack)
 import System.Exit (die)
 import System.Console.Haskeline
 import Text.Megaparsec
 
+import Rascal.Codegen
 import Rascal.Renamer
 import Rascal.Parser
 import Rascal.TypeCheck
@@ -42,3 +44,6 @@ process input = do
       Left err -> die $ show err
       Right t -> pure t
   print typed
+
+  codegenString <- generateLLVMIR typed
+  BS8.putStrLn codegenString

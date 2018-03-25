@@ -2,6 +2,7 @@
 
 module Rascal.TypeCheck.AST
   ( NameId
+  , IdName(..)
   , Literal(..)
   , Type(..)
   , PrimitiveType(..)
@@ -22,7 +23,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 
 import Rascal.Parser.AST (Literal(..))
-import Rascal.Renamer.AST (NameId, IdName)
+import Rascal.Renamer.AST (NameId, IdName(..))
 
 -- | A 'Type' is a 'NonEmpty' list of primitive types. A primitive type is just
 -- a single @[PrimitiveType]@. A function is a 'Type' of length greater than
@@ -50,14 +51,14 @@ unPrimitiveType pt = Type (pt :| [])
 functionType :: Type -> Maybe FunctionType
 functionType (Type ts) = do
   args <- NE.nonEmpty (NE.init ts)
-  pure $ FunctionType (Type args) (NE.last ts)
+  pure $ FunctionType args (NE.last ts)
 
 bindingReturnType :: Type -> PrimitiveType
 bindingReturnType (Type ts) = NE.last ts
 
 data FunctionType
   = FunctionType
-  { functionTypeArgTypes :: !Type
+  { functionTypeArgTypes :: !(NonEmpty PrimitiveType)
   , functionTypeReturnType :: !PrimitiveType
   } deriving (Show, Eq)
 
@@ -78,6 +79,8 @@ data TypeCheckASTDeclaration
 data TypeCheckBindingDeclaration
   = TypeCheckBindingDeclaration
   { typeCheckBindingDeclarationName :: !IdName
+    -- TODO: Have arguments be paris of (IdName, PrimitiveType) so we
+    -- statically know that there is one argument name per argument.
   , typeCheckBindingDeclarationArgs :: ![IdName]
   , typeCheckBindingDeclarationType :: !Type
   , typeCheckBindingDeclarationBody :: !(Typed TypeCheckASTExpression)
