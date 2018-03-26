@@ -10,19 +10,16 @@ import Control.Monad.Except
 import Data.Either (partitionEithers)
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
-import qualified Data.Map.Merge.Strict as Map
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import GHC.Exts (toList)
 
 import Rascal.AST
-import Rascal.Renamer.AST
+import Rascal.Names
 import Rascal.Renamer.Monad
 
 -- | Gives a unique identity to all names in the AST
-rename :: AST Text -> Either [RenamerError] RenamerAST
+rename :: AST Text -> Either [RenamerError] (AST IdName)
 rename ast = runRenamer emptyRenamerState $ setupDefaultEnvironment >> rename' ast
 
 -- | Add known type definitions
@@ -31,7 +28,7 @@ setupDefaultEnvironment = do
   void $ addTypeToScope "Int"
   void $ addTypeToScope "Double"
 
-rename' :: AST Text -> Renamer RenamerAST
+rename' :: AST Text -> Renamer (AST IdName)
 rename' (AST declarations) = do
   -- TODO: Try to do each of these steps in such a way that we can get as many
   -- errors as possible. For example, we should be able to validate all binding
@@ -39,79 +36,39 @@ rename' (AST declarations) = do
   -- all the errors. Currently we fail on the first error. Maybe this should be
   -- applicative?
 
-  -- Handle extern declarations
-  let
-    getExtern (TopLevelExternType dec) = Just dec
-    getExtern _ = Nothing
-  externDeclarations <-
-    fmap (fmap RenamerASTExtern) $
-    mapM renameExternDeclaration $
-    mapMaybe getExtern (toList declarations)
+  -- Rename extern declarations
+  let externs = mapMaybe topLevelExternType (toList declarations)
+  externs' <- fmap TopLevelExternType <$> mapM renameBindingType externs
 
-  -- Ensure that every binding has a type declaration and vice versa
-  bindingDeclarationsWithTypes <- either throwError pure $ pairBindingDeclarations (toList declarations)
+  -- Rename binding type declarations
+  let bindingTypes = mapMaybe topLevelBindingType (toList declarations)
+  bindingTypes' <- fmap TopLevelBindingType <$> mapM renameBindingType bindingTypes
 
-  -- Add binding declarations to scope and check types
-  bindingDeclarationsWithIds <- mapM (uncurry addBindingDeclarationToScope) bindingDeclarationsWithTypes
+  -- Add all top-level binding names to scope. This is necessary so that
+  -- binding value expressions can reference any other top-level binding.
+  let bindingValues = mapMaybe topLevelBindingValue (toList declarations)
+  mapM_ (addValueToScope TopLevelDefinition . bindingValueName) bindingValues
 
-  -- Validate each binding expression
-  bindingDeclarations <- fmap RenamerASTBinding <$> mapM renameBindingDeclaration bindingDeclarationsWithIds
+  -- Rename binding value declarations
+  bindingValues' <- fmap TopLevelBindingValue <$> mapM renameBindingValue bindingValues
 
-  pure $ RenamerAST $ externDeclarations ++ bindingDeclarations
+  pure $ AST $ externs' ++ bindingTypes' ++ bindingValues'
 
--- | Pair binding declarations with type declarations.
-pairBindingDeclarations
-  :: [TopLevel Text]
-  -> Either [RenamerError] [(BindingValue Text, NonEmpty Text)]
-pairBindingDeclarations declarations =
-  let
-    -- Get all the bindings and type declarations in separate maps by name
-    bindingNameMap = Map.fromList $ mapMaybe getFuncName declarations
-    typeNameMap = Map.fromList $ mapMaybe getTypeName declarations
+renameBindingType
+  :: BindingType Text
+  -> Renamer (BindingType IdName)
+renameBindingType declaration = do
+  -- Add extern name to scope
+  idName <- addValueToScope TopLevelDefinition $ bindingTypeName declaration
 
-    -- Combine the two maps
-    combined :: Map Text (Either RenamerError (BindingValue Text, NonEmpty Text))
-    combined =
-      Map.merge
-      -- Binding declaration but no type declaration
-      (Map.mapMissing $ \name _ -> Left $ BindingLacksTypeSignature name)
-      -- Types declaration but no binding declaration
-      (Map.mapMissing $ \name _ -> Left $ TypeSignatureLacksBinding name)
-      -- Both a type and binding declaration
-      (Map.zipWithMatched $ \_ f t -> Right (f, bindingTypeType t))
-      bindingNameMap
-      typeNameMap
+  -- Add types to scope
+  typeIds <- ensureTypesExist $ bindingTypeType declaration
 
-    -- Split out any errors
-    (errors, pairs) = partitionEithers $ Map.elems combined
-
-  in
-    if null errors
-    then Right pairs
-    else Left errors
-
- where
-  getFuncName :: TopLevel a -> Maybe (a, BindingValue a)
-  getFuncName (TopLevelBindingValue bind@BindingValue{bindingValueName}) = Just (bindingValueName, bind)
-  getFuncName _ = Nothing
-
-  getTypeName :: TopLevel a -> Maybe (a, BindingType a)
-  getTypeName (TopLevelBindingType bind@BindingType{bindingTypeName}) = Just (bindingTypeName, bind)
-  getTypeName _ = Nothing
-
--- | Adds the name for a binding declaration to the scope
-addBindingDeclarationToScope
-  :: BindingValue Text
-  -> NonEmpty Text
-  -> Renamer (IdName, BindingValue Text, NonEmpty IdName) -- TODO: Better type than a tuple?
-addBindingDeclarationToScope declaration typeNames = do
-  -- Add binding name to scope
-  idName <- addValueToScope TopLevelDefinition (bindingValueName declaration)
-
-  -- Make sure all the types exist
-  typeIds <- ensureTypesExist typeNames
-
-  pure (idName, declaration, typeIds)
+  pure
+    BindingType
+    { bindingTypeName = idName
+    , bindingTypeType = typeIds
+    }
 
 ensureTypesExist :: NonEmpty Text -> Renamer (NonEmpty IdName)
 ensureTypesExist typeNames = do
@@ -121,59 +78,37 @@ ensureTypesExist typeNames = do
     ([], ids) -> pure (NE.fromList ids) -- NE.fromList shouldn't fail since all IDs exist
     (errors, _) -> throwError errors
 
-renameExternDeclaration
-  :: BindingType Text
-  -> Renamer RenamerExternDeclaration
-renameExternDeclaration declaration = do
-  -- Add extern name to scope
-  idName <- addValueToScope TopLevelDefinition $ bindingTypeName declaration
-
-  -- Add types to scope
-  typeIds <- ensureTypesExist $ bindingTypeType declaration
-
-  pure
-    RenamerExternDeclaration
-    { renamerExternDeclarationName = idName
-    , renamerExternDeclarationTypeNames = typeIds
-    }
-
-renameBindingDeclaration
-  :: (IdName, BindingValue Text, NonEmpty IdName)
-  -> Renamer RenamerBindingDeclaration
-renameBindingDeclaration (idName, declaration, typeIds) = withNewScope $ do -- Begin new scope
-  -- Check that number of arguments matches types minus 1
-  let
-    numFuncTypeArgs = NE.length typeIds - 1
-    numFuncArgs = length (bindingValueArgs declaration)
-  when (numFuncTypeArgs /= numFuncArgs) $
-    throwError [FunctionArgumentMismatch (idNameText idName) numFuncTypeArgs numFuncArgs]
+renameBindingValue
+  :: BindingValue Text
+  -> Renamer (BindingValue IdName)
+renameBindingValue binding = withNewScope $ do -- Begin new scope
+  -- Get binding name ID
+  idName <- lookupValueInScopeOrError (bindingValueName binding)
 
   -- Add binding arguments to scope
-  args <- mapM (addValueToScope LocalDefinition) (bindingValueArgs declaration)
+  args <- mapM (addValueToScope LocalDefinition) (bindingValueArgs binding)
 
   -- Run renamer on expression
-  expression <- renameExpression (bindingValueBody declaration)
+  expression <- renameExpression (bindingValueBody binding)
 
   pure
-    RenamerBindingDeclaration
-    { renamerBindingDeclarationName = idName
-    , renamerBindingDeclarationArgs = args
-    , renamerBindingDeclarationTypeNames = typeIds
-    , renamerBindingDeclarationBody = expression
+    BindingValue
+    { bindingValueName = idName
+    , bindingValueArgs = args
+    , bindingValueBody = expression
     }
 
-renameExpression :: Expression Text -> Renamer RenamerASTExpression
-renameExpression (ExpressionLiteral lit) = pure $ RenamerASTLiteral lit
-renameExpression (ExpressionVariable var) =
-  lookupValueInScope var >>= maybe (throwError [UnknownVariable var]) (pure . RenamerASTVariable)
+renameExpression :: Expression Text -> Renamer (Expression IdName)
+renameExpression (ExpressionLiteral lit) = pure $ ExpressionLiteral lit
+renameExpression (ExpressionVariable var) = ExpressionVariable <$> lookupValueInScopeOrError var
 renameExpression (ExpressionFunctionApplication app) = do
   let funcName = functionApplicationFunctionName app
   funcNameId <- maybe (throwError [UnknownVariable funcName]) pure =<< lookupValueInScope funcName
   expressions <- mapM renameExpression (functionApplicationArgs app)
   pure $
-    RenamerASTFunctionApplication
-    RenamerFunctionApplication
-    { renamerFunctionApplicationFunctionName = funcNameId
-    , renamerFunctionApplicationArgs = expressions
+    ExpressionFunctionApplication
+    FunctionApplication
+    { functionApplicationFunctionName = funcNameId
+    , functionApplicationArgs = expressions
     }
-renameExpression (ExpressionParens expr) = RenamerASTExpressionParens <$> renameExpression expr
+renameExpression (ExpressionParens expr) = ExpressionParens <$> renameExpression expr

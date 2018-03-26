@@ -1,6 +1,9 @@
 module Rascal.AST
   ( AST(..)
   , TopLevel(..)
+  , topLevelBindingValue
+  , topLevelBindingType
+  , topLevelExternType
   , BindingValue(..)
   , BindingType(..)
   , Expression(..)
@@ -13,6 +16,9 @@ import Data.List.NonEmpty (NonEmpty)
 -- | An 'AST' is simply a list of 'TopLevel' declarations.
 newtype AST name = AST { unAST :: [TopLevel name] }
   deriving (Show, Eq)
+-- TODO: Instead of having a sum type for TopLevel and having AST be a list of
+-- these, consider having AST be a record type with a field for each of the
+-- possible top level declarations.
 
 -- | An 'TopLevel' value is anything that exists at the top level of a module.
 data TopLevel name
@@ -20,6 +26,18 @@ data TopLevel name
   | TopLevelBindingType !(BindingType name)
   | TopLevelExternType !(BindingType name)
   deriving (Show, Eq)
+
+topLevelBindingValue :: TopLevel name -> Maybe (BindingValue name)
+topLevelBindingValue (TopLevelBindingValue bv) = Just bv
+topLevelBindingValue _ = Nothing
+
+topLevelBindingType :: TopLevel name -> Maybe (BindingType name)
+topLevelBindingType (TopLevelBindingType bt) = Just bt
+topLevelBindingType _ = Nothing
+
+topLevelExternType :: TopLevel name -> Maybe (BindingType name)
+topLevelExternType (TopLevelExternType bt) = Just bt
+topLevelExternType _ = Nothing
 
 -- | A 'BindingValue' is the value level part of a binding declaration. That
 -- is, the part that isn't the type declaration. For example, in @f :: Int ->

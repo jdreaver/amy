@@ -9,6 +9,7 @@ module Rascal.Renamer.Monad
   , addValueToScope
   , addTypeToScope
   , lookupValueInScope
+  , lookupValueInScopeOrError
   , lookupTypeInScope
   , withNewScope
   ) where
@@ -19,7 +20,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 
-import Rascal.Renamer.AST
+import Rascal.Names
 
 newtype Renamer a = Renamer (ExceptT [RenamerError] (State RenamerState) a)
   deriving (Functor, Applicative, Monad, MonadState RenamerState, MonadError [RenamerError])
@@ -32,7 +33,6 @@ data RenamerError
   | BindingLacksTypeSignature !Text
   | UnknownType !Text
   | UnknownVariable !Text
-  | FunctionArgumentMismatch !Text !Int !Int
   | VariableShadowed !Text !IdName
   deriving (Show, Eq)
 
@@ -82,6 +82,10 @@ addTypeToScope name = do
 
 lookupValueInScope :: Text -> Renamer (Maybe IdName)
 lookupValueInScope name = Map.lookup name <$> gets renamerStateValues
+
+lookupValueInScopeOrError :: Text -> Renamer IdName
+lookupValueInScopeOrError name =
+  lookupValueInScope name >>= maybe (throwError [UnknownVariable name]) pure
 
 lookupTypeInScope :: Text -> Renamer (Maybe IdName)
 lookupTypeInScope name = Map.lookup name <$> gets renamerStateTypes
