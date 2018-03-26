@@ -15,78 +15,78 @@ import Data.Void (Void)
 import Data.Text (Text)
 import Text.Megaparsec
 
+import Rascal.AST
 import Rascal.Parser.Lexer
-import Rascal.Parser.AST
 
 type Parser = Parsec Void Text
 -- type ParserError = ParseError Void Char
 
-parserAST :: Parser ParserAST
-parserAST = ParserAST <$> declaration `sepByNonEmpty` semicolon
+parserAST :: Parser (AST Text)
+parserAST = AST <$> topLevel `sepBy` semicolon
 
-declaration :: Parser ParserASTDeclaration
-declaration =
-  (ParserASTExtern <$> externType)
-  <|> try (ParserASTBindingType <$> bindingType)
-  <|> try (ParserASTBinding <$> binding)
+topLevel :: Parser (TopLevel Text)
+topLevel =
+  (TopLevelExternType <$> externType)
+  <|> try (TopLevelBindingType <$> bindingType)
+  <|> try (TopLevelBindingValue <$> binding)
 
-externType :: Parser ParserBindingTypeDeclaration
+externType :: Parser (BindingType Text)
 externType = do
   extern
   bindingType
 
-bindingType :: Parser ParserBindingTypeDeclaration
+bindingType :: Parser (BindingType Text)
 bindingType = do
   bindingName <- identifier
   doubleColon
   typeNames <- typeIdentifier `sepByNonEmpty` typeSeparatorArrow
   pure
-    ParserBindingTypeDeclaration
-    { parserBindingTypeDeclarationName = bindingName
-    , parserBindingTypeDeclarationTypeNames = typeNames
+    BindingType
+    { bindingTypeName = bindingName
+    , bindingTypeType = typeNames
     }
 
-binding :: Parser ParserBindingDeclaration
+binding :: Parser (BindingValue Text)
 binding = do
   bindingName <- identifier
   args <- many identifier
   equals
   expr <- expression
   pure
-    ParserBindingDeclaration
-    { parserBindingDeclarationName = bindingName
-    , parserBindingDeclarationArgs = args
-    , parserBindingDeclarationBody = expr
+    BindingValue
+    { bindingValueName = bindingName
+    , bindingValueArgs = args
+    , bindingValueBody = expr
     }
 
-expression :: Parser ParserASTExpression
+expression :: Parser (Expression Text)
 expression =
-  try (ParserASTFunctionApplication <$> functionApplication)
+  try (ExpressionFunctionApplication <$> functionApplication)
   <|> expressionNotApplication
 
 -- | Parses any expression except function application. This is needed to avoid
 -- left recursion. Without this distinction, f a b would be parsed as f (a b)
 -- instead of (f a) b.
-expressionNotApplication :: Parser ParserASTExpression
+expressionNotApplication :: Parser (Expression Text)
 expressionNotApplication =
   expressionParens
-  <|> (ParserASTLiteral <$> literal)
-  <|> try (ParserASTVariable <$> identifier)
+  <|> (ExpressionLiteral <$> literal)
+  <|> try (ExpressionVariable <$> identifier)
 
-expressionParens :: Parser ParserASTExpression
-expressionParens = ParserASTExpressionParens <$> between lparen rparen expression
+expressionParens :: Parser (Expression Text)
+expressionParens = ExpressionParens <$> between lparen rparen expression
 
 literal :: Parser Literal
 literal =
   try (LiteralDouble <$> double)
   <|> (LiteralInt <$> integer)
 
-functionApplication :: Parser ParserFunctionApplication
+functionApplication :: Parser (FunctionApplication Text)
 functionApplication = do
   functionName <- identifier
   args <- someNonEmpty expressionNotApplication
   pure
-    ParserFunctionApplication
-    { parserFunctionApplicationFunctionName = functionName
-    , parserFunctionApplicationArgs = args
+    FunctionApplication
+    { functionApplicationFunctionName = functionName
+    , functionApplicationArgs = args
     }

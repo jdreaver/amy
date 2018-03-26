@@ -12,7 +12,7 @@ import Test.Hspec.Megaparsec
 import Text.Megaparsec
 import Text.Shakespeare.Text (st)
 
-import Rascal.Parser.AST
+import Rascal.AST
 import Rascal.Parser.Parser
 
 spec :: Spec
@@ -22,58 +22,58 @@ spec = do
     it "parses a small module" $ do
       parse parserAST "" sampleModule
         `shouldParse`
-        ParserAST
-        [ ParserASTBindingType
-          ParserBindingTypeDeclaration
-          { parserBindingTypeDeclarationName = "f"
-          , parserBindingTypeDeclarationTypeNames = ["Int", "Double"]
+        AST
+        [ TopLevelBindingType
+          BindingType
+          { bindingTypeName = "f"
+          , bindingTypeType = ["Int", "Double"]
           }
-        , ParserASTBinding
-          ParserBindingDeclaration
-          { parserBindingDeclarationName = "f"
-          , parserBindingDeclarationArgs = ["x"]
-          , parserBindingDeclarationBody =
-            ParserASTLiteral (LiteralInt 1)
+        , TopLevelBindingValue
+          BindingValue
+          { bindingValueName = "f"
+          , bindingValueArgs = ["x"]
+          , bindingValueBody =
+            ExpressionLiteral (LiteralInt 1)
           }
         ]
 
   describe "expression" $ do
     it "parses complex expressions" $ do
       parse expression "" "f (g x) 1" `shouldParse`
-        ParserASTFunctionApplication (
-          ParserFunctionApplication
+        ExpressionFunctionApplication (
+          FunctionApplication
           "f"
-          [ ParserASTExpressionParens (
-             ParserASTFunctionApplication $
-             ParserFunctionApplication "g" [ParserASTVariable "x"]
+          [ ExpressionParens (
+             ExpressionFunctionApplication $
+             FunctionApplication "g" [ExpressionVariable "x"]
             )
-          , ParserASTLiteral (LiteralInt 1)
+          , ExpressionLiteral (LiteralInt 1)
           ]
         )
 
   describe "externType" $ do
     it "parses extern declaration" $ do
-      parse externType "" "extern f :: Int" `shouldParse` ParserBindingTypeDeclaration "f" ["Int"]
-      parse externType "" "extern f :: Int -> Double" `shouldParse` ParserBindingTypeDeclaration "f" ["Int", "Double"]
+      parse externType "" "extern f :: Int" `shouldParse` BindingType "f" ["Int"]
+      parse externType "" "extern f :: Int -> Double" `shouldParse` BindingType "f" ["Int", "Double"]
 
   describe "bindingType" $ do
     it "parses binding types" $ do
-      parse bindingType "" "f :: Int" `shouldParse` ParserBindingTypeDeclaration "f" ["Int"]
-      parse bindingType "" "f :: Int -> Double" `shouldParse` ParserBindingTypeDeclaration "f" ["Int", "Double"]
+      parse bindingType "" "f :: Int" `shouldParse` BindingType "f" ["Int"]
+      parse bindingType "" "f :: Int -> Double" `shouldParse` BindingType "f" ["Int", "Double"]
 
   describe "expressionParens" $ do
     it "parses expressions in parens" $ do
-      parse expressionParens "" "(x)" `shouldParse` ParserASTExpressionParens (ParserASTVariable "x")
+      parse expressionParens "" "(x)" `shouldParse` ExpressionParens (ExpressionVariable "x")
       parse expressionParens "" "(f x)"
         `shouldParse`
-        ParserASTExpressionParens (ParserASTFunctionApplication $ ParserFunctionApplication "f" [ParserASTVariable "x"])
+        ExpressionParens (ExpressionFunctionApplication $ FunctionApplication "f" [ExpressionVariable "x"])
 
   describe "functionApplication" $ do
     it "parses an application" $ do
-      parse functionApplication "" "f x" `shouldParse` ParserFunctionApplication "f" [ParserASTVariable "x"]
+      parse functionApplication "" "f x" `shouldParse` FunctionApplication "f" [ExpressionVariable "x"]
       parse functionApplication "" "f x 1"
         `shouldParse`
-        ParserFunctionApplication "f" [ParserASTVariable "x", ParserASTLiteral (LiteralInt 1)]
+        FunctionApplication "f" [ExpressionVariable "x", ExpressionLiteral (LiteralInt 1)]
 
   describe "literal" $ do
     it "can discriminate between integer and double" $ do

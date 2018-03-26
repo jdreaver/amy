@@ -24,7 +24,7 @@ module Rascal.TypeCheck.AST
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 
-import Rascal.Parser.AST (Literal(..))
+import Rascal.AST (Literal(..))
 import Rascal.Renamer.AST
 
 -- | A 'Type' is a 'NonEmpty' list of primitive types. A primitive type is just

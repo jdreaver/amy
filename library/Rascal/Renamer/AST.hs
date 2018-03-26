@@ -13,7 +13,7 @@ module Rascal.Renamer.AST
 import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 
-import Rascal.Parser.AST (Literal)
+import Rascal.AST (Literal)
 
 data IdName
   = IdName
