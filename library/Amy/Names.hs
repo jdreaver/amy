@@ -1,4 +1,4 @@
-module Rascal.Names
+module Amy.Names
   ( IdName(..)
   , IdNameProvenance(..)
   , NameId

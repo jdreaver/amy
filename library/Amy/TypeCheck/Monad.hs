@@ -1,6 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Rascal.TypeCheck.Monad
+module Amy.TypeCheck.Monad
   ( TypeCheck
   , runTypeCheck
   , TypeCheckError(..)
@@ -19,8 +19,8 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 
-import Rascal.Names
-import Rascal.Type
+import Amy.Names
+import Amy.Type
 
 newtype TypeCheck a = TypeCheck (ExceptT [TypeCheckError] (State TypeCheckState) a)
   deriving (Functor, Applicative, Monad, MonadState TypeCheckState, MonadError [TypeCheckError])

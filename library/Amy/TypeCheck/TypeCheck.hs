@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Rascal.TypeCheck.TypeCheck
+module Amy.TypeCheck.TypeCheck
   ( typeCheck
   ) where
 
@@ -11,10 +11,10 @@ import qualified Data.List.NonEmpty as NE
 import Data.Maybe (mapMaybe)
 import GHC.Exts (toList)
 
-import Rascal.AST
-import Rascal.Names
-import Rascal.Type
-import Rascal.TypeCheck.Monad
+import Amy.AST
+import Amy.Names
+import Amy.Type
+import Amy.TypeCheck.Monad
 
 typeCheck :: AST IdName () -> Either [TypeCheckError] (AST IdName Type)
 typeCheck ast = runTypeCheck emptyTypeCheckState $ typeCheck' ast

@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Rascal.Codegen.Monad
+module Amy.Codegen.Monad
   ( FunctionGen
   , runGenBlocks
   , generateId

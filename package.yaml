@@ -1,4 +1,4 @@
-name: rascal
+name: amy
 
 dependencies:
   - base
@@ -22,16 +22,16 @@ tests:
     source-dirs:
       - tests
     dependencies:
-      - rascal
+      - amy
       - hspec
       - hspec-discover
       - hspec-megaparsec
       - shakespeare
 
 executables:
-  rascal:
+  amy:
     source-dirs: executables
     main: Main.hs
     dependencies:
-      - rascal
+      - amy
       - haskeline

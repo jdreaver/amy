@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
-module Rascal.Parser.ParserSpec
+module Amy.Parser.ParserSpec
   ( spec
   ) where
 
@@ -12,8 +12,8 @@ import Test.Hspec.Megaparsec
 import Text.Megaparsec
 import Text.Shakespeare.Text (st)
 
-import Rascal.AST
-import Rascal.Parser.Parser
+import Amy.AST
+import Amy.Parser.Parser
 
 spec :: Spec
 spec = do

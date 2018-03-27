@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Rascal.Codegen.Pure
+module Amy.Codegen.Pure
   ( codegenPure
   ) where
 
@@ -21,10 +21,10 @@ import qualified LLVM.AST.Float as F
 import qualified LLVM.AST.IntegerPredicate as IP
 import LLVM.AST.Global as LLVM
 
-import Rascal.AST
-import Rascal.Codegen.Monad
-import Rascal.Names
-import Rascal.Type as T
+import Amy.AST
+import Amy.Codegen.Monad
+import Amy.Names
+import Amy.Type as T
 
 codegenPure :: AST IdName T.Type -> Module
 codegenPure (AST declarations) =
@@ -32,14 +32,14 @@ codegenPure (AST declarations) =
     definitions = mapMaybe codegenDeclaration declarations
   in
     defaultModule
-    { moduleName = "rascal-module"
+    { moduleName = "amy-module"
     , moduleDefinitions = definitions
     }
 
 textToShortBS :: Text -> ShortByteString
 textToShortBS = BSS.toShort . encodeUtf8
 
--- | Convert from a rascal primitive type to an LLVM type
+-- | Convert from a amy primitive type to an LLVM type
 llvmPrimitiveType :: PrimitiveType -> LLVM.Type
 llvmPrimitiveType IntType = IntegerType 32
 llvmPrimitiveType DoubleType = FloatingPointType DoubleFP

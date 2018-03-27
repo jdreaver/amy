@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Rascal.Parser.LexerSpec
+module Amy.Parser.LexerSpec
   ( spec
   ) where
 
@@ -9,7 +9,7 @@ import Test.Hspec
 import Test.Hspec.Megaparsec
 import Text.Megaparsec
 
-import Rascal.Parser.Lexer
+import Amy.Parser.Lexer
 
 spec :: Spec
 spec = do

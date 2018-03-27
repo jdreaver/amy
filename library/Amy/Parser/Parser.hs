@@ -1,4 +1,4 @@
-module Rascal.Parser.Parser
+module Amy.Parser.Parser
   ( parserAST
 
   , externType
@@ -17,8 +17,8 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Text.Megaparsec
 
-import Rascal.AST
-import Rascal.Parser.Lexer
+import Amy.AST
+import Amy.Parser.Lexer
 
 type Parser = Parsec Void Text
 -- type ParserError = ParseError Void Char

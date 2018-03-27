@@ -1,3 +1,3 @@
-module Rascal
+module Amy
   (
   ) where

@@ -1,4 +1,4 @@
-module Rascal.Codegen.Emit
+module Amy.Codegen.Emit
   ( generateLLVMIR
   ) where
 
@@ -7,10 +7,10 @@ import LLVM.Context
 import LLVM.Module
 -- import LLVM.Pretty (ppllvm)
 
-import Rascal.AST
-import Rascal.Codegen.Pure
-import Rascal.Names
-import Rascal.Type
+import Amy.AST
+import Amy.Codegen.Pure
+import Amy.Names
+import Amy.Type
 
 generateLLVMIR :: AST IdName Type -> IO ByteString
 generateLLVMIR ast =

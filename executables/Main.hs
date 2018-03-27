@@ -11,13 +11,13 @@ import System.Exit (die)
 import System.IO (hPutStrLn, stderr)
 import Text.Megaparsec
 
-import Rascal.AST
-import Rascal.Codegen
-import Rascal.Names
-import Rascal.Renamer
-import Rascal.Parser
-import Rascal.Type
-import Rascal.TypeCheck
+import Amy.AST
+import Amy.Codegen
+import Amy.Names
+import Amy.Renamer
+import Amy.Parser
+import Amy.Type
+import Amy.TypeCheck
 
 main :: IO ()
 main = do
@@ -25,10 +25,10 @@ main = do
   case args of
     [] -> runInputT defaultSettings loop
     [arg] -> process (pack arg)
-    _ -> die "Usage: rascal [optional program text]"
+    _ -> die "Usage: amy [optional program text]"
  where
   loop = do
-    minput <- getInputLine "rascal> "
+    minput <- getInputLine "amy> "
     case minput of
       Nothing -> outputStrLn "Goodbye."
       Just input -> do

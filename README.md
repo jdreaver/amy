@@ -1,1 +1,1 @@
-# The Rascal Programming Language
+# The Amy Programming Language

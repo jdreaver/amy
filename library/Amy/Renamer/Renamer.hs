@@ -1,6 +1,6 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Rascal.Renamer.Renamer
+module Amy.Renamer.Renamer
   ( rename
   ) where
 
@@ -8,9 +8,9 @@ import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import GHC.Exts (toList)
 
-import Rascal.AST
-import Rascal.Names
-import Rascal.Renamer.Monad
+import Amy.AST
+import Amy.Names
+import Amy.Renamer.Monad
 
 -- | Gives a unique identity to all names in the AST
 rename :: AST Text () -> Either [RenamerError] (AST IdName ())

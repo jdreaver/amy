@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Rascal.Type
+module Amy.Type
   ( Type(..)
   , returnType
   , argTypes
@@ -15,7 +15,7 @@ import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 
-import Rascal.AST
+import Amy.AST
 
 data Type
   = PrimitiveTy !PrimitiveType

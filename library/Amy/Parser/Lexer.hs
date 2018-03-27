@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Rascal.Parser.Lexer
+module Amy.Parser.Lexer
   ( spaceConsumer
   , integer
   , double

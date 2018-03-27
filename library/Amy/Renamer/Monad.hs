@@ -1,6 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Rascal.Renamer.Monad
+module Amy.Renamer.Monad
   ( Renamer
   , runRenamer
   , emptyRenamerState
@@ -18,7 +18,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 
-import Rascal.Names
+import Amy.Names
 
 newtype Renamer a = Renamer (ExceptT [RenamerError] (State RenamerState) a)
   deriving (Functor, Applicative, Monad, MonadState RenamerState, MonadError [RenamerError])

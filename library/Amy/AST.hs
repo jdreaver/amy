@@ -1,4 +1,4 @@
-module Rascal.AST
+module Amy.AST
   ( AST(..)
   , TopLevel(..)
   , topLevelBindingValue
