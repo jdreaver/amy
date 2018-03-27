@@ -9,8 +9,6 @@ module Rascal.TypeCheck.Monad
   , setValuePrimitiveType
   , lookupValueType
   , lookupValueTypeOrError
-  , lookupValuePrimitiveTypeOrError
-  , lookupValueFunctionTypeOrError
   , module Control.Monad.Except
   , module Control.Monad.State.Strict
   ) where
@@ -34,9 +32,9 @@ data TypeCheckError
   = TypeMismatch !Type !Type
   | UnknownTypeName !Text
   | CantFindType !IdName
-  | WrongNumberOfArguments !IdName !Int !Int
-  | ExpectedPrimitiveType !IdName !Type
-  | ExpectedFunctionType !IdName !Type
+  | WrongNumberOfArguments !Int !Int
+  | ExpectedPrimitiveType !(Maybe IdName) !Type
+  | ExpectedFunctionType !Type
   deriving (Show, Eq)
 
 data TypeCheckState
@@ -70,17 +68,3 @@ lookupValueTypeOrError idName =
   lookupValueType (idNameId idName) >>= maybe (throwError [err]) pure
  where
   err = CantFindType idName
-
-lookupValuePrimitiveTypeOrError :: IdName -> TypeCheck PrimitiveType
-lookupValuePrimitiveTypeOrError idName = do
-  ty <- lookupValueTypeOrError idName
-  case ty of
-    PrimitiveTy prim -> pure prim
-    _ -> throwError [ExpectedPrimitiveType idName ty]
-
-lookupValueFunctionTypeOrError :: IdName -> TypeCheck FunctionType
-lookupValueFunctionTypeOrError idName = do
-  ty <- lookupValueTypeOrError idName
-  case ty of
-    FunctionTy ft -> pure ft
-    _ -> throwError [ExpectedFunctionType idName ty]

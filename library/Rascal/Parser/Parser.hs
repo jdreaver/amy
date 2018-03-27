@@ -5,15 +5,16 @@ module Rascal.Parser.Parser
   , bindingType
   , binding
   , expression
-  , expressionNotApplication
+  , expression'
   , expressionParens
   , ifExpression
   , literal
-  , functionApplication
   ) where
 
-import Data.Void (Void)
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
+import Data.Void (Void)
 import Text.Megaparsec
 
 import Rascal.AST
@@ -62,15 +63,29 @@ binding = do
     }
 
 expression :: Parser (Expression Text ())
-expression =
-  try (ExpressionFunctionApplication <$> functionApplication)
-  <|> expressionNotApplication
+expression = do
+  -- Parse a NonEmpty list of expressions separated by spaces.
+  expressions <- expression' `sepByNonEmpty` spaceConsumer
+
+  pure $
+    case expressions of
+      -- Just a simple expression
+      expr :| [] -> expr
+      -- We must have a function application
+      f :| args ->
+        ExpressionFunctionApplication
+        FunctionApplication
+        { functionApplicationFunction = f
+        , functionApplicationArgs = NE.fromList args
+        , functionApplicationReturnType = ()
+        }
+
 
 -- | Parses any expression except function application. This is needed to avoid
 -- left recursion. Without this distinction, f a b would be parsed as f (a b)
 -- instead of (f a) b.
-expressionNotApplication :: Parser (Expression Text ())
-expressionNotApplication =
+expression' :: Parser (Expression Text ())
+expression' =
   expressionParens
   <|> (ExpressionLiteral <$> literal)
   <|> (ExpressionIf <$> ifExpression)
@@ -108,15 +123,4 @@ ifExpression = do
     , ifThen = thenExpression
     , ifElse = elseExpression
     , ifType = ()
-    }
-
-functionApplication :: Parser (FunctionApplication Text ())
-functionApplication = do
-  functionName <- identifier
-  args <- someNonEmpty expressionNotApplication
-  pure
-    FunctionApplication
-    { functionApplicationFunctionName = functionName
-    , functionApplicationType = ()
-    , functionApplicationArgs = args
     }

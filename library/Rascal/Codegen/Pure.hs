@@ -135,12 +135,15 @@ codegenExpression (ExpressionIf (If predicate thenExpression elseExpression ty))
   startNewBlock endBlockName
   phi (llvmPrimitiveType $ assertPrimitiveType ty) [(thenOp, thenBlockName), (elseOp, elseBlockName)]
 codegenExpression (ExpressionFunctionApplication app) = do
+  fnName <-
+    case functionApplicationFunction app of
+      ExpressionVariable var -> pure $ variableName var
+      _ -> error $ "Expected function to be variable (no currying yet). Got " ++ show app
   let
-    fnName = functionApplicationFunctionName app
     fnArgs = functionApplicationArgs app
     fnArgTypes = toList $ assertPrimitiveType . expressionType <$> fnArgs
   argOps <- mapM codegenExpression fnArgs
-  functionCallInstruction fnName (toList argOps) fnArgTypes (assertPrimitiveType $ functionApplicationType app)
+  functionCallInstruction fnName (toList argOps) fnArgTypes (assertPrimitiveType $ functionApplicationReturnType app)
 codegenExpression (ExpressionParens expression) = codegenExpression expression
 
 functionCallInstruction

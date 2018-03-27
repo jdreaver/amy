@@ -89,9 +89,9 @@ data If name ty
 -- argument, like @f x y@.
 data FunctionApplication name ty
   = FunctionApplication
-  { functionApplicationFunctionName :: !name
-  , functionApplicationType :: !ty
+  { functionApplicationFunction :: !(Expression name ty)
   , functionApplicationArgs :: !(NonEmpty (Expression name ty))
+  , functionApplicationReturnType :: !ty
   } deriving (Show, Eq)
 
 -- | A 'Literal' is any literal from the source code. This type is used in many

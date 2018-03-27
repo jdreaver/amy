@@ -82,7 +82,7 @@ typeCheckBindingValue bindingValue = do
   -- Make sure expression type matches binding return type
   let expType = expressionType expression
   expressionType' <-
-    maybe (throwError [ExpectedPrimitiveType (bindingValueName bindingValue) expType]) pure $
+    maybe (throwError [ExpectedPrimitiveType (Just $ bindingValueName bindingValue) expType]) pure $
     primitiveType expType
   let
     returnType' = returnType type'
@@ -100,11 +100,11 @@ typeCheckExpression
   -> TypeCheck (Expression IdName Type)
 typeCheckExpression (ExpressionLiteral lit) = pure $ ExpressionLiteral lit
 typeCheckExpression (ExpressionVariable var) = do
-  ty <- lookupValuePrimitiveTypeOrError (variableName var)
+  ty <- lookupValueTypeOrError (variableName var)
   pure $
     ExpressionVariable
     var
-    { variableType = PrimitiveTy ty
+    { variableType = ty
     }
 typeCheckExpression (ExpressionIf (If predicate thenExpression elseExpression ())) = do
   predicate' <- typeCheckExpression predicate
@@ -133,22 +133,27 @@ typeCheckExpression (ExpressionIf (If predicate thenExpression elseExpression ()
     , ifType = thenType
     }
 typeCheckExpression (ExpressionFunctionApplication app) = do
-  -- Compute function return type
-  funcType <- lookupValueFunctionTypeOrError $ functionApplicationFunctionName app
+  -- Type check the function expression
+  function <- typeCheckExpression $ functionApplicationFunction app
+  let
+    funcType = expressionType function
 
-  -- Compute types of args
+  -- Type check the arguments
   args <- mapM typeCheckExpression $ functionApplicationArgs app
   argTypes' <- forM args $ \arg ->
     let argType = expressionType arg
-    in maybe (throwError [ExpectedPrimitiveType (functionApplicationFunctionName app) argType]) pure $
+    in maybe (throwError [ExpectedPrimitiveType Nothing argType]) pure $
        primitiveType argType
 
   -- Make sure there is the right number of arguments
+  funcType' <-
+    case funcType of
+      FunctionTy ft -> pure ft
+      _ -> throwError [ExpectedFunctionType funcType]
   let
-    funcName = functionApplicationFunctionName app
-    funcArgTypes = functionTypeArgTypes funcType
+    funcArgTypes = functionTypeArgTypes funcType'
   unless (length argTypes' == length funcArgTypes) $
-    throwError [WrongNumberOfArguments funcName (length argTypes') (length funcArgTypes)]
+    throwError [WrongNumberOfArguments (length argTypes') (length funcArgTypes)]
 
   -- Make sure arg types make function types
   let
@@ -162,9 +167,10 @@ typeCheckExpression (ExpressionFunctionApplication app) = do
   -- Put it all together
   pure $
     ExpressionFunctionApplication
-    app
-    { functionApplicationType = PrimitiveTy $ functionTypeReturnType funcType
+    FunctionApplication
+    { functionApplicationFunction = function
     , functionApplicationArgs = args
+    , functionApplicationReturnType = PrimitiveTy $ functionTypeReturnType funcType'
     }
 typeCheckExpression (ExpressionParens expr) =
   ExpressionParens <$> typeCheckExpression expr

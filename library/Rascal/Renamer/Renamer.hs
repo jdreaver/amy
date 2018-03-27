@@ -4,7 +4,6 @@ module Rascal.Renamer.Renamer
   ( rename
   ) where
 
-import Control.Monad.Except
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import GHC.Exts (toList)
@@ -92,14 +91,13 @@ renameExpression (ExpressionIf (If predicate thenExpression elseExpression _)) =
   <*> renameExpression elseExpression
   <*> pure ()
 renameExpression (ExpressionFunctionApplication app) = do
-  let funcName = functionApplicationFunctionName app
-  funcNameId <- maybe (throwError [UnknownVariable funcName]) pure =<< lookupValueInScope funcName
+  function <- renameExpression $ functionApplicationFunction app
   expressions <- mapM renameExpression (functionApplicationArgs app)
   pure $
     ExpressionFunctionApplication
     FunctionApplication
-    { functionApplicationFunctionName = funcNameId
-    , functionApplicationType = ()
+    { functionApplicationFunction = function
     , functionApplicationArgs = expressions
+    , functionApplicationReturnType = ()
     }
 renameExpression (ExpressionParens expr) = ExpressionParens <$> renameExpression expr

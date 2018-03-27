@@ -43,14 +43,17 @@ spec = do
       parse expression "" "f (g x) 1" `shouldParse`
         ExpressionFunctionApplication (
           FunctionApplication
-          "f"
-          ()
+          (ExpressionVariable (Variable "f" ()))
           [ ExpressionParens (
              ExpressionFunctionApplication $
-             FunctionApplication "g" () [ExpressionVariable (Variable "x" ())]
+             FunctionApplication
+               (ExpressionVariable (Variable "g" ()))
+               [ExpressionVariable (Variable "x" ())]
+               ()
             )
           , ExpressionLiteral (LiteralInt 1)
           ]
+          ()
         )
 
   describe "externType" $ do
@@ -68,7 +71,13 @@ spec = do
       parse expressionParens "" "(x)" `shouldParse` ExpressionParens (ExpressionVariable (Variable "x" ()))
       parse expressionParens "" "(f x)"
         `shouldParse`
-        ExpressionParens (ExpressionFunctionApplication $ FunctionApplication "f" () [ExpressionVariable (Variable "x" ())])
+        ExpressionParens (
+          ExpressionFunctionApplication
+            (FunctionApplication
+               (ExpressionVariable (Variable "f" ()))
+               [ExpressionVariable (Variable "x" ())]
+               ()
+            ))
 
   describe "ifExpression" $ do
     it "parses if expressions" $ do
@@ -82,17 +91,25 @@ spec = do
       parse ifExpression "" "if f x then f y else g 2"
         `shouldParse`
         If
-          (ExpressionFunctionApplication $ FunctionApplication "f" () [ExpressionVariable (Variable "x" ())])
-          (ExpressionFunctionApplication $ FunctionApplication "f" () [ExpressionVariable (Variable "y" ())])
-          (ExpressionFunctionApplication $ FunctionApplication "g" () [ExpressionLiteral (LiteralInt 2)])
+          (ExpressionFunctionApplication $
+             FunctionApplication
+               (ExpressionVariable (Variable "f" ()))
+               [ExpressionVariable (Variable "x" ())]
+               ()
+          )
+          (ExpressionFunctionApplication $
+             FunctionApplication
+               (ExpressionVariable (Variable "f" ()))
+               [ExpressionVariable (Variable "y" ())]
+               ()
+          )
+          (ExpressionFunctionApplication $
+             FunctionApplication
+               (ExpressionVariable (Variable "g" ()))
+               [ExpressionLiteral (LiteralInt 2)]
+               ()
+          )
           ()
-
-  describe "functionApplication" $ do
-    it "parses an application" $ do
-      parse functionApplication "" "f x" `shouldParse` FunctionApplication "f" () [ExpressionVariable (Variable "x" ())]
-      parse functionApplication "" "f x 1"
-        `shouldParse`
-        FunctionApplication "f" () [ExpressionVariable (Variable "x" ()), ExpressionLiteral (LiteralInt 1)]
 
   describe "literal" $ do
     it "can discriminate between integer and double" $ do

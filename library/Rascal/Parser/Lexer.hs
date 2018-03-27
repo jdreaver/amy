@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Rascal.Parser.Lexer
-  ( integer
+  ( spaceConsumer
+  , integer
   , double
   , bool
   , symbol
