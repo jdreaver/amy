@@ -5,6 +5,7 @@ dependencies:
   - bytestring
   - containers
   - llvm-hs
+  # - llvm-hs-pretty
   - llvm-hs-pure
   - megaparsec
   - mtl

@@ -5,6 +5,7 @@ module Rascal.Codegen.Emit
 import Data.ByteString (ByteString)
 import LLVM.Context
 import LLVM.Module
+-- import LLVM.Pretty (ppllvm)
 
 import Rascal.AST
 import Rascal.Codegen.Pure
