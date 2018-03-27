@@ -23,7 +23,9 @@ rename' (AST declarations) = do
   -- errors as possible. For example, we should be able to validate all binding
   -- declarations "in parallel" so if more than one has an error we can show
   -- all the errors. Currently we fail on the first error. Maybe this should be
-  -- applicative?
+  -- applicative? I think MonadPlus or Errors
+  -- (http://hackage.haskell.org/package/transformers-0.5.2.0/docs/Control-Applicative-Lift.html#t:Errors)
+  -- might be the way to go.
 
   -- Rename extern declarations
   let externs = mapMaybe topLevelExternType (toList declarations)
