@@ -38,6 +38,10 @@ spec = do
           }
         ]
 
+    it "rejects indented top-level declarations" $ do
+      parse parserAST "" "  f :: Int"
+        `shouldFailWith` FancyError [SourcePos "" (mkPos 1) (mkPos 3)] [ErrorIndentation EQ (mkPos 1) (mkPos 3)]
+
   describe "expression" $ do
     it "parses complex expressions" $ do
       parse expression "" "f (g x) 1" `shouldParse`

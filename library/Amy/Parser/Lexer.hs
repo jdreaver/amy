@@ -2,6 +2,7 @@
 
 module Amy.Parser.Lexer
   ( spaceConsumer
+  , noIndent
   , integer
   , double
   , bool
@@ -39,6 +40,9 @@ spaceConsumer = L.space space1 lineComment blockComment
  where
   lineComment  = L.skipLineComment "#"
   blockComment = empty
+
+noIndent :: Lexer a -> Lexer a
+noIndent = L.nonIndented spaceConsumer
 
 integer :: Lexer Int
 integer = lexeme L.decimal

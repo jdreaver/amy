@@ -25,7 +25,7 @@ type Parser = Parsec Void Text
 -- type ParserError = ParseError Void Char
 
 parserAST :: Parser (AST Text ())
-parserAST = AST <$> topLevel `sepBy` semicolon
+parserAST = AST <$> noIndent topLevel `sepBy` semicolon
 
 topLevel :: Parser (TopLevel Text ())
 topLevel =
