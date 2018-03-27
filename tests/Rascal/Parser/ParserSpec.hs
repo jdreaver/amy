@@ -26,12 +26,13 @@ spec = do
         [ TopLevelBindingType
           BindingType
           { bindingTypeName = "f"
-          , bindingTypeType = ["Int", "Double"]
+          , bindingTypeTypeNames = ["Int", "Double"]
           }
         , TopLevelBindingValue
           BindingValue
           { bindingValueName = "f"
           , bindingValueArgs = ["x"]
+          , bindingValueType = ()
           , bindingValueBody =
             ExpressionLiteral (LiteralInt 1)
           }
@@ -43,9 +44,10 @@ spec = do
         ExpressionFunctionApplication (
           FunctionApplication
           "f"
+          ()
           [ ExpressionParens (
              ExpressionFunctionApplication $
-             FunctionApplication "g" [ExpressionVariable "x"]
+             FunctionApplication "g" () [ExpressionVariable (Variable "x" ())]
             )
           , ExpressionLiteral (LiteralInt 1)
           ]
@@ -63,17 +65,17 @@ spec = do
 
   describe "expressionParens" $ do
     it "parses expressions in parens" $ do
-      parse expressionParens "" "(x)" `shouldParse` ExpressionParens (ExpressionVariable "x")
+      parse expressionParens "" "(x)" `shouldParse` ExpressionParens (ExpressionVariable (Variable "x" ()))
       parse expressionParens "" "(f x)"
         `shouldParse`
-        ExpressionParens (ExpressionFunctionApplication $ FunctionApplication "f" [ExpressionVariable "x"])
+        ExpressionParens (ExpressionFunctionApplication $ FunctionApplication "f" () [ExpressionVariable (Variable "x" ())])
 
   describe "functionApplication" $ do
     it "parses an application" $ do
-      parse functionApplication "" "f x" `shouldParse` FunctionApplication "f" [ExpressionVariable "x"]
+      parse functionApplication "" "f x" `shouldParse` FunctionApplication "f" () [ExpressionVariable (Variable "x" ())]
       parse functionApplication "" "f x 1"
         `shouldParse`
-        FunctionApplication "f" [ExpressionVariable "x", ExpressionLiteral (LiteralInt 1)]
+        FunctionApplication "f" () [ExpressionVariable (Variable "x" ()), ExpressionLiteral (LiteralInt 1)]
 
   describe "literal" $ do
     it "can discriminate between integer and double" $ do

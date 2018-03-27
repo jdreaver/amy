@@ -1,15 +1,10 @@
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 module Rascal.Renamer.Renamer
   ( rename
   ) where
 
-import Control.Monad (void)
 import Control.Monad.Except
-import Data.Either (partitionEithers)
-import Data.List.NonEmpty (NonEmpty)
-import qualified Data.List.NonEmpty as NE
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import GHC.Exts (toList)
@@ -19,16 +14,10 @@ import Rascal.Names
 import Rascal.Renamer.Monad
 
 -- | Gives a unique identity to all names in the AST
-rename :: AST Text -> Either [RenamerError] (AST IdName)
-rename ast = runRenamer emptyRenamerState $ setupDefaultEnvironment >> rename' ast
+rename :: AST Text () -> Either [RenamerError] (AST IdName ())
+rename ast = runRenamer emptyRenamerState $ rename' ast
 
--- | Add known type definitions
-setupDefaultEnvironment :: Renamer ()
-setupDefaultEnvironment = do
-  void $ addTypeToScope "Int"
-  void $ addTypeToScope "Double"
-
-rename' :: AST Text -> Renamer (AST IdName)
+rename' :: AST Text () -> Renamer (AST IdName ())
 rename' (AST declarations) = do
   -- TODO: Try to do each of these steps in such a way that we can get as many
   -- errors as possible. For example, we should be able to validate all binding
@@ -40,16 +29,12 @@ rename' (AST declarations) = do
   let externs = mapMaybe topLevelExternType (toList declarations)
   externs' <- fmap TopLevelExternType <$> mapM renameBindingType externs
 
-  -- Rename binding type declarations
+  -- Rename binding type declarations and add value bindings to scope
   let bindingTypes = mapMaybe topLevelBindingType (toList declarations)
   bindingTypes' <- fmap TopLevelBindingType <$> mapM renameBindingType bindingTypes
 
-  -- Add all top-level binding names to scope. This is necessary so that
-  -- binding value expressions can reference any other top-level binding.
-  let bindingValues = mapMaybe topLevelBindingValue (toList declarations)
-  mapM_ (addValueToScope TopLevelDefinition . bindingValueName) bindingValues
-
   -- Rename binding value declarations
+  let bindingValues = mapMaybe topLevelBindingValue (toList declarations)
   bindingValues' <- fmap TopLevelBindingValue <$> mapM renameBindingValue bindingValues
 
   pure $ AST $ externs' ++ bindingTypes' ++ bindingValues'
@@ -57,30 +42,18 @@ rename' (AST declarations) = do
 renameBindingType
   :: BindingType Text
   -> Renamer (BindingType IdName)
-renameBindingType declaration = do
+renameBindingType bindingType = do
   -- Add extern name to scope
-  idName <- addValueToScope TopLevelDefinition $ bindingTypeName declaration
-
-  -- Add types to scope
-  typeIds <- ensureTypesExist $ bindingTypeType declaration
+  idName <- addValueToScope TopLevelDefinition $ bindingTypeName bindingType
 
   pure
-    BindingType
+    bindingType
     { bindingTypeName = idName
-    , bindingTypeType = typeIds
     }
 
-ensureTypesExist :: NonEmpty Text -> Renamer (NonEmpty IdName)
-ensureTypesExist typeNames = do
-  let lookupTypeWithError typeName = maybe (Left $ UnknownType typeName) Right <$> lookupTypeInScope typeName
-  eTypeIds <- mapM lookupTypeWithError (toList typeNames)
-  case partitionEithers eTypeIds of
-    ([], ids) -> pure (NE.fromList ids) -- NE.fromList shouldn't fail since all IDs exist
-    (errors, _) -> throwError errors
-
 renameBindingValue
-  :: BindingValue Text
-  -> Renamer (BindingValue IdName)
+  :: BindingValue Text ()
+  -> Renamer (BindingValue IdName ())
 renameBindingValue binding = withNewScope $ do -- Begin new scope
   -- Get binding name ID
   idName <- lookupValueInScopeOrError (bindingValueName binding)
@@ -95,12 +68,20 @@ renameBindingValue binding = withNewScope $ do -- Begin new scope
     BindingValue
     { bindingValueName = idName
     , bindingValueArgs = args
+    , bindingValueType = ()
     , bindingValueBody = expression
     }
 
-renameExpression :: Expression Text -> Renamer (Expression IdName)
+renameExpression :: Expression Text () -> Renamer (Expression IdName ())
 renameExpression (ExpressionLiteral lit) = pure $ ExpressionLiteral lit
-renameExpression (ExpressionVariable var) = ExpressionVariable <$> lookupValueInScopeOrError var
+renameExpression (ExpressionVariable var) = do
+  idName <- lookupValueInScopeOrError (variableName var)
+  pure $
+    ExpressionVariable
+    Variable
+    { variableName = idName
+    , variableType = ()
+    }
 renameExpression (ExpressionFunctionApplication app) = do
   let funcName = functionApplicationFunctionName app
   funcNameId <- maybe (throwError [UnknownVariable funcName]) pure =<< lookupValueInScope funcName
@@ -109,6 +90,7 @@ renameExpression (ExpressionFunctionApplication app) = do
     ExpressionFunctionApplication
     FunctionApplication
     { functionApplicationFunctionName = funcNameId
+    , functionApplicationType = ()
     , functionApplicationArgs = expressions
     }
 renameExpression (ExpressionParens expr) = ExpressionParens <$> renameExpression expr

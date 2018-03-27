@@ -7,22 +7,27 @@ module Rascal.Codegen.Pure
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
 import Data.Foldable (toList)
-import Data.Text (Text)
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
+import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Text (Text, unpack)
 import Data.Text.Encoding (encodeUtf8)
 import LLVM.AST as LLVM
 import LLVM.AST.AddrSpace
 import qualified LLVM.AST.CallingConvention as CC
 import qualified LLVM.AST.Constant as C
 import qualified LLVM.AST.Float as F
-import LLVM.AST.Global
+import LLVM.AST.Global as LLVM
 
+import Rascal.AST
 import Rascal.Codegen.Monad
-import Rascal.TypeCheck as TC
+import Rascal.Names
+import Rascal.Type as T
 
-codegenPure :: TypeCheckAST -> Module
-codegenPure (TypeCheckAST declarations) =
+codegenPure :: AST IdName T.Type -> Module
+codegenPure (AST declarations) =
   let
-    definitions = codegenDeclaration <$> declarations
+    definitions = mapMaybe codegenDeclaration declarations
   in
     defaultModule
     { moduleName = "rascal-module"
@@ -37,62 +42,70 @@ llvmPrimitiveType :: PrimitiveType -> LLVM.Type
 llvmPrimitiveType IntType = IntegerType 32
 llvmPrimitiveType DoubleType = FloatingPointType DoubleFP
 
-codegenDeclaration :: TypeCheckASTDeclaration -> Definition
-codegenDeclaration (TypeCheckASTBinding binding) =
+codegenDeclaration :: TopLevel IdName T.Type -> Maybe Definition
+codegenDeclaration (TopLevelBindingValue binding) =
   let
-    block = runGenBlock "entry" (codegenExpression $ typeCheckBindingDeclarationBody binding)
-    bindingType = typeCheckBindingDeclarationType binding
-    paramTypes = llvmPrimitiveType <$> maybe [] (toList . functionTypeArgTypes) (functionType bindingType)
+    block = runGenBlock "entry" (codegenExpression $ bindingValueBody binding)
+    bindingType = bindingValueType binding
+    paramTypes = llvmPrimitiveType <$> argTypes bindingType
     params =
-      (\(idn, ty) -> Parameter ty (Name . textToShortBS $ idNameText idn)  [])
-      <$> zip (typeCheckBindingDeclarationArgs binding) paramTypes
-    returnType' = llvmPrimitiveType $ bindingReturnType bindingType
+      (\(idn, ty) -> Parameter ty (Name . textToShortBS $ idNameRaw idn)  [])
+      <$> zip (bindingValueArgs binding) paramTypes
+    returnType' = llvmPrimitiveType $ T.returnType bindingType
   in
-    GlobalDefinition
-    functionDefaults
-    { name = idNameToLLVM $ typeCheckBindingDeclarationName binding
-    , parameters = (params, False)
-    , returnType = returnType'
-    , basicBlocks = [block]
-    }
-codegenDeclaration (TypeCheckASTExtern extern) =
+    Just $
+      GlobalDefinition
+      functionDefaults
+      { name = idNameToLLVM $ bindingValueName binding
+      , parameters = (params, False)
+      , LLVM.returnType = returnType'
+      , basicBlocks = [block]
+      }
+codegenDeclaration (TopLevelExternType extern) =
   let
-    bindingType = typeCheckExternDeclarationType extern
-    paramTypes = llvmPrimitiveType <$> maybe [] (toList . functionTypeArgTypes) (functionType bindingType)
+    -- TODO: It sucks that we have to interpret these types again
+    bindingTypes :: NonEmpty PrimitiveType
+    bindingTypes =
+      (\mType -> fromMaybe (error $ "Panic! Unknown type " ++ unpack mType) $ readPrimitiveType mType)
+      <$> bindingTypeTypeNames extern
+
+    paramTypes = llvmPrimitiveType <$> NE.init bindingTypes
     params =
       (\ty -> Parameter ty (UnName 0) []) <$> paramTypes
-    returnType' = llvmPrimitiveType $ bindingReturnType bindingType
+    returnType' = llvmPrimitiveType $ NE.last bindingTypes
   in
-    GlobalDefinition
-    functionDefaults
-    { name = idNameToLLVM $ typeCheckExternDeclarationName extern
-    , parameters = (params, False)
-    , returnType = returnType'
-    }
+    Just $
+      GlobalDefinition
+      functionDefaults
+      { name = idNameToLLVM $ bindingTypeName extern
+      , parameters = (params, False)
+      , LLVM.returnType = returnType'
+      }
+codegenDeclaration (TopLevelBindingType _) = Nothing
 
 idNameToLLVM :: IdName -> Name
 idNameToLLVM (IdName name' _ _) = Name $ textToShortBS name'
 
-codegenExpression :: Typed TypeCheckASTExpression -> FunctionGen Operand
-codegenExpression (Typed _ (TypeCheckASTLiteral lit)) =
+codegenExpression :: Expression IdName T.Type -> FunctionGen Operand
+codegenExpression (ExpressionLiteral lit) =
   pure $ ConstantOperand $
     case lit of
       LiteralInt i -> C.Int 32 (fromIntegral i)
       LiteralDouble x -> C.Float (F.Double x)
-codegenExpression (Typed ty (TypeCheckASTVariable idn)) =
+codegenExpression (ExpressionVariable (Variable idn ty)) =
   -- We need to use the IdName's provenance to determine whether or not to use
   -- a local reference to a variable or a function call with no arguments.
   case idNameProvenance idn of
-    LocalDefinition -> pure $ LocalReference (llvmPrimitiveType ty) (idNameToLLVM idn)
-    TopLevelDefinition -> functionCallInstruction idn [] [] ty
-codegenExpression (Typed ty (TypeCheckASTFunctionApplication app)) = do
+    LocalDefinition -> pure $ LocalReference (llvmPrimitiveType $ assertPrimitiveType ty) (idNameToLLVM idn)
+    TopLevelDefinition -> functionCallInstruction idn [] [] (T.returnType ty)
+codegenExpression (ExpressionFunctionApplication app) = do
   let
-    fnName = typeCheckFunctionApplicationFunctionName app
-    fnArgs = typeCheckFunctionApplicationArgs app
-    fnArgTypes = toList $ typedType <$> fnArgs
+    fnName = functionApplicationFunctionName app
+    fnArgs = functionApplicationArgs app
+    fnArgTypes = toList $ assertPrimitiveType . expressionType <$> fnArgs
   argOps <- mapM codegenExpression fnArgs
-  functionCallInstruction fnName (toList argOps) fnArgTypes ty
-codegenExpression (Typed ty (TypeCheckASTExpressionParens expression)) = codegenExpression (Typed ty expression)
+  functionCallInstruction fnName (toList argOps) fnArgTypes (assertPrimitiveType $ functionApplicationType app)
+codegenExpression (ExpressionParens expression) = codegenExpression expression
 
 functionCallInstruction
   :: IdName
@@ -102,14 +115,20 @@ functionCallInstruction
   -> FunctionGen Operand
 functionCallInstruction idName argumentOperands argumentTypes' returnType' = do
   let
-    argTypes = llvmPrimitiveType <$> argumentTypes'
+    argTypes' = llvmPrimitiveType <$> argumentTypes'
     fnRef =
       ConstantOperand $
       C.GlobalReference
-      (PointerType (LLVM.FunctionType (llvmPrimitiveType returnType') argTypes False) (AddrSpace 0))
+      (PointerType (LLVM.FunctionType (llvmPrimitiveType returnType') argTypes' False) (AddrSpace 0))
       (idNameToLLVM idName)
     toArg arg = (arg, [])
     instruction = Call Nothing CC.C [] (Right fnRef) (toArg <$> argumentOperands) [] []
 
   instructionName <- addUnNamedInstruction instruction
   pure $ LocalReference (llvmPrimitiveType returnType') instructionName
+
+-- TODO: This function shouldn't be necessary. The AST that feeds into Codegen
+-- should have things that are primitive types statically declared.
+assertPrimitiveType :: T.Type -> PrimitiveType
+assertPrimitiveType t =
+  fromMaybe (error $ "Panic! Expected PrimitiveType, got " ++ show t) $ primitiveType t

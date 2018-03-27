@@ -19,9 +19,10 @@ import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 
-import Rascal.Renamer
-import Rascal.TypeCheck.AST
+import Rascal.Names
+import Rascal.Type
 
 newtype TypeCheck a = TypeCheck (ExceptT [TypeCheckError] (State TypeCheckState) a)
   deriving (Functor, Applicative, Monad, MonadState TypeCheckState, MonadError [TypeCheckError])
@@ -31,7 +32,7 @@ runTypeCheck initialState (TypeCheck action) = evalState (runExceptT action) ini
 
 data TypeCheckError
   = TypeMismatch !Type !Type
-  | UnknownType !IdName
+  | UnknownTypeName !Text
   | CantFindType !IdName
   | WrongNumberOfArguments !IdName !Int !Int
   | ExpectedPrimitiveType !IdName !Type
@@ -59,7 +60,7 @@ setValueType nameId ty = do
       modify' (\s -> s { typeCheckStateValueTypeMap = Map.insert nameId ty (typeCheckStateValueTypeMap s) })
 
 setValuePrimitiveType :: NameId -> PrimitiveType -> TypeCheck ()
-setValuePrimitiveType nameId = setValueType nameId . unPrimitiveType
+setValuePrimitiveType nameId = setValueType nameId . PrimitiveTy
 
 lookupValueType :: NameId -> TypeCheck (Maybe Type)
 lookupValueType nameId = Map.lookup nameId <$> gets typeCheckStateValueTypeMap
@@ -68,14 +69,18 @@ lookupValueTypeOrError :: IdName -> TypeCheck Type
 lookupValueTypeOrError idName =
   lookupValueType (idNameId idName) >>= maybe (throwError [err]) pure
  where
-  err = UnknownType idName
+  err = CantFindType idName
 
 lookupValuePrimitiveTypeOrError :: IdName -> TypeCheck PrimitiveType
 lookupValuePrimitiveTypeOrError idName = do
   ty <- lookupValueTypeOrError idName
-  maybe (throwError [ExpectedPrimitiveType idName ty]) pure $ primitiveType ty
+  case ty of
+    PrimitiveTy prim -> pure prim
+    _ -> throwError [ExpectedPrimitiveType idName ty]
 
 lookupValueFunctionTypeOrError :: IdName -> TypeCheck FunctionType
 lookupValueFunctionTypeOrError idName = do
   ty <- lookupValueTypeOrError idName
-  maybe (throwError [ExpectedFunctionType idName ty]) pure $ functionType ty
+  case ty of
+    FunctionTy ft -> pure ft
+    _ -> throwError [ExpectedFunctionType idName ty]

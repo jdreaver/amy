@@ -21,10 +21,10 @@ import Rascal.Parser.Lexer
 type Parser = Parsec Void Text
 -- type ParserError = ParseError Void Char
 
-parserAST :: Parser (AST Text)
+parserAST :: Parser (AST Text ())
 parserAST = AST <$> topLevel `sepBy` semicolon
 
-topLevel :: Parser (TopLevel Text)
+topLevel :: Parser (TopLevel Text ())
 topLevel =
   (TopLevelExternType <$> externType)
   <|> try (TopLevelBindingType <$> bindingType)
@@ -43,10 +43,10 @@ bindingType = do
   pure
     BindingType
     { bindingTypeName = bindingName
-    , bindingTypeType = typeNames
+    , bindingTypeTypeNames = typeNames
     }
 
-binding :: Parser (BindingValue Text)
+binding :: Parser (BindingValue Text ())
 binding = do
   bindingName <- identifier
   args <- many identifier
@@ -56,10 +56,11 @@ binding = do
     BindingValue
     { bindingValueName = bindingName
     , bindingValueArgs = args
+    , bindingValueType = ()
     , bindingValueBody = expr
     }
 
-expression :: Parser (Expression Text)
+expression :: Parser (Expression Text ())
 expression =
   try (ExpressionFunctionApplication <$> functionApplication)
   <|> expressionNotApplication
@@ -67,13 +68,13 @@ expression =
 -- | Parses any expression except function application. This is needed to avoid
 -- left recursion. Without this distinction, f a b would be parsed as f (a b)
 -- instead of (f a) b.
-expressionNotApplication :: Parser (Expression Text)
+expressionNotApplication :: Parser (Expression Text ())
 expressionNotApplication =
   expressionParens
   <|> (ExpressionLiteral <$> literal)
-  <|> try (ExpressionVariable <$> identifier)
+  <|> try (ExpressionVariable <$> variable)
 
-expressionParens :: Parser (Expression Text)
+expressionParens :: Parser (Expression Text ())
 expressionParens = ExpressionParens <$> between lparen rparen expression
 
 literal :: Parser Literal
@@ -81,12 +82,22 @@ literal =
   try (LiteralDouble <$> double)
   <|> (LiteralInt <$> integer)
 
-functionApplication :: Parser (FunctionApplication Text)
+variable :: Parser (Variable Text ())
+variable = do
+  name <- identifier
+  pure
+    Variable
+    { variableName = name
+    , variableType = ()
+    }
+
+functionApplication :: Parser (FunctionApplication Text ())
 functionApplication = do
   functionName <- identifier
   args <- someNonEmpty expressionNotApplication
   pure
     FunctionApplication
     { functionApplicationFunctionName = functionName
+    , functionApplicationType = ()
     , functionApplicationArgs = args
     }

@@ -6,10 +6,12 @@ import Data.ByteString (ByteString)
 import LLVM.Context
 import LLVM.Module
 
+import Rascal.AST
 import Rascal.Codegen.Pure
-import Rascal.TypeCheck
+import Rascal.Names
+import Rascal.Type
 
-generateLLVMIR :: TypeCheckAST -> IO ByteString
+generateLLVMIR :: AST IdName Type -> IO ByteString
 generateLLVMIR ast =
   withContext $ \context ->
     withModuleFromAST context mod' $ \m ->
