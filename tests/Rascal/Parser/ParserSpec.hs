@@ -70,6 +70,23 @@ spec = do
         `shouldParse`
         ExpressionParens (ExpressionFunctionApplication $ FunctionApplication "f" () [ExpressionVariable (Variable "x" ())])
 
+  describe "ifExpression" $ do
+    it "parses if expressions" $ do
+      parse ifExpression "" "if True then 1 else 2"
+        `shouldParse`
+        If
+          (ExpressionLiteral (LiteralBool True))
+          (ExpressionLiteral (LiteralInt 1))
+          (ExpressionLiteral (LiteralInt 2))
+          ()
+      parse ifExpression "" "if f x then f y else g 2"
+        `shouldParse`
+        If
+          (ExpressionFunctionApplication $ FunctionApplication "f" () [ExpressionVariable (Variable "x" ())])
+          (ExpressionFunctionApplication $ FunctionApplication "f" () [ExpressionVariable (Variable "y" ())])
+          (ExpressionFunctionApplication $ FunctionApplication "g" () [ExpressionLiteral (LiteralInt 2)])
+          ()
+
   describe "functionApplication" $ do
     it "parses an application" $ do
       parse functionApplication "" "f x" `shouldParse` FunctionApplication "f" () [ExpressionVariable (Variable "x" ())]

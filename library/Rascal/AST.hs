@@ -7,6 +7,7 @@ module Rascal.AST
   , BindingValue(..)
   , BindingType(..)
   , Expression(..)
+  , If(..)
   , Variable(..)
   , FunctionApplication(..)
   , Literal(..)
@@ -65,6 +66,7 @@ data BindingType name
 data Expression name ty
   = ExpressionLiteral !Literal
   | ExpressionVariable !(Variable name ty)
+  | ExpressionIf (If name ty)
   | ExpressionFunctionApplication (FunctionApplication name ty)
   | ExpressionParens (Expression name ty)
   deriving (Show, Eq)
@@ -73,6 +75,14 @@ data Variable name ty
   = Variable
   { variableName :: !name
   , variableType :: !ty
+  } deriving (Show, Eq)
+
+data If name ty
+  = If
+  { ifPredicate :: !(Expression name ty)
+  , ifThen :: !(Expression name ty)
+  , ifElse :: !(Expression name ty)
+  , ifType :: !ty
   } deriving (Show, Eq)
 
 -- | A 'FunctionApplication' is a function followed by an expression per

@@ -58,6 +58,7 @@ data FunctionType
 expressionType :: Expression name Type -> Type
 expressionType (ExpressionLiteral lit) = PrimitiveTy $ literalType lit
 expressionType (ExpressionVariable (Variable _ ty)) = ty
+expressionType (ExpressionIf if') = ifType if'
 expressionType (ExpressionFunctionApplication app) = functionApplicationType app
 expressionType (ExpressionParens expr) = expressionType expr
 

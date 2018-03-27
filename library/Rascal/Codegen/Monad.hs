@@ -1,51 +1,85 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Rascal.Codegen.Monad
   ( FunctionGen
-  , runFunctionGen
-  , runGenBlock
+  , runGenBlocks
+  , generateId
   , generateUnName
+  , startNewBlock
   , addInstruction
   , addUnNamedInstruction
+  , instr
+  , br
+  , cbr
+  , phi
+  , ret
   ) where
 
 import Control.Monad.State.Strict
+import Data.Foldable (toList)
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
+import Data.Maybe (fromMaybe)
 import LLVM.AST
 
 newtype FunctionGen a = FunctionGen { _unFunctionGen :: State FunctionGenState a }
   deriving (Functor, Applicative, Monad, MonadState FunctionGenState)
 
-runFunctionGen :: FunctionGen a -> (a, FunctionGenState)
-runFunctionGen (FunctionGen action) = runState action defaultFunctionGenState
+execFunctionGen :: FunctionGen a -> FunctionGenState
+execFunctionGen (FunctionGen action) = execState action (defaultFunctionGenState "entry")
 
 -- | Code generation state when generating a single function.
 data FunctionGenState
   = FunctionGenState
   { functionGenStateLastId :: !Word
     -- ^ Last incrementing ID. Used to generate intermediate instruction names.
-  , functionGenStateInstructionStack :: [Named Instruction]
-    -- ^ Stack of instructions for the current function (needs to be reversed
-    -- before sending to LLVM).
+  , functionGenStateBlockStack :: !(NonEmpty BlockGenState)
+    -- ^ Stack of simple blocks. Needs to be reversed before generating LLVM.
   } deriving (Show, Eq)
 
-defaultFunctionGenState :: FunctionGenState
-defaultFunctionGenState =
+data BlockGenState
+  = BlockGenState
+  { blockGenStateBlockName :: !Name
+    -- ^ Name of the block
+  , blockGenStateInstructionStack :: ![Named Instruction]
+    -- ^ Stack of instructions for the current function (needs to be reversed
+    -- before sending to LLVM).
+  , blockGenStateTerminator :: !(Maybe (Named Terminator))
+    -- ^ Final terminator of block
+  } deriving (Show, Eq)
+
+defaultFunctionGenState :: Name -> FunctionGenState
+defaultFunctionGenState name' =
   FunctionGenState
   { functionGenStateLastId = 0
-  , functionGenStateInstructionStack = []
+  , functionGenStateBlockStack = defaultBlockGenState name' :| []
   }
 
--- | Runs the 'FunctionGen' action and produces the 'BasicBlock' for it.
-runGenBlock
-  :: Name
-  -> FunctionGen Operand
-  -> BasicBlock
-runGenBlock name' action =
+defaultBlockGenState :: Name -> BlockGenState
+defaultBlockGenState name' =
+  BlockGenState
+  { blockGenStateBlockName =  name'
+  , blockGenStateInstructionStack = []
+  , blockGenStateTerminator = Nothing
+  }
+
+-- | Runs the 'FunctionGen' action and produces the 'BasicBlock's for it.
+runGenBlocks
+  :: FunctionGen Operand
+  -> [BasicBlock]
+runGenBlocks action =
   let
-    (returnOp, state') = runFunctionGen action
-    instructions = reverse $ functionGenStateInstructionStack state'
-    terminator = Do $ Ret (Just returnOp) []
-  in BasicBlock name' instructions terminator
+    state' = execFunctionGen (action >>= ret)
+    blockStates = reverse $ toList $ functionGenStateBlockStack state'
+    genBlock :: BlockGenState -> BasicBlock
+    genBlock blockState =
+      BasicBlock
+        (blockGenStateBlockName blockState)
+        (reverse $ blockGenStateInstructionStack blockState)
+        (fromMaybe (error ("Block has no terminator " ++ show blockState)) $ blockGenStateTerminator blockState)
+    blocks = genBlock <$> blockStates
+  in blocks
 
 -- | Generate a new unique ID and increment the last ID of the state.
 generateId :: FunctionGen Word
@@ -57,10 +91,35 @@ generateId = do
 generateUnName :: FunctionGen Name
 generateUnName = UnName <$> generateId
 
+startNewBlock :: Name -> FunctionGen ()
+startNewBlock blockName =
+  modify' $ \s ->
+    s
+    { functionGenStateBlockStack = NE.cons newBlock (functionGenStateBlockStack s)
+    }
+ where
+  newBlock = defaultBlockGenState blockName
+
+modifyCurrentBlock :: (BlockGenState -> BlockGenState) -> FunctionGen ()
+modifyCurrentBlock f =
+  modify' $ \s ->
+    let
+      blockStack = functionGenStateBlockStack s
+      currentBlock = NE.head blockStack
+      restBlocks = NE.tail blockStack
+    in
+      s
+      { functionGenStateBlockStack = f currentBlock :| restBlocks
+      }
+
 -- | Adds an instruction to the stack
 addInstruction :: Named Instruction -> FunctionGen ()
 addInstruction instruction =
-  modify' $ \s -> s { functionGenStateInstructionStack = instruction : functionGenStateInstructionStack s }
+  modifyCurrentBlock $ \block ->
+    block
+    { blockGenStateInstructionStack =
+      instruction : blockGenStateInstructionStack block
+    }
 
 -- | Add an instruction to the stack and return the 'UnName'
 addUnNamedInstruction :: Instruction -> FunctionGen Name
@@ -68,3 +127,26 @@ addUnNamedInstruction instruction = do
   instructionName <- generateUnName
   addInstruction (instructionName := instruction)
   pure instructionName
+
+instr :: Type -> Instruction -> FunctionGen Operand
+instr ty = fmap (LocalReference ty) . addUnNamedInstruction
+
+-- | Sets the 'Terminator' for the current block
+terminator :: Named Terminator -> FunctionGen ()
+terminator term =
+  modifyCurrentBlock $ \block ->
+    block
+    { blockGenStateTerminator = Just term
+    }
+
+br :: Name -> FunctionGen ()
+br val = terminator $ Do $ Br val []
+
+cbr :: Operand -> Name -> Name -> FunctionGen ()
+cbr cond tr fl = terminator $ Do $ CondBr cond tr fl []
+
+phi :: Type -> [(Operand, Name)] -> FunctionGen Operand
+phi ty incoming = instr ty $ Phi ty incoming []
+
+ret :: Operand -> FunctionGen ()
+ret val = terminator $ Do $ Ret (Just val) []

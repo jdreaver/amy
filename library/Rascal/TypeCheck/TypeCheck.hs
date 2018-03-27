@@ -106,6 +106,32 @@ typeCheckExpression (ExpressionVariable var) = do
     var
     { variableType = PrimitiveTy ty
     }
+typeCheckExpression (ExpressionIf (If predicate thenExpression elseExpression ())) = do
+  predicate' <- typeCheckExpression predicate
+  thenExpression' <- typeCheckExpression thenExpression
+  elseExpression' <- typeCheckExpression elseExpression
+
+  let
+    predicateType = expressionType predicate'
+    thenType = expressionType thenExpression'
+    elseType = expressionType elseExpression'
+
+  -- Predicate needs to be Bool
+  when (predicateType /= PrimitiveTy BoolType) $
+    throwError [TypeMismatch predicateType (PrimitiveTy BoolType)]
+
+  -- then/else branches need to have the same type
+  when (thenType /= elseType) $
+    throwError [TypeMismatch thenType elseType]
+
+  pure $
+    ExpressionIf
+    If
+    { ifPredicate = predicate'
+    , ifThen = thenExpression'
+    , ifElse = elseExpression'
+    , ifType = thenType
+    }
 typeCheckExpression (ExpressionFunctionApplication app) = do
   -- Compute function return type
   funcType <- lookupValueFunctionTypeOrError $ functionApplicationFunctionName app

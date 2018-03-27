@@ -84,6 +84,13 @@ renameExpression (ExpressionVariable var) = do
     { variableName = idName
     , variableType = ()
     }
+renameExpression (ExpressionIf (If predicate thenExpression elseExpression _)) =
+  fmap ExpressionIf
+  $ If
+  <$> renameExpression predicate
+  <*> renameExpression thenExpression
+  <*> renameExpression elseExpression
+  <*> pure ()
 renameExpression (ExpressionFunctionApplication app) = do
   let funcName = functionApplicationFunctionName app
   funcNameId <- maybe (throwError [UnknownVariable funcName]) pure =<< lookupValueInScope funcName

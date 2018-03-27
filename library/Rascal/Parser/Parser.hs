@@ -7,6 +7,7 @@ module Rascal.Parser.Parser
   , expression
   , expressionNotApplication
   , expressionParens
+  , ifExpression
   , literal
   , functionApplication
   ) where
@@ -72,6 +73,7 @@ expressionNotApplication :: Parser (Expression Text ())
 expressionNotApplication =
   expressionParens
   <|> (ExpressionLiteral <$> literal)
+  <|> (ExpressionIf <$> ifExpression)
   <|> try (ExpressionVariable <$> variable)
 
 expressionParens :: Parser (Expression Text ())
@@ -90,6 +92,22 @@ variable = do
     Variable
     { variableName = name
     , variableType = ()
+    }
+
+ifExpression :: Parser (If Text ())
+ifExpression = do
+  if'
+  predicate <- expression
+  then'
+  thenExpression <- expression
+  else'
+  elseExpression <- expression
+  pure
+    If
+    { ifPredicate = predicate
+    , ifThen = thenExpression
+    , ifElse = elseExpression
+    , ifType = ()
     }
 
 functionApplication :: Parser (FunctionApplication Text ())

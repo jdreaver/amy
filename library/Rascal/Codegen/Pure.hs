@@ -4,6 +4,7 @@ module Rascal.Codegen.Pure
   ( codegenPure
   ) where
 
+import qualified Data.ByteString.Char8 as BS8
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
 import Data.Foldable (toList)
@@ -17,6 +18,7 @@ import LLVM.AST.AddrSpace
 import qualified LLVM.AST.CallingConvention as CC
 import qualified LLVM.AST.Constant as C
 import qualified LLVM.AST.Float as F
+import qualified LLVM.AST.FloatingPointPredicate as FP
 import LLVM.AST.Global as LLVM
 
 import Rascal.AST
@@ -46,7 +48,7 @@ llvmPrimitiveType BoolType = IntegerType 1
 codegenDeclaration :: TopLevel IdName T.Type -> Maybe Definition
 codegenDeclaration (TopLevelBindingValue binding) =
   let
-    block = runGenBlock "entry" (codegenExpression $ bindingValueBody binding)
+    blocks = runGenBlocks (codegenExpression $ bindingValueBody binding)
     bindingType = bindingValueType binding
     paramTypes = llvmPrimitiveType <$> argTypes bindingType
     params =
@@ -60,7 +62,7 @@ codegenDeclaration (TopLevelBindingValue binding) =
       { name = idNameToLLVM $ bindingValueName binding
       , parameters = (params, False)
       , LLVM.returnType = returnType'
-      , basicBlocks = [block]
+      , basicBlocks = blocks
       }
 codegenDeclaration (TopLevelExternType extern) =
   let
@@ -100,6 +102,38 @@ codegenExpression (ExpressionVariable (Variable idn ty)) =
   case idNameProvenance idn of
     LocalDefinition -> pure $ LocalReference (llvmPrimitiveType $ assertPrimitiveType ty) (idNameToLLVM idn)
     TopLevelDefinition -> functionCallInstruction idn [] [] (T.returnType ty)
+codegenExpression (ExpressionIf (If predicate thenExpression elseExpression ty)) = do
+  let
+    -- one = ConstantOperand $ C.Float (F.Double 1.0)
+    zero = ConstantOperand $ C.Float (F.Double 0.0)
+    -- true = one
+    false = zero
+
+  -- Generate unique block names
+  uniqueId <- generateId
+  let
+    thenBlockName = Name $ BSS.toShort $ BS8.pack $ "if.then." ++ show uniqueId
+    elseBlockName = Name $ BSS.toShort $ BS8.pack $ "if.else." ++ show uniqueId
+    endBlockName = Name $ BSS.toShort $ BS8.pack $ "if.end." ++ show uniqueId
+
+  -- Generate code for the predicate
+  predicateOp <- codegenExpression predicate
+  test <- instr (llvmPrimitiveType BoolType) $ FCmp FP.ONE false predicateOp []
+  cbr test thenBlockName elseBlockName
+
+  -- Generate code for the "then" block
+  startNewBlock thenBlockName
+  thenOp <- codegenExpression thenExpression
+  br endBlockName
+
+  -- Generate code for the "else" block
+  startNewBlock elseBlockName
+  elseOp <- codegenExpression elseExpression
+  br endBlockName
+
+  -- Generate the code for the ending block
+  startNewBlock endBlockName
+  phi (llvmPrimitiveType $ assertPrimitiveType ty) [(thenOp, thenBlockName), (elseOp, elseBlockName)]
 codegenExpression (ExpressionFunctionApplication app) = do
   let
     fnName = functionApplicationFunctionName app
@@ -126,8 +160,7 @@ functionCallInstruction idName argumentOperands argumentTypes' returnType' = do
     toArg arg = (arg, [])
     instruction = Call Nothing CC.C [] (Right fnRef) (toArg <$> argumentOperands) [] []
 
-  instructionName <- addUnNamedInstruction instruction
-  pure $ LocalReference (llvmPrimitiveType returnType') instructionName
+  instr (llvmPrimitiveType returnType') instruction
 
 -- TODO: This function shouldn't be necessary. The AST that feeds into Codegen
 -- should have things that are primitive types statically declared.

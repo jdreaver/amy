@@ -8,6 +8,9 @@ module Rascal.Parser.Lexer
   , identifier
   , typeIdentifier
   , extern
+  , if'
+  , then'
+  , else'
   , lparen
   , rparen
   , comma
@@ -66,10 +69,22 @@ identifier = (lexeme . try) (p >>= check)
 reservedWords :: [String]
 reservedWords =
   [ "extern"
+  , "if"
+  , "then"
+  , "else"
   ]
 
 extern :: Lexer ()
 extern = void $ symbol "extern"
+
+if' :: Lexer ()
+if' = void $ symbol "if"
+
+then' :: Lexer ()
+then' = void $ symbol "then"
+
+else' :: Lexer ()
+else' = void $ symbol "else"
 
 -- | Type names are upper-case, like Int and Double
 typeIdentifier :: Lexer Text
