@@ -20,13 +20,9 @@ module Amy.Parser.Lexer
   , equals
   , typeSeparatorArrow
   , text
-  , sepByNonEmpty
-  , someNonEmpty
   ) where
 
-import Control.Monad (MonadPlus, void)
-import Data.List.NonEmpty (NonEmpty)
-import qualified Data.List.NonEmpty as NE
+import Control.Monad (void)
 import Data.Text (Text, pack)
 import Data.Void (Void)
 import Text.Megaparsec
@@ -114,11 +110,3 @@ typeSeparatorArrow = string "->" >> spaceConsumer
 
 text :: Lexer Text
 text = fmap pack $ char '"' >> manyTill L.charLiteral (char '"')
-
--- | Like 'sepBy1', except shoves the result in a 'NonEmpty'
-sepByNonEmpty :: (MonadPlus m) => m a -> m sep -> m (NonEmpty a)
-sepByNonEmpty p sep = NE.fromList <$> sepBy1 p sep
-
--- | Like 'some' but puts result in a 'NonEmpty'
-someNonEmpty :: (MonadPlus f) => f a -> f (NonEmpty a)
-someNonEmpty = fmap NE.fromList . some

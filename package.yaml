@@ -9,6 +9,7 @@ dependencies:
   - llvm-hs-pure
   - megaparsec
   - mtl
+  - parser-combinators
   - text
 
 ghc-options: -Wall

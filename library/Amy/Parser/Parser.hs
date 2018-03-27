@@ -11,6 +11,7 @@ module Amy.Parser.Parser
   , literal
   ) where
 
+import qualified Control.Applicative.Combinators.NonEmpty as CNE
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
@@ -41,7 +42,7 @@ bindingType :: Parser (BindingType Text)
 bindingType = do
   bindingName <- identifier
   doubleColon
-  typeNames <- typeIdentifier `sepByNonEmpty` typeSeparatorArrow
+  typeNames <- typeIdentifier `CNE.sepBy1` typeSeparatorArrow
   pure
     BindingType
     { bindingTypeName = bindingName
@@ -65,7 +66,7 @@ binding = do
 expression :: Parser (Expression Text ())
 expression = do
   -- Parse a NonEmpty list of expressions separated by spaces.
-  expressions <- expression' `sepByNonEmpty` spaceConsumer
+  expressions <- expression' `CNE.sepBy1` spaceConsumer
 
   pure $
     case expressions of
