@@ -126,6 +126,8 @@ spec = do
       parse literal "" "False" `shouldParse` LiteralBool False
 
 sampleModule :: Text
-sampleModule = [st|f :: Int -> Double;
+sampleModule = [st|
+f :: Int -> Double
 f x = 1
+
 |]

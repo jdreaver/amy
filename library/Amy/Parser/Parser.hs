@@ -1,6 +1,7 @@
 module Amy.Parser.Parser
   ( parserAST
 
+  , topLevel
   , externType
   , bindingType
   , binding
@@ -22,16 +23,17 @@ import Amy.AST
 import Amy.Parser.Lexer
 
 type Parser = Parsec Void Text
--- type ParserError = ParseError Void Char
 
 parserAST :: Parser (AST Text ())
-parserAST = AST <$> noIndent topLevel `sepBy` semicolon
+parserAST = AST <$> do
+  spaceConsumerNewlines
+  noIndent (indentedBlock topLevel) <* eof
 
 topLevel :: Parser (TopLevel Text ())
 topLevel =
-  (TopLevelExternType <$> externType)
+  try (TopLevelExternType <$> externType)
   <|> try (TopLevelBindingType <$> bindingType)
-  <|> try (TopLevelBindingValue <$> binding)
+  <|> (TopLevelBindingValue <$> binding)
 
 externType :: Parser (BindingType Text)
 externType = do

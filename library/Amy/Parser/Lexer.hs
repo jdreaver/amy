@@ -2,6 +2,7 @@
 
 module Amy.Parser.Lexer
   ( spaceConsumer
+  , spaceConsumerNewlines
   , noIndent
   , integer
   , double
@@ -16,11 +17,12 @@ module Amy.Parser.Lexer
   , lparen
   , rparen
   , comma
-  , semicolon
   , doubleColon
   , equals
   , typeSeparatorArrow
   , text
+  , indentedBlock
+  , lineFold
   ) where
 
 import Control.Monad (void)
@@ -36,13 +38,16 @@ lexeme :: Lexer a -> Lexer a
 lexeme = L.lexeme spaceConsumer
 
 spaceConsumer :: Lexer ()
-spaceConsumer = L.space space1 lineComment blockComment
- where
-  lineComment  = L.skipLineComment "#"
-  blockComment = empty
+spaceConsumer = L.space (void $ char ' ') lineComment blockComment
 
-noIndent :: Lexer a -> Lexer a
-noIndent = L.nonIndented spaceConsumer
+spaceConsumerNewlines :: Lexer ()
+spaceConsumerNewlines = L.space space1 lineComment blockComment
+
+lineComment :: Lexer ()
+lineComment  = L.skipLineComment "#"
+
+blockComment :: Lexer ()
+blockComment = empty
 
 integer :: Lexer Int
 integer = lexeme L.decimal
@@ -100,9 +105,6 @@ rparen = char ')' >> spaceConsumer
 comma :: Lexer ()
 comma = char ',' >> spaceConsumer
 
-semicolon :: Lexer ()
-semicolon = char ';' >> spaceConsumer
-
 doubleColon :: Lexer ()
 doubleColon = char ':' >> char ':' >> spaceConsumer
 
@@ -114,3 +116,23 @@ typeSeparatorArrow = string "->" >> spaceConsumer
 
 text :: Lexer Text
 text = fmap pack $ char '"' >> manyTill L.charLiteral (char '"')
+
+noIndent :: Lexer a -> Lexer a
+noIndent = L.nonIndented spaceConsumer
+
+-- | Parse a list of things at the current indentation level, no more no less.
+indentedBlock
+  :: Parsec Void Text a
+  -> Parsec Void Text [a]
+indentedBlock p = do
+  blockIndentation <- L.indentLevel
+  many $ do
+    currentIndentation <- L.indentLevel
+    if currentIndentation == blockIndentation
+    then p <* spaceConsumerNewlines
+    else L.incorrectIndent EQ blockIndentation currentIndentation
+
+-- | Parse something that can bleed over newlines as long as the indentation on
+-- the next lines is strictly greater than the first line.
+lineFold :: (Parsec Void Text () -> Parsec Void Text a) -> Parsec Void Text a
+lineFold = L.lineFold spaceConsumerNewlines
