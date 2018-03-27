@@ -18,7 +18,7 @@ import LLVM.AST.AddrSpace
 import qualified LLVM.AST.CallingConvention as CC
 import qualified LLVM.AST.Constant as C
 import qualified LLVM.AST.Float as F
-import qualified LLVM.AST.FloatingPointPredicate as FP
+import qualified LLVM.AST.IntegerPredicate as IP
 import LLVM.AST.Global as LLVM
 
 import Rascal.AST
@@ -104,13 +104,13 @@ codegenExpression (ExpressionVariable (Variable idn ty)) =
     TopLevelDefinition -> functionCallInstruction idn [] [] (T.returnType ty)
 codegenExpression (ExpressionIf (If predicate thenExpression elseExpression ty)) = do
   let
-    -- one = ConstantOperand $ C.Float (F.Double 1.0)
-    zero = ConstantOperand $ C.Float (F.Double 0.0)
-    -- true = one
-    false = zero
+    one = ConstantOperand $ C.Int 32 1
+    --zero = ConstantOperand $ C.Int 32 0
+    true = one
+    --false = zero
 
   -- Generate unique block names
-  uniqueId <- generateId
+  uniqueId <- currentId
   let
     thenBlockName = Name $ BSS.toShort $ BS8.pack $ "if.then." ++ show uniqueId
     elseBlockName = Name $ BSS.toShort $ BS8.pack $ "if.else." ++ show uniqueId
@@ -118,7 +118,7 @@ codegenExpression (ExpressionIf (If predicate thenExpression elseExpression ty))
 
   -- Generate code for the predicate
   predicateOp <- codegenExpression predicate
-  test <- instr (llvmPrimitiveType BoolType) $ FCmp FP.ONE false predicateOp []
+  test <- instr (llvmPrimitiveType BoolType) $ ICmp IP.EQ true predicateOp []
   cbr test thenBlockName elseBlockName
 
   -- Generate code for the "then" block

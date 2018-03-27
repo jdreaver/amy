@@ -5,6 +5,7 @@ module Rascal.Codegen.Monad
   ( FunctionGen
   , runGenBlocks
   , generateId
+  , currentId
   , generateUnName
   , startNewBlock
   , addInstruction
@@ -85,7 +86,11 @@ runGenBlocks action =
 generateId :: FunctionGen Word
 generateId = do
   modify $ \s -> s { functionGenStateLastId = functionGenStateLastId s + 1 }
-  gets functionGenStateLastId
+  currentId
+
+-- | Get the current latest ID
+currentId :: FunctionGen Word
+currentId = gets functionGenStateLastId
 
 -- | Generate a new name using 'UnName' and 'generateId'
 generateUnName :: FunctionGen Name
