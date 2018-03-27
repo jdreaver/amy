@@ -37,6 +37,7 @@ primitiveType _ = Nothing
 data PrimitiveType
   = IntType
   | DoubleType
+  | BoolType
   deriving (Show, Eq)
 
 readPrimitiveType :: Text -> Maybe PrimitiveType
@@ -44,6 +45,7 @@ readPrimitiveType t =
   case t of
     "Int" -> Just IntType
     "Double" -> Just DoubleType
+    "Bool" -> Just BoolType
     _ -> Nothing
 
 data FunctionType
@@ -62,3 +64,4 @@ expressionType (ExpressionParens expr) = expressionType expr
 literalType :: Literal -> PrimitiveType
 literalType (LiteralInt _) = IntType
 literalType (LiteralDouble _) = DoubleType
+literalType (LiteralBool _) = BoolType

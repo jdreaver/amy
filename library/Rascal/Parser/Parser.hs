@@ -80,7 +80,8 @@ expressionParens = ExpressionParens <$> between lparen rparen expression
 literal :: Parser Literal
 literal =
   try (LiteralDouble <$> double)
-  <|> (LiteralInt <$> integer)
+  <|> try (LiteralInt <$> integer)
+  <|> (LiteralBool <$> bool)
 
 variable :: Parser (Variable Text ())
 variable = do

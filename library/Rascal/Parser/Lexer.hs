@@ -3,6 +3,7 @@
 module Rascal.Parser.Lexer
   ( integer
   , double
+  , bool
   , symbol
   , identifier
   , typeIdentifier
@@ -44,6 +45,11 @@ integer = lexeme L.decimal
 
 double :: Lexer Double
 double = lexeme L.float
+
+bool :: Lexer Bool
+bool = lexeme $
+  (string "True" >> pure True)
+  <|> (string "False" >> pure False)
 
 symbol :: Text -> Lexer Text
 symbol = L.symbol spaceConsumer

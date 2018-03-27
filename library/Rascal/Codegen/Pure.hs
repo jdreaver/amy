@@ -41,6 +41,7 @@ textToShortBS = BSS.toShort . encodeUtf8
 llvmPrimitiveType :: PrimitiveType -> LLVM.Type
 llvmPrimitiveType IntType = IntegerType 32
 llvmPrimitiveType DoubleType = FloatingPointType DoubleFP
+llvmPrimitiveType BoolType = IntegerType 1
 
 codegenDeclaration :: TopLevel IdName T.Type -> Maybe Definition
 codegenDeclaration (TopLevelBindingValue binding) =
@@ -92,6 +93,7 @@ codegenExpression (ExpressionLiteral lit) =
     case lit of
       LiteralInt i -> C.Int 32 (fromIntegral i)
       LiteralDouble x -> C.Float (F.Double x)
+      LiteralBool x -> C.Int 1 $ if x then 1 else 0
 codegenExpression (ExpressionVariable (Variable idn ty)) =
   -- We need to use the IdName's provenance to determine whether or not to use
   -- a local reference to a variable or a function call with no arguments.

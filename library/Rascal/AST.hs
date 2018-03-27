@@ -89,4 +89,5 @@ data FunctionApplication name ty
 data Literal
   = LiteralInt !Int
   | LiteralDouble !Double
+  | LiteralBool !Bool
   deriving (Show, Eq)

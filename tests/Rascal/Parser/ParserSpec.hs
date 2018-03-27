@@ -83,6 +83,10 @@ spec = do
       parse literal "" "1." `shouldParse` LiteralInt 1
       parse literal "" "1.5" `shouldParse` LiteralDouble 1.5
 
+    it "can parse bools" $ do
+      parse literal "" "True" `shouldParse` LiteralBool True
+      parse literal "" "False" `shouldParse` LiteralBool False
+
 sampleModule :: Text
 sampleModule = [st|f :: Int -> Double;
 f x = 1
