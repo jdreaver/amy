@@ -36,6 +36,25 @@ spec = do
           , bindingValueBody =
             ExpressionLiteral (LiteralInt 1)
           }
+        , TopLevelBindingType
+          BindingType
+          { bindingTypeName = "main"
+          , bindingTypeTypeNames = ["Int"]
+          }
+        , TopLevelBindingValue
+          BindingValue
+          { bindingValueName = "main"
+          , bindingValueArgs = []
+          , bindingValueType = ()
+          , bindingValueBody =
+            ExpressionFunctionApplication (
+              FunctionApplication
+              (ExpressionVariable (Variable "f" ()))
+              [ ExpressionLiteral (LiteralInt 2)
+              ]
+              ()
+            )
+          }
         ]
 
     it "rejects indented top-level declarations" $ do
@@ -141,5 +160,8 @@ sampleModule :: Text
 sampleModule = [st|
 f :: Int -> Double
 f x = 1
+
+main :: Int
+main = f 2
 
 |]

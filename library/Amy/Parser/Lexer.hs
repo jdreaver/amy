@@ -137,5 +137,5 @@ lineFold p = do
   startingIndent <- L.indentLevel
   first <- p
   spaceConsumerNewlines
-  rest <- many (L.indentGuard spaceConsumerNewlines GT startingIndent >> p)
+  rest <- many $ L.indentGuard spaceConsumerNewlines GT startingIndent >> p <* spaceConsumerNewlines
   pure $ first :| rest
