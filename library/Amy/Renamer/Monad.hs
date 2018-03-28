@@ -54,10 +54,10 @@ freshId = do
   modify' (\s -> s { renamerStateLastId = 1 + renamerStateLastId s })
   gets renamerStateLastId
 
-addValueToScope :: ValueNameProvenance -> Text -> Renamer ValueName
-addValueToScope provenance name = do
+addValueToScope :: Text -> Renamer ValueName
+addValueToScope name = do
   nameId <- freshId
-  let valueName = ValueName name nameId provenance
+  let valueName = ValueName name nameId
   mExistingId <- lookupValueInScope name
   case mExistingId of
     Just nid -> throwError [VariableShadowed name nid]

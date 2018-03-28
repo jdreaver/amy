@@ -3,6 +3,7 @@
 
 module Amy.Codegen.Monad
   ( FunctionGen
+  , CodegenIdentifier(..)
   , runGenBlocks
   , generateId
   , currentId
@@ -43,9 +44,16 @@ data FunctionGenState
     -- ^ Last incrementing ID. Used to generate intermediate instruction names.
   , functionGenStateBlockStack :: !(NonEmpty BlockGenState)
     -- ^ Stack of simple blocks. Needs to be reversed before generating LLVM.
-  , functionGenStateSymbolTable :: !(Map ValueName Operand)
+  , functionGenStateSymbolTable :: !(Map ValueName CodegenIdentifier)
     -- ^ Map from Amy variable names to operands
   } deriving (Show, Eq)
+
+data CodegenIdentifier
+  = LocalOperand !Operand
+    -- ^ Operand for a variable defined locally
+  | GlobalIdentifier !ValueName
+    -- ^ Name of a globally-defined function or constant
+  deriving (Show, Eq)
 
 data BlockGenState
   = BlockGenState
@@ -126,16 +134,16 @@ modifyCurrentBlock f =
       { functionGenStateBlockStack = f currentBlock :| restBlocks
       }
 
-addNameToSymbolTable :: ValueName -> Operand -> FunctionGen ()
-addNameToSymbolTable name op =
+addNameToSymbolTable :: ValueName -> CodegenIdentifier -> FunctionGen ()
+addNameToSymbolTable name ident =
   modify' $
     \s ->
       s
       { functionGenStateSymbolTable =
-        Map.insert name op (functionGenStateSymbolTable s)
+        Map.insert name ident (functionGenStateSymbolTable s)
       }
 
-lookupSymbol :: ValueName -> FunctionGen (Maybe Operand)
+lookupSymbol :: ValueName -> FunctionGen (Maybe CodegenIdentifier)
 lookupSymbol name = Map.lookup name <$> gets functionGenStateSymbolTable
 
 -- | Adds an instruction to the stack

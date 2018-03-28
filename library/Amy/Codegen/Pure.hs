@@ -29,7 +29,12 @@ import Amy.Type as T
 codegenPure :: AST ValueName T.Type -> Module
 codegenPure (AST declarations) =
   let
-    definitions = mapMaybe codegenDeclaration declarations
+    -- Extract all the top level names so we can put them in the symbol table.
+    topLevelValueNames =
+      fmap bindingTypeName
+      $ mapMaybe topLevelBindingType declarations
+      ++ mapMaybe topLevelExternType declarations
+    definitions = mapMaybe (codegenDeclaration topLevelValueNames) declarations
   in
     defaultModule
     { moduleName = "amy-module"
@@ -45,14 +50,28 @@ llvmPrimitiveType IntType = IntegerType 32
 llvmPrimitiveType DoubleType = FloatingPointType DoubleFP
 llvmPrimitiveType BoolType = IntegerType 1
 
-codegenDeclaration :: TopLevel ValueName T.Type -> Maybe Definition
-codegenDeclaration (TopLevelBindingValue binding) =
+codegenDeclaration :: [ValueName] -> TopLevel ValueName T.Type -> Maybe Definition
+codegenDeclaration allTopLevelNames (TopLevelBindingValue binding) =
   let
-    blocks = runGenBlocks (codegenExpression $ bindingValueBody binding)
     bindingType = bindingValueType binding
+    blocks = runGenBlocks $ do
+      -- Add top-level names to symbol table
+      forM_ allTopLevelNames $ \valueName ->
+        addNameToSymbolTable valueName (GlobalIdentifier valueName)
+
+      -- Add args to symbol table
+      let
+        argsAndTypes = zip (bindingValueArgs binding) (argTypes bindingType)
+      forM_ argsAndTypes $ \(valueName, argType) ->
+        let op = LocalReference (llvmPrimitiveType argType) (valueNameToLLVM valueName)
+        in addNameToSymbolTable valueName (LocalOperand op)
+
+      -- Codegen the expression
+      codegenExpression $ bindingValueBody binding
+
     paramTypes = llvmPrimitiveType <$> argTypes bindingType
     params =
-      (\(idn, ty) -> Parameter ty (Name . textToShortBS $ valueNameRaw idn)  [])
+      (\(valueName, ty) -> Parameter ty (Name . textToShortBS $ valueNameRaw valueName)  [])
       <$> zip (bindingValueArgs binding) paramTypes
     returnType' = llvmPrimitiveType $ T.returnType bindingType
   in
@@ -64,9 +83,10 @@ codegenDeclaration (TopLevelBindingValue binding) =
       , LLVM.returnType = returnType'
       , basicBlocks = blocks
       }
-codegenDeclaration (TopLevelExternType extern) =
+codegenDeclaration _ (TopLevelExternType extern) =
   let
-    -- TODO: It sucks that we have to interpret these types again
+    -- TODO: It sucks that we have to interpret these types again. I wish the
+    -- renamer handled this for us.
     bindingTypes :: NonEmpty PrimitiveType
     bindingTypes =
       (\mType -> fromMaybe (error $ "Panic! Unknown type " ++ unpack mType) $ readPrimitiveType mType)
@@ -84,10 +104,10 @@ codegenDeclaration (TopLevelExternType extern) =
       , parameters = (params, False)
       , LLVM.returnType = returnType'
       }
-codegenDeclaration (TopLevelBindingType _) = Nothing
+codegenDeclaration _ (TopLevelBindingType _) = Nothing
 
 valueNameToLLVM :: ValueName -> Name
-valueNameToLLVM (ValueName name' _ _) = Name $ textToShortBS name'
+valueNameToLLVM (ValueName name' _) = Name $ textToShortBS name'
 
 codegenExpression :: Expression ValueName T.Type -> FunctionGen Operand
 codegenExpression (ExpressionLiteral lit) =
@@ -96,20 +116,12 @@ codegenExpression (ExpressionLiteral lit) =
       LiteralInt i -> C.Int 32 (fromIntegral i)
       LiteralDouble x -> C.Float (F.Double x)
       LiteralBool x -> C.Int 1 $ if x then 1 else 0
-codegenExpression (ExpressionVariable (Variable idn ty)) =
-  -- We need to use the ValueName's provenance to determine whether or not to use
-  -- a local reference to a variable or a function call with no arguments.
-  case valueNameProvenance idn of
-    LocalDefinition -> do
-      -- First check the symbol table
-      mOp <- lookupSymbol idn
-
-      pure $
-        fromMaybe
-        -- Must not be in symbol table, assume the name is in scope
-        (LocalReference (llvmPrimitiveType $ assertPrimitiveType ty) (valueNameToLLVM idn))
-        mOp
-    TopLevelDefinition -> functionCallInstruction idn [] [] (T.returnType ty)
+codegenExpression (ExpressionVariable (Variable valueName ty)) = do
+  -- Check if a value exists in the symbol table
+  ident <- fromMaybe (error $ "Panic! Can't find symbol for " ++ show valueName) <$> lookupSymbol valueName
+  case ident of
+    LocalOperand op -> pure op
+    GlobalIdentifier valueName' -> functionCallInstruction valueName' [] [] (T.returnType ty)
 codegenExpression (ExpressionIf (If predicate thenExpression elseExpression ty)) = do
   let
     one = ConstantOperand $ C.Int 32 1
@@ -150,7 +162,7 @@ codegenExpression (ExpressionLet (Let bindings expression _)) = do
     bodyOp <- codegenExpression $ bindingValueBody bindingValue
 
     -- Add operator to symbol table for binding variable name
-    addNameToSymbolTable (bindingValueName bindingValue) bodyOp
+    addNameToSymbolTable (bindingValueName bindingValue) $ LocalOperand bodyOp
 
   -- Codegen the let expression
   codegenExpression expression

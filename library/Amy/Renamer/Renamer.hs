@@ -28,11 +28,11 @@ rename' (AST declarations) = do
 
   -- Rename extern declarations
   let externs = mapMaybe topLevelExternType (toList declarations)
-  externs' <- fmap TopLevelExternType <$> mapM (renameBindingType TopLevelDefinition) externs
+  externs' <- fmap TopLevelExternType <$> mapM renameBindingType externs
 
   -- Rename binding type declarations and add value bindings to scope
   let bindingTypes = mapMaybe topLevelBindingType (toList declarations)
-  bindingTypes' <- fmap TopLevelBindingType <$> mapM (renameBindingType TopLevelDefinition) bindingTypes
+  bindingTypes' <- fmap TopLevelBindingType <$> mapM renameBindingType bindingTypes
 
   -- Rename binding value declarations
   let bindingValues = mapMaybe topLevelBindingValue (toList declarations)
@@ -41,12 +41,11 @@ rename' (AST declarations) = do
   pure $ AST $ externs' ++ bindingTypes' ++ bindingValues'
 
 renameBindingType
-  :: ValueNameProvenance
-  -> BindingType Text
+  :: BindingType Text
   -> Renamer (BindingType ValueName)
-renameBindingType provenance bindingType = do
+renameBindingType bindingType = do
   -- Add extern name to scope
-  valueName <- addValueToScope provenance $ bindingTypeName bindingType
+  valueName <- addValueToScope $ bindingTypeName bindingType
 
   pure
     bindingType
@@ -61,7 +60,7 @@ renameBindingValue binding = withNewScope $ do -- Begin new scope
   valueName <- lookupValueInScopeOrError (bindingValueName binding)
 
   -- Add binding arguments to scope
-  args <- mapM (addValueToScope LocalDefinition) (bindingValueArgs binding)
+  args <- mapM addValueToScope (bindingValueArgs binding)
 
   -- Run renamer on expression
   expression <- renameExpression (bindingValueBody binding)
@@ -94,7 +93,7 @@ renameExpression (ExpressionIf (If predicate thenExpression elseExpression _)) =
 renameExpression (ExpressionLet (Let bindings expression _)) =
   withNewScope $ do
     -- Rename binding types
-    bindingTypes' <- fmap LetBindingType <$> mapM (renameBindingType LocalDefinition) (mapMaybe letBindingType bindings)
+    bindingTypes' <- fmap LetBindingType <$> mapM renameBindingType (mapMaybe letBindingType bindings)
 
     -- Rename binding values
     bindingValues' <- fmap LetBindingValue <$> mapM renameBindingValue (mapMaybe letBindingValue bindings)
