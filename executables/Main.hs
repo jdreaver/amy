@@ -5,6 +5,7 @@ module Main
 import qualified Data.ByteString.Char8 as BS8
 import Control.Monad.IO.Class (liftIO)
 import Data.Text (Text, pack)
+import qualified Data.Text.IO as TIO
 import System.Console.Haskeline
 import System.Environment (getArgs)
 import System.Exit (die)
@@ -23,9 +24,20 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    [] -> runInputT defaultSettings loop
-    [arg] -> process (pack arg)
-    _ -> die "Usage: amy [optional program text]"
+    [] -> do
+      -- See if there is anything in stding
+      stdinString <- getContents
+      if null stdinString
+      then
+        -- Run REPL
+        runInputT defaultSettings loop
+      else
+        -- Assume a program was passed in
+        process (pack stdinString)
+
+    -- User passed a file path
+    [path] -> TIO.readFile path >>= process
+    _ -> die "Usage: amy [file]"
  where
   loop = do
     minput <- getInputLine "amy> "

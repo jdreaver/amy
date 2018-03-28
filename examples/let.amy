@@ -1,0 +1,13 @@
+extern abs :: Int -> Int
+
+main :: Int -> Int
+main =
+  let
+    x :: Int
+    x = if True then abs (f 100) else abs (f 200)
+    y :: Int
+    y = x
+  in y
+
+f :: Int -> Int
+f x = if True then abs x else 300
