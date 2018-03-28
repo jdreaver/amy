@@ -26,7 +26,7 @@ typeCheck' (AST declarations) = do
   mapM_ typeCheckBindingType externs
 
   -- Check that all binding types exist and set binding types
-  let bindingTypes = mapMaybe topLevelBindingType (toList declarations)
+  let bindingTypes = mapMaybe topLevelBindingType declarations
   mapM_ typeCheckBindingType bindingTypes
 
   -- Type check binding values
@@ -131,6 +131,24 @@ typeCheckExpression (ExpressionIf (If predicate thenExpression elseExpression ()
     , ifThen = thenExpression'
     , ifElse = elseExpression'
     , ifType = thenType
+    }
+typeCheckExpression (ExpressionLet (Let bindings expression _)) = do
+  -- Type check binding types
+  let bindingTypes' = mapMaybe letBindingType bindings
+  mapM_ typeCheckBindingType bindingTypes'
+
+  -- Type check binding values
+  bindingValues' <- mapM typeCheckBindingValue (mapMaybe letBindingValue bindings)
+
+  -- Type check expression
+  expression' <- typeCheckExpression expression
+
+  pure $
+    ExpressionLet
+    Let
+    { letBindings = (LetBindingType <$> bindingTypes') ++ (LetBindingValue <$> bindingValues')
+    , letExpression = expression'
+    , letType = expressionType expression'
     }
 typeCheckExpression (ExpressionFunctionApplication app) = do
   -- Type check the function expression

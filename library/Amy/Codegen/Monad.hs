@@ -8,6 +8,8 @@ module Amy.Codegen.Monad
   , currentId
   , generateUnName
   , startNewBlock
+  , addNameToSymbolTable
+  , lookupSymbol
   , addInstruction
   , addUnNamedInstruction
   , instr
@@ -21,8 +23,12 @@ import Control.Monad.State.Strict
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import LLVM.AST
+
+import Amy.Names
 
 newtype FunctionGen a = FunctionGen { _unFunctionGen :: State FunctionGenState a }
   deriving (Functor, Applicative, Monad, MonadState FunctionGenState)
@@ -37,6 +43,8 @@ data FunctionGenState
     -- ^ Last incrementing ID. Used to generate intermediate instruction names.
   , functionGenStateBlockStack :: !(NonEmpty BlockGenState)
     -- ^ Stack of simple blocks. Needs to be reversed before generating LLVM.
+  , functionGenStateSymbolTable :: !(Map IdName Operand)
+    -- ^ Map from Amy variable names to operands
   } deriving (Show, Eq)
 
 data BlockGenState
@@ -55,6 +63,7 @@ defaultFunctionGenState name' =
   FunctionGenState
   { functionGenStateLastId = 0
   , functionGenStateBlockStack = defaultBlockGenState name' :| []
+  , functionGenStateSymbolTable = Map.empty
   }
 
 defaultBlockGenState :: Name -> BlockGenState
@@ -116,6 +125,18 @@ modifyCurrentBlock f =
       s
       { functionGenStateBlockStack = f currentBlock :| restBlocks
       }
+
+addNameToSymbolTable :: IdName -> Operand -> FunctionGen ()
+addNameToSymbolTable name op =
+  modify' $
+    \s ->
+      s
+      { functionGenStateSymbolTable =
+        Map.insert name op (functionGenStateSymbolTable s)
+      }
+
+lookupSymbol :: IdName -> FunctionGen (Maybe Operand)
+lookupSymbol name = Map.lookup name <$> gets functionGenStateSymbolTable
 
 -- | Adds an instruction to the stack
 addInstruction :: Named Instruction -> FunctionGen ()

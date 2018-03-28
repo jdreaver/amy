@@ -13,6 +13,8 @@ module Amy.Parser.Lexer
   , if'
   , then'
   , else'
+  , let'
+  , in'
   , lparen
   , rparen
   , comma
@@ -76,6 +78,8 @@ reservedWords =
   , "if"
   , "then"
   , "else"
+  , "let"
+  , "in"
   ]
 
 extern :: Lexer ()
@@ -89,6 +93,12 @@ then' = void $ symbol "then"
 
 else' :: Lexer ()
 else' = void $ symbol "else"
+
+let' :: Lexer ()
+let' = void $ symbol "let"
+
+in' :: Lexer ()
+in' = void $ symbol "in"
 
 -- | Type names are upper-case, like Int and Double
 typeIdentifier :: Lexer Text

@@ -59,6 +59,7 @@ expressionType :: Expression name Type -> Type
 expressionType (ExpressionLiteral lit) = PrimitiveTy $ literalType lit
 expressionType (ExpressionVariable (Variable _ ty)) = ty
 expressionType (ExpressionIf if') = ifType if'
+expressionType (ExpressionLet let') = letType let'
 expressionType (ExpressionFunctionApplication app) = functionApplicationReturnType app
 expressionType (ExpressionParens expr) = expressionType expr
 

@@ -7,7 +7,7 @@ module Amy.Codegen.Pure
 import qualified Data.ByteString.Char8 as BS8
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
-import Data.Foldable (toList)
+import Data.Foldable (forM_, toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe, mapMaybe)
@@ -100,7 +100,15 @@ codegenExpression (ExpressionVariable (Variable idn ty)) =
   -- We need to use the IdName's provenance to determine whether or not to use
   -- a local reference to a variable or a function call with no arguments.
   case idNameProvenance idn of
-    LocalDefinition -> pure $ LocalReference (llvmPrimitiveType $ assertPrimitiveType ty) (idNameToLLVM idn)
+    LocalDefinition -> do
+      -- First check the symbol table
+      mOp <- lookupSymbol idn
+
+      pure $
+        fromMaybe
+        -- Must not be in symbol table, assume the name is in scope
+        (LocalReference (llvmPrimitiveType $ assertPrimitiveType ty) (idNameToLLVM idn))
+        mOp
     TopLevelDefinition -> functionCallInstruction idn [] [] (T.returnType ty)
 codegenExpression (ExpressionIf (If predicate thenExpression elseExpression ty)) = do
   let
@@ -134,6 +142,18 @@ codegenExpression (ExpressionIf (If predicate thenExpression elseExpression ty))
   -- Generate the code for the ending block
   startNewBlock endBlockName
   phi (llvmPrimitiveType $ assertPrimitiveType ty) [(thenOp, thenBlockName), (elseOp, elseBlockName)]
+codegenExpression (ExpressionLet (Let bindings expression _)) = do
+  -- For each binding value, generate code for the expression
+  let bindingValues = mapMaybe letBindingValue bindings
+  forM_ bindingValues $ \bindingValue -> do
+    -- Generate code for binding expression
+    bodyOp <- codegenExpression $ bindingValueBody bindingValue
+
+    -- Add operator to symbol table for binding variable name
+    addNameToSymbolTable (bindingValueName bindingValue) bodyOp
+
+  -- Codegen the let expression
+  codegenExpression expression
 codegenExpression (ExpressionFunctionApplication app) = do
   fnName <-
     case functionApplicationFunction app of

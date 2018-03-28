@@ -47,13 +47,32 @@ spec = do
           , bindingValueArgs = []
           , bindingValueType = ()
           , bindingValueBody =
-            ExpressionFunctionApplication (
-              FunctionApplication
-              (ExpressionVariable (Variable "f" ()))
-              [ ExpressionLiteral (LiteralInt 2)
-              ]
-              ()
-            )
+            ExpressionLet
+              Let
+              { letBindings =
+                [ LetBindingType
+                  BindingType
+                  { bindingTypeName = "x"
+                  , bindingTypeTypeNames = ["Int"]
+                  }
+                , LetBindingValue
+                  BindingValue
+                  { bindingValueName = "x"
+                  , bindingValueArgs = []
+                  , bindingValueType = ()
+                  , bindingValueBody = ExpressionLiteral (LiteralInt 1)
+                  }
+                ]
+              , letExpression =
+                ExpressionFunctionApplication (
+                  FunctionApplication
+                  (ExpressionVariable (Variable "f" ()))
+                  [ ExpressionVariable (Variable "x" ())
+                  ]
+                  ()
+                )
+              , letType = ()
+              }
           }
         ]
 
@@ -163,6 +182,10 @@ f x = 1
 
 main :: Int
 main =
-  f 2
+  let
+    x :: Int
+    x = 1
+  in
+    f x
 
 |]

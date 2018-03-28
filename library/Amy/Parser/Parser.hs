@@ -9,6 +9,7 @@ module Amy.Parser.Parser
   , expression'
   , expressionParens
   , ifExpression
+  , letExpression'
   , literal
   ) where
 
@@ -95,6 +96,7 @@ expression' =
   expressionParens
   <|> (ExpressionLiteral <$> literal)
   <|> (ExpressionIf <$> ifExpression)
+  <|> (ExpressionLet <$> letExpression')
   <|> (ExpressionVariable <$> variable)
 
 expressionParens :: Parser (Expression Text ())
@@ -128,4 +130,31 @@ ifExpression = do
     , ifThen = thenExpression
     , ifElse = elseExpression
     , ifType = ()
+    }
+
+letExpression' :: Parser (Let Text ())
+letExpression' = do
+  letIndentation <- L.indentLevel
+  let'
+  let
+    parser =
+      try (LetBindingValue <$> binding)
+      <|> (LetBindingType <$> bindingType)
+  bindings <- many $ do
+    _ <- L.indentGuard spaceConsumerNewlines GT letIndentation
+    parser <* spaceConsumerNewlines
+
+  inIndentation <- L.indentLevel
+  _ <- do
+    -- TODO: What if the "in" and "let" are on the same line?
+    _ <- L.indentGuard spaceConsumerNewlines EQ letIndentation
+    in'
+  expr <- do
+    _ <- L.indentGuard spaceConsumerNewlines GT inIndentation
+    expression
+  pure
+    Let
+    { letBindings = bindings
+    , letExpression = expr
+    , letType = ()
     }

@@ -28,11 +28,11 @@ rename' (AST declarations) = do
 
   -- Rename extern declarations
   let externs = mapMaybe topLevelExternType (toList declarations)
-  externs' <- fmap TopLevelExternType <$> mapM renameBindingType externs
+  externs' <- fmap TopLevelExternType <$> mapM (renameBindingType TopLevelDefinition) externs
 
   -- Rename binding type declarations and add value bindings to scope
   let bindingTypes = mapMaybe topLevelBindingType (toList declarations)
-  bindingTypes' <- fmap TopLevelBindingType <$> mapM renameBindingType bindingTypes
+  bindingTypes' <- fmap TopLevelBindingType <$> mapM (renameBindingType TopLevelDefinition) bindingTypes
 
   -- Rename binding value declarations
   let bindingValues = mapMaybe topLevelBindingValue (toList declarations)
@@ -41,11 +41,12 @@ rename' (AST declarations) = do
   pure $ AST $ externs' ++ bindingTypes' ++ bindingValues'
 
 renameBindingType
-  :: BindingType Text
+  :: IdNameProvenance
+  -> BindingType Text
   -> Renamer (BindingType IdName)
-renameBindingType bindingType = do
+renameBindingType provenance bindingType = do
   -- Add extern name to scope
-  idName <- addValueToScope TopLevelDefinition $ bindingTypeName bindingType
+  idName <- addValueToScope provenance $ bindingTypeName bindingType
 
   pure
     bindingType
@@ -90,6 +91,24 @@ renameExpression (ExpressionIf (If predicate thenExpression elseExpression _)) =
   <*> renameExpression thenExpression
   <*> renameExpression elseExpression
   <*> pure ()
+renameExpression (ExpressionLet (Let bindings expression _)) =
+  withNewScope $ do
+    -- Rename binding types
+    bindingTypes' <- fmap LetBindingType <$> mapM (renameBindingType LocalDefinition) (mapMaybe letBindingType bindings)
+
+    -- Rename binding values
+    bindingValues' <- fmap LetBindingValue <$> mapM renameBindingValue (mapMaybe letBindingValue bindings)
+
+    -- Rename expression
+    expression' <- renameExpression expression
+
+    pure $
+      ExpressionLet
+      Let
+      { letBindings = bindingTypes' ++ bindingValues'
+      , letExpression = expression'
+      , letType = ()
+      }
 renameExpression (ExpressionFunctionApplication app) = do
   function <- renameExpression $ functionApplicationFunction app
   expressions <- mapM renameExpression (functionApplicationArgs app)

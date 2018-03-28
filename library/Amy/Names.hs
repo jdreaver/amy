@@ -12,7 +12,7 @@ data IdName
   { idNameRaw :: !Text
   , idNameId :: !NameId
   , idNameProvenance :: !IdNameProvenance
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 -- TODO: Get rid of this. It is only used for the LLVM code generator to decide
 -- to use a global or local reference. The code generator itself should track
@@ -21,6 +21,6 @@ data IdName
 data IdNameProvenance
   = LocalDefinition
   | TopLevelDefinition
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 type NameId = Int

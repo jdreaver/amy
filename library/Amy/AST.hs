@@ -8,6 +8,10 @@ module Amy.AST
   , BindingType(..)
   , Expression(..)
   , If(..)
+  , Let(..)
+  , LetBinding(..)
+  , letBindingValue
+  , letBindingType
   , Variable(..)
   , FunctionApplication(..)
   , Literal(..)
@@ -67,6 +71,7 @@ data Expression name ty
   = ExpressionLiteral !Literal
   | ExpressionVariable !(Variable name ty)
   | ExpressionIf (If name ty)
+  | ExpressionLet !(Let name ty)
   | ExpressionFunctionApplication (FunctionApplication name ty)
   | ExpressionParens (Expression name ty)
   deriving (Show, Eq)
@@ -84,6 +89,26 @@ data If name ty
   , ifElse :: !(Expression name ty)
   , ifType :: !ty
   } deriving (Show, Eq)
+
+data Let name ty
+  = Let
+  { letBindings :: ![LetBinding name ty]
+  , letExpression :: !(Expression name ty)
+  , letType :: !ty
+  } deriving (Show, Eq)
+
+data LetBinding name ty
+  = LetBindingValue !(BindingValue name ty)
+  | LetBindingType !(BindingType name)
+  deriving (Show, Eq)
+
+letBindingValue :: LetBinding name ty -> Maybe (BindingValue name ty)
+letBindingValue (LetBindingValue v) = Just v
+letBindingValue _ = Nothing
+
+letBindingType :: LetBinding name ty -> Maybe (BindingType name)
+letBindingType (LetBindingType v) = Just v
+letBindingType _ = Nothing
 
 -- | A 'FunctionApplication' is a function followed by an expression per
 -- argument, like @f x y@.
