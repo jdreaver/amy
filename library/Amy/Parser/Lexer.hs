@@ -26,6 +26,7 @@ module Amy.Parser.Lexer
   ) where
 
 import Control.Monad (void)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text, pack)
 import Data.Void (Void)
 import Text.Megaparsec
@@ -134,5 +135,14 @@ indentedBlock p = do
 
 -- | Parse something that can bleed over newlines as long as the indentation on
 -- the next lines is strictly greater than the first line.
-lineFold :: (Parsec Void Text () -> Parsec Void Text a) -> Parsec Void Text a
-lineFold = L.lineFold spaceConsumerNewlines
+lineFold :: Parsec Void Text a -> Parsec Void Text (NonEmpty a)
+lineFold p = do
+  startingIndent <- L.indentLevel
+  first <- p
+  spaceConsumerNewlines
+  rest <- many (L.indentGuard spaceConsumerNewlines GT startingIndent >> p)
+  -- rest <- many $ do
+  --   item <- p
+  --   _ <- L.indentGuard spaceConsumerNewlines GT startingIndent
+  --   pure item
+  pure $ first :| rest

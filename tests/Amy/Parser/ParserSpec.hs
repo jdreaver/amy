@@ -60,6 +60,18 @@ spec = do
           ()
         )
 
+    it "parses multi-line expression" $ do
+      parse expression "" "f 1\n 2 3" `shouldParse`
+        ExpressionFunctionApplication (
+          FunctionApplication
+          (ExpressionVariable (Variable "f" ()))
+          [ ExpressionLiteral (LiteralInt 1)
+          , ExpressionLiteral (LiteralInt 2)
+          , ExpressionLiteral (LiteralInt 3)
+          ]
+          ()
+        )
+
   describe "externType" $ do
     it "parses extern declaration" $ do
       parse externType "" "extern f :: Int" `shouldParse` BindingType "f" ["Int"]

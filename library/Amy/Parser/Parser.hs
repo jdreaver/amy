@@ -68,7 +68,7 @@ binding = do
 expression :: Parser (Expression Text ())
 expression = do
   -- Parse a NonEmpty list of expressions separated by spaces.
-  expressions <- expression' `CNE.sepBy1` spaceConsumer
+  expressions <- lineFold expression'
 
   pure $
     case expressions of
