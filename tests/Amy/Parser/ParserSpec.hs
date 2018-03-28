@@ -162,6 +162,7 @@ f :: Int -> Double
 f x = 1
 
 main :: Int
-main = f 2
+main =
+  f 2
 
 |]

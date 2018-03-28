@@ -18,6 +18,7 @@ import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import Data.Void (Void)
 import Text.Megaparsec
+import qualified Text.Megaparsec.Char.Lexer as L
 
 import Amy.AST
 import Amy.Parser.Lexer
@@ -53,9 +54,12 @@ bindingType = do
 
 binding :: Parser (BindingValue Text ())
 binding = do
+  startingIndent <- L.indentLevel
   bindingName <- identifier
   args <- many identifier
   equals
+  spaceConsumerNewlines
+  _ <- L.indentGuard spaceConsumerNewlines GT startingIndent
   expr <- expression
   pure
     BindingValue
