@@ -16,10 +16,10 @@ import Amy.Names
 import Amy.Type
 import Amy.TypeCheck.Monad
 
-typeCheck :: AST IdName () -> Either [TypeCheckError] (AST IdName Type)
+typeCheck :: AST ValueName () -> Either [TypeCheckError] (AST ValueName Type)
 typeCheck ast = runTypeCheck emptyTypeCheckState $ typeCheck' ast
 
-typeCheck' :: AST IdName () -> TypeCheck (AST IdName Type)
+typeCheck' :: AST ValueName () -> TypeCheck (AST ValueName Type)
 typeCheck' (AST declarations) = do
   -- Check that all extern types exist
   let externs = mapMaybe topLevelExternType (toList declarations)
@@ -39,7 +39,7 @@ typeCheck' (AST declarations) = do
     ++ (TopLevelBindingValue <$> bindingValues')
 
 typeCheckBindingType
-  :: BindingType IdName
+  :: BindingType ValueName
   -> TypeCheck ()
 typeCheckBindingType bindingType = do
   -- Validate type names
@@ -58,11 +58,11 @@ typeCheckBindingType bindingType = do
           , functionTypeReturnType = NE.last types
           }
 
-  setValueType (idNameId $ bindingTypeName bindingType) type'
+  setValueType (valueNameId $ bindingTypeName bindingType) type'
 
 typeCheckBindingValue
-  :: BindingValue IdName ()
-  -> TypeCheck (BindingValue IdName Type)
+  :: BindingValue ValueName ()
+  -> TypeCheck (BindingValue ValueName Type)
 typeCheckBindingValue bindingValue = do
   -- Look up binding type
   type' <- lookupValueTypeOrError (bindingValueName bindingValue)
@@ -74,7 +74,7 @@ typeCheckBindingValue bindingValue = do
 
   -- Look up types for arguments
   forM_ (zip argNames argTypes') $ \(argName, argType) ->
-    setValuePrimitiveType (idNameId argName) argType
+    setValuePrimitiveType (valueNameId argName) argType
 
   -- Get type of expression
   expression <- typeCheckExpression (bindingValueBody bindingValue)
@@ -96,8 +96,8 @@ typeCheckBindingValue bindingValue = do
     }
 
 typeCheckExpression
-  :: Expression IdName ()
-  -> TypeCheck (Expression IdName Type)
+  :: Expression ValueName ()
+  -> TypeCheck (Expression ValueName Type)
 typeCheckExpression (ExpressionLiteral lit) = pure $ ExpressionLiteral lit
 typeCheckExpression (ExpressionVariable var) = do
   ty <- lookupValueTypeOrError (variableName var)

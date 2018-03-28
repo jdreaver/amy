@@ -56,7 +56,7 @@ process input =
 
     showLeft errName = mapLeft (\x -> errName ++ " error! " ++ show x)
 
-    eTyped :: Either String (AST IdName Type)
+    eTyped :: Either String (AST ValueName Type)
     eTyped = do
       parsed <- mapLeft parseErrorPretty $ parse parserAST "<repl>" input
       renamed <- showLeft "Renamer" $ rename parsed

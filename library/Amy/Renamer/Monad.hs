@@ -30,14 +30,14 @@ data RenamerError
   = TypeSignatureLacksBinding !Text
   | BindingLacksTypeSignature !Text
   | UnknownVariable !Text
-  | VariableShadowed !Text !IdName
+  | VariableShadowed !Text !ValueName
   deriving (Show, Eq)
 
 data RenamerState
   = RenamerState
   { renamerStateLastId :: !NameId
     -- ^ Last 'NameId' generated
-  , renamerStateValues :: !(Map Text IdName)
+  , renamerStateValues :: !(Map Text ValueName)
     -- ^ Values in scope
   } deriving (Show, Eq)
 
@@ -54,20 +54,20 @@ freshId = do
   modify' (\s -> s { renamerStateLastId = 1 + renamerStateLastId s })
   gets renamerStateLastId
 
-addValueToScope :: IdNameProvenance -> Text -> Renamer IdName
+addValueToScope :: ValueNameProvenance -> Text -> Renamer ValueName
 addValueToScope provenance name = do
   nameId <- freshId
-  let idName = IdName name nameId provenance
+  let valueName = ValueName name nameId provenance
   mExistingId <- lookupValueInScope name
   case mExistingId of
     Just nid -> throwError [VariableShadowed name nid]
-    Nothing -> modify' (\s -> s { renamerStateValues = Map.insert name idName (renamerStateValues s) })
-  pure idName
+    Nothing -> modify' (\s -> s { renamerStateValues = Map.insert name valueName (renamerStateValues s) })
+  pure valueName
 
-lookupValueInScope :: Text -> Renamer (Maybe IdName)
+lookupValueInScope :: Text -> Renamer (Maybe ValueName)
 lookupValueInScope name = Map.lookup name <$> gets renamerStateValues
 
-lookupValueInScopeOrError :: Text -> Renamer IdName
+lookupValueInScopeOrError :: Text -> Renamer ValueName
 lookupValueInScopeOrError name =
   lookupValueInScope name >>= maybe (throwError [UnknownVariable name]) pure
 

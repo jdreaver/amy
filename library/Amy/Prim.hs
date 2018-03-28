@@ -45,7 +45,7 @@ data PrimitiveFunctionName
     -- Double
   | PrimDAdd
   | PrimDSub
-  deriving (Show, Eq, Enum, Bounded)
+  deriving (Show, Eq, Enum, Bounded, Ord)
 
 readPrimitiveFunctionName :: Text -> Maybe PrimitiveFunctionName
 readPrimitiveFunctionName name =

@@ -31,9 +31,9 @@ runTypeCheck initialState (TypeCheck action) = evalState (runExceptT action) ini
 data TypeCheckError
   = TypeMismatch !Type !Type
   | UnknownTypeName !Text
-  | CantFindType !IdName
+  | CantFindType !ValueName
   | WrongNumberOfArguments !Int !Int
-  | ExpectedPrimitiveType !(Maybe IdName) !Type
+  | ExpectedPrimitiveType !(Maybe ValueName) !Type
   | ExpectedFunctionType !Type
   deriving (Show, Eq)
 
@@ -63,8 +63,8 @@ setValuePrimitiveType nameId = setValueType nameId . PrimitiveTy
 lookupValueType :: NameId -> TypeCheck (Maybe Type)
 lookupValueType nameId = Map.lookup nameId <$> gets typeCheckStateValueTypeMap
 
-lookupValueTypeOrError :: IdName -> TypeCheck Type
-lookupValueTypeOrError idName =
-  lookupValueType (idNameId idName) >>= maybe (throwError [err]) pure
+lookupValueTypeOrError :: ValueName -> TypeCheck Type
+lookupValueTypeOrError valueName =
+  lookupValueType (valueNameId valueName) >>= maybe (throwError [err]) pure
  where
-  err = CantFindType idName
+  err = CantFindType valueName

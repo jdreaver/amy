@@ -12,7 +12,7 @@ import Amy.Codegen.Pure
 import Amy.Names
 import Amy.Type
 
-generateLLVMIR :: AST IdName Type -> IO ByteString
+generateLLVMIR :: AST ValueName Type -> IO ByteString
 generateLLVMIR ast =
   withContext $ \context ->
     withModuleFromAST context mod' $ \m ->

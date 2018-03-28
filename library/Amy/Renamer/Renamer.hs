@@ -13,10 +13,10 @@ import Amy.Names
 import Amy.Renamer.Monad
 
 -- | Gives a unique identity to all names in the AST
-rename :: AST Text () -> Either [RenamerError] (AST IdName ())
+rename :: AST Text () -> Either [RenamerError] (AST ValueName ())
 rename ast = runRenamer emptyRenamerState $ rename' ast
 
-rename' :: AST Text () -> Renamer (AST IdName ())
+rename' :: AST Text () -> Renamer (AST ValueName ())
 rename' (AST declarations) = do
   -- TODO: Try to do each of these steps in such a way that we can get as many
   -- errors as possible. For example, we should be able to validate all binding
@@ -41,24 +41,24 @@ rename' (AST declarations) = do
   pure $ AST $ externs' ++ bindingTypes' ++ bindingValues'
 
 renameBindingType
-  :: IdNameProvenance
+  :: ValueNameProvenance
   -> BindingType Text
-  -> Renamer (BindingType IdName)
+  -> Renamer (BindingType ValueName)
 renameBindingType provenance bindingType = do
   -- Add extern name to scope
-  idName <- addValueToScope provenance $ bindingTypeName bindingType
+  valueName <- addValueToScope provenance $ bindingTypeName bindingType
 
   pure
     bindingType
-    { bindingTypeName = idName
+    { bindingTypeName = valueName
     }
 
 renameBindingValue
   :: BindingValue Text ()
-  -> Renamer (BindingValue IdName ())
+  -> Renamer (BindingValue ValueName ())
 renameBindingValue binding = withNewScope $ do -- Begin new scope
   -- Get binding name ID
-  idName <- lookupValueInScopeOrError (bindingValueName binding)
+  valueName <- lookupValueInScopeOrError (bindingValueName binding)
 
   -- Add binding arguments to scope
   args <- mapM (addValueToScope LocalDefinition) (bindingValueArgs binding)
@@ -68,20 +68,20 @@ renameBindingValue binding = withNewScope $ do -- Begin new scope
 
   pure
     BindingValue
-    { bindingValueName = idName
+    { bindingValueName = valueName
     , bindingValueArgs = args
     , bindingValueType = ()
     , bindingValueBody = expression
     }
 
-renameExpression :: Expression Text () -> Renamer (Expression IdName ())
+renameExpression :: Expression Text () -> Renamer (Expression ValueName ())
 renameExpression (ExpressionLiteral lit) = pure $ ExpressionLiteral lit
 renameExpression (ExpressionVariable var) = do
-  idName <- lookupValueInScopeOrError (variableName var)
+  valueName <- lookupValueInScopeOrError (variableName var)
   pure $
     ExpressionVariable
     Variable
-    { variableName = idName
+    { variableName = valueName
     , variableType = ()
     }
 renameExpression (ExpressionIf (If predicate thenExpression elseExpression _)) =

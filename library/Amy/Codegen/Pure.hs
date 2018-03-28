@@ -26,7 +26,7 @@ import Amy.Codegen.Monad
 import Amy.Names
 import Amy.Type as T
 
-codegenPure :: AST IdName T.Type -> Module
+codegenPure :: AST ValueName T.Type -> Module
 codegenPure (AST declarations) =
   let
     definitions = mapMaybe codegenDeclaration declarations
@@ -45,21 +45,21 @@ llvmPrimitiveType IntType = IntegerType 32
 llvmPrimitiveType DoubleType = FloatingPointType DoubleFP
 llvmPrimitiveType BoolType = IntegerType 1
 
-codegenDeclaration :: TopLevel IdName T.Type -> Maybe Definition
+codegenDeclaration :: TopLevel ValueName T.Type -> Maybe Definition
 codegenDeclaration (TopLevelBindingValue binding) =
   let
     blocks = runGenBlocks (codegenExpression $ bindingValueBody binding)
     bindingType = bindingValueType binding
     paramTypes = llvmPrimitiveType <$> argTypes bindingType
     params =
-      (\(idn, ty) -> Parameter ty (Name . textToShortBS $ idNameRaw idn)  [])
+      (\(idn, ty) -> Parameter ty (Name . textToShortBS $ valueNameRaw idn)  [])
       <$> zip (bindingValueArgs binding) paramTypes
     returnType' = llvmPrimitiveType $ T.returnType bindingType
   in
     Just $
       GlobalDefinition
       functionDefaults
-      { name = idNameToLLVM $ bindingValueName binding
+      { name = valueNameToLLVM $ bindingValueName binding
       , parameters = (params, False)
       , LLVM.returnType = returnType'
       , basicBlocks = blocks
@@ -80,16 +80,16 @@ codegenDeclaration (TopLevelExternType extern) =
     Just $
       GlobalDefinition
       functionDefaults
-      { name = idNameToLLVM $ bindingTypeName extern
+      { name = valueNameToLLVM $ bindingTypeName extern
       , parameters = (params, False)
       , LLVM.returnType = returnType'
       }
 codegenDeclaration (TopLevelBindingType _) = Nothing
 
-idNameToLLVM :: IdName -> Name
-idNameToLLVM (IdName name' _ _) = Name $ textToShortBS name'
+valueNameToLLVM :: ValueName -> Name
+valueNameToLLVM (ValueName name' _ _) = Name $ textToShortBS name'
 
-codegenExpression :: Expression IdName T.Type -> FunctionGen Operand
+codegenExpression :: Expression ValueName T.Type -> FunctionGen Operand
 codegenExpression (ExpressionLiteral lit) =
   pure $ ConstantOperand $
     case lit of
@@ -97,9 +97,9 @@ codegenExpression (ExpressionLiteral lit) =
       LiteralDouble x -> C.Float (F.Double x)
       LiteralBool x -> C.Int 1 $ if x then 1 else 0
 codegenExpression (ExpressionVariable (Variable idn ty)) =
-  -- We need to use the IdName's provenance to determine whether or not to use
+  -- We need to use the ValueName's provenance to determine whether or not to use
   -- a local reference to a variable or a function call with no arguments.
-  case idNameProvenance idn of
+  case valueNameProvenance idn of
     LocalDefinition -> do
       -- First check the symbol table
       mOp <- lookupSymbol idn
@@ -107,7 +107,7 @@ codegenExpression (ExpressionVariable (Variable idn ty)) =
       pure $
         fromMaybe
         -- Must not be in symbol table, assume the name is in scope
-        (LocalReference (llvmPrimitiveType $ assertPrimitiveType ty) (idNameToLLVM idn))
+        (LocalReference (llvmPrimitiveType $ assertPrimitiveType ty) (valueNameToLLVM idn))
         mOp
     TopLevelDefinition -> functionCallInstruction idn [] [] (T.returnType ty)
 codegenExpression (ExpressionIf (If predicate thenExpression elseExpression ty)) = do
@@ -167,19 +167,19 @@ codegenExpression (ExpressionFunctionApplication app) = do
 codegenExpression (ExpressionParens expression) = codegenExpression expression
 
 functionCallInstruction
-  :: IdName
+  :: ValueName
   -> [Operand]
   -> [PrimitiveType]
   -> PrimitiveType
   -> FunctionGen Operand
-functionCallInstruction idName argumentOperands argumentTypes' returnType' = do
+functionCallInstruction valueName argumentOperands argumentTypes' returnType' = do
   let
     argTypes' = llvmPrimitiveType <$> argumentTypes'
     fnRef =
       ConstantOperand $
       C.GlobalReference
       (PointerType (LLVM.FunctionType (llvmPrimitiveType returnType') argTypes' False) (AddrSpace 0))
-      (idNameToLLVM idName)
+      (valueNameToLLVM valueName)
     toArg arg = (arg, [])
     instruction = Call Nothing CC.C [] (Right fnRef) (toArg <$> argumentOperands) [] []
 

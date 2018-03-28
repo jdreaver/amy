@@ -43,7 +43,7 @@ data FunctionGenState
     -- ^ Last incrementing ID. Used to generate intermediate instruction names.
   , functionGenStateBlockStack :: !(NonEmpty BlockGenState)
     -- ^ Stack of simple blocks. Needs to be reversed before generating LLVM.
-  , functionGenStateSymbolTable :: !(Map IdName Operand)
+  , functionGenStateSymbolTable :: !(Map ValueName Operand)
     -- ^ Map from Amy variable names to operands
   } deriving (Show, Eq)
 
@@ -126,7 +126,7 @@ modifyCurrentBlock f =
       { functionGenStateBlockStack = f currentBlock :| restBlocks
       }
 
-addNameToSymbolTable :: IdName -> Operand -> FunctionGen ()
+addNameToSymbolTable :: ValueName -> Operand -> FunctionGen ()
 addNameToSymbolTable name op =
   modify' $
     \s ->
@@ -135,7 +135,7 @@ addNameToSymbolTable name op =
         Map.insert name op (functionGenStateSymbolTable s)
       }
 
-lookupSymbol :: IdName -> FunctionGen (Maybe Operand)
+lookupSymbol :: ValueName -> FunctionGen (Maybe Operand)
 lookupSymbol name = Map.lookup name <$> gets functionGenStateSymbolTable
 
 -- | Adds an instruction to the stack
