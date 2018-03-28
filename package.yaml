@@ -10,6 +10,7 @@ dependencies:
   - megaparsec
   - mtl
   - parser-combinators
+  - scientific
   - text
 
 ghc-options: -Wall

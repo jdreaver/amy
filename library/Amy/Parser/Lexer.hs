@@ -4,8 +4,7 @@ module Amy.Parser.Lexer
   ( spaceConsumer
   , spaceConsumerNewlines
   , noIndent
-  , integer
-  , double
+  , number
   , bool
   , symbol
   , identifier
@@ -27,6 +26,7 @@ module Amy.Parser.Lexer
 
 import Control.Monad (void)
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.Scientific (floatingOrInteger)
 import Data.Text (Text, pack)
 import Data.Void (Void)
 import Text.Megaparsec
@@ -50,11 +50,8 @@ lineComment  = L.skipLineComment "#"
 blockComment :: Lexer ()
 blockComment = empty
 
-integer :: Lexer Int
-integer = lexeme L.decimal
-
-double :: Lexer Double
-double = lexeme L.float
+number :: Lexer (Either Double Int)
+number = floatingOrInteger <$> lexeme L.scientific
 
 bool :: Lexer Bool
 bool = lexeme $
@@ -141,8 +138,4 @@ lineFold p = do
   first <- p
   spaceConsumerNewlines
   rest <- many (L.indentGuard spaceConsumerNewlines GT startingIndent >> p)
-  -- rest <- many $ do
-  --   item <- p
-  --   _ <- L.indentGuard spaceConsumerNewlines GT startingIndent
-  --   pure item
   pure $ first :| rest

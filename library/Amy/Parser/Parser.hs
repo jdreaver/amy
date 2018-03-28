@@ -31,7 +31,7 @@ parserAST = AST <$> do
 
 topLevel :: Parser (TopLevel Text ())
 topLevel =
-  try (TopLevelExternType <$> externType)
+  (TopLevelExternType <$> externType)
   <|> try (TopLevelBindingType <$> bindingType)
   <|> (TopLevelBindingValue <$> binding)
 
@@ -83,7 +83,6 @@ expression = do
         , functionApplicationReturnType = ()
         }
 
-
 -- | Parses any expression except function application. This is needed to avoid
 -- left recursion. Without this distinction, f a b would be parsed as f (a b)
 -- instead of (f a) b.
@@ -92,15 +91,14 @@ expression' =
   expressionParens
   <|> (ExpressionLiteral <$> literal)
   <|> (ExpressionIf <$> ifExpression)
-  <|> try (ExpressionVariable <$> variable)
+  <|> (ExpressionVariable <$> variable)
 
 expressionParens :: Parser (Expression Text ())
 expressionParens = ExpressionParens <$> between lparen rparen expression
 
 literal :: Parser Literal
 literal =
-  try (LiteralDouble <$> double)
-  <|> try (LiteralInt <$> integer)
+  (either LiteralDouble LiteralInt <$> number)
   <|> (LiteralBool <$> bool)
 
 variable :: Parser (Variable Text ())

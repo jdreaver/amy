@@ -5,6 +5,7 @@ module Amy.Parser.LexerSpec
   ( spec
   ) where
 
+import Data.Either (fromRight)
 import Test.Hspec
 import Test.Hspec.Megaparsec
 import Text.Megaparsec
@@ -23,6 +24,9 @@ spec = do
       parse text "" "\"Hello \\\"Bob\\\"\"" `shouldParse` "Hello \"Bob\""
 
   describe "lineFold" $ do
+
+    let
+      integer = fromRight (error "Not an integer") <$> number
 
     it "works" $ do
       parse (lineFold integer) "" "1" `shouldParse` [1]
