@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Amy.Type
   ( Type(..)
   , returnType
@@ -13,9 +11,9 @@ module Amy.Type
 
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty)
-import Data.Text (Text)
 
 import Amy.AST
+import Amy.Prim (PrimitiveType(..), readPrimitiveType)
 
 data Type
   = PrimitiveTy !PrimitiveType
@@ -33,20 +31,6 @@ argTypes (FunctionTy ft) = toList (functionTypeArgTypes ft)
 primitiveType :: Type -> Maybe PrimitiveType
 primitiveType (PrimitiveTy prim) = Just prim
 primitiveType _ = Nothing
-
-data PrimitiveType
-  = IntType
-  | DoubleType
-  | BoolType
-  deriving (Show, Eq)
-
-readPrimitiveType :: Text -> Maybe PrimitiveType
-readPrimitiveType t =
-  case t of
-    "Int" -> Just IntType
-    "Double" -> Just DoubleType
-    "Bool" -> Just BoolType
-    _ -> Nothing
 
 data FunctionType
   = FunctionType
