@@ -20,6 +20,7 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 
 import Amy.Names
+import Amy.Prim
 import Amy.Type
 
 newtype TypeCheck a = TypeCheck (ExceptT [TypeCheckError] (State TypeCheckState) a)
@@ -46,8 +47,14 @@ data TypeCheckState
 emptyTypeCheckState :: TypeCheckState
 emptyTypeCheckState =
   TypeCheckState
-  { typeCheckStateValueTypeMap = Map.empty
+  { typeCheckStateValueTypeMap = primitiveFunctionTypes
   }
+
+primitiveFunctionTypes :: Map NameId Type
+primitiveFunctionTypes =
+  Map.fromList $ (\prim -> (PrimitiveFunctionId prim, mkType prim)) <$> allPrimitiveFunctionNames
+ where
+  mkType prim = makeType $ primitiveFunctionType $ primitiveFunction prim
 
 setValueType :: NameId -> Type -> TypeCheck ()
 setValueType nameId ty = do

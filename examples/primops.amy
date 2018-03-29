@@ -1,0 +1,9 @@
+main :: Int
+main =
+  let
+    x :: Int
+    x = 2
+    y :: Int
+    y = iAdd x 5
+  in
+    if iLessThan x 5 then 100 else 200

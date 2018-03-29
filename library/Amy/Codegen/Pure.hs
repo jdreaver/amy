@@ -24,6 +24,7 @@ import LLVM.AST.Global as LLVM
 import Amy.AST
 import Amy.Codegen.Monad
 import Amy.Names
+import Amy.Prim
 import Amy.Type as T
 
 codegenPure :: AST ValueName T.Type -> Module
@@ -167,16 +168,50 @@ codegenExpression (ExpressionLet (Let bindings expression _)) = do
   -- Codegen the let expression
   codegenExpression expression
 codegenExpression (ExpressionFunctionApplication app) = do
-  fnName <-
+  -- Evaluate argument expressions
+  let
+    fnArgs = functionApplicationArgs app
+    fnArgTypes = assertPrimitiveType . expressionType <$> fnArgs
+    fnReturnType = assertPrimitiveType $ functionApplicationReturnType app
+  argOps <- mapM codegenExpression fnArgs
+
+  -- Get the function expression variable
+  fnVarName <-
     case functionApplicationFunction app of
       ExpressionVariable var -> pure $ variableName var
       _ -> error $ "Expected function to be variable (no currying yet). Got " ++ show app
-  let
-    fnArgs = functionApplicationArgs app
-    fnArgTypes = toList $ assertPrimitiveType . expressionType <$> fnArgs
-  argOps <- mapM codegenExpression fnArgs
-  functionCallInstruction fnName (toList argOps) fnArgTypes (assertPrimitiveType $ functionApplicationReturnType app)
+
+  -- Generate code for function
+  case valueNameId fnVarName of
+    PrimitiveFunctionId primName -> codegenPrimitiveFunction primName argOps fnReturnType
+    NameIntId _ -> functionCallInstruction fnVarName (toList argOps) (toList fnArgTypes) fnReturnType
 codegenExpression (ExpressionParens expression) = codegenExpression expression
+
+codegenPrimitiveFunction
+  :: PrimitiveFunctionName
+  -> NonEmpty Operand
+  -> PrimitiveType
+  -> FunctionGen Operand
+codegenPrimitiveFunction primFuncName argumentOperands returnType' = do
+  let
+    -- TODO: Better error checking here if number of operands doesn't match
+    -- expected number. However, this should be type checked, so a simple panic
+    -- should suffice.
+    op0 = NE.head argumentOperands
+    op1 = argumentOperands NE.!! 1
+  let
+    instruction =
+      case primFuncName of
+        PrimIAdd -> Add False False op0 op1 []
+        PrimISub -> Sub False False op0 op1 []
+        PrimIEquals -> ICmp IP.EQ op0 op1 []
+        PrimIGreaterThan -> ICmp IP.SGT op0 op1 []
+        PrimILessThan -> ICmp IP.SLT op0 op1 []
+
+        PrimDAdd -> FAdd noFastMathFlags op0 op1 []
+        PrimDSub -> FSub noFastMathFlags op0 op1 []
+
+  instr (llvmPrimitiveType returnType') instruction
 
 functionCallInstruction
   :: ValueName

@@ -6,7 +6,6 @@ module Amy.TypeCheck.TypeCheck
   ) where
 
 import Control.Monad (forM, when)
-import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (mapMaybe)
 import GHC.Exts (toList)
@@ -47,18 +46,7 @@ typeCheckBindingType bindingType = do
     maybe (throwError [UnknownTypeName typeName]) pure (readPrimitiveType typeName)
 
   -- Set value type for binding
-  let
-    type' =
-      case primTypes of
-        primType :| [] -> PrimitiveTy primType
-        types@(firstType :| rest) ->
-          FunctionTy
-          FunctionType
-          { functionTypeArgTypes = firstType :| init rest
-          , functionTypeReturnType = NE.last types
-          }
-
-  setValueType (valueNameId $ bindingTypeName bindingType) type'
+  setValueType (valueNameId $ bindingTypeName bindingType) (makeType primTypes)
 
 typeCheckBindingValue
   :: BindingValue ValueName ()

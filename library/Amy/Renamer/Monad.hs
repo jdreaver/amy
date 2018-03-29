@@ -19,6 +19,7 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 
 import Amy.Names
+import Amy.Prim
 
 newtype Renamer a = Renamer (ExceptT [RenamerError] (State RenamerState) a)
   deriving (Functor, Applicative, Monad, MonadState RenamerState, MonadError [RenamerError])
@@ -35,8 +36,8 @@ data RenamerError
 
 data RenamerState
   = RenamerState
-  { renamerStateLastId :: !NameId
-    -- ^ Last 'NameId' generated
+  { renamerStateLastId :: !NameIntId
+    -- ^ Last 'NameIntId' generated
   , renamerStateValues :: !(Map Text ValueName)
     -- ^ Values in scope
   } deriving (Show, Eq)
@@ -45,14 +46,23 @@ emptyRenamerState :: RenamerState
 emptyRenamerState =
   RenamerState
   { renamerStateLastId = -1
-  , renamerStateValues = Map.empty
+  , renamerStateValues = primitiveFunctionNames
   }
 
--- | Generate a new 'NameId'
+primitiveFunctionNames :: Map Text ValueName
+primitiveFunctionNames =
+  Map.fromList $
+    (\prim ->
+       ( showPrimitiveFunctionName prim
+       , ValueName (showPrimitiveFunctionName prim) (PrimitiveFunctionId prim)
+       ))
+    <$> allPrimitiveFunctionNames
+
+-- | Generate a new 'NameIntId'
 freshId :: Renamer NameId
 freshId = do
   modify' (\s -> s { renamerStateLastId = 1 + renamerStateLastId s })
-  gets renamerStateLastId
+  NameIntId <$> gets renamerStateLastId
 
 addValueToScope :: Text -> Renamer ValueName
 addValueToScope name = do

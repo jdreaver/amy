@@ -3,6 +3,7 @@ module Amy.Type
   , returnType
   , argTypes
   , primitiveType
+  , makeType
   , PrimitiveType(..)
   , readPrimitiveType
   , FunctionType(..)
@@ -10,7 +11,8 @@ module Amy.Type
   ) where
 
 import Data.Foldable (toList)
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 
 import Amy.AST
 import Amy.Prim (PrimitiveType(..), readPrimitiveType)
@@ -31,6 +33,17 @@ argTypes (FunctionTy ft) = toList (functionTypeArgTypes ft)
 primitiveType :: Type -> Maybe PrimitiveType
 primitiveType (PrimitiveTy prim) = Just prim
 primitiveType _ = Nothing
+
+makeType :: NonEmpty PrimitiveType -> Type
+makeType primTypes =
+  case primTypes of
+    primType :| [] -> PrimitiveTy primType
+    types@(firstType :| rest) ->
+      FunctionTy
+      FunctionType
+      { functionTypeArgTypes = firstType :| init rest
+      , functionTypeReturnType = NE.last types
+      }
 
 data FunctionType
   = FunctionType

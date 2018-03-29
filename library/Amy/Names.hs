@@ -1,9 +1,12 @@
 module Amy.Names
   ( ValueName(..)
-  , NameId
+  , NameIntId
+  , NameId(..)
   ) where
 
 import Data.Text (Text)
+
+import Amy.Prim
 
 -- | An 'ValueName' is a program name tagged with a unique ID.
 data ValueName
@@ -12,4 +15,10 @@ data ValueName
   , valueNameId :: !NameId
   } deriving (Show, Eq, Ord)
 
-type NameId = Int
+-- | How a name is identified after renaming.
+data NameId
+  = NameIntId !NameIntId
+  | PrimitiveFunctionId !PrimitiveFunctionName
+  deriving (Show, Eq, Ord)
+
+type NameIntId = Int
