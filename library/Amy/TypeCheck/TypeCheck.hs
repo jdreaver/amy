@@ -11,7 +11,6 @@ import Data.Traversable (for)
 import qualified Data.List.NonEmpty as NE
 
 import Amy.Errors
-import Amy.Literal
 import Amy.Names
 import Amy.Renamer.AST
 import Amy.Type
@@ -70,7 +69,7 @@ typeCheckBinding binding = do
   body' <- typeCheckExpression (rBindingBody binding)
 
   -- Make sure expression type matches binding return type
-  let expType = typedType body'
+  let expType = expressionType body'
   expressionType' <-
     maybe (throwError [ExpectedPrimitiveType (Just $ rBindingName binding) expType]) pure $
     primitiveType expType
@@ -87,20 +86,20 @@ typeCheckBinding binding = do
     , tBindingBody = body'
     }
 
-typeCheckExpression :: RExpr -> TypeCheck (Typed TExpr)
-typeCheckExpression (RELit lit) = pure $ Typed (PrimitiveTy $ literalType lit) (TELit lit)
+typeCheckExpression :: RExpr -> TypeCheck TExpr
+typeCheckExpression (RELit lit) = pure $ TELit lit
 typeCheckExpression (REVar var) = do
   ty <- lookupValueTypeOrError var
-  pure $ Typed ty (TEVar var)
+  pure $ TEVar $ Typed ty var
 typeCheckExpression (REIf (RIf predicate thenExpression elseExpression)) = do
   predicate' <- typeCheckExpression predicate
   thenExpression' <- typeCheckExpression thenExpression
   elseExpression' <- typeCheckExpression elseExpression
 
   let
-    predicateType = typedType predicate'
-    thenType = typedType thenExpression'
-    elseType = typedType elseExpression'
+    predicateType = expressionType predicate'
+    thenType = expressionType thenExpression'
+    elseType = expressionType elseExpression'
 
   -- Predicate needs to be Bool
   when (predicateType /= PrimitiveTy BoolType) $
@@ -111,13 +110,12 @@ typeCheckExpression (REIf (RIf predicate thenExpression elseExpression)) = do
     throwError [TypeMismatch thenType elseType]
 
   pure $
-    Typed thenType $
-      TEIf
-      TIf
-      { tIfPredicate = predicate'
-      , tIfThen = thenExpression'
-      , tIfElse = elseExpression'
-      }
+    TEIf
+    TIf
+    { tIfPredicate = predicate'
+    , tIfThen = thenExpression'
+    , tIfElse = elseExpression'
+    }
 typeCheckExpression (RELet (RLet bindings expression)) = do
   -- Add binding types to scope
   traverse_ addBindingTypeToScope bindings
@@ -129,7 +127,6 @@ typeCheckExpression (RELet (RLet bindings expression)) = do
   expression' <- typeCheckExpression expression
 
   pure $
-    Typed (typedType expression') $
     TELet
     TLet
     { tLetBindings = bindings'
@@ -141,36 +138,37 @@ typeCheckExpression (REApp app) = do
 
   -- Type check the arguments
   args <- mapM typeCheckExpression $ rAppArgs app
-  argTypes' <- forM args $ \arg ->
-    let argType = typedType arg
-    in maybe (throwError [ExpectedPrimitiveType Nothing argType]) pure $
-       primitiveType argType
+  typedArgs <- forM args $ \arg -> do
+    let argType = expressionType arg
+    ty <- maybe (throwError [ExpectedPrimitiveType Nothing argType]) pure $ primitiveType argType
+    pure (ty, arg)
 
   -- Make sure there is the right number of arguments
-  let funcType = typedType function
+  let funcType = expressionType function
   funcType' <-
     case funcType of
       FunctionTy ft -> pure ft
       _ -> throwError [ExpectedFunctionType funcType]
   let
     funcArgTypes = functionTypeArgTypes funcType'
-  unless (length argTypes' == length funcArgTypes) $
-    throwError [WrongNumberOfArguments (length argTypes') (length funcArgTypes)]
+  unless (length typedArgs == length funcArgTypes) $
+    throwError [WrongNumberOfArguments (length typedArgs) (length funcArgTypes)]
 
   -- Make sure arg types make function types
   let
     mismatchedTypes =
       fmap (\(p1, p2) -> TypeMismatch (PrimitiveTy p1) (PrimitiveTy p2))
       . NE.filter (uncurry (/=))
-      $ NE.zip argTypes' funcArgTypes
+      . fmap (\((p1, _), p2) -> (p1, p2))
+      $ NE.zip typedArgs funcArgTypes
   unless (null mismatchedTypes) $
     throwError mismatchedTypes
 
   -- Put it all together
   pure $
-    Typed (PrimitiveTy $ functionTypeReturnType funcType') $
     TEApp
     TApp
     { tAppFunction = function
-    , tAppArgs = args
+    , tAppArgs = typedArgs
+    , tAppReturnType = functionTypeReturnType funcType'
     }

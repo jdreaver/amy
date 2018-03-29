@@ -8,6 +8,7 @@ module Amy.TypeCheck.AST
   , TIf(..)
   , TLet(..)
   , TApp(..)
+  , expressionType
 
     -- Re-export
   , Literal(..)
@@ -15,7 +16,7 @@ module Amy.TypeCheck.AST
 
 import Data.List.NonEmpty (NonEmpty)
 
-import Amy.Literal (Literal(..))
+import Amy.Literal
 import Amy.Names
 import Amy.Type
 
@@ -34,7 +35,7 @@ data TBinding
   { tBindingName :: !ValueName
   , tBindingArgs :: ![(PrimitiveType, ValueName)]
   , tBindingReturnType :: !PrimitiveType
-  , tBindingBody :: !(Typed TExpr)
+  , tBindingBody :: !TExpr
   } deriving (Show, Eq)
 
 -- | A renamed extern declaration.
@@ -47,7 +48,7 @@ data TExtern
 -- | A renamed 'Expr'
 data TExpr
   = TELit !Literal
-  | TEVar !ValueName
+  | TEVar !(Typed ValueName)
   | TEIf !TIf
   | TELet !TLet
   | TEApp !TApp
@@ -55,19 +56,27 @@ data TExpr
 
 data TIf
   = TIf
-  { tIfPredicate :: !(Typed TExpr)
-  , tIfThen :: !(Typed TExpr)
-  , tIfElse :: !(Typed TExpr)
+  { tIfPredicate :: !TExpr
+  , tIfThen :: !TExpr
+  , tIfElse :: !TExpr
   } deriving (Show, Eq)
 
 data TLet
   = TLet
   { tLetBindings :: ![TBinding]
-  , tLetExpression :: !(Typed TExpr)
+  , tLetExpression :: !TExpr
   } deriving (Show, Eq)
 
 data TApp
   = TApp
-  { tAppFunction :: !(Typed TExpr)
-  , tAppArgs :: !(NonEmpty (Typed TExpr))
+  { tAppFunction :: !TExpr
+  , tAppArgs :: !(NonEmpty (PrimitiveType, TExpr))
+  , tAppReturnType :: !PrimitiveType
   } deriving (Show, Eq)
+
+expressionType :: TExpr -> Type
+expressionType (TELit lit) = PrimitiveTy $ literalType lit
+expressionType (TEVar (Typed ty _)) = ty
+expressionType (TEIf if') = expressionType (tIfThen if') -- Checker ensure "then" and "else" types match
+expressionType (TELet let') = expressionType (tLetExpression let')
+expressionType (TEApp app) = PrimitiveTy $ tAppReturnType app

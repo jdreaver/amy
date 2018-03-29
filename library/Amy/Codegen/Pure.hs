@@ -100,14 +100,14 @@ codegenBinding allTopLevelNames binding = do
 valueNameToLLVM :: ValueName -> Name
 valueNameToLLVM (ValueName name' _) = Name $ textToShortBS name'
 
-codegenExpression :: Typed TExpr -> FunctionGen Operand
-codegenExpression (Typed _ (TELit lit)) =
+codegenExpression :: TExpr -> FunctionGen Operand
+codegenExpression (TELit lit) =
   pure $ ConstantOperand $
     case lit of
       LiteralInt i -> C.Int 32 (fromIntegral i)
       LiteralDouble x -> C.Float (F.Double x)
       LiteralBool x -> C.Int 1 $ if x then 1 else 0
-codegenExpression (Typed ty (TEVar valueName)) = do
+codegenExpression (TEVar (Typed ty valueName)) = do
   -- Check if a value exists in the symbol table
   mSymbol <- lookupSymbol valueName
   ident <-
@@ -117,7 +117,7 @@ codegenExpression (Typed ty (TEVar valueName)) = do
   case ident of
     LocalOperand op -> pure op
     GlobalIdentifier valueName' -> functionCallInstruction valueName' [] [] (T.returnType ty)
-codegenExpression (Typed ty (TEIf (TIf predicate thenExpression elseExpression))) = do
+codegenExpression expr@(TEIf (TIf predicate thenExpression elseExpression)) = do
   let
     one = ConstantOperand $ C.Int 32 1
     --zero = ConstantOperand $ C.Int 32 0
@@ -148,9 +148,9 @@ codegenExpression (Typed ty (TEIf (TIf predicate thenExpression elseExpression))
 
   -- Generate the code for the ending block
   startNewBlock endBlockName
-  ty' <- llvmPrimitiveType <$> assertPrimitiveType ty
+  ty' <- llvmPrimitiveType <$> assertPrimitiveType (expressionType expr)
   phi ty' [(thenOp, thenBlockName), (elseOp, elseBlockName)]
-codegenExpression (Typed _ (TELet (TLet bindings expression))) = do
+codegenExpression (TELet (TLet bindings expression)) = do
   -- For each binding value, generate code for the expression
   for_ bindings $ \binding -> do
     -- Generate code for binding expression
@@ -161,18 +161,18 @@ codegenExpression (Typed _ (TELet (TLet bindings expression))) = do
 
   -- Codegen the let expression
   codegenExpression expression
-codegenExpression (Typed ty (TEApp app)) = do
+codegenExpression (TEApp app) = do
   -- Evaluate argument expressions
   let
     fnArgs = tAppArgs app
-  fnArgTypes <- traverse assertPrimitiveType $ typedType <$> fnArgs
-  fnReturnType <- assertPrimitiveType ty
-  argOps <- mapM codegenExpression fnArgs
+    fnArgTypes = fst <$> fnArgs
+    fnReturnType = tAppReturnType app
+  argOps <- mapM codegenExpression (snd <$> fnArgs)
 
   -- Get the function expression variable
   fnVarName <-
     case tAppFunction app of
-      (Typed _ (TEVar var)) -> pure var
+      (TEVar (Typed _ var)) -> pure var
       _ -> throwError [NoCurrying app]
 
   -- Generate code for function
