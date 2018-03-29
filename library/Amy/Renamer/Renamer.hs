@@ -9,11 +9,12 @@ import Data.Text (Text)
 import GHC.Exts (toList)
 
 import Amy.AST
+import Amy.Errors
 import Amy.Names
 import Amy.Renamer.Monad
 
 -- | Gives a unique identity to all names in the AST
-rename :: AST Text () -> Either [RenamerError] (AST ValueName ())
+rename :: AST Text () -> Either [Error] (AST ValueName ())
 rename ast = runRenamer emptyRenamerState $ rename' ast
 
 rename' :: AST Text () -> Renamer (AST ValueName ())

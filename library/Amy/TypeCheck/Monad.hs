@@ -3,7 +3,6 @@
 module Amy.TypeCheck.Monad
   ( TypeCheck
   , runTypeCheck
-  , TypeCheckError(..)
   , emptyTypeCheckState
   , setValueType
   , setValuePrimitiveType
@@ -17,26 +16,17 @@ import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Text (Text)
 
+import Amy.Errors
 import Amy.Names
 import Amy.Prim
 import Amy.Type
 
-newtype TypeCheck a = TypeCheck (ExceptT [TypeCheckError] (State TypeCheckState) a)
-  deriving (Functor, Applicative, Monad, MonadState TypeCheckState, MonadError [TypeCheckError])
+newtype TypeCheck a = TypeCheck (ExceptT [Error] (State TypeCheckState) a)
+  deriving (Functor, Applicative, Monad, MonadState TypeCheckState, MonadError [Error])
 
-runTypeCheck :: TypeCheckState -> TypeCheck a -> Either [TypeCheckError] a
+runTypeCheck :: TypeCheckState -> TypeCheck a -> Either [Error] a
 runTypeCheck initialState (TypeCheck action) = evalState (runExceptT action) initialState
-
-data TypeCheckError
-  = TypeMismatch !Type !Type
-  | UnknownTypeName !Text
-  | CantFindType !ValueName
-  | WrongNumberOfArguments !Int !Int
-  | ExpectedPrimitiveType !(Maybe ValueName) !Type
-  | ExpectedFunctionType !Type
-  deriving (Show, Eq)
 
 data TypeCheckState
   = TypeCheckState

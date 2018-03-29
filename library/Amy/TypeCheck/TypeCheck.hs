@@ -11,11 +11,12 @@ import Data.Maybe (mapMaybe)
 import GHC.Exts (toList)
 
 import Amy.AST
+import Amy.Errors
 import Amy.Names
 import Amy.Type
 import Amy.TypeCheck.Monad
 
-typeCheck :: AST ValueName () -> Either [TypeCheckError] (AST ValueName Type)
+typeCheck :: AST ValueName () -> Either [Error] (AST ValueName Type)
 typeCheck ast = runTypeCheck emptyTypeCheckState $ typeCheck' ast
 
 typeCheck' :: AST ValueName () -> TypeCheck (AST ValueName Type)

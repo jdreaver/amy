@@ -4,7 +4,6 @@ module Amy.Renamer.Monad
   ( Renamer
   , runRenamer
   , emptyRenamerState
-  , RenamerError(..)
   , freshId
   , addValueToScope
   , lookupValueInScope
@@ -18,21 +17,15 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 
+import Amy.Errors
 import Amy.Names
 import Amy.Prim
 
-newtype Renamer a = Renamer (ExceptT [RenamerError] (State RenamerState) a)
-  deriving (Functor, Applicative, Monad, MonadState RenamerState, MonadError [RenamerError])
+newtype Renamer a = Renamer (ExceptT [Error] (State RenamerState) a)
+  deriving (Functor, Applicative, Monad, MonadState RenamerState, MonadError [Error])
 
-runRenamer :: RenamerState -> Renamer a -> Either [RenamerError] a
+runRenamer :: RenamerState -> Renamer a -> Either [Error] a
 runRenamer initialState (Renamer action) = evalState (runExceptT action) initialState
-
-data RenamerError
-  = TypeSignatureLacksBinding !Text
-  | BindingLacksTypeSignature !Text
-  | UnknownVariable !Text
-  | VariableShadowed !Text !ValueName
-  deriving (Show, Eq)
 
 data RenamerState
   = RenamerState
