@@ -8,7 +8,7 @@ import Data.Text (Text)
 
 import Amy.Prim
 
--- | An 'ValueName' is a program name tagged with a unique ID.
+-- | An 'ValueName' is a value name tagged with a unique ID.
 data ValueName
   = ValueName
   { valueNameRaw :: !Text

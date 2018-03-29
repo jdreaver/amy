@@ -9,21 +9,21 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Text.Megaparsec
 
-import Amy.AST
 import Amy.Names
+import Amy.Renamer.AST
 import Amy.Type
+import Amy.TypeCheck.AST
 
 data Error
   -- Parser
   = ParserError !(ParseError Char Void)
 
   -- Renamer
-  | TypeSignatureLacksBinding !Text
-  | BindingLacksTypeSignature !Text
   | UnknownVariable !Text
   | VariableShadowed !Text !ValueName
 
   -- Type checker
+  | BindingLacksTypeSignature !RBinding
   | TypeMismatch !Type !Type
   | UnknownTypeName !Text
   | CantFindType !ValueName
@@ -35,7 +35,7 @@ data Error
   | CodegenUnknownTypeName !Text
   | CodegenMissingSymbol !ValueName
   | CodegenExpectedPrimitiveType !Type
-  | NoCurrying !(FunctionApplication ValueName Type)
+  | NoCurrying !TApp
   deriving (Show, Eq)
 
 showError :: Error -> String

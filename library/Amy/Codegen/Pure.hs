@@ -8,10 +8,9 @@ import Control.Monad.Except
 import qualified Data.ByteString.Char8 as BS8
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
-import Data.Foldable (forM_, toList)
+import Data.Foldable (for_, toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
 import LLVM.AST as LLVM
@@ -22,26 +21,24 @@ import qualified LLVM.AST.Float as F
 import qualified LLVM.AST.IntegerPredicate as IP
 import LLVM.AST.Global as LLVM
 
-import Amy.AST
 import Amy.Codegen.Monad
 import Amy.Errors
 import Amy.Names
 import Amy.Prim
 import Amy.Type as T
+import Amy.TypeCheck.AST
 
-codegenPure :: AST ValueName T.Type -> Either [Error] Module
-codegenPure (AST declarations) = do
+codegenPure :: TModule -> Either [Error] Module
+codegenPure (TModule bindings externs) = do
   let
     -- Extract all the top level names so we can put them in the symbol table.
-    topLevelValueNames =
-      fmap bindingTypeName
-      $ mapMaybe topLevelBindingType declarations
-      ++ mapMaybe topLevelExternType declarations
-  definitions <- catMaybes <$> mapM (codegenDeclaration topLevelValueNames) declarations
+    topLevelValueNames = (tExternName <$> externs) ++ (tBindingName <$> bindings)
+  externDefs <- traverse codegenExtern externs
+  bindingDefs <- traverse (codegenBinding topLevelValueNames) bindings
   pure $
     defaultModule
     { moduleName = "amy-module"
-    , moduleDefinitions = definitions
+    , moduleDefinitions = externDefs ++ bindingDefs
     }
 
 textToShortBS :: Text -> ShortByteString
@@ -53,79 +50,64 @@ llvmPrimitiveType IntType = IntegerType 32
 llvmPrimitiveType DoubleType = FloatingPointType DoubleFP
 llvmPrimitiveType BoolType = IntegerType 1
 
-codegenDeclaration :: [ValueName] -> TopLevel ValueName T.Type -> Either [Error] (Maybe Definition)
-codegenDeclaration allTopLevelNames (TopLevelBindingValue binding) = do
+codegenExtern :: TExtern -> Either [Error] Definition
+codegenExtern extern = do
   let
-    bindingType = bindingValueType binding
+    types = tExternType extern
+    paramTypes = llvmPrimitiveType <$> NE.init types
+    params =
+      (\ty -> Parameter ty (UnName 0) []) <$> paramTypes
+    returnType' = llvmPrimitiveType $ NE.last types
 
+  pure $
+    GlobalDefinition
+    functionDefaults
+    { name = valueNameToLLVM $ tExternName extern
+    , parameters = (params, False)
+    , LLVM.returnType = returnType'
+    }
+
+codegenBinding :: [ValueName] -> TBinding -> Either [Error] Definition
+codegenBinding allTopLevelNames binding = do
   blocks <- runGenBlocks $ do
     -- Add top-level names to symbol table
     forM_ allTopLevelNames $ \valueName ->
       addNameToSymbolTable valueName (GlobalIdentifier valueName)
 
     -- Add args to symbol table
-    let
-      argsAndTypes = zip (bindingValueArgs binding) (argTypes bindingType)
-    forM_ argsAndTypes $ \(valueName, argType) ->
+    forM_ (tBindingArgs binding) $ \(argType, valueName) ->
       let op = LocalReference (llvmPrimitiveType argType) (valueNameToLLVM valueName)
       in addNameToSymbolTable valueName (LocalOperand op)
 
     -- Codegen the expression
-    codegenExpression $ bindingValueBody binding
+    codegenExpression $ tBindingBody binding
 
   let
-    paramTypes = llvmPrimitiveType <$> argTypes bindingType
     params =
-      (\(valueName, ty) -> Parameter ty (Name . textToShortBS $ valueNameRaw valueName)  [])
-      <$> zip (bindingValueArgs binding) paramTypes
-    returnType' = llvmPrimitiveType $ T.returnType bindingType
+      (\(ty, valueName) -> Parameter (llvmPrimitiveType ty) (Name . textToShortBS $ valueNameRaw valueName) [])
+      <$> tBindingArgs binding
+    returnType' = llvmPrimitiveType $ tBindingReturnType binding
 
   pure $
-    Just $
     GlobalDefinition
     functionDefaults
-    { name = valueNameToLLVM $ bindingValueName binding
+    { name = valueNameToLLVM $ tBindingName binding
     , parameters = (params, False)
     , LLVM.returnType = returnType'
     , basicBlocks = blocks
     }
-codegenDeclaration _ (TopLevelExternType extern) = do
-  -- TODO: It sucks that we have to interpret these types again. I wish the
-  -- renamer handled this for us.
-  let
-    typeNames = bindingTypeTypeNames extern
-  bindingTypes <-
-    traverse
-    (\mType -> maybe (Left [CodegenUnknownTypeName mType]) pure $ readPrimitiveType mType)
-    typeNames
-
-  let
-    paramTypes = llvmPrimitiveType <$> NE.init bindingTypes
-    params =
-      (\ty -> Parameter ty (UnName 0) []) <$> paramTypes
-    returnType' = llvmPrimitiveType $ NE.last bindingTypes
-
-  pure $
-    Just $
-    GlobalDefinition
-    functionDefaults
-    { name = valueNameToLLVM $ bindingTypeName extern
-    , parameters = (params, False)
-    , LLVM.returnType = returnType'
-    }
-codegenDeclaration _ (TopLevelBindingType _) = Right Nothing
 
 valueNameToLLVM :: ValueName -> Name
 valueNameToLLVM (ValueName name' _) = Name $ textToShortBS name'
 
-codegenExpression :: Expression ValueName T.Type -> FunctionGen Operand
-codegenExpression (ExpressionLiteral lit) =
+codegenExpression :: Typed TExpr -> FunctionGen Operand
+codegenExpression (Typed _ (TELit lit)) =
   pure $ ConstantOperand $
     case lit of
       LiteralInt i -> C.Int 32 (fromIntegral i)
       LiteralDouble x -> C.Float (F.Double x)
       LiteralBool x -> C.Int 1 $ if x then 1 else 0
-codegenExpression (ExpressionVariable (Variable valueName ty)) = do
+codegenExpression (Typed ty (TEVar valueName)) = do
   -- Check if a value exists in the symbol table
   mSymbol <- lookupSymbol valueName
   ident <-
@@ -135,7 +117,7 @@ codegenExpression (ExpressionVariable (Variable valueName ty)) = do
   case ident of
     LocalOperand op -> pure op
     GlobalIdentifier valueName' -> functionCallInstruction valueName' [] [] (T.returnType ty)
-codegenExpression (ExpressionIf (If predicate thenExpression elseExpression ty)) = do
+codegenExpression (Typed ty (TEIf (TIf predicate thenExpression elseExpression))) = do
   let
     one = ConstantOperand $ C.Int 32 1
     --zero = ConstantOperand $ C.Int 32 0
@@ -168,37 +150,35 @@ codegenExpression (ExpressionIf (If predicate thenExpression elseExpression ty))
   startNewBlock endBlockName
   ty' <- llvmPrimitiveType <$> assertPrimitiveType ty
   phi ty' [(thenOp, thenBlockName), (elseOp, elseBlockName)]
-codegenExpression (ExpressionLet (Let bindings expression _)) = do
+codegenExpression (Typed _ (TELet (TLet bindings expression))) = do
   -- For each binding value, generate code for the expression
-  let bindingValues = mapMaybe letBindingValue bindings
-  forM_ bindingValues $ \bindingValue -> do
+  for_ bindings $ \binding -> do
     -- Generate code for binding expression
-    bodyOp <- codegenExpression $ bindingValueBody bindingValue
+    bodyOp <- codegenExpression $ tBindingBody binding
 
     -- Add operator to symbol table for binding variable name
-    addNameToSymbolTable (bindingValueName bindingValue) $ LocalOperand bodyOp
+    addNameToSymbolTable (tBindingName binding) $ LocalOperand bodyOp
 
   -- Codegen the let expression
   codegenExpression expression
-codegenExpression (ExpressionFunctionApplication app) = do
+codegenExpression (Typed ty (TEApp app)) = do
   -- Evaluate argument expressions
   let
-    fnArgs = functionApplicationArgs app
-  fnArgTypes <- traverse assertPrimitiveType $ expressionType <$> fnArgs
-  fnReturnType <- assertPrimitiveType $ functionApplicationReturnType app
+    fnArgs = tAppArgs app
+  fnArgTypes <- traverse assertPrimitiveType $ typedType <$> fnArgs
+  fnReturnType <- assertPrimitiveType ty
   argOps <- mapM codegenExpression fnArgs
 
   -- Get the function expression variable
   fnVarName <-
-    case functionApplicationFunction app of
-      ExpressionVariable var -> pure $ variableName var
+    case tAppFunction app of
+      (Typed _ (TEVar var)) -> pure var
       _ -> throwError [NoCurrying app]
 
   -- Generate code for function
   case valueNameId fnVarName of
     PrimitiveFunctionId primName -> codegenPrimitiveFunction primName argOps fnReturnType
     NameIntId _ -> functionCallInstruction fnVarName (toList argOps) (toList fnArgTypes) fnReturnType
-codegenExpression (ExpressionParens expression) = codegenExpression expression
 
 codegenPrimitiveFunction
   :: PrimitiveFunctionName

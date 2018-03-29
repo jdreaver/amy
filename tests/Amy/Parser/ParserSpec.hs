@@ -12,42 +12,40 @@ import Test.Hspec.Megaparsec
 import Text.Megaparsec
 import Text.Shakespeare.Text (st)
 
-import Amy.AST
+import Amy.Parser.AST
 import Amy.Parser.Parser
 
 spec :: Spec
 spec = do
 
-  describe "parserAST" $ do
+  describe "parseModule" $ do
     it "parses a small module" $ do
-      parse parserAST "" sampleModule
+      parse parseModule "" sampleModule
         `shouldParse`
-        AST
-        [ TopLevelBindingType
+        Module
+        [ DeclBindingType
           BindingType
           { bindingTypeName = "f"
           , bindingTypeTypeNames = ["Int", "Double"]
           }
-        , TopLevelBindingValue
-          BindingValue
-          { bindingValueName = "f"
-          , bindingValueArgs = ["x"]
-          , bindingValueType = ()
-          , bindingValueBody =
-            ExpressionLiteral (LiteralInt 1)
+        , DeclBinding
+          Binding
+          { bindingName = "f"
+          , bindingArgs = ["x"]
+          , bindingBody =
+            ELit (LiteralInt 1)
           }
-        , TopLevelBindingType
+        , DeclBindingType
           BindingType
           { bindingTypeName = "main"
           , bindingTypeTypeNames = ["Int"]
           }
-        , TopLevelBindingValue
-          BindingValue
-          { bindingValueName = "main"
-          , bindingValueArgs = []
-          , bindingValueType = ()
-          , bindingValueBody =
-            ExpressionLet
+        , DeclBinding
+          Binding
+          { bindingName = "main"
+          , bindingArgs = []
+          , bindingBody =
+            ELet
               Let
               { letBindings =
                 [ LetBindingType
@@ -55,59 +53,48 @@ spec = do
                   { bindingTypeName = "x"
                   , bindingTypeTypeNames = ["Int"]
                   }
-                , LetBindingValue
-                  BindingValue
-                  { bindingValueName = "x"
-                  , bindingValueArgs = []
-                  , bindingValueType = ()
-                  , bindingValueBody = ExpressionLiteral (LiteralInt 1)
+                , LetBinding
+                  Binding
+                  { bindingName = "x"
+                  , bindingArgs = []
+                  , bindingBody = ELit (LiteralInt 1)
                   }
                 ]
               , letExpression =
-                ExpressionFunctionApplication (
-                  FunctionApplication
-                  (ExpressionVariable (Variable "f" ()))
-                  [ ExpressionVariable (Variable "x" ())
+                EApp (
+                  App
+                  (EVar "f")
+                  [ EVar "x"
                   ]
-                  ()
                 )
-              , letType = ()
               }
           }
         ]
 
     it "rejects indented top-level declarations" $ do
-      parse parserAST "" "  f :: Int"
+      parse parseModule "" "  f :: Int"
         `shouldFailWith` FancyError [SourcePos "" (mkPos 1) (mkPos 3)] [ErrorIndentation EQ (mkPos 1) (mkPos 3)]
 
   describe "expression" $ do
     it "parses complex expressions" $ do
       parse expression "" "f (g x) 1" `shouldParse`
-        ExpressionFunctionApplication (
-          FunctionApplication
-          (ExpressionVariable (Variable "f" ()))
-          [ ExpressionParens (
-             ExpressionFunctionApplication $
-             FunctionApplication
-               (ExpressionVariable (Variable "g" ()))
-               [ExpressionVariable (Variable "x" ())]
-               ()
-            )
-          , ExpressionLiteral (LiteralInt 1)
+        EApp (
+          App
+          (EVar "f")
+          [ EParens $ EApp $ App (EVar "g") [EVar "x"]
+          , ELit (LiteralInt 1)
           ]
-          ()
         )
 
     it "parses multi-line expression" $ do
       parse expression "" "f 1\n 2 3" `shouldParse`
-        ExpressionFunctionApplication (
-          FunctionApplication
-          (ExpressionVariable (Variable "f" ()))
-          [ ExpressionLiteral (LiteralInt 1)
-          , ExpressionLiteral (LiteralInt 2)
-          , ExpressionLiteral (LiteralInt 3)
+        EApp (
+          App
+          (EVar "f")
+          [ ELit (LiteralInt 1)
+          , ELit (LiteralInt 2)
+          , ELit (LiteralInt 3)
           ]
-          ()
         )
 
   describe "externType" $ do
@@ -122,48 +109,25 @@ spec = do
 
   describe "expressionParens" $ do
     it "parses expressions in parens" $ do
-      parse expressionParens "" "(x)" `shouldParse` ExpressionParens (ExpressionVariable (Variable "x" ()))
+      parse expressionParens "" "(x)" `shouldParse` EParens (EVar "x")
       parse expressionParens "" "(f x)"
         `shouldParse`
-        ExpressionParens (
-          ExpressionFunctionApplication
-            (FunctionApplication
-               (ExpressionVariable (Variable "f" ()))
-               [ExpressionVariable (Variable "x" ())]
-               ()
-            ))
+        EParens (EApp (App (EVar "f") [EVar "x"]))
 
   describe "ifExpression" $ do
     it "parses if expressions" $ do
       parse ifExpression "" "if True then 1 else 2"
         `shouldParse`
         If
-          (ExpressionLiteral (LiteralBool True))
-          (ExpressionLiteral (LiteralInt 1))
-          (ExpressionLiteral (LiteralInt 2))
-          ()
+          (ELit (LiteralBool True))
+          (ELit (LiteralInt 1))
+          (ELit (LiteralInt 2))
       parse ifExpression "" "if f x then f y else g 2"
         `shouldParse`
         If
-          (ExpressionFunctionApplication $
-             FunctionApplication
-               (ExpressionVariable (Variable "f" ()))
-               [ExpressionVariable (Variable "x" ())]
-               ()
-          )
-          (ExpressionFunctionApplication $
-             FunctionApplication
-               (ExpressionVariable (Variable "f" ()))
-               [ExpressionVariable (Variable "y" ())]
-               ()
-          )
-          (ExpressionFunctionApplication $
-             FunctionApplication
-               (ExpressionVariable (Variable "g" ()))
-               [ExpressionLiteral (LiteralInt 2)]
-               ()
-          )
-          ()
+          (EApp $ App (EVar "f") [EVar "x"])
+          (EApp $ App (EVar "f") [EVar "y"])
+          (EApp $ App (EVar "g") [ELit (LiteralInt 2)])
 
   describe "literal" $ do
     it "can discriminate between integer and double" $ do

@@ -53,7 +53,7 @@ process inputFile input =
   let
     eModule :: Either [Error] LLVM.AST.Module
     eModule = do
-      parsed <- first ((:[]) . ParserError) $ parse parserAST inputFile input
+      parsed <- first ((:[]) . ParserError) $ parse parseModule inputFile input
       renamed <- rename parsed
       typed <- typeCheck renamed
       codegenPure typed

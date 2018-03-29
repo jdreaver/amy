@@ -1,7 +1,7 @@
 module Amy.Parser.Parser
-  ( parserAST
+  ( parseModule
 
-  , topLevel
+  , declaration
   , externType
   , bindingType
   , binding
@@ -21,56 +21,55 @@ import Data.Void (Void)
 import Text.Megaparsec
 import qualified Text.Megaparsec.Char.Lexer as L
 
-import Amy.AST
+import Amy.Parser.AST
 import Amy.Parser.Lexer
 
 type Parser = Parsec Void Text
 
-parserAST :: Parser (AST Text ())
-parserAST = AST <$> do
+parseModule :: Parser Module
+parseModule = Module <$> do
   spaceConsumerNewlines
-  noIndent (indentedBlock topLevel) <* eof
+  noIndent (indentedBlock declaration) <* eof
 
-topLevel :: Parser (TopLevel Text ())
-topLevel =
-  (TopLevelExternType <$> externType)
-  <|> try (TopLevelBindingType <$> bindingType)
-  <|> (TopLevelBindingValue <$> binding)
+declaration :: Parser Declaration
+declaration =
+  (DeclExtern <$> externType)
+  <|> try (DeclBindingType <$> bindingType)
+  <|> (DeclBinding <$> binding)
 
-externType :: Parser (BindingType Text)
+externType :: Parser BindingType
 externType = do
   extern
   bindingType
 
-bindingType :: Parser (BindingType Text)
+bindingType :: Parser BindingType
 bindingType = do
-  bindingName <- identifier
+  name <- identifier
   doubleColon
   typeNames <- typeIdentifier `CNE.sepBy1` typeSeparatorArrow
   pure
     BindingType
-    { bindingTypeName = bindingName
+    { bindingTypeName = name
     , bindingTypeTypeNames = typeNames
     }
 
-binding :: Parser (BindingValue Text ())
+binding :: Parser Binding
 binding = do
   startingIndent <- L.indentLevel
-  bindingName <- identifier
+  name <- identifier
   args <- many identifier
   equals
   spaceConsumerNewlines
   _ <- L.indentGuard spaceConsumerNewlines GT startingIndent
-  expr <- expression
+  body <- expression
   pure
-    BindingValue
-    { bindingValueName = bindingName
-    , bindingValueArgs = args
-    , bindingValueType = ()
-    , bindingValueBody = expr
+    Binding
+    { bindingName = name
+    , bindingArgs = args
+    , bindingBody = body
     }
 
-expression :: Parser (Expression Text ())
+expression :: Parser Expr
 expression = do
   -- Parse a NonEmpty list of expressions separated by spaces.
   expressions <- lineFold expression'
@@ -81,42 +80,35 @@ expression = do
       expr :| [] -> expr
       -- We must have a function application
       f :| args ->
-        ExpressionFunctionApplication
-        FunctionApplication
-        { functionApplicationFunction = f
-        , functionApplicationArgs = NE.fromList args
-        , functionApplicationReturnType = ()
+        EApp
+        App
+        { appFunction = f
+        , appArgs = NE.fromList args
         }
 
 -- | Parses any expression except function application. This is needed to avoid
 -- left recursion. Without this distinction, f a b would be parsed as f (a b)
 -- instead of (f a) b.
-expression' :: Parser (Expression Text ())
+expression' :: Parser Expr
 expression' =
   expressionParens
-  <|> (ExpressionLiteral <$> literal)
-  <|> (ExpressionIf <$> ifExpression)
-  <|> (ExpressionLet <$> letExpression')
-  <|> (ExpressionVariable <$> variable)
+  <|> (ELit <$> literal)
+  <|> (EIf <$> ifExpression)
+  <|> (ELet <$> letExpression')
+  <|> (EVar <$> variable)
 
-expressionParens :: Parser (Expression Text ())
-expressionParens = ExpressionParens <$> between lparen rparen expression
+expressionParens :: Parser Expr
+expressionParens = EParens <$> between lparen rparen expression
 
 literal :: Parser Literal
 literal =
   (either LiteralDouble LiteralInt <$> number)
   <|> (LiteralBool <$> bool)
 
-variable :: Parser (Variable Text ())
-variable = do
-  name <- identifier
-  pure
-    Variable
-    { variableName = name
-    , variableType = ()
-    }
+variable :: Parser Text
+variable = identifier
 
-ifExpression :: Parser (If Text ())
+ifExpression :: Parser If
 ifExpression = do
   if'
   predicate <- expression
@@ -129,16 +121,15 @@ ifExpression = do
     { ifPredicate = predicate
     , ifThen = thenExpression
     , ifElse = elseExpression
-    , ifType = ()
     }
 
-letExpression' :: Parser (Let Text ())
+letExpression' :: Parser Let
 letExpression' = do
   letIndentation <- L.indentLevel
   let'
   let
     parser =
-      try (LetBindingValue <$> binding)
+      try (LetBinding <$> binding)
       <|> (LetBindingType <$> bindingType)
   bindings <- many $ do
     _ <- L.indentGuard spaceConsumerNewlines GT letIndentation
@@ -156,5 +147,4 @@ letExpression' = do
     Let
     { letBindings = bindings
     , letExpression = expr
-    , letType = ()
     }

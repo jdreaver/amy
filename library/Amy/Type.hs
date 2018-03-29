@@ -1,5 +1,6 @@
 module Amy.Type
   ( Type(..)
+  , Typed(..)
   , returnType
   , argTypes
   , primitiveType
@@ -7,20 +8,25 @@ module Amy.Type
   , PrimitiveType(..)
   , readPrimitiveType
   , FunctionType(..)
-  , expressionType
   ) where
 
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 
-import Amy.AST
 import Amy.Prim (PrimitiveType(..), readPrimitiveType)
 
 data Type
   = PrimitiveTy !PrimitiveType
   | FunctionTy !FunctionType
   deriving (Show, Eq)
+
+-- | A value with a type.
+data Typed a
+  = Typed
+  { typedType :: !Type
+  , typedValue :: !a
+  } deriving (Show, Eq)
 
 returnType :: Type -> PrimitiveType
 returnType (PrimitiveTy ty) = ty
@@ -50,17 +56,3 @@ data FunctionType
   { functionTypeArgTypes :: !(NonEmpty PrimitiveType)
   , functionTypeReturnType :: !PrimitiveType
   } deriving (Show, Eq)
-
--- | Gets the 'Type' for an expression. All expression nodes have a type!
-expressionType :: Expression name Type -> Type
-expressionType (ExpressionLiteral lit) = PrimitiveTy $ literalType lit
-expressionType (ExpressionVariable (Variable _ ty)) = ty
-expressionType (ExpressionIf if') = ifType if'
-expressionType (ExpressionLet let') = letType let'
-expressionType (ExpressionFunctionApplication app) = functionApplicationReturnType app
-expressionType (ExpressionParens expr) = expressionType expr
-
-literalType :: Literal -> PrimitiveType
-literalType (LiteralInt _) = IntType
-literalType (LiteralDouble _) = DoubleType
-literalType (LiteralBool _) = BoolType

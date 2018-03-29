@@ -4,21 +4,26 @@ module Amy.Renamer.Renamer
   ( rename
   ) where
 
+import Control.Monad.Except
+import Data.Foldable (traverse_)
+import Data.List.NonEmpty (NonEmpty)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
-import GHC.Exts (toList)
 
-import Amy.AST
 import Amy.Errors
-import Amy.Names
+import Amy.Renamer.AST
 import Amy.Renamer.Monad
+import Amy.Parser.AST
+import Amy.Type
 
 -- | Gives a unique identity to all names in the AST
-rename :: AST Text () -> Either [Error] (AST ValueName ())
+rename :: Module -> Either [Error] RModule
 rename ast = runRenamer emptyRenamerState $ rename' ast
 
-rename' :: AST Text () -> Renamer (AST ValueName ())
-rename' (AST declarations) = do
+rename' :: Module -> Renamer RModule
+rename' (Module declarations) = do
   -- TODO: Try to do each of these steps in such a way that we can get as many
   -- errors as possible. For example, we should be able to validate all binding
   -- declarations "in parallel" so if more than one has an error we can show
@@ -28,95 +33,86 @@ rename' (AST declarations) = do
   -- might be the way to go.
 
   -- Rename extern declarations
-  let externs = mapMaybe topLevelExternType (toList declarations)
-  externs' <- fmap TopLevelExternType <$> mapM renameBindingType externs
-
-  -- Rename binding type declarations and add value bindings to scope
-  let bindingTypes = mapMaybe topLevelBindingType (toList declarations)
-  bindingTypes' <- fmap TopLevelBindingType <$> mapM renameBindingType bindingTypes
+  externs' <- traverse renameExtern (mapMaybe declExtern declarations)
 
   -- Rename binding value declarations
-  let bindingValues = mapMaybe topLevelBindingValue (toList declarations)
-  bindingValues' <- fmap TopLevelBindingValue <$> mapM renameBindingValue bindingValues
-
-  pure $ AST $ externs' ++ bindingTypes' ++ bindingValues'
-
-renameBindingType
-  :: BindingType Text
-  -> Renamer (BindingType ValueName)
-renameBindingType bindingType = do
-  -- Add extern name to scope
-  valueName <- addValueToScope $ bindingTypeName bindingType
+  let
+    bindings = mapMaybe declBinding declarations
+    bindingTypeMap = bindingTypesMap $ mapMaybe declBindingType declarations
+  traverse_ addValueToScope (bindingName <$> bindings)
+  bindingValues' <- traverse (renameBinding bindingTypeMap) bindings
 
   pure
-    bindingType
-    { bindingTypeName = valueName
+    RModule
+    { rModuleBindings = bindingValues'
+    , rModuleExterns = externs'
     }
 
-renameBindingValue
-  :: BindingValue Text ()
-  -> Renamer (BindingValue ValueName ())
-renameBindingValue binding = withNewScope $ do -- Begin new scope
-  -- Get binding name ID
-  valueName <- lookupValueInScopeOrError (bindingValueName binding)
+bindingTypesMap :: [BindingType] -> Map Text (NonEmpty Text)
+bindingTypesMap = Map.fromList . fmap (\(BindingType name ts) -> (name, ts))
+
+renameExtern :: BindingType -> Renamer RExtern
+renameExtern bindingType =
+  RExtern
+  -- Add extern name to scope
+  <$> addValueToScope (bindingTypeName bindingType)
+  -- Look up types
+  <*> renameTypes (bindingTypeTypeNames bindingType)
+
+renameTypes :: NonEmpty Text -> Renamer (NonEmpty PrimitiveType)
+renameTypes = traverse (\name -> maybe (throwError [UnknownTypeName name]) pure $ readPrimitiveType name)
+
+renameBinding :: Map Text (NonEmpty Text) -> Binding -> Renamer RBinding
+renameBinding typeMap binding = withNewScope $ do -- Begin new scope
+  -- Look up binding name
+  name <- lookupValueInScopeOrError (bindingName binding)
+
+  -- Look up types
+  let mTypeNames = Map.lookup (bindingName binding) typeMap
+  types <- traverse renameTypes mTypeNames
 
   -- Add binding arguments to scope
-  args <- mapM addValueToScope (bindingValueArgs binding)
+  args <- mapM addValueToScope (bindingArgs binding)
 
   -- Run renamer on expression
-  expression <- renameExpression (bindingValueBody binding)
+  body <- renameExpression (bindingBody binding)
 
   pure
-    BindingValue
-    { bindingValueName = valueName
-    , bindingValueArgs = args
-    , bindingValueType = ()
-    , bindingValueBody = expression
+    RBinding
+    { rBindingName = name
+    , rBindingType = types
+    , rBindingArgs = args
+    , rBindingBody = body
     }
 
-renameExpression :: Expression Text () -> Renamer (Expression ValueName ())
-renameExpression (ExpressionLiteral lit) = pure $ ExpressionLiteral lit
-renameExpression (ExpressionVariable var) = do
-  valueName <- lookupValueInScopeOrError (variableName var)
-  pure $
-    ExpressionVariable
-    Variable
-    { variableName = valueName
-    , variableType = ()
-    }
-renameExpression (ExpressionIf (If predicate thenExpression elseExpression _)) =
-  fmap ExpressionIf
-  $ If
+renameExpression :: Expr -> Renamer RExpr
+renameExpression (ELit lit) = pure $ RELit lit
+renameExpression (EVar var) = REVar <$> lookupValueInScopeOrError var
+renameExpression (EIf (If predicate thenExpression elseExpression)) =
+  fmap REIf
+  $ RIf
   <$> renameExpression predicate
   <*> renameExpression thenExpression
   <*> renameExpression elseExpression
-  <*> pure ()
-renameExpression (ExpressionLet (Let bindings expression _)) =
+renameExpression (ELet (Let bindings expression)) =
   withNewScope $ do
-    -- Rename binding types
-    bindingTypes' <- fmap LetBindingType <$> mapM renameBindingType (mapMaybe letBindingType bindings)
+    let
+      bindings' = mapMaybe letBinding bindings
+      bindingTypeMap = bindingTypesMap $ mapMaybe letBindingType bindings
 
-    -- Rename binding values
-    bindingValues' <- fmap LetBindingValue <$> mapM renameBindingValue (mapMaybe letBindingValue bindings)
-
-    -- Rename expression
+    traverse_ addValueToScope (bindingName <$> bindings')
+    bindings'' <- traverse (renameBinding bindingTypeMap) bindings'
     expression' <- renameExpression expression
 
     pure $
-      ExpressionLet
-      Let
-      { letBindings = bindingTypes' ++ bindingValues'
-      , letExpression = expression'
-      , letType = ()
+      RELet
+      RLet
+      { rLetBindings = bindings''
+      , rLetExpression = expression'
       }
-renameExpression (ExpressionFunctionApplication app) = do
-  function <- renameExpression $ functionApplicationFunction app
-  expressions <- mapM renameExpression (functionApplicationArgs app)
-  pure $
-    ExpressionFunctionApplication
-    FunctionApplication
-    { functionApplicationFunction = function
-    , functionApplicationArgs = expressions
-    , functionApplicationReturnType = ()
-    }
-renameExpression (ExpressionParens expr) = ExpressionParens <$> renameExpression expr
+renameExpression (EApp app) =
+  fmap REApp $
+  RApp
+  <$> renameExpression (appFunction app)
+  <*> mapM renameExpression (appArgs app)
+renameExpression (EParens expr) = renameExpression expr
