@@ -30,7 +30,7 @@ runTypeCheck initialState (TypeCheck action) = evalState (runExceptT action) ini
 
 data TypeCheckState
   = TypeCheckState
-  { typeCheckStateValueTypeMap :: Map NameId Type
+  { typeCheckStateValueTypeMap :: Map NameId (Type PrimitiveType)
     -- ^ Type for all values
   } deriving (Show, Eq)
 
@@ -40,13 +40,13 @@ emptyTypeCheckState =
   { typeCheckStateValueTypeMap = primitiveFunctionTypes
   }
 
-primitiveFunctionTypes :: Map NameId Type
+primitiveFunctionTypes :: Map NameId (Type PrimitiveType)
 primitiveFunctionTypes =
   Map.fromList $ (\prim -> (PrimitiveFunctionId prim, mkType prim)) <$> allPrimitiveFunctionNames
  where
   mkType prim = makeType $ primitiveFunctionType $ primitiveFunction prim
 
-setValueType :: NameId -> Type -> TypeCheck ()
+setValueType :: NameId -> Type PrimitiveType -> TypeCheck ()
 setValueType nameId ty = do
   mExistingType <- lookupValueType nameId
   case mExistingType of
@@ -57,10 +57,10 @@ setValueType nameId ty = do
 setValuePrimitiveType :: NameId -> PrimitiveType -> TypeCheck ()
 setValuePrimitiveType nameId = setValueType nameId . PrimitiveTy
 
-lookupValueType :: NameId -> TypeCheck (Maybe Type)
+lookupValueType :: NameId -> TypeCheck (Maybe (Type PrimitiveType))
 lookupValueType nameId = Map.lookup nameId <$> gets typeCheckStateValueTypeMap
 
-lookupValueTypeOrError :: ValueName -> TypeCheck Type
+lookupValueTypeOrError :: ValueName -> TypeCheck (Type PrimitiveType)
 lookupValueTypeOrError valueName =
   lookupValueType (valueNameId valueName) >>= maybe (throwError [err]) pure
  where

@@ -24,17 +24,17 @@ data Error
 
   -- Type checker
   | BindingLacksTypeSignature !RBinding
-  | TypeMismatch !Type !Type
+  | TypeMismatch !(Type PrimitiveType) !(Type PrimitiveType)
   | UnknownTypeName !Text
   | CantFindType !ValueName
   | WrongNumberOfArguments !Int !Int
-  | ExpectedPrimitiveType !(Maybe ValueName) !Type
-  | ExpectedFunctionType !Type
+  | ExpectedPrimitiveType !(Maybe ValueName) !(Type PrimitiveType)
+  | ExpectedFunctionType !(Type PrimitiveType)
 
   -- Codegen
   | CodegenUnknownTypeName !Text
   | CodegenMissingSymbol !ValueName
-  | CodegenExpectedPrimitiveType !Type
+  | CodegenExpectedPrimitiveType !(Type PrimitiveType)
   | NoCurrying !TApp
   deriving (Show, Eq)
 

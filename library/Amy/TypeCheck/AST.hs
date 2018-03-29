@@ -48,7 +48,7 @@ data TExtern
 -- | A renamed 'Expr'
 data TExpr
   = TELit !Literal
-  | TEVar !(Typed ValueName)
+  | TEVar !(Typed PrimitiveType ValueName)
   | TEIf !TIf
   | TELet !TLet
   | TEApp !TApp
@@ -74,7 +74,7 @@ data TApp
   , tAppReturnType :: !PrimitiveType
   } deriving (Show, Eq)
 
-expressionType :: TExpr -> Type
+expressionType :: TExpr -> Type PrimitiveType
 expressionType (TELit lit) = PrimitiveTy $ literalType lit
 expressionType (TEVar (Typed ty _)) = ty
 expressionType (TEIf if') = expressionType (tIfThen if') -- Checker ensure "then" and "else" types match

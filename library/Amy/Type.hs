@@ -16,31 +16,31 @@ import qualified Data.List.NonEmpty as NE
 
 import Amy.Prim (PrimitiveType(..), readPrimitiveType)
 
-data Type
-  = PrimitiveTy !PrimitiveType
-  | FunctionTy !FunctionType
+data Type ty
+  = PrimitiveTy !ty
+  | FunctionTy !(FunctionType ty)
   deriving (Show, Eq)
 
 -- | A value with a type.
-data Typed a
+data Typed ty a
   = Typed
-  { typedType :: !Type
+  { typedType :: !(Type ty)
   , typedValue :: !a
   } deriving (Show, Eq)
 
-returnType :: Type -> PrimitiveType
+returnType :: Type ty -> ty
 returnType (PrimitiveTy ty) = ty
 returnType (FunctionTy ft) = functionTypeReturnType ft
 
-argTypes :: Type -> [PrimitiveType]
+argTypes :: Type ty -> [ty]
 argTypes (PrimitiveTy _) = []
 argTypes (FunctionTy ft) = toList (functionTypeArgTypes ft)
 
-primitiveType :: Type -> Maybe PrimitiveType
+primitiveType :: Type ty -> Maybe ty
 primitiveType (PrimitiveTy prim) = Just prim
 primitiveType _ = Nothing
 
-makeType :: NonEmpty PrimitiveType -> Type
+makeType :: NonEmpty ty -> Type ty
 makeType primTypes =
   case primTypes of
     primType :| [] -> PrimitiveTy primType
@@ -51,8 +51,8 @@ makeType primTypes =
       , functionTypeReturnType = NE.last types
       }
 
-data FunctionType
+data FunctionType ty
   = FunctionType
-  { functionTypeArgTypes :: !(NonEmpty PrimitiveType)
-  , functionTypeReturnType :: !PrimitiveType
+  { functionTypeArgTypes :: !(NonEmpty ty)
+  , functionTypeReturnType :: !ty
   } deriving (Show, Eq)

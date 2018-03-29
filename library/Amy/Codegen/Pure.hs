@@ -227,7 +227,7 @@ functionCallInstruction valueName argumentOperands argumentTypes' returnType' = 
 
 -- TODO: This function shouldn't be necessary. The AST that feeds into Codegen
 -- should have things that are primitive types statically declared.
-assertPrimitiveType :: T.Type -> FunctionGen PrimitiveType
+assertPrimitiveType :: T.Type PrimitiveType -> FunctionGen PrimitiveType
 assertPrimitiveType t =
   maybe
     (throwError [CodegenExpectedPrimitiveType t])
