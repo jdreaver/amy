@@ -4,14 +4,15 @@ module Amy.Codegen.Pure
   ( codegenPure
   ) where
 
+import Control.Monad.Except
 import qualified Data.ByteString.Char8 as BS8
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
 import Data.Foldable (forM_, toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromMaybe, mapMaybe)
-import Data.Text (Text, unpack)
+import Data.Maybe (catMaybes, mapMaybe)
+import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
 import LLVM.AST as LLVM
 import LLVM.AST.AddrSpace
@@ -23,20 +24,21 @@ import LLVM.AST.Global as LLVM
 
 import Amy.AST
 import Amy.Codegen.Monad
+import Amy.Errors
 import Amy.Names
 import Amy.Prim
 import Amy.Type as T
 
-codegenPure :: AST ValueName T.Type -> Module
-codegenPure (AST declarations) =
+codegenPure :: AST ValueName T.Type -> Either [Error] Module
+codegenPure (AST declarations) = do
   let
     -- Extract all the top level names so we can put them in the symbol table.
     topLevelValueNames =
       fmap bindingTypeName
       $ mapMaybe topLevelBindingType declarations
       ++ mapMaybe topLevelExternType declarations
-    definitions = mapMaybe (codegenDeclaration topLevelValueNames) declarations
-  in
+  definitions <- catMaybes <$> mapM (codegenDeclaration topLevelValueNames) declarations
+  pure $
     defaultModule
     { moduleName = "amy-module"
     , moduleDefinitions = definitions
@@ -51,61 +53,67 @@ llvmPrimitiveType IntType = IntegerType 32
 llvmPrimitiveType DoubleType = FloatingPointType DoubleFP
 llvmPrimitiveType BoolType = IntegerType 1
 
-codegenDeclaration :: [ValueName] -> TopLevel ValueName T.Type -> Maybe Definition
-codegenDeclaration allTopLevelNames (TopLevelBindingValue binding) =
+codegenDeclaration :: [ValueName] -> TopLevel ValueName T.Type -> Either [Error] (Maybe Definition)
+codegenDeclaration allTopLevelNames (TopLevelBindingValue binding) = do
   let
     bindingType = bindingValueType binding
-    blocks = runGenBlocks $ do
-      -- Add top-level names to symbol table
-      forM_ allTopLevelNames $ \valueName ->
-        addNameToSymbolTable valueName (GlobalIdentifier valueName)
 
-      -- Add args to symbol table
-      let
-        argsAndTypes = zip (bindingValueArgs binding) (argTypes bindingType)
-      forM_ argsAndTypes $ \(valueName, argType) ->
-        let op = LocalReference (llvmPrimitiveType argType) (valueNameToLLVM valueName)
-        in addNameToSymbolTable valueName (LocalOperand op)
+  blocks <- runGenBlocks $ do
+    -- Add top-level names to symbol table
+    forM_ allTopLevelNames $ \valueName ->
+      addNameToSymbolTable valueName (GlobalIdentifier valueName)
 
-      -- Codegen the expression
-      codegenExpression $ bindingValueBody binding
+    -- Add args to symbol table
+    let
+      argsAndTypes = zip (bindingValueArgs binding) (argTypes bindingType)
+    forM_ argsAndTypes $ \(valueName, argType) ->
+      let op = LocalReference (llvmPrimitiveType argType) (valueNameToLLVM valueName)
+      in addNameToSymbolTable valueName (LocalOperand op)
 
+    -- Codegen the expression
+    codegenExpression $ bindingValueBody binding
+
+  let
     paramTypes = llvmPrimitiveType <$> argTypes bindingType
     params =
       (\(valueName, ty) -> Parameter ty (Name . textToShortBS $ valueNameRaw valueName)  [])
       <$> zip (bindingValueArgs binding) paramTypes
     returnType' = llvmPrimitiveType $ T.returnType bindingType
-  in
-    Just $
-      GlobalDefinition
-      functionDefaults
-      { name = valueNameToLLVM $ bindingValueName binding
-      , parameters = (params, False)
-      , LLVM.returnType = returnType'
-      , basicBlocks = blocks
-      }
-codegenDeclaration _ (TopLevelExternType extern) =
-  let
-    -- TODO: It sucks that we have to interpret these types again. I wish the
-    -- renamer handled this for us.
-    bindingTypes :: NonEmpty PrimitiveType
-    bindingTypes =
-      (\mType -> fromMaybe (error $ "Panic! Unknown type " ++ unpack mType) $ readPrimitiveType mType)
-      <$> bindingTypeTypeNames extern
 
+  pure $
+    Just $
+    GlobalDefinition
+    functionDefaults
+    { name = valueNameToLLVM $ bindingValueName binding
+    , parameters = (params, False)
+    , LLVM.returnType = returnType'
+    , basicBlocks = blocks
+    }
+codegenDeclaration _ (TopLevelExternType extern) = do
+  -- TODO: It sucks that we have to interpret these types again. I wish the
+  -- renamer handled this for us.
+  let
+    typeNames = bindingTypeTypeNames extern
+  bindingTypes <-
+    traverse
+    (\mType -> maybe (Left [CodegenUnknownTypeName mType]) pure $ readPrimitiveType mType)
+    typeNames
+
+  let
     paramTypes = llvmPrimitiveType <$> NE.init bindingTypes
     params =
       (\ty -> Parameter ty (UnName 0) []) <$> paramTypes
     returnType' = llvmPrimitiveType $ NE.last bindingTypes
-  in
+
+  pure $
     Just $
-      GlobalDefinition
-      functionDefaults
-      { name = valueNameToLLVM $ bindingTypeName extern
-      , parameters = (params, False)
-      , LLVM.returnType = returnType'
-      }
-codegenDeclaration _ (TopLevelBindingType _) = Nothing
+    GlobalDefinition
+    functionDefaults
+    { name = valueNameToLLVM $ bindingTypeName extern
+    , parameters = (params, False)
+    , LLVM.returnType = returnType'
+    }
+codegenDeclaration _ (TopLevelBindingType _) = Right Nothing
 
 valueNameToLLVM :: ValueName -> Name
 valueNameToLLVM (ValueName name' _) = Name $ textToShortBS name'
@@ -119,7 +127,11 @@ codegenExpression (ExpressionLiteral lit) =
       LiteralBool x -> C.Int 1 $ if x then 1 else 0
 codegenExpression (ExpressionVariable (Variable valueName ty)) = do
   -- Check if a value exists in the symbol table
-  ident <- fromMaybe (error $ "Panic! Can't find symbol for " ++ show valueName) <$> lookupSymbol valueName
+  mSymbol <- lookupSymbol valueName
+  ident <-
+    case mSymbol of
+      Nothing -> throwError [CodegenMissingSymbol valueName]
+      Just s -> pure s
   case ident of
     LocalOperand op -> pure op
     GlobalIdentifier valueName' -> functionCallInstruction valueName' [] [] (T.returnType ty)
@@ -154,7 +166,8 @@ codegenExpression (ExpressionIf (If predicate thenExpression elseExpression ty))
 
   -- Generate the code for the ending block
   startNewBlock endBlockName
-  phi (llvmPrimitiveType $ assertPrimitiveType ty) [(thenOp, thenBlockName), (elseOp, elseBlockName)]
+  ty' <- llvmPrimitiveType <$> assertPrimitiveType ty
+  phi ty' [(thenOp, thenBlockName), (elseOp, elseBlockName)]
 codegenExpression (ExpressionLet (Let bindings expression _)) = do
   -- For each binding value, generate code for the expression
   let bindingValues = mapMaybe letBindingValue bindings
@@ -171,15 +184,15 @@ codegenExpression (ExpressionFunctionApplication app) = do
   -- Evaluate argument expressions
   let
     fnArgs = functionApplicationArgs app
-    fnArgTypes = assertPrimitiveType . expressionType <$> fnArgs
-    fnReturnType = assertPrimitiveType $ functionApplicationReturnType app
+  fnArgTypes <- traverse assertPrimitiveType $ expressionType <$> fnArgs
+  fnReturnType <- assertPrimitiveType $ functionApplicationReturnType app
   argOps <- mapM codegenExpression fnArgs
 
   -- Get the function expression variable
   fnVarName <-
     case functionApplicationFunction app of
       ExpressionVariable var -> pure $ variableName var
-      _ -> error $ "Expected function to be variable (no currying yet). Got " ++ show app
+      _ -> throwError [NoCurrying app]
 
   -- Generate code for function
   case valueNameId fnVarName of
@@ -234,6 +247,9 @@ functionCallInstruction valueName argumentOperands argumentTypes' returnType' = 
 
 -- TODO: This function shouldn't be necessary. The AST that feeds into Codegen
 -- should have things that are primitive types statically declared.
-assertPrimitiveType :: T.Type -> PrimitiveType
+assertPrimitiveType :: T.Type -> FunctionGen PrimitiveType
 assertPrimitiveType t =
-  fromMaybe (error $ "Panic! Expected PrimitiveType, got " ++ show t) $ primitiveType t
+  maybe
+    (throwError [CodegenExpectedPrimitiveType t])
+    pure
+    $ primitiveType t

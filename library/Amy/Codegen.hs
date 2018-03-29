@@ -3,3 +3,4 @@ module Amy.Codegen
   ) where
 
 import Amy.Codegen.Emit as X
+import Amy.Codegen.Pure as X

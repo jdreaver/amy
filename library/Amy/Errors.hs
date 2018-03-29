@@ -9,6 +9,7 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Text.Megaparsec
 
+import Amy.AST
 import Amy.Names
 import Amy.Type
 
@@ -30,6 +31,11 @@ data Error
   | ExpectedPrimitiveType !(Maybe ValueName) !Type
   | ExpectedFunctionType !Type
 
+  -- Codegen
+  | CodegenUnknownTypeName !Text
+  | CodegenMissingSymbol !ValueName
+  | CodegenExpectedPrimitiveType !Type
+  | NoCurrying !(FunctionApplication ValueName Type)
   deriving (Show, Eq)
 
 showError :: Error -> String

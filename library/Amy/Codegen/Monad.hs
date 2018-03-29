@@ -20,6 +20,7 @@ module Amy.Codegen.Monad
   , ret
   ) where
 
+import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -29,13 +30,17 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import LLVM.AST
 
+import Amy.Errors
 import Amy.Names
 
-newtype FunctionGen a = FunctionGen { _unFunctionGen :: State FunctionGenState a }
-  deriving (Functor, Applicative, Monad, MonadState FunctionGenState)
+newtype FunctionGen a = FunctionGen (ExceptT [Error] (State FunctionGenState) a)
+  deriving (Functor, Applicative, Monad, MonadState FunctionGenState, MonadError [Error])
 
-execFunctionGen :: FunctionGen a -> FunctionGenState
-execFunctionGen (FunctionGen action) = execState action (defaultFunctionGenState "entry")
+execFunctionGen :: FunctionGen a -> Either [Error] FunctionGenState
+execFunctionGen (FunctionGen action) =
+  let
+    (result, state') = runState (runExceptT action) (defaultFunctionGenState "entry")
+  in const state' <$> result
 
 -- | Code generation state when generating a single function.
 data FunctionGenState
@@ -85,10 +90,10 @@ defaultBlockGenState name' =
 -- | Runs the 'FunctionGen' action and produces the 'BasicBlock's for it.
 runGenBlocks
   :: FunctionGen Operand
-  -> [BasicBlock]
-runGenBlocks action =
+  -> Either [Error] [BasicBlock]
+runGenBlocks action = do
+  state' <- execFunctionGen (action >>= ret)
   let
-    state' = execFunctionGen (action >>= ret)
     blockStates = reverse $ toList $ functionGenStateBlockStack state'
     genBlock :: BlockGenState -> BasicBlock
     genBlock blockState =
@@ -96,8 +101,7 @@ runGenBlocks action =
         (blockGenStateBlockName blockState)
         (reverse $ blockGenStateInstructionStack blockState)
         (fromMaybe (error ("Block has no terminator " ++ show blockState)) $ blockGenStateTerminator blockState)
-    blocks = genBlock <$> blockStates
-  in blocks
+  pure $ genBlock <$> blockStates
 
 -- | Generate a new unique ID and increment the last ID of the state.
 generateId :: FunctionGen Word

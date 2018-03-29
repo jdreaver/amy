@@ -8,19 +8,17 @@ import Data.Bifunctor (first)
 import Data.List (intercalate)
 import Data.Text (Text, pack)
 import qualified Data.Text.IO as TIO
+import LLVM.AST (Module)
 import System.Console.Haskeline
 import System.Environment (getArgs)
 import System.Exit (die)
 import System.IO (hPutStrLn, stderr)
 import Text.Megaparsec
 
-import Amy.AST
 import Amy.Codegen
 import Amy.Errors
-import Amy.Names
 import Amy.Renamer
 import Amy.Parser
-import Amy.Type
 import Amy.TypeCheck
 
 main :: IO ()
@@ -53,15 +51,12 @@ main = do
 process :: FilePath -> Text -> IO ()
 process inputFile input =
   let
-    eTyped :: Either [Error] (AST ValueName Type)
-    eTyped = do
+    eModule :: Either [Error] LLVM.AST.Module
+    eModule = do
       parsed <- first ((:[]) . ParserError) $ parse parserAST inputFile input
       renamed <- rename parsed
       typed <- typeCheck renamed
-      pure typed
-  in
-    case eTyped of
-      Left err -> hPutStrLn stderr (intercalate "\n" $ showError <$> err)
-      Right typed -> do
-        codegenString <- generateLLVMIR typed
-        BS8.putStrLn codegenString
+      codegenPure typed
+  in do
+    eCodegenString <- traverse generateLLVMIR eModule
+    either (hPutStrLn stderr . intercalate "\n" . fmap showError) BS8.putStrLn eCodegenString
