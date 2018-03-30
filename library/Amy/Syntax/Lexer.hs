@@ -37,10 +37,25 @@ import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
+import Amy.Syntax.Located
+
 type Lexer = Parsec Void Text
 
-lexeme :: Lexer a -> Lexer a
-lexeme = L.lexeme spaceConsumer
+lexeme :: Lexer a -> Lexer (Located a)
+lexeme p = do
+  (SourcePos fp startLine startCol) <- getPosition
+  val <- p
+  (SourcePos _ endLine endCol) <- getPosition
+  spaceConsumer
+  let
+    sourceSpan =
+      SourceSpan
+      fp
+      (unPos startLine)
+      (unPos startCol)
+      (unPos endLine)
+      (unPos endCol - 1)
+  pure (Located sourceSpan val)
 
 spaceConsumer :: Lexer ()
 spaceConsumer = L.space (void $ char ' ') lineComment blockComment
@@ -54,10 +69,10 @@ lineComment  = L.skipLineComment "#"
 blockComment :: Lexer ()
 blockComment = empty
 
-number :: Lexer (Either Double Int)
-number = floatingOrInteger <$> lexeme L.scientific
+number :: Lexer (Located (Either Double Int))
+number = fmap floatingOrInteger <$> lexeme L.scientific
 
-bool :: Lexer Bool
+bool :: Lexer (Located Bool)
 bool = lexeme $
   (string "True" >> pure True)
   <|> (string "False" >> pure False)
@@ -65,10 +80,10 @@ bool = lexeme $
 symbol :: Text -> Lexer Text
 symbol = L.symbol spaceConsumer
 
-identifier :: Lexer Text
-identifier = (lexeme . try) (p >>= check)
+identifier :: Lexer (Located Text)
+identifier = try (p >>= traverse check)
  where
-  p = ((:) <$> lowerChar <*> many alphaNumChar) <* spaceConsumer
+  p = lexeme ((:) <$> lowerChar <*> many alphaNumChar)
   check x =
     if x `elem` reservedWords
     then fail $ "keyword " ++ show x ++ " cannot be an identifier"
@@ -103,8 +118,8 @@ in' :: Lexer ()
 in' = void $ symbol "in"
 
 -- | Type names are upper-case, like Int and Double
-typeIdentifier :: Lexer Text
-typeIdentifier = fmap pack $ ((:) <$> upperChar <*> many alphaNumChar) <* spaceConsumer
+typeIdentifier :: Lexer (Located Text)
+typeIdentifier = lexeme $ pack <$> ((:) <$> upperChar <*> many alphaNumChar)
 
 lparen :: Lexer ()
 lparen = char '(' >> spaceConsumer

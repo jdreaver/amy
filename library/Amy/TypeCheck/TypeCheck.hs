@@ -15,6 +15,7 @@ import Amy.Errors
 import Amy.Names
 import Amy.Prim
 import Amy.Renamer.AST
+import Amy.Syntax.Located
 import Amy.Type
 import Amy.TypeCheck.AST
 import Amy.TypeCheck.Monad
@@ -44,17 +45,23 @@ typeCheckExtern
   -> TypeCheck TExtern
 typeCheckExtern extern = do
   -- Set value type for binding
-  setValueType (valueNameId $ rExternName extern) (rExternType extern)
+  let
+    name' = locatedValue $ rExternName extern
+    type' = locatedValue <$> rExternType extern
+  setValueType type' name'
 
   pure
     TExtern
-    { tExternName = rExternName extern
-    , tExternType = rExternType extern
+    { tExternName = name'
+    , tExternType = type'
     }
 
 addBindingTypeToScope :: RBinding -> TypeCheck ()
 addBindingTypeToScope binding =
-  maybe (pure ()) (setValueType (valueNameId $ rBindingName binding)) (rBindingType binding)
+  maybe
+    (pure ())
+    (flip setValueType (locatedValue $ rBindingName binding))
+    (fmap locatedValue <$> rBindingType binding)
 
 typeCheckBinding :: RBinding -> TypeCheck TBinding
 typeCheckBinding binding = do
@@ -63,10 +70,10 @@ typeCheckBinding binding = do
 
   -- Make sure binding has same number of args as binding type
   let
-    argTypes = NE.init $ typeToNonEmpty bindingType
+    argTypes = fmap (fmap locatedValue) $ NE.init $ typeToNonEmpty bindingType
   args <-
-    for (zip (rBindingArgs binding) argTypes) $ \(argName, argType) -> do
-      setValueType (valueNameId argName) argType
+    for (zip (rBindingArgs binding) argTypes) $ \(Located _ argName, argType) -> do
+      setValueType argType argName
       pure $ Typed argType argName
 
   -- Get type of body expression
@@ -75,21 +82,24 @@ typeCheckBinding binding = do
   -- Make sure expression type matches binding return type
   let expType = expressionType body'
   expressionType' <- assertPrimitiveType (Just $ rBindingName binding) expType
-  returnType' <- assertPrimitiveType (Just $ rBindingName binding) $ NE.last $ typeToNonEmpty bindingType
+  returnType' <-
+    assertPrimitiveType
+      (Just $ rBindingName binding)
+      (locatedValue <$> NE.last (typeToNonEmpty bindingType))
   when (expressionType' /= returnType') $
     throwError [TypeMismatch (TVar expressionType') (TVar returnType')]
 
   pure
     TBinding
-    { tBindingName = rBindingName binding
+    { tBindingName = locatedValue $ rBindingName binding
     , tBindingArgs = args
     , tBindingReturnType = returnType'
     , tBindingBody = body'
     }
 
 typeCheckExpression :: RExpr -> TypeCheck TExpr
-typeCheckExpression (RELit lit) = pure $ TELit lit
-typeCheckExpression (REVar var) = do
+typeCheckExpression (RELit lit) = pure $ TELit (locatedValue lit)
+typeCheckExpression (REVar (Located _ var)) = do
   ty <- lookupValueTypeOrError var
   pure $ TEVar $ Typed ty var
 typeCheckExpression (REIf (RIf predicate thenExpression elseExpression)) = do
@@ -177,7 +187,7 @@ typeCheckExpression (REApp app) = do
 
 assertPrimitiveType
   :: (MonadError [Error] m)
-  => Maybe ValueName
+  => Maybe (Located ValueName)
   -> Type PrimitiveType
   -> m PrimitiveType
 assertPrimitiveType mName t =

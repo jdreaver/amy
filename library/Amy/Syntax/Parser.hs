@@ -55,7 +55,7 @@ bindingType = do
     , bindingTypeTypeNames = typeNames
     }
 
-parseType :: Parser (Type Text)
+parseType :: Parser (Type (Located Text))
 parseType = makeExprParser term table
  where
   tVar = TVar <$> typeIdentifier
@@ -109,12 +109,12 @@ expression' =
 expressionParens :: Parser Expr
 expressionParens = EParens <$> parens expression
 
-literal :: Parser Literal
+literal :: Parser (Located Literal)
 literal =
-  (either LiteralDouble LiteralInt <$> number)
-  <|> (LiteralBool <$> bool)
+  (fmap (either LiteralDouble LiteralInt) <$> number)
+  <|> (fmap LiteralBool <$> bool)
 
-variable :: Parser Text
+variable :: Parser (Located Text)
 variable = identifier
 
 ifExpression :: Parser If

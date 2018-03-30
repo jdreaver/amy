@@ -18,12 +18,15 @@ module Amy.Syntax.AST
 
     -- Re-export
   , Literal(..)
+  , Located(..)
+  , SourceSpan(..)
   ) where
 
 import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 
 import Amy.Literal (Literal(..))
+import Amy.Syntax.Located
 import Amy.Type
 
 -- | A 'Module' is simply a list of 'Declaration' values.
@@ -52,8 +55,8 @@ declExtern _ = Nothing
 -- x@
 data Binding
   = Binding
-  { bindingName :: !Text
-  , bindingArgs :: ![Text]
+  { bindingName :: !(Located Text)
+  , bindingArgs :: ![Located Text]
   , bindingBody :: !Expr
   } deriving (Show, Eq)
 
@@ -61,13 +64,13 @@ data Binding
 -- Int@ or @f :: Int -> Int@
 data BindingType
   = BindingType
-  { bindingTypeName :: !Text
-  , bindingTypeTypeNames :: !(Type Text)
+  { bindingTypeName :: !(Located Text)
+  , bindingTypeTypeNames :: !(Type (Located Text))
   } deriving (Show, Eq)
 
 data Expr
-  = ELit !Literal
-  | EVar !Text
+  = ELit !(Located Literal)
+  | EVar !(Located Text)
   | EIf !If
   | ELet !Let
   | EApp !App

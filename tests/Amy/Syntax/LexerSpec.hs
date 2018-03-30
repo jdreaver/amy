@@ -11,6 +11,7 @@ import Test.Hspec.Megaparsec
 import Text.Megaparsec
 
 import Amy.Syntax.Lexer
+import Amy.Syntax.Located
 
 spec :: Spec
 spec = do
@@ -26,7 +27,7 @@ spec = do
   describe "lineFold" $ do
 
     let
-      integer = fromRight (error "Not an integer") <$> number
+      integer = fromRight (error "Not an integer") . locatedValue <$> number
 
     it "works" $ do
       parse (lineFold integer) "" "1" `shouldParse` [1]

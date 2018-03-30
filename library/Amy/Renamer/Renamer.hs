@@ -48,8 +48,8 @@ rename' (Module declarations) = do
     , rModuleExterns = externs'
     }
 
-bindingTypesMap :: [BindingType] -> Map Text (Type Text)
-bindingTypesMap = Map.fromList . fmap (\(BindingType name ts) -> (name, ts))
+bindingTypesMap :: [BindingType] -> Map Text (Type (Located Text))
+bindingTypesMap = Map.fromList . fmap (\(BindingType (Located _ name) ts) -> (name, ts))
 
 renameExtern :: BindingType -> Renamer RExtern
 renameExtern bindingType =
@@ -59,16 +59,18 @@ renameExtern bindingType =
   -- Look up types
   <*> renameTypes (bindingTypeTypeNames bindingType)
 
-renameTypes :: (Traversable t) => t Text -> Renamer (t PrimitiveType)
-renameTypes = traverse (\name -> maybe (throwError [UnknownTypeName name]) pure $ readPrimitiveType name)
+renameTypes :: (Traversable t) => t (Located Text) -> Renamer (t (Located PrimitiveType))
+renameTypes =
+  traverse
+    (\name -> maybe (throwError [UnknownTypeName name]) pure $ traverse readPrimitiveType name)
 
-renameBinding :: Map Text (Type Text) -> Binding -> Renamer RBinding
+renameBinding :: Map Text (Type (Located Text)) -> Binding -> Renamer RBinding
 renameBinding typeMap binding = withNewScope $ do -- Begin new scope
   -- Look up binding name
   name <- lookupValueInScopeOrError (bindingName binding)
 
   -- Look up types
-  let mTypeNames = Map.lookup (bindingName binding) typeMap
+  let mTypeNames = Map.lookup (locatedValue $ bindingName binding) typeMap
   types <- traverse renameTypes mTypeNames
 
   -- Add binding arguments to scope

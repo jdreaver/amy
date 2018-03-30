@@ -29,7 +29,7 @@ runTypeCheck initialState (TypeCheck action) = evalState (runExceptT action) ini
 
 data TypeCheckState
   = TypeCheckState
-  { typeCheckStateValueTypeMap :: Map NameId (Type PrimitiveType)
+  { typeCheckStateValueTypeMap :: Map ValueName (Type PrimitiveType)
     -- ^ Type for all values
   } deriving (Show, Eq)
 
@@ -39,25 +39,27 @@ emptyTypeCheckState =
   { typeCheckStateValueTypeMap = primitiveFunctionTypes
   }
 
-primitiveFunctionTypes :: Map NameId (Type PrimitiveType)
+primitiveFunctionTypes :: Map ValueName (Type PrimitiveType)
 primitiveFunctionTypes =
-  Map.fromList $ (\prim -> (PrimitiveFunctionId prim, mkType prim)) <$> allPrimitiveFunctionNames
+  Map.fromList
+    $ (\prim -> (ValueName (showPrimitiveFunctionName prim) (PrimitiveFunctionId prim), mkType prim))
+    <$> allPrimitiveFunctionNames
  where
   mkType prim = typeFromNonEmpty . fmap TVar . primitiveFunctionType $ primitiveFunction prim
 
-setValueType :: NameId -> Type PrimitiveType -> TypeCheck ()
-setValueType nameId ty = do
-  mExistingType <- lookupValueType nameId
+setValueType :: Type PrimitiveType -> ValueName -> TypeCheck ()
+setValueType ty valueName = do
+  mExistingType <- lookupValueType valueName
   case mExistingType of
     Just ty' -> throwError [TypeMismatch ty ty']
     Nothing ->
-      modify' (\s -> s { typeCheckStateValueTypeMap = Map.insert nameId ty (typeCheckStateValueTypeMap s) })
+      modify' (\s -> s { typeCheckStateValueTypeMap = Map.insert valueName ty (typeCheckStateValueTypeMap s) })
 
-lookupValueType :: NameId -> TypeCheck (Maybe (Type PrimitiveType))
-lookupValueType nameId = Map.lookup nameId <$> gets typeCheckStateValueTypeMap
+lookupValueType :: ValueName -> TypeCheck (Maybe (Type PrimitiveType))
+lookupValueType valueName = Map.lookup valueName <$> gets typeCheckStateValueTypeMap
 
 lookupValueTypeOrError :: ValueName -> TypeCheck (Type PrimitiveType)
 lookupValueTypeOrError valueName =
-  lookupValueType (valueNameId valueName) >>= maybe (throwError [err]) pure
+  lookupValueType valueName >>= maybe (throwError [err]) pure
  where
   err = CantFindType valueName

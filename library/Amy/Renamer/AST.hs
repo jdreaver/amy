@@ -18,6 +18,7 @@ import Data.List.NonEmpty (NonEmpty)
 import Amy.Literal (Literal(..))
 import Amy.Names
 import Amy.Prim
+import Amy.Syntax.Located
 import Amy.Type
 
 -- | An 'RModule' is a 'Module' after renaming.
@@ -32,23 +33,23 @@ data RModule
 -- 'BindingType' after they've been paired together.
 data RBinding
   = RBinding
-  { rBindingName :: !ValueName
-  , rBindingType :: !(Maybe (Type PrimitiveType))
-  , rBindingArgs :: ![ValueName]
+  { rBindingName :: !(Located ValueName)
+  , rBindingType :: !(Maybe (Type (Located PrimitiveType)))
+  , rBindingArgs :: ![Located ValueName]
   , rBindingBody :: !RExpr
   } deriving (Show, Eq)
 
 -- | A renamed extern declaration.
 data RExtern
   = RExtern
-  { rExternName :: !ValueName
-  , rExternType :: !(Type PrimitiveType)
+  { rExternName :: !(Located ValueName)
+  , rExternType :: !(Type (Located PrimitiveType))
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'
 data RExpr
-  = RELit !Literal
-  | REVar !ValueName
+  = RELit !(Located Literal)
+  | REVar !(Located ValueName)
   | REIf !RIf
   | RELet !RLet
   | REApp !RApp

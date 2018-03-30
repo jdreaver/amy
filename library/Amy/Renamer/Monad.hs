@@ -20,6 +20,7 @@ import Data.Text (Text)
 import Amy.Errors
 import Amy.Names
 import Amy.Prim
+import Amy.Syntax.Located
 
 newtype Renamer a = Renamer (ExceptT [Error] (State RenamerState) a)
   deriving (Functor, Applicative, Monad, MonadState RenamerState, MonadError [Error])
@@ -57,22 +58,22 @@ freshId = do
   modify' (\s -> s { renamerStateLastId = 1 + renamerStateLastId s })
   NameIntId <$> gets renamerStateLastId
 
-addValueToScope :: Text -> Renamer ValueName
-addValueToScope name = do
+addValueToScope :: Located Text -> Renamer (Located ValueName)
+addValueToScope lName@(Located span' name) = do
   nameId <- freshId
   let valueName = ValueName name nameId
   mExistingId <- lookupValueInScope name
   case mExistingId of
-    Just nid -> throwError [VariableShadowed name nid]
+    Just nid -> throwError [VariableShadowed lName nid]
     Nothing -> modify' (\s -> s { renamerStateValues = Map.insert name valueName (renamerStateValues s) })
-  pure valueName
+  pure (Located span' valueName)
 
 lookupValueInScope :: Text -> Renamer (Maybe ValueName)
 lookupValueInScope name = Map.lookup name <$> gets renamerStateValues
 
-lookupValueInScopeOrError :: Text -> Renamer ValueName
-lookupValueInScopeOrError name =
-  lookupValueInScope name >>= maybe (throwError [UnknownVariable name]) pure
+lookupValueInScopeOrError :: Located Text -> Renamer (Located ValueName)
+lookupValueInScopeOrError name@(Located span' name') =
+  lookupValueInScope name' >>= maybe (throwError [UnknownVariable name]) (pure . Located span')
 
 -- | Runs a 'Renamer' action in a fresh scope and restores the original scope
 -- when the action is done.
