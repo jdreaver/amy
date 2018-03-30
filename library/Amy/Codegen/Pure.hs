@@ -188,7 +188,7 @@ codegenExpression (TEApp app) = do
     fnArgs = tAppArgs app
     fnArgTypes = typedType <$> fnArgs
     fnReturnType = tAppReturnType app
-  argOps <- mapM codegenExpression (typedValue <$> fnArgs)
+  argOps <- traverse codegenExpression (typedValue <$> fnArgs)
 
   -- Get the function expression variable
   fnVarName <-

@@ -72,7 +72,7 @@ renameBinding typeMap binding = withNewScope $ do -- Begin new scope
   types <- traverse renameTypes mTypeNames
 
   -- Add binding arguments to scope
-  args <- mapM addValueToScope (bindingArgs binding)
+  args <- traverse addValueToScope (bindingArgs binding)
 
   -- Run renamer on expression
   body <- renameExpression (bindingBody binding)
@@ -114,5 +114,5 @@ renameExpression (EApp app) =
   fmap REApp $
   RApp
   <$> renameExpression (appFunction app)
-  <*> mapM renameExpression (appArgs app)
+  <*> traverse renameExpression (appArgs app)
 renameExpression (EParens expr) = renameExpression expr

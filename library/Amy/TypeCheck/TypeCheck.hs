@@ -138,7 +138,7 @@ typeCheckExpression (REApp app) = do
   function <- typeCheckExpression $ rAppFunction app
 
   -- Type check the arguments
-  args <- mapM typeCheckExpression $ rAppArgs app
+  args <- traverse typeCheckExpression $ rAppArgs app
   let
     typedArgs = (\arg -> Typed (expressionType arg) arg) <$> args
 
