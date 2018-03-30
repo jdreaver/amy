@@ -7,6 +7,7 @@ module Amy.Errors
 
 import Data.Text (Text)
 import Data.Void (Void)
+import LLVM.AST (Operand)
 import Text.Megaparsec
 
 import Amy.Names
@@ -37,6 +38,7 @@ data Error
   | CodegenMissingSymbol !ValueName
   | CodegenExpectedPrimitiveType !(Type PrimitiveType)
   | NoCurrying !TApp
+  | UnknownOperandType !Operand
   deriving (Show, Eq)
 
 showError :: Error -> String

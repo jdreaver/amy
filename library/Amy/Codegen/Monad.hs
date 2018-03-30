@@ -57,8 +57,10 @@ data FunctionGenState
 data CodegenIdentifier
   = LocalOperand !Operand
     -- ^ Operand for a variable defined locally
-  | GlobalIdentifier !ValueName
-    -- ^ Name of a globally-defined function or constant
+  | GlobalFunctionNoArgs !Operand
+    -- ^ Operand for a globally-defined function with no arguments
+  | GlobalFunction !Operand
+    -- ^ Name of a globally-defined function with arguments
   deriving (Show, Eq)
 
 data BlockGenState
