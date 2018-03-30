@@ -51,14 +51,13 @@ llvmType = go . typeToNonEmpty
  where
   go (TVar prim :| []) = llvmPrimitiveType prim
   go ts =
-    PointerType (
+    PointerType
       FunctionType
       { resultType = llvmType $ NE.last ts
       , argumentTypes = llvmType <$> NE.init ts
       , isVarArg = False
       }
-    )
-    (AddrSpace 0)
+      (AddrSpace 0)
 
 -- | Convert from a amy primitive type to an LLVM type
 llvmPrimitiveType :: PrimitiveType -> LLVM.Type
