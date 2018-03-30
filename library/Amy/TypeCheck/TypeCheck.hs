@@ -6,7 +6,7 @@ module Amy.TypeCheck.TypeCheck
   ( typeCheck
   ) where
 
-import Control.Monad (forM, when)
+import Control.Monad (when)
 import Data.Foldable (traverse_)
 import Data.Traversable (for)
 import qualified Data.List.NonEmpty as NE
@@ -67,8 +67,7 @@ typeCheckBinding binding = do
   args <-
     for (zip (rBindingArgs binding) argTypes) $ \(argName, argType) -> do
       setValueType (valueNameId argName) argType
-      argType' <- assertPrimitiveType (Just argName) argType
-      pure (argType', argName)
+      pure $ Typed argType argName
 
   -- Get type of body expression
   body' <- typeCheckExpression (rBindingBody binding)
@@ -140,9 +139,8 @@ typeCheckExpression (REApp app) = do
 
   -- Type check the arguments
   args <- mapM typeCheckExpression $ rAppArgs app
-  typedArgs <- forM args $ \arg -> do
-    argType <- assertPrimitiveType Nothing $ expressionType arg
-    pure (argType, arg)
+  let
+    typedArgs = (\arg -> Typed (expressionType arg) arg) <$> args
 
   -- Make sure there is the right number of arguments
   let
@@ -155,12 +153,12 @@ typeCheckExpression (REApp app) = do
   unless (length typedArgs == length funcArgTypes) $
     throwError [WrongNumberOfArguments (length typedArgs) (length funcArgTypes)]
 
-  -- Make sure arg types make function types
+  -- Make sure arg types match function types
   let
     mismatchedTypes =
       fmap (uncurry TypeMismatch)
       . NE.filter (uncurry (/=))
-      . fmap (\((p1, _), p2) -> (TVar p1, p2))
+      . fmap (\(Typed p1 _, p2) -> (p1, p2))
       $ NE.zip typedArgs funcArgTypes
   unless (null mismatchedTypes) $
     throwError mismatchedTypes

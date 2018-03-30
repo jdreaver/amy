@@ -45,6 +45,21 @@ codegenPure (TModule bindings externs) = do
 textToShortBS :: Text -> ShortByteString
 textToShortBS = BSS.toShort . encodeUtf8
 
+-- TODO: Add tests for this
+llvmType :: T.Type PrimitiveType -> LLVM.Type
+llvmType = go . typeToNonEmpty
+ where
+  go (TVar prim :| []) = llvmPrimitiveType prim
+  go ts =
+    PointerType (
+      FunctionType
+      { resultType = llvmType $ NE.last ts
+      , argumentTypes = llvmType <$> NE.init ts
+      , isVarArg = False
+      }
+    )
+    (AddrSpace 0)
+
 -- | Convert from a amy primitive type to an LLVM type
 llvmPrimitiveType :: PrimitiveType -> LLVM.Type
 llvmPrimitiveType IntType = IntegerType 32
@@ -55,13 +70,10 @@ codegenExtern :: TExtern -> Either [Error] Definition
 codegenExtern extern = do
   let
     types = tExternType extern
-  paramTypes <-
-    traverse (fmap llvmPrimitiveType . assertPrimitiveType) --traverse (fmap llvmPrimitiveType . assertPrimitiveType)
-    $ NE.init (typeToNonEmpty types)
-  let
+    paramTypes = llvmType <$> NE.init (typeToNonEmpty types)
     params =
       (\ty -> Parameter ty (UnName 0) []) <$> paramTypes
-  returnType' <- fmap llvmPrimitiveType . assertPrimitiveType . NE.last . typeToNonEmpty $ types
+    returnType' = llvmType . NE.last . typeToNonEmpty $ types
 
   pure $
     GlobalDefinition
@@ -79,8 +91,8 @@ codegenBinding allTopLevelNames binding = do
       addNameToSymbolTable valueName (GlobalIdentifier valueName)
 
     -- Add args to symbol table
-    forM_ (tBindingArgs binding) $ \(argType, valueName) ->
-      let op = LocalReference (llvmPrimitiveType argType) (valueNameToLLVM valueName)
+    forM_ (tBindingArgs binding) $ \(Typed argType valueName) ->
+      let op = LocalReference (llvmType argType) (valueNameToLLVM valueName)
       in addNameToSymbolTable valueName (LocalOperand op)
 
     -- Codegen the expression
@@ -88,7 +100,7 @@ codegenBinding allTopLevelNames binding = do
 
   let
     params =
-      (\(ty, valueName) -> Parameter (llvmPrimitiveType ty) (Name . textToShortBS $ valueNameRaw valueName) [])
+      (\(Typed ty valueName) -> Parameter (llvmType ty) (Name . textToShortBS $ valueNameRaw valueName) [])
       <$> tBindingArgs binding
     returnType' = llvmPrimitiveType $ tBindingReturnType binding
 
@@ -115,10 +127,17 @@ codegenExpression (TEVar (Typed ty valueName)) = do
   -- Check if a value exists in the symbol table
   ident <- lookupSymbolOrError valueName
 
-  primTy <- assertPrimitiveType ty
+  -- TODO: Way too much special casing going on here. This information should
+  -- be stored in the symbol table or something.
   case ident of
     LocalOperand op -> pure op
-    GlobalIdentifier valueName' -> functionCallInstruction valueName' [] [] primTy
+    GlobalIdentifier valueName' ->
+      case ty of
+        (TVar primTy) -> functionCallInstruction valueName' [] [] primTy (\t -> ConstantOperand . C.GlobalReference t)
+        _ -> pure $ ConstantOperand $
+          C.GlobalReference
+          (llvmType ty)
+          (valueNameToLLVM valueName)
 codegenExpression expr@(TEIf (TIf predicate thenExpression elseExpression)) = do
   let
     one = ConstantOperand $ C.Int 32 1
@@ -150,7 +169,7 @@ codegenExpression expr@(TEIf (TIf predicate thenExpression elseExpression)) = do
 
   -- Generate the code for the ending block
   startNewBlock endBlockName
-  ty' <- llvmPrimitiveType <$> assertPrimitiveType (expressionType expr)
+  let ty' = llvmType $ expressionType expr
   phi ty' [(thenOp, thenBlockName), (elseOp, elseBlockName)]
 codegenExpression (TELet (TLet bindings expression)) = do
   -- For each binding value, generate code for the expression
@@ -167,9 +186,9 @@ codegenExpression (TEApp app) = do
   -- Evaluate argument expressions
   let
     fnArgs = tAppArgs app
-    fnArgTypes = fst <$> fnArgs
+    fnArgTypes = typedType <$> fnArgs
     fnReturnType = tAppReturnType app
-  argOps <- mapM codegenExpression (snd <$> fnArgs)
+  argOps <- mapM codegenExpression (typedValue <$> fnArgs)
 
   -- Get the function expression variable
   fnVarName <-
@@ -180,7 +199,17 @@ codegenExpression (TEApp app) = do
   -- Generate code for function
   case valueNameId fnVarName of
     PrimitiveFunctionId primName -> codegenPrimitiveFunction primName argOps fnReturnType
-    NameIntId _ -> functionCallInstruction fnVarName (toList argOps) (toList fnArgTypes) fnReturnType
+    NameIntId _ -> do
+      ident <- lookupSymbolOrError fnVarName
+
+      -- TODO: Way too much special casing going on here. This information should
+      -- be stored in the symbol table or something.
+      let
+        opType =
+          case ident of
+            LocalOperand _ -> LocalReference
+            GlobalIdentifier _ -> \t -> ConstantOperand . C.GlobalReference t
+      functionCallInstruction fnVarName (toList argOps) (toList fnArgTypes) fnReturnType opType
 
 codegenPrimitiveFunction
   :: PrimitiveFunctionName
@@ -211,24 +240,18 @@ codegenPrimitiveFunction primFuncName argumentOperands returnType' = do
 functionCallInstruction
   :: ValueName
   -> [Operand]
-  -> [PrimitiveType]
+  -> [T.Type PrimitiveType]
   -> PrimitiveType
+  -> (LLVM.Type -> Name -> Operand)
   -> FunctionGen Operand
-functionCallInstruction valueName argumentOperands argumentTypes' returnType' = do
+functionCallInstruction valueName argumentOperands argumentTypes' returnType' mkOperand = do
   let
-    argTypes' = llvmPrimitiveType <$> argumentTypes'
+    argTypes' = llvmType <$> argumentTypes'
     fnRef =
-      ConstantOperand $
-      C.GlobalReference
+      mkOperand
       (PointerType (LLVM.FunctionType (llvmPrimitiveType returnType') argTypes' False) (AddrSpace 0))
       (valueNameToLLVM valueName)
     toArg arg = (arg, [])
     instruction = Call Nothing CC.C [] (Right fnRef) (toArg <$> argumentOperands) [] []
 
   instr (llvmPrimitiveType returnType') instruction
-
-assertPrimitiveType :: (MonadError [Error] m) => T.Type PrimitiveType -> m PrimitiveType
-assertPrimitiveType t =
-  case t of
-    (TVar t') -> pure t'
-    _ -> throwError [CodegenExpectedPrimitiveType t]

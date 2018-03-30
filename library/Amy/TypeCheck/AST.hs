@@ -34,7 +34,7 @@ data TModule
 data TBinding
   = TBinding
   { tBindingName :: !ValueName
-  , tBindingArgs :: ![(PrimitiveType, ValueName)]
+  , tBindingArgs :: ![Typed PrimitiveType ValueName]
   , tBindingReturnType :: !PrimitiveType
   , tBindingBody :: !TExpr
   } deriving (Show, Eq)
@@ -71,7 +71,7 @@ data TLet
 data TApp
   = TApp
   { tAppFunction :: !TExpr
-  , tAppArgs :: !(NonEmpty (PrimitiveType, TExpr))
+  , tAppArgs :: !(NonEmpty (Typed PrimitiveType TExpr))
   , tAppReturnType :: !PrimitiveType
   } deriving (Show, Eq)
 
