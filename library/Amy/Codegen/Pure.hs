@@ -113,11 +113,7 @@ codegenExpression (TELit lit) =
       LiteralBool x -> C.Int 1 $ if x then 1 else 0
 codegenExpression (TEVar (Typed ty valueName)) = do
   -- Check if a value exists in the symbol table
-  mSymbol <- lookupSymbol valueName
-  ident <-
-    case mSymbol of
-      Nothing -> throwError [CodegenMissingSymbol valueName]
-      Just s -> pure s
+  ident <- lookupSymbolOrError valueName
 
   primTy <- assertPrimitiveType ty
   case ident of

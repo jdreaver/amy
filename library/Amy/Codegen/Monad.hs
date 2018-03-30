@@ -11,6 +11,7 @@ module Amy.Codegen.Monad
   , startNewBlock
   , addNameToSymbolTable
   , lookupSymbol
+  , lookupSymbolOrError
   , addInstruction
   , addUnNamedInstruction
   , instr
@@ -149,6 +150,9 @@ addNameToSymbolTable name ident =
 
 lookupSymbol :: ValueName -> FunctionGen (Maybe CodegenIdentifier)
 lookupSymbol name = Map.lookup name <$> gets functionGenStateSymbolTable
+
+lookupSymbolOrError :: ValueName -> FunctionGen CodegenIdentifier
+lookupSymbolOrError name = maybe (throwError [CodegenMissingSymbol name]) pure =<< lookupSymbol name
 
 -- | Adds an instruction to the stack
 addInstruction :: Named Instruction -> FunctionGen ()
