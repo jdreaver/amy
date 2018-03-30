@@ -1,6 +1,6 @@
 -- | AST for the frontend parser.
 
-module Amy.Parser.AST
+module Amy.Syntax.AST
   ( Module(..)
   , Declaration(..)
   , declBinding

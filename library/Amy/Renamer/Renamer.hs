@@ -14,8 +14,8 @@ import Data.Text (Text)
 import Amy.Errors
 import Amy.Renamer.AST
 import Amy.Renamer.Monad
-import Amy.Parser.AST
 import Amy.Prim
+import Amy.Syntax.AST
 import Amy.Type
 
 -- | Gives a unique identity to all names in the AST

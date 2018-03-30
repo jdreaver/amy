@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Amy.Parser.Lexer
+module Amy.Syntax.Lexer
   ( spaceConsumer
   , spaceConsumerNewlines
   , noIndent

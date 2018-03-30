@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Amy.Parser.LexerSpec
+module Amy.Syntax.LexerSpec
   ( spec
   ) where
 
@@ -10,7 +10,7 @@ import Test.Hspec
 import Test.Hspec.Megaparsec
 import Text.Megaparsec
 
-import Amy.Parser.Lexer
+import Amy.Syntax.Lexer
 
 spec :: Spec
 spec = do

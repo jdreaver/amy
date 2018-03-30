@@ -1,4 +1,4 @@
-module Amy.Parser.Parser
+module Amy.Syntax.Parser
   ( parseModule
 
   , declaration
@@ -22,8 +22,8 @@ import Text.Megaparsec
 import Text.Megaparsec.Expr
 import qualified Text.Megaparsec.Char.Lexer as L
 
-import Amy.Parser.AST
-import Amy.Parser.Lexer
+import Amy.Syntax.AST
+import Amy.Syntax.Lexer
 import Amy.Type
 
 type Parser = Parsec Void Text

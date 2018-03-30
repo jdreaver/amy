@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
-module Amy.Parser.ParserSpec
+module Amy.Syntax.ParserSpec
   ( spec
   ) where
 
@@ -12,8 +12,8 @@ import Test.Hspec.Megaparsec
 import Text.Megaparsec
 import Text.Shakespeare.Text (st)
 
-import Amy.Parser.AST
-import Amy.Parser.Parser
+import Amy.Syntax.AST
+import Amy.Syntax.Parser
 import Amy.Type
 
 spec :: Spec

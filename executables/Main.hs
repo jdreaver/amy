@@ -18,7 +18,7 @@ import Text.Megaparsec
 import Amy.Codegen
 import Amy.Errors
 import Amy.Renamer
-import Amy.Parser
+import Amy.Syntax
 import Amy.TypeCheck
 
 main :: IO ()
