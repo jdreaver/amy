@@ -6,7 +6,6 @@ module Amy.Renamer.Renamer
 
 import Control.Monad.Except
 import Data.Foldable (traverse_)
-import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
@@ -16,6 +15,7 @@ import Amy.Errors
 import Amy.Renamer.AST
 import Amy.Renamer.Monad
 import Amy.Parser.AST
+import Amy.Prim
 import Amy.Type
 
 -- | Gives a unique identity to all names in the AST
@@ -48,7 +48,7 @@ rename' (Module declarations) = do
     , rModuleExterns = externs'
     }
 
-bindingTypesMap :: [BindingType] -> Map Text (NonEmpty Text)
+bindingTypesMap :: [BindingType] -> Map Text (Type Text)
 bindingTypesMap = Map.fromList . fmap (\(BindingType name ts) -> (name, ts))
 
 renameExtern :: BindingType -> Renamer RExtern
@@ -59,10 +59,10 @@ renameExtern bindingType =
   -- Look up types
   <*> renameTypes (bindingTypeTypeNames bindingType)
 
-renameTypes :: NonEmpty Text -> Renamer (NonEmpty PrimitiveType)
+renameTypes :: (Traversable t) => t Text -> Renamer (t PrimitiveType)
 renameTypes = traverse (\name -> maybe (throwError [UnknownTypeName name]) pure $ readPrimitiveType name)
 
-renameBinding :: Map Text (NonEmpty Text) -> Binding -> Renamer RBinding
+renameBinding :: Map Text (Type Text) -> Binding -> Renamer RBinding
 renameBinding typeMap binding = withNewScope $ do -- Begin new scope
   -- Look up binding name
   name <- lookupValueInScopeOrError (bindingName binding)

@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Amy.Codegen.Pure
@@ -54,10 +55,13 @@ codegenExtern :: TExtern -> Either [Error] Definition
 codegenExtern extern = do
   let
     types = tExternType extern
-    paramTypes = llvmPrimitiveType <$> NE.init types
+  paramTypes <-
+    traverse (fmap llvmPrimitiveType . assertPrimitiveType) --traverse (fmap llvmPrimitiveType . assertPrimitiveType)
+    $ NE.init (typeToNonEmpty types)
+  let
     params =
       (\ty -> Parameter ty (UnName 0) []) <$> paramTypes
-    returnType' = llvmPrimitiveType $ NE.last types
+  returnType' <- fmap llvmPrimitiveType . assertPrimitiveType . NE.last . typeToNonEmpty $ types
 
   pure $
     GlobalDefinition
@@ -114,9 +118,11 @@ codegenExpression (TEVar (Typed ty valueName)) = do
     case mSymbol of
       Nothing -> throwError [CodegenMissingSymbol valueName]
       Just s -> pure s
+
+  primTy <- assertPrimitiveType ty
   case ident of
     LocalOperand op -> pure op
-    GlobalIdentifier valueName' -> functionCallInstruction valueName' [] [] (T.returnType ty)
+    GlobalIdentifier valueName' -> functionCallInstruction valueName' [] [] primTy
 codegenExpression expr@(TEIf (TIf predicate thenExpression elseExpression)) = do
   let
     one = ConstantOperand $ C.Int 32 1
@@ -225,11 +231,8 @@ functionCallInstruction valueName argumentOperands argumentTypes' returnType' = 
 
   instr (llvmPrimitiveType returnType') instruction
 
--- TODO: This function shouldn't be necessary. The AST that feeds into Codegen
--- should have things that are primitive types statically declared.
-assertPrimitiveType :: T.Type PrimitiveType -> FunctionGen PrimitiveType
+assertPrimitiveType :: (MonadError [Error] m) => T.Type PrimitiveType -> m PrimitiveType
 assertPrimitiveType t =
-  maybe
-    (throwError [CodegenExpectedPrimitiveType t])
-    pure
-    $ primitiveType t
+  case t of
+    (TVar t') -> pure t'
+    _ -> throwError [CodegenExpectedPrimitiveType t]

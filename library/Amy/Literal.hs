@@ -5,7 +5,7 @@ module Amy.Literal
   , literalType
   ) where
 
-import Amy.Type
+import Amy.Prim
 
 -- | A 'Literal' is any literal from the source code. This type is used in many
 -- ASTs since there is no need for renaming or annotating types to a literal.

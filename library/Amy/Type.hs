@@ -1,58 +1,42 @@
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveTraversable #-}
+
 module Amy.Type
   ( Type(..)
+  , typeFromNonEmpty
+  , typeToNonEmpty
   , Typed(..)
-  , returnType
-  , argTypes
-  , primitiveType
-  , makeType
-  , PrimitiveType(..)
-  , readPrimitiveType
-  , FunctionType(..)
   ) where
 
-import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 
-import Amy.Prim (PrimitiveType(..), readPrimitiveType)
-
 data Type ty
-  = PrimitiveTy !ty
-  | FunctionTy !(FunctionType ty)
-  deriving (Show, Eq)
+  = TVar !ty
+    -- ^ A lone type variable
+  | TArr !(Type ty) !(Type ty)
+    -- ^ Two types linked by "->" (short for Type Array)
+  deriving (Show, Eq, Functor, Foldable, Traversable)
+
+-- | Turns a 'NonEmpty' list of 'Type' values into a 'Type' via 'TArr'.
+typeFromNonEmpty :: NonEmpty (Type ty) -> Type ty
+typeFromNonEmpty = go . NE.toList
+ where
+  go [] = error "No empty lists here!"
+  go [t] = t
+  go (t:ts) = TArr t (go ts)
+
+-- | Inverse of 'typeFromNonEmpty'
+typeToNonEmpty :: Type ty -> NonEmpty (Type ty)
+typeToNonEmpty = go
+ where
+  go ty@(TVar _) = ty :| []
+  go (TArr t1 t2) = NE.cons t1 (typeToNonEmpty t2)
 
 -- | A value with a type.
 data Typed ty a
   = Typed
   { typedType :: !(Type ty)
   , typedValue :: !a
-  } deriving (Show, Eq)
-
-returnType :: Type ty -> ty
-returnType (PrimitiveTy ty) = ty
-returnType (FunctionTy ft) = functionTypeReturnType ft
-
-argTypes :: Type ty -> [ty]
-argTypes (PrimitiveTy _) = []
-argTypes (FunctionTy ft) = toList (functionTypeArgTypes ft)
-
-primitiveType :: Type ty -> Maybe ty
-primitiveType (PrimitiveTy prim) = Just prim
-primitiveType _ = Nothing
-
-makeType :: NonEmpty ty -> Type ty
-makeType primTypes =
-  case primTypes of
-    primType :| [] -> PrimitiveTy primType
-    types@(firstType :| rest) ->
-      FunctionTy
-      FunctionType
-      { functionTypeArgTypes = firstType :| init rest
-      , functionTypeReturnType = NE.last types
-      }
-
-data FunctionType ty
-  = FunctionType
-  { functionTypeArgTypes :: !(NonEmpty ty)
-  , functionTypeReturnType :: !ty
   } deriving (Show, Eq)

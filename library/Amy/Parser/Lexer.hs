@@ -17,6 +17,8 @@ module Amy.Parser.Lexer
   , in'
   , lparen
   , rparen
+  , parens
+  , optionalParens
   , comma
   , doubleColon
   , equals
@@ -109,6 +111,12 @@ lparen = char '(' >> spaceConsumer
 
 rparen :: Lexer ()
 rparen = char ')' >> spaceConsumer
+
+parens :: Lexer a -> Lexer a
+parens = between lparen rparen
+
+optionalParens :: Lexer a -> Lexer a
+optionalParens p = parens p <|> p
 
 comma :: Lexer ()
 comma = char ',' >> spaceConsumer

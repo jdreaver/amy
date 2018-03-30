@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -12,6 +13,7 @@ import qualified Data.List.NonEmpty as NE
 
 import Amy.Errors
 import Amy.Names
+import Amy.Prim
 import Amy.Renamer.AST
 import Amy.Type
 import Amy.TypeCheck.AST
@@ -42,7 +44,7 @@ typeCheckExtern
   -> TypeCheck TExtern
 typeCheckExtern extern = do
   -- Set value type for binding
-  setValueType (valueNameId $ rExternName extern) (makeType $ rExternType extern)
+  setValueType (valueNameId $ rExternName extern) (rExternType extern)
 
   pure
     TExtern
@@ -52,31 +54,31 @@ typeCheckExtern extern = do
 
 addBindingTypeToScope :: RBinding -> TypeCheck ()
 addBindingTypeToScope binding =
-  maybe (pure ()) (setValueType (valueNameId $ rBindingName binding) . makeType) (rBindingType binding)
+  maybe (pure ()) (setValueType (valueNameId $ rBindingName binding)) (rBindingType binding)
 
 typeCheckBinding :: RBinding -> TypeCheck TBinding
 typeCheckBinding binding = do
   -- Get binding type (all bindings must have types)
-  bindingType <- maybe (throwError [BindingLacksTypeSignature binding]) (pure . makeType) $ rBindingType binding
+  bindingType <- maybe (throwError [BindingLacksTypeSignature binding]) pure $ rBindingType binding
 
   -- Make sure binding has same number of args as binding type
+  let
+    argTypes = NE.init $ typeToNonEmpty bindingType
   args <-
-    for (zip (rBindingArgs binding) (argTypes bindingType)) $ \(argName, argType) -> do
-      setValuePrimitiveType (valueNameId argName) argType
-      pure (argType, argName)
+    for (zip (rBindingArgs binding) argTypes) $ \(argName, argType) -> do
+      setValueType (valueNameId argName) argType
+      argType' <- assertPrimitiveType (Just argName) argType
+      pure (argType', argName)
 
   -- Get type of body expression
   body' <- typeCheckExpression (rBindingBody binding)
 
   -- Make sure expression type matches binding return type
   let expType = expressionType body'
-  expressionType' <-
-    maybe (throwError [ExpectedPrimitiveType (Just $ rBindingName binding) expType]) pure $
-    primitiveType expType
-  let
-    returnType' = returnType bindingType
+  expressionType' <- assertPrimitiveType (Just $ rBindingName binding) expType
+  returnType' <- assertPrimitiveType (Just $ rBindingName binding) $ NE.last $ typeToNonEmpty bindingType
   when (expressionType' /= returnType') $
-    throwError [TypeMismatch (PrimitiveTy expressionType') (PrimitiveTy returnType')]
+    throwError [TypeMismatch (TVar expressionType') (TVar returnType')]
 
   pure
     TBinding
@@ -102,8 +104,8 @@ typeCheckExpression (REIf (RIf predicate thenExpression elseExpression)) = do
     elseType = expressionType elseExpression'
 
   -- Predicate needs to be Bool
-  when (predicateType /= PrimitiveTy BoolType) $
-    throwError [TypeMismatch predicateType (PrimitiveTy BoolType)]
+  when (predicateType /= TVar BoolType) $
+    throwError [TypeMismatch predicateType (TVar BoolType)]
 
   -- then/else branches need to have the same type
   when (thenType /= elseType) $
@@ -139,30 +141,32 @@ typeCheckExpression (REApp app) = do
   -- Type check the arguments
   args <- mapM typeCheckExpression $ rAppArgs app
   typedArgs <- forM args $ \arg -> do
-    let argType = expressionType arg
-    ty <- maybe (throwError [ExpectedPrimitiveType Nothing argType]) pure $ primitiveType argType
-    pure (ty, arg)
+    argType <- assertPrimitiveType Nothing $ expressionType arg
+    pure (argType, arg)
 
   -- Make sure there is the right number of arguments
-  let funcType = expressionType function
-  funcType' <-
-    case funcType of
-      FunctionTy ft -> pure ft
-      _ -> throwError [ExpectedFunctionType funcType]
   let
-    funcArgTypes = functionTypeArgTypes funcType'
+    funcType = expressionType function
+    funcTypeNE = typeToNonEmpty funcType
+  (funcArgTypes, funcReturnType) <-
+    if NE.length funcTypeNE == 1
+    then throwError [ExpectedFunctionType funcType]
+    else pure (NE.fromList (NE.init funcTypeNE), NE.last funcTypeNE)
   unless (length typedArgs == length funcArgTypes) $
     throwError [WrongNumberOfArguments (length typedArgs) (length funcArgTypes)]
 
   -- Make sure arg types make function types
   let
     mismatchedTypes =
-      fmap (\(p1, p2) -> TypeMismatch (PrimitiveTy p1) (PrimitiveTy p2))
+      fmap (uncurry TypeMismatch)
       . NE.filter (uncurry (/=))
-      . fmap (\((p1, _), p2) -> (p1, p2))
+      . fmap (\((p1, _), p2) -> (TVar p1, p2))
       $ NE.zip typedArgs funcArgTypes
   unless (null mismatchedTypes) $
     throwError mismatchedTypes
+
+  -- Make sure return type is primitive
+  funcReturnType' <- assertPrimitiveType Nothing funcReturnType
 
   -- Put it all together
   pure $
@@ -170,5 +174,15 @@ typeCheckExpression (REApp app) = do
     TApp
     { tAppFunction = function
     , tAppArgs = typedArgs
-    , tAppReturnType = functionTypeReturnType funcType'
+    , tAppReturnType = funcReturnType'
     }
+
+assertPrimitiveType
+  :: (MonadError [Error] m)
+  => Maybe ValueName
+  -> Type PrimitiveType
+  -> m PrimitiveType
+assertPrimitiveType mName t =
+  case t of
+    (TVar t') -> pure t'
+    _ -> throwError [ExpectedPrimitiveType mName t]

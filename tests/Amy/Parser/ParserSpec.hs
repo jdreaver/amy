@@ -14,6 +14,7 @@ import Text.Shakespeare.Text (st)
 
 import Amy.Parser.AST
 import Amy.Parser.Parser
+import Amy.Type
 
 spec :: Spec
 spec = do
@@ -26,7 +27,7 @@ spec = do
         [ DeclBindingType
           BindingType
           { bindingTypeName = "f"
-          , bindingTypeTypeNames = ["Int", "Double"]
+          , bindingTypeTypeNames = TArr (TVar "Int") (TVar "Double")
           }
         , DeclBinding
           Binding
@@ -38,7 +39,7 @@ spec = do
         , DeclBindingType
           BindingType
           { bindingTypeName = "main"
-          , bindingTypeTypeNames = ["Int"]
+          , bindingTypeTypeNames = TVar "Int"
           }
         , DeclBinding
           Binding
@@ -51,7 +52,7 @@ spec = do
                 [ LetBindingType
                   BindingType
                   { bindingTypeName = "x"
-                  , bindingTypeTypeNames = ["Int"]
+                  , bindingTypeTypeNames = TVar "Int"
                   }
                 , LetBinding
                   Binding
@@ -99,13 +100,36 @@ spec = do
 
   describe "externType" $ do
     it "parses extern declaration" $ do
-      parse externType "" "extern f :: Int" `shouldParse` BindingType "f" ["Int"]
-      parse externType "" "extern f :: Int -> Double" `shouldParse` BindingType "f" ["Int", "Double"]
+      parse externType "" "extern f :: Int" `shouldParse` BindingType "f" (TVar "Int")
+      parse externType "" "extern f :: Int -> Double" `shouldParse` BindingType "f" (TArr (TVar "Int") (TVar "Double"))
 
   describe "bindingType" $ do
     it "parses binding types" $ do
-      parse bindingType "" "f :: Int" `shouldParse` BindingType "f" ["Int"]
-      parse bindingType "" "f :: Int -> Double" `shouldParse` BindingType "f" ["Int", "Double"]
+      parse bindingType "" "f :: Int" `shouldParse` BindingType "f" (TVar "Int")
+      parse bindingType "" "f :: Int -> Double" `shouldParse` BindingType "f" (TArr (TVar "Int") (TVar "Double"))
+
+  describe "parseType" $ do
+    it "handles simple types" $ do
+      parse parseType "" "A" `shouldParse` TVar "A"
+      parse parseType "" "A -> B" `shouldParse` TArr (TVar "A") (TVar "B")
+      parse parseType "" "A -> B -> C" `shouldParse` TArr (TVar "A") (TArr (TVar "B") (TVar "C"))
+
+    it "handles parens" $ do
+      parse parseType "" "(A)" `shouldParse` TVar "A"
+      parse parseType "" "((X))" `shouldParse` TVar "X"
+      parse parseType "" "((A)) -> ((B))" `shouldParse` TArr (TVar "A") (TVar "B")
+      parse parseType "" "(A -> B) -> C"
+        `shouldParse`
+        TArr (TArr (TVar "A") (TVar "B")) (TVar "C")
+      parse parseType "" "A -> (B -> C) -> D"
+        `shouldParse`
+        TArr (TVar "A") (TArr (TArr (TVar "B") (TVar "C")) (TVar "D"))
+
+    it "should fail gracefully without infinite loops" $ do
+      parse parseType "" `shouldFailOn` ""
+      parse parseType "" `shouldFailOn` "()"
+      parse parseType "" `shouldFailOn` "(())"
+      parse parseType "" `shouldFailOn` "A ->"
 
   describe "expressionParens" $ do
     it "parses expressions in parens" $ do

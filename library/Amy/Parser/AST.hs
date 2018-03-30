@@ -24,6 +24,7 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 
 import Amy.Literal (Literal(..))
+import Amy.Type
 
 -- | A 'Module' is simply a list of 'Declaration' values.
 newtype Module = Module { unModule :: [Declaration] }
@@ -61,7 +62,7 @@ data Binding
 data BindingType
   = BindingType
   { bindingTypeName :: !Text
-  , bindingTypeTypeNames :: !(NonEmpty Text)
+  , bindingTypeTypeNames :: !(Type Text)
   } deriving (Show, Eq)
 
 data Expr

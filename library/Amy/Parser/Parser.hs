@@ -4,6 +4,7 @@ module Amy.Parser.Parser
   , declaration
   , externType
   , bindingType
+  , parseType
   , binding
   , expression
   , expression'
@@ -13,16 +14,17 @@ module Amy.Parser.Parser
   , literal
   ) where
 
-import qualified Control.Applicative.Combinators.NonEmpty as CNE
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import Data.Void (Void)
 import Text.Megaparsec
+import Text.Megaparsec.Expr
 import qualified Text.Megaparsec.Char.Lexer as L
 
 import Amy.Parser.AST
 import Amy.Parser.Lexer
+import Amy.Type
 
 type Parser = Parsec Void Text
 
@@ -46,12 +48,19 @@ bindingType :: Parser BindingType
 bindingType = do
   name <- identifier
   doubleColon
-  typeNames <- typeIdentifier `CNE.sepBy1` typeSeparatorArrow
+  typeNames <- parseType
   pure
     BindingType
     { bindingTypeName = name
     , bindingTypeTypeNames = typeNames
     }
+
+parseType :: Parser (Type Text)
+parseType = makeExprParser term table
+ where
+  tVar = TVar <$> typeIdentifier
+  table = [[InfixR (TArr <$ typeSeparatorArrow)]]
+  term = parens parseType <|> tVar
 
 binding :: Parser Binding
 binding = do
@@ -98,7 +107,7 @@ expression' =
   <|> (EVar <$> variable)
 
 expressionParens :: Parser Expr
-expressionParens = EParens <$> between lparen rparen expression
+expressionParens = EParens <$> parens expression
 
 literal :: Parser Literal
 literal =

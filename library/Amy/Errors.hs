@@ -10,6 +10,7 @@ import Data.Void (Void)
 import Text.Megaparsec
 
 import Amy.Names
+import Amy.Prim
 import Amy.Renamer.AST
 import Amy.Type
 import Amy.TypeCheck.AST

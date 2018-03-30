@@ -18,6 +18,7 @@ import Data.List.NonEmpty (NonEmpty)
 
 import Amy.Literal
 import Amy.Names
+import Amy.Prim
 import Amy.Type
 
 -- | A 'TModule' is an 'RModule' after renaming.
@@ -42,7 +43,7 @@ data TBinding
 data TExtern
   = TExtern
   { tExternName :: !ValueName
-  , tExternType :: !(NonEmpty PrimitiveType)
+  , tExternType :: !(Type PrimitiveType)
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'
@@ -75,8 +76,8 @@ data TApp
   } deriving (Show, Eq)
 
 expressionType :: TExpr -> Type PrimitiveType
-expressionType (TELit lit) = PrimitiveTy $ literalType lit
+expressionType (TELit lit) = TVar $ literalType lit
 expressionType (TEVar (Typed ty _)) = ty
 expressionType (TEIf if') = expressionType (tIfThen if') -- Checker ensure "then" and "else" types match
 expressionType (TELet let') = expressionType (tLetExpression let')
-expressionType (TEApp app) = PrimitiveTy $ tAppReturnType app
+expressionType (TEApp app) = TVar $ tAppReturnType app

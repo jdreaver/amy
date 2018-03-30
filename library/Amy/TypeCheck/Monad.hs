@@ -5,7 +5,6 @@ module Amy.TypeCheck.Monad
   , runTypeCheck
   , emptyTypeCheckState
   , setValueType
-  , setValuePrimitiveType
   , lookupValueType
   , lookupValueTypeOrError
   , module Control.Monad.Except
@@ -44,7 +43,7 @@ primitiveFunctionTypes :: Map NameId (Type PrimitiveType)
 primitiveFunctionTypes =
   Map.fromList $ (\prim -> (PrimitiveFunctionId prim, mkType prim)) <$> allPrimitiveFunctionNames
  where
-  mkType prim = makeType $ primitiveFunctionType $ primitiveFunction prim
+  mkType prim = typeFromNonEmpty . fmap TVar . primitiveFunctionType $ primitiveFunction prim
 
 setValueType :: NameId -> Type PrimitiveType -> TypeCheck ()
 setValueType nameId ty = do
@@ -53,9 +52,6 @@ setValueType nameId ty = do
     Just ty' -> throwError [TypeMismatch ty ty']
     Nothing ->
       modify' (\s -> s { typeCheckStateValueTypeMap = Map.insert nameId ty (typeCheckStateValueTypeMap s) })
-
-setValuePrimitiveType :: NameId -> PrimitiveType -> TypeCheck ()
-setValuePrimitiveType nameId = setValueType nameId . PrimitiveTy
 
 lookupValueType :: NameId -> TypeCheck (Maybe (Type PrimitiveType))
 lookupValueType nameId = Map.lookup nameId <$> gets typeCheckStateValueTypeMap

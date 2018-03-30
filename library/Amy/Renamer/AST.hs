@@ -17,6 +17,7 @@ import Data.List.NonEmpty (NonEmpty)
 
 import Amy.Literal (Literal(..))
 import Amy.Names
+import Amy.Prim
 import Amy.Type
 
 -- | An 'RModule' is a 'Module' after renaming.
@@ -32,7 +33,7 @@ data RModule
 data RBinding
   = RBinding
   { rBindingName :: !ValueName
-  , rBindingType :: !(Maybe (NonEmpty PrimitiveType))
+  , rBindingType :: !(Maybe (Type PrimitiveType))
   , rBindingArgs :: ![ValueName]
   , rBindingBody :: !RExpr
   } deriving (Show, Eq)
@@ -41,7 +42,7 @@ data RBinding
 data RExtern
   = RExtern
   { rExternName :: !ValueName
-  , rExternType :: !(NonEmpty PrimitiveType)
+  , rExternType :: !(Type PrimitiveType)
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'
