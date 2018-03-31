@@ -106,8 +106,8 @@ typeCheckBinding binding = do
 
 typeCheckExpression :: RExpr -> TypeCheck TExpr
 typeCheckExpression (RELit lit) = pure $ TELit (locatedValue lit)
-typeCheckExpression (REVar (Located _ var)) = do
-  ty <- lookupValueTypeOrError var
+typeCheckExpression (REVar loc@(Located _ var)) = do
+  ty <- lookupValueTypeOrError loc
   pure $ TEVar $ Typed ty var
 typeCheckExpression (REIf (RIf predicate thenExpression elseExpression)) = do
   predicate' <- typeCheckExpression predicate

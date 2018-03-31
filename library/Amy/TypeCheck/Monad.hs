@@ -19,6 +19,7 @@ import qualified Data.Map.Strict as Map
 import Amy.Errors
 import Amy.Names
 import Amy.Prim
+import Amy.Syntax.Located
 import Amy.Type
 
 newtype TypeCheck a = TypeCheck (ExceptT [Error] (State TypeCheckState) a)
@@ -58,8 +59,8 @@ setValueType ty valueName = do
 lookupValueType :: ValueName -> TypeCheck (Maybe (Type PrimitiveType))
 lookupValueType valueName = Map.lookup valueName <$> gets typeCheckStateValueTypeMap
 
-lookupValueTypeOrError :: ValueName -> TypeCheck (Type PrimitiveType)
+lookupValueTypeOrError :: Located ValueName -> TypeCheck (Type PrimitiveType)
 lookupValueTypeOrError valueName =
-  lookupValueType valueName >>= maybe (throwError [err]) pure
+  lookupValueType (locatedValue valueName) >>= maybe (throwError [err]) pure
  where
   err = CantFindType valueName

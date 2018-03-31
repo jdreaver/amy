@@ -30,7 +30,7 @@ data Error
   | BindingLacksTypeSignature !RBinding
   | TypeMismatch !(Type PrimitiveType) !(Type PrimitiveType)
   | UnknownTypeName !(Located Text)
-  | CantFindType !ValueName
+  | CantFindType !(Located ValueName)
   | WrongNumberOfArguments !Int !Int
   | ExpectedPrimitiveType !(Maybe (Located ValueName)) !(Type PrimitiveType)
   | ExpectedFunctionType !(Type PrimitiveType)
