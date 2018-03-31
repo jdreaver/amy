@@ -34,8 +34,12 @@ data TModule
 data TBinding
   = TBinding
   { tBindingName :: !ValueName
+  , tBindingType :: !(Type PrimitiveType)
+    -- ^ Type for whole function
   , tBindingArgs :: ![Typed PrimitiveType ValueName]
-  , tBindingReturnType :: !PrimitiveType
+    -- ^ Argument names and types split out from 'tBindingType'
+  , tBindingReturnType :: !(Type PrimitiveType)
+    -- ^ Return type split out from 'tBindingType'
   , tBindingBody :: !TExpr
   } deriving (Show, Eq)
 

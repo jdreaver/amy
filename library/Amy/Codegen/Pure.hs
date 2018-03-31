@@ -55,15 +55,10 @@ bindingIdentifier :: TBinding -> (ValueName, CodegenIdentifier)
 bindingIdentifier binding = (name', ident)
  where
   name' = tBindingName binding
-  argTypes = llvmType . typedType <$> tBindingArgs binding
-  returnType' = llvmPrimitiveType $ tBindingReturnType binding
-  op =
-    ConstantOperand $
-    C.GlobalReference
-    (PointerType (LLVM.FunctionType returnType' argTypes False) (AddrSpace 0))
-    (valueNameToLLVM name')
+  funcType = llvmType (tBindingType binding)
+  op = ConstantOperand $ C.GlobalReference funcType (valueNameToLLVM name')
   ident =
-    if null argTypes
+    if null (tBindingArgs binding)
     then GlobalFunctionNoArgs op
     else GlobalFunction op
 
@@ -125,7 +120,7 @@ codegenBinding allTopLevelIdentifiers binding = do
     params =
       (\(Typed ty valueName) -> Parameter (llvmType ty) (Name . textToShortBS $ valueNameRaw valueName) [])
       <$> tBindingArgs binding
-    returnType' = llvmPrimitiveType $ tBindingReturnType binding
+    returnType' = llvmType $ tBindingReturnType binding
 
   pure $
     GlobalDefinition
@@ -200,10 +195,7 @@ codegenExpression (TELet (TLet bindings expression)) = do
   codegenExpression expression
 codegenExpression (TEApp app) = do
   -- Evaluate argument expressions
-  let
-    fnArgs = tAppArgs app
-    fnReturnType = tAppReturnType app
-  argOps <- traverse codegenExpression (typedValue <$> fnArgs)
+  argOps <- traverse codegenExpression (typedValue <$> tAppArgs app)
 
   -- Get the function expression variable
   fnVarName <-
@@ -213,7 +205,7 @@ codegenExpression (TEApp app) = do
 
   -- Generate code for function
   case valueNameId fnVarName of
-    PrimitiveFunctionId primName -> codegenPrimitiveFunction primName argOps fnReturnType
+    PrimitiveFunctionId primName -> codegenPrimitiveFunction primName argOps (tAppReturnType app)
     NameIntId _ -> do
       ident <- lookupSymbolOrError fnVarName
 

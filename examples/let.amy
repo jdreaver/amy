@@ -1,6 +1,6 @@
 extern abs :: Int -> Int
 
-main :: Int -> Int
+main :: Int
 main =
   let
     x :: Int

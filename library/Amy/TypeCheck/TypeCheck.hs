@@ -65,35 +65,42 @@ addBindingTypeToScope binding =
 
 typeCheckBinding :: RBinding -> TypeCheck TBinding
 typeCheckBinding binding = do
-  -- Get binding type (all bindings must have types)
+  -- Get binding type (all bindings must have types until we have type
+  -- inference)
   bindingType <- maybe (throwError [BindingLacksTypeSignature binding]) pure $ rBindingType binding
 
-  -- Make sure binding has same number of args as binding type
+  -- Sort out which types are for arguments and what the return type is
   let
-    argTypes = fmap (fmap locatedValue) $ NE.init $ typeToNonEmpty bindingType
-  args <-
-    for (zip (rBindingArgs binding) argTypes) $ \(Located _ argName, argType) -> do
-      setValueType argType argName
-      pure $ Typed argType argName
+    typeNE = typeToNonEmpty bindingType
+    args = rBindingArgs binding
+    (argTypes, returnTypeList) = NE.splitAt (length args) typeNE
+
+  -- Make sure there aren't too many arguments
+  returnType <-
+    case NE.nonEmpty returnTypeList of
+      Nothing -> throwError []-- TODO: Too many arguments to function
+      Just returnTypeNE -> pure . fmap locatedValue . typeFromNonEmpty $ returnTypeNE
+
+  -- Set types for arguments
+  args' <-
+    for (zip args argTypes) $ \(Located _ argName, argType) -> do
+      setValueType (locatedValue <$> argType) argName
+      pure $ Typed (locatedValue <$> argType) argName
 
   -- Get type of body expression
   body' <- typeCheckExpression (rBindingBody binding)
 
   -- Make sure expression type matches binding return type
   let expType = expressionType body'
-  expressionType' <- assertPrimitiveType (Just $ rBindingName binding) expType
-  returnType' <-
-    assertPrimitiveType
-      (Just $ rBindingName binding)
-      (locatedValue <$> NE.last (typeToNonEmpty bindingType))
-  when (expressionType' /= returnType') $
-    throwError [TypeMismatch (TVar expressionType') (TVar returnType')]
+  when (expType /= returnType) $
+    throwError [TypeMismatch expType returnType]
 
   pure
     TBinding
     { tBindingName = locatedValue $ rBindingName binding
-    , tBindingArgs = args
-    , tBindingReturnType = returnType'
+    , tBindingType = locatedValue <$> bindingType
+    , tBindingArgs = args'
+    , tBindingReturnType = returnType
     , tBindingBody = body'
     }
 
