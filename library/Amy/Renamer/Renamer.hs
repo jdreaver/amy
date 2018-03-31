@@ -1,4 +1,5 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Amy.Renamer.Renamer
   ( rename
@@ -33,88 +34,55 @@ rename' (Module declarations) = do
   -- might be the way to go.
 
   -- Rename extern declarations
-  externs' <- traverse renameExtern (mapMaybe declExtern declarations)
+  rModuleExterns <- traverse renameExtern (mapMaybe declExtern declarations)
 
   -- Rename binding value declarations
   let
     bindings = mapMaybe declBinding declarations
     bindingTypeMap = bindingTypesMap $ mapMaybe declBindingType declarations
   traverse_ addValueToScope (bindingName <$> bindings)
-  bindingValues' <- traverse (renameBinding bindingTypeMap) bindings
+  rModuleBindings <- traverse (renameBinding bindingTypeMap) bindings
 
-  pure
-    RModule
-    { rModuleBindings = bindingValues'
-    , rModuleExterns = externs'
-    }
+  pure RModule{..}
 
 bindingTypesMap :: [BindingType] -> Map Text (Type (Located Text))
 bindingTypesMap = Map.fromList . fmap (\(BindingType (Located _ name) ts) -> (name, ts))
 
 renameExtern :: BindingType -> Renamer RExtern
-renameExtern bindingType =
-  RExtern
-  -- Add extern name to scope
-  <$> addValueToScope (bindingTypeName bindingType)
-  -- Look up types
-  <*> renameTypes (bindingTypeTypeNames bindingType)
+renameExtern bindingType = do
+  rExternName <- addValueToScope (bindingTypeName bindingType)
+  rExternType <- traverse renameType (bindingTypeTypeNames bindingType)
+  pure RExtern{..}
 
-renameTypes :: (Traversable t) => t (Located Text) -> Renamer (t (Located PrimitiveType))
-renameTypes =
-  traverse
-    (\name -> maybe (throwError [UnknownTypeName name]) pure $ traverse readPrimitiveType name)
+renameType :: Located Text -> Renamer (Located PrimitiveType)
+renameType name = maybe (throwError [UnknownTypeName name]) pure $ traverse readPrimitiveType name
 
 renameBinding :: Map Text (Type (Located Text)) -> Binding -> Renamer RBinding
 renameBinding typeMap binding = withNewScope $ do -- Begin new scope
-  -- Look up binding name
-  name <- lookupValueInScopeOrError (bindingName binding)
-
-  -- Look up types
-  let mTypeNames = Map.lookup (locatedValue $ bindingName binding) typeMap
-  types <- traverse renameTypes mTypeNames
-
-  -- Add binding arguments to scope
-  args <- traverse addValueToScope (bindingArgs binding)
-
-  -- Run renamer on expression
-  body <- renameExpression (bindingBody binding)
-
-  pure
-    RBinding
-    { rBindingName = name
-    , rBindingType = types
-    , rBindingArgs = args
-    , rBindingBody = body
-    }
-
+  rBindingName <- lookupValueInScopeOrError (bindingName binding)
+  rBindingType <- traverse (traverse renameType) $ Map.lookup (locatedValue $ bindingName binding) typeMap
+  rBindingArgs <- traverse addValueToScope (bindingArgs binding)
+  rBindingBody <- renameExpression (bindingBody binding)
+  pure RBinding{..}
 renameExpression :: Expr -> Renamer RExpr
 renameExpression (ELit lit) = pure $ RELit lit
 renameExpression (EVar var) = REVar <$> lookupValueInScopeOrError var
-renameExpression (EIf (If predicate thenExpression elseExpression)) =
-  fmap REIf
-  $ RIf
-  <$> renameExpression predicate
-  <*> renameExpression thenExpression
-  <*> renameExpression elseExpression
+renameExpression (EIf (If predicate thenExpression elseExpression)) = do
+  rIfPredicate <- renameExpression predicate
+  rIfThen <- renameExpression thenExpression
+  rIfElse <- renameExpression elseExpression
+  pure $ REIf RIf {..}
 renameExpression (ELet (Let bindings expression)) =
   withNewScope $ do
     let
       bindings' = mapMaybe letBinding bindings
       bindingTypeMap = bindingTypesMap $ mapMaybe letBindingType bindings
-
     traverse_ addValueToScope (bindingName <$> bindings')
-    bindings'' <- traverse (renameBinding bindingTypeMap) bindings'
-    expression' <- renameExpression expression
-
-    pure $
-      RELet
-      RLet
-      { rLetBindings = bindings''
-      , rLetExpression = expression'
-      }
-renameExpression (EApp app) =
-  fmap REApp $
-  RApp
-  <$> renameExpression (appFunction app)
-  <*> traverse renameExpression (appArgs app)
+    rLetBindings <- traverse (renameBinding bindingTypeMap) bindings'
+    rLetExpression <- renameExpression expression
+    pure $ RELet RLet{..}
+renameExpression (EApp app) = do
+  rAppFunction <- renameExpression (appFunction app)
+  rAppArgs <- traverse renameExpression (appArgs app)
+  pure $ REApp RApp{..}
 renameExpression (EParens expr) = renameExpression expr
