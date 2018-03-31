@@ -25,6 +25,8 @@ typeCheck ast = runTypeCheck emptyTypeCheckState $ typeCheck' ast
 
 typeCheck' :: RModule -> TypeCheck TModule
 typeCheck' (RModule bindings externs) = do
+  -- TODO: Use Validation here to get as many errors as possible
+
   -- Add all extern types to scope
   externs' <- traverse typeCheckExtern externs
 

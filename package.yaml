@@ -12,6 +12,7 @@ dependencies:
   - parser-combinators
   - scientific
   - text
+  - validation
 
 ghc-options: -Wall
 
