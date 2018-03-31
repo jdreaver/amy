@@ -1,5 +1,7 @@
+examples_llvm: $(patsubst %.amy,%.ll,$(wildcard examples/*.amy))
+
 .PHONY: all
-all: build
+all: build $(examples_llvm)
 
 .PHONY: build
 build:
@@ -16,3 +18,8 @@ watch:
 .PHONY: clean
 clean:
 	git clean -xfd
+
+examples/%.ll: examples/%.amy build
+	@echo "; Generated from $<" > $@
+	@echo "" >> $@
+	stack exec amy -- $< >> $@
