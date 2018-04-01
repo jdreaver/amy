@@ -122,8 +122,8 @@ typeCheckExpression (REIf (RIf predicate thenExpression elseExpression)) = do
     elseType = expressionType elseExpression'
 
   -- Predicate needs to be Bool
-  when (predicateType /= TVar BoolType) $
-    throwError [TypeMismatch predicateType (TVar BoolType)]
+  when (predicateType /= TCon BoolType) $
+    throwError [TypeMismatch predicateType (TCon BoolType)]
 
   -- then/else branches need to have the same type
   when (thenType /= elseType) $
@@ -201,5 +201,5 @@ assertPrimitiveType
   -> m PrimitiveType
 assertPrimitiveType mName t =
   case t of
-    (TVar t') -> pure t'
+    (TCon t') -> pure t'
     _ -> throwError [ExpectedPrimitiveType mName t]

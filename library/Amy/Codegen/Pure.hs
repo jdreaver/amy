@@ -69,7 +69,7 @@ textToShortBS = BSS.toShort . encodeUtf8
 llvmType :: T.Type PrimitiveType -> LLVM.Type
 llvmType = go . typeToNonEmpty
  where
-  go (TVar prim :| []) = llvmPrimitiveType prim
+  go (TCon prim :| []) = llvmPrimitiveType prim
   go ts =
     PointerType
       FunctionType

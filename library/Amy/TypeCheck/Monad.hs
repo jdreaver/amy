@@ -46,7 +46,7 @@ primitiveFunctionTypes =
     $ (\prim -> (ValueName (showPrimitiveFunctionName prim) (PrimitiveFunctionId prim), mkType prim))
     <$> allPrimitiveFunctionNames
  where
-  mkType prim = typeFromNonEmpty . fmap TVar . primitiveFunctionType $ primitiveFunction prim
+  mkType prim = typeFromNonEmpty . fmap TCon . primitiveFunctionType $ primitiveFunction prim
 
 setValueType :: Type PrimitiveType -> ValueName -> TypeCheck ()
 setValueType ty valueName = do

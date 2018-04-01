@@ -13,8 +13,8 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 
 data Type ty
-  = TVar !ty
-    -- ^ A lone type variable
+  = TCon !ty
+    -- ^ A type constructor
   | TArr !(Type ty) !(Type ty)
     -- ^ Two types linked by "->" (short for Type Array)
   deriving (Show, Eq, Functor, Foldable, Traversable)
@@ -31,7 +31,7 @@ typeFromNonEmpty = go . NE.toList
 typeToNonEmpty :: Type ty -> NonEmpty (Type ty)
 typeToNonEmpty = go
  where
-  go ty@(TVar _) = ty :| []
+  go ty@(TCon _) = ty :| []
   go (TArr t1 t2) = NE.cons t1 (typeToNonEmpty t2)
 
 -- | A value with a type.

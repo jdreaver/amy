@@ -29,8 +29,8 @@ spec = do
           { bindingTypeName = Located (SourceSpan "" 2 1 2 1) "f"
           , bindingTypeTypeNames =
             TArr
-              (TVar (Located (SourceSpan "" 2 6 2 8) "Int"))
-              (TVar (Located (SourceSpan "" 2 13 2 18) "Double"))
+              (TCon (Located (SourceSpan "" 2 6 2 8) "Int"))
+              (TCon (Located (SourceSpan "" 2 13 2 18) "Double"))
           }
         , DeclBinding
           Binding
@@ -42,7 +42,7 @@ spec = do
         , DeclBindingType
           BindingType
           { bindingTypeName = Located (SourceSpan "" 5 1 5 4) "main"
-          , bindingTypeTypeNames = TVar (Located (SourceSpan "" 5 9 5 11) "Int")
+          , bindingTypeTypeNames = TCon (Located (SourceSpan "" 5 9 5 11) "Int")
           }
         , DeclBinding
           Binding
@@ -55,7 +55,7 @@ spec = do
                 [ LetBindingType
                   BindingType
                   { bindingTypeName = Located (SourceSpan "" 8 5 8 5) "x"
-                  , bindingTypeTypeNames = TVar (Located (SourceSpan "" 8 10 8 12) "Int")
+                  , bindingTypeTypeNames = TCon (Located (SourceSpan "" 8 10 8 12) "Int")
                   }
                 , LetBinding
                   Binding
@@ -111,14 +111,14 @@ spec = do
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 8 1 8) "f")
-          (TVar (Located (SourceSpan "" 1 13 1 15) "Int"))
+          (TCon (Located (SourceSpan "" 1 13 1 15) "Int"))
       parse externType "" "extern f :: Int -> Double"
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 8 1 8) "f")
           (TArr
-             (TVar (Located (SourceSpan "" 1 13 1 15) "Int"))
-             (TVar (Located (SourceSpan "" 1 20 1 25) "Double"))
+             (TCon (Located (SourceSpan "" 1 13 1 15) "Int"))
+             (TCon (Located (SourceSpan "" 1 20 1 25) "Double"))
           )
 
   describe "bindingType" $ do
@@ -127,58 +127,58 @@ spec = do
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
-          (TVar (Located (SourceSpan "" 1 6 1 8) "Int"))
+          (TCon (Located (SourceSpan "" 1 6 1 8) "Int"))
       parse bindingType "" "f :: Int -> Double"
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
           (TArr
-             (TVar (Located (SourceSpan "" 1 6 1 8) "Int"))
-             (TVar (Located (SourceSpan "" 1 13 1 18) "Double"))
+             (TCon (Located (SourceSpan "" 1 6 1 8) "Int"))
+             (TCon (Located (SourceSpan "" 1 13 1 18) "Double"))
           )
 
   describe "parseType" $ do
     it "handles simple types" $ do
-      parse parseType "" "A" `shouldParse` TVar (Located (SourceSpan "" 1 1 1 1) "A")
+      parse parseType "" "A" `shouldParse` TCon (Located (SourceSpan "" 1 1 1 1) "A")
       parse parseType "" "A -> B"
         `shouldParse`
         TArr
-          (TVar (Located (SourceSpan "" 1 1 1 1) "A"))
-          (TVar (Located (SourceSpan "" 1 6 1 6) "B"))
+          (TCon (Located (SourceSpan "" 1 1 1 1) "A"))
+          (TCon (Located (SourceSpan "" 1 6 1 6) "B"))
       parse parseType "" "A -> B -> C"
         `shouldParse`
         TArr
-          (TVar (Located (SourceSpan "" 1 1 1 1) "A"))
+          (TCon (Located (SourceSpan "" 1 1 1 1) "A"))
           (TArr
-             (TVar (Located (SourceSpan "" 1 6 1 6) "B"))
-             (TVar (Located (SourceSpan "" 1 11 1 11) "C"))
+             (TCon (Located (SourceSpan "" 1 6 1 6) "B"))
+             (TCon (Located (SourceSpan "" 1 11 1 11) "C"))
           )
 
     it "handles parens" $ do
-      parse parseType "" "(A)" `shouldParse` TVar (Located (SourceSpan "" 1 2 1 2) "A")
-      parse parseType "" "((X))" `shouldParse` TVar (Located (SourceSpan "" 1 3 1 3) "X")
+      parse parseType "" "(A)" `shouldParse` TCon (Located (SourceSpan "" 1 2 1 2) "A")
+      parse parseType "" "((X))" `shouldParse` TCon (Located (SourceSpan "" 1 3 1 3) "X")
       parse parseType "" "((A)) -> ((B))"
         `shouldParse`
         TArr
-          (TVar (Located (SourceSpan "" 1 3 1 3) "A"))
-          (TVar (Located (SourceSpan "" 1 12 1 12) "B"))
+          (TCon (Located (SourceSpan "" 1 3 1 3) "A"))
+          (TCon (Located (SourceSpan "" 1 12 1 12) "B"))
       parse parseType "" "(A -> B) -> C"
         `shouldParse`
         TArr
           (TArr
-            (TVar (Located (SourceSpan "" 1 2 1 2) "A"))
-            (TVar (Located (SourceSpan "" 1 7 1 7) "B"))
+            (TCon (Located (SourceSpan "" 1 2 1 2) "A"))
+            (TCon (Located (SourceSpan "" 1 7 1 7) "B"))
           )
-          (TVar (Located (SourceSpan "" 1 13 1 13) "C"))
+          (TCon (Located (SourceSpan "" 1 13 1 13) "C"))
       parse parseType "" "A -> (B -> C) -> D"
         `shouldParse`
         TArr
-          (TVar (Located (SourceSpan "" 1 1 1 1) "A"))
+          (TCon (Located (SourceSpan "" 1 1 1 1) "A"))
           (TArr
             (TArr
-              (TVar (Located (SourceSpan "" 1 7 1 7) "B"))
-              (TVar (Located (SourceSpan "" 1 12 1 12) "C")))
-            (TVar (Located (SourceSpan "" 1 18 1 18) "D"))
+              (TCon (Located (SourceSpan "" 1 7 1 7) "B"))
+              (TCon (Located (SourceSpan "" 1 12 1 12) "C")))
+            (TCon (Located (SourceSpan "" 1 18 1 18) "D"))
           )
 
     it "should fail gracefully without infinite loops" $ do
