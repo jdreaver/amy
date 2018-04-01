@@ -58,8 +58,8 @@ bindingType = do
 parseType :: Parser (Type (Located Text))
 parseType = makeExprParser term table
  where
-  tVar = TCon <$> typeIdentifier
-  table = [[InfixR (TArr <$ typeSeparatorArrow)]]
+  tVar = TyCon <$> typeIdentifier
+  table = [[InfixR (TyArr <$ typeSeparatorArrow)]]
   term = parens parseType <|> tVar
 
 binding :: Parser Binding

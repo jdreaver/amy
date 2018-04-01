@@ -80,8 +80,8 @@ data TApp
   } deriving (Show, Eq)
 
 expressionType :: TExpr -> Type PrimitiveType
-expressionType (TELit lit) = TCon $ literalType lit
+expressionType (TELit lit) = TyCon $ literalType lit
 expressionType (TEVar (Typed ty _)) = ty
 expressionType (TEIf if') = expressionType (tIfThen if') -- Checker ensure "then" and "else" types match
 expressionType (TELet let') = expressionType (tLetExpression let')
-expressionType (TEApp app) = TCon $ tAppReturnType app
+expressionType (TEApp app) = TyCon $ tAppReturnType app
