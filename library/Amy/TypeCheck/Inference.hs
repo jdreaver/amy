@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 module Amy.TypeCheck.Inference
   ( runInference
@@ -12,6 +13,7 @@ import Control.Monad.State.Strict
 import Data.Foldable (foldl')
 import Data.List (delete, find, nub)
 import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
@@ -91,28 +93,48 @@ newtype Inference a = Inference (ReaderT (Set TVar) (StateT Int (Except TypeErro
 -- TODO: Separate monads for constraint collection and unification.
 
 -- | Generate a fresh type variable
-freshTypeVariable :: Inference (Type PrimitiveType)
+freshTypeVariable :: Inference TVar
 freshTypeVariable = do
   modify' (+ 1)
-  TyVar . TVar . pack . (letters !!) <$> get
+  TVar . (letters !!) <$> get
 
-letters :: [String]
-letters = [1..] >>= flip replicateM ['a'..'z']
+letters :: [Text]
+letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
 
 instantiateScheme :: Scheme PrimitiveType -> Inference (Type PrimitiveType)
 instantiateScheme (Forall as t) = do
-  as' <- mapM (const freshTypeVariable) as
+  as' <- traverse (fmap TyVar . const freshTypeVariable) as
   let s = Subst $ Map.fromList $ zip as as'
   return $ substituteType s t
 
 -- | Add a monomorphic variable to the monomorphic set and run a computation
-extendMonomorphicSet :: TVar -> Inference a -> Inference a
-extendMonomorphicSet x = local (Set.insert x)
+extendMonomorphicSet :: [TVar] -> Inference a -> Inference a
+extendMonomorphicSet xs = local (Set.union (Set.fromList xs))
+
+-- | Canonicalize and return the polymorphic type.
+closeOver :: Type PrimitiveType -> Scheme PrimitiveType
+closeOver = normalize . generalize Set.empty
 
 generalize :: Set.Set TVar -> Type PrimitiveType -> Scheme PrimitiveType
 generalize free t  = Forall as t
  where
   as = Set.toList $ freeTypeVariables t `Set.difference` free
+
+normalize :: Scheme PrimitiveType -> Scheme PrimitiveType
+normalize (Forall _ body) = Forall (map snd ord) (normtype body)
+ where
+  ord = zip (nub $ fv body) (map TVar letters)
+
+  fv (TyVar a) = [a]
+  fv (TyArr a b) = fv a ++ fv b
+  fv (TyCon _) = []
+
+  normtype (TyArr a b) = TyArr (normtype a) (normtype b)
+  normtype (TyCon a) = TyCon a
+  normtype (TyVar a) =
+    case Prelude.lookup a ord of
+      Just x -> TyVar x
+      Nothing -> error "type variable not in signature"
 
 -- TODO: Don't use Except, use Validation
 
@@ -177,19 +199,27 @@ inferType ex = do
   subst <- solve cs --(cs ++ cs')
   return (subst, substituteType subst t)
 
--- TODO: Multiple arguments
 inferBinding :: RBinding -> Inference (Assumptions, [Constraint], Type PrimitiveType)
 inferBinding (RBinding _ _ args body) = do
-  (asBody, consBody, tyBody) <- inferExpr' body
-  tyVar <- freshTypeVariable
+  -- Instantiate a fresh type variable for every argument
+  argsAndTyVars <- traverse (\arg -> (arg,) <$> freshTypeVariable) args
+
+  -- Infer the type of the expression after extending the monomorphic set with
+  -- the type variables for the arguments.
   let
-    argNames = locatedValue <$> args
-    argConstraints =
-      concatMap (\name' -> (\t -> EqConstraint t tyVar) <$> lookupAssumption name' asBody) argNames
+    tyVars = snd <$> argsAndTyVars
+  (asBody, consBody, tyBody) <- extendMonomorphicSet tyVars $ inferExpr' body
+
+  -- Create equality constraints for each argument by looking up the argument
+  -- in the assumptions from the body.
+  let
+    argConstraint (Located _ argName, argTyVar) =
+      (\t -> EqConstraint t (TyVar argTyVar)) <$> lookupAssumption argName asBody
+    argConstraints = concatMap argConstraint argsAndTyVars
   pure
-    ( foldl' removeAssumption asBody argNames
-    , consBody ++ argConstraints -- [EqConst t' tv | t' <- As.lookup x as]
-    , tyVar `TyArr` tyBody
+    ( foldl' removeAssumption asBody (locatedValue <$> args)
+    , consBody ++ argConstraints
+    , typeFromNonEmpty (NE.fromList $ (TyVar <$> tyVars) ++ [tyBody])
     )
 
 -- | Collect constraints for an expression.
@@ -199,7 +229,7 @@ inferExpr' (RELit (Located _ (LiteralDouble _))) = pure (emptyAssumptions, [], T
 inferExpr' (RELit (Located _ (LiteralBool _))) = pure (emptyAssumptions, [], TyCon BoolType)
 inferExpr' (REVar (Located _ name)) = do
   -- For a Var, generate a fresh type variable and add it to the assumption set
-  tyVar <- freshTypeVariable
+  tyVar <- TyVar <$> freshTypeVariable
   pure (singletonAssumption name tyVar, [], tyVar)
 inferExpr' (REIf (RIf pred' then' else')) = do
   -- If statements are simple. Merge all the assumptions/constraints from each
@@ -213,32 +243,45 @@ inferExpr' (REIf (RIf pred' then' else')) = do
     , consPred ++ consThen ++ consElse ++ [EqConstraint tyPred (TyCon BoolType), EqConstraint tyThen tyElse]
     , tyThen
     )
--- TODO: Multiple arguments and multiple bindings
-inferExpr' (RELet (RLet [RBinding (Located _ name) _ [] body] expression)) = do
-  (asBody, consBody, tyBody) <- inferExpr' body
+inferExpr' (RELet (RLet bindings expression)) = do
+  bindingsInference <- traverse inferBinding bindings
   (asExpression, consExpression, tyExpression) <- inferExpr' expression
   monomorphicSet <- ask
   let
-    newConstraints =
-      (\t -> ImplicitInstanceConstraint t monomorphicSet tyBody)
-      <$> lookupAssumption name asExpression
+    bindingNames = locatedValue . rBindingName <$> bindings
+    bindingAssumptions = (\(as, _, _) -> as) <$> bindingsInference
+    bindingConstraints = (\(_, cs, _) -> cs) <$> bindingsInference
+    bindingTypes = (\(_, _, t) -> t) <$> bindingsInference
+
+    bindingConstraint (bindingName, bindingType) =
+      (\t -> ImplicitInstanceConstraint t monomorphicSet bindingType)
+      <$> lookupAssumption bindingName asExpression
+    newConstraints = concatMap bindingConstraint (zip bindingNames bindingTypes)
+
+    -- Remove binding names from expression assumption
+    expressionAssumption = foldl' removeAssumption asExpression bindingNames
   pure
-    ( asBody `mergeAssumptions` asExpression `removeAssumption` name
-    , consBody ++ consExpression ++ newConstraints
+    ( foldl' mergeAssumptions expressionAssumption bindingAssumptions
+    , concat bindingConstraints ++ consExpression ++ newConstraints
     , tyExpression
     )
--- TODO: Multiple arguments
-inferExpr' (REApp (RApp func (arg :| []))) = do
+inferExpr' (REApp (RApp func args)) = do
   -- For an App, we first collect constraints for the function and the
   -- arguments. Then, we instantiate a fresh type variable. The assumption sets
   -- and constraint sets are merged, and the additional constraint that the
-  -- function has a type of @tyArg -> tyVar@ is added.
+  -- function is a TyApp from the args to the fresh type variable is added.
   (asFunc, consFunc, tyFunc) <- inferExpr' func
-  (asArg, consArg, tyArg) <- inferExpr' arg
-  tyVar <- freshTypeVariable
+  argsInference <- traverse inferExpr' args
+  let
+    argAssumptions = (\(as, _, _) -> as) <$> argsInference
+    argConstraints = (\(_, cs, _) -> cs) <$> argsInference
+    argTypes = (\(_, _, t) -> t) <$> argsInference
+  tyVar <- TyVar <$> freshTypeVariable
+  let
+    newConstraint = EqConstraint tyFunc (typeFromNonEmpty $ NE.fromList (NE.toList argTypes ++ [tyVar]))
   pure
-    ( asFunc `mergeAssumptions` asArg
-    , consFunc ++ consArg ++ [EqConstraint tyFunc (tyArg `TyArr` tyVar)]
+    ( foldl' mergeAssumptions asFunc argAssumptions
+    , consFunc ++ concat argConstraints ++ [newConstraint]
     , tyVar
     )
 
@@ -326,7 +369,36 @@ e1 :: RExpr
 e1 =
   RELet $
   RLet
-  [RBinding x Nothing [] (RELit (l $ LiteralBool True))]
+  [RBinding x Nothing [y] (RELit (l $ LiteralBool True))]
   (REApp (RApp (REVar x) (RELit (l $ LiteralInt 1) :| [])))
  where
-  x = l $ ValueName "x" (NameIntId 1)
+  y = l $ ValueName "y" (NameIntId 1)
+  x = l $ ValueName "x" (NameIntId 2)
+
+e2 :: RExpr
+e2 =
+  RELet $
+  RLet
+  [RBinding x Nothing [y, z] (RELit (l $ LiteralBool True))]
+  --(REVar x)
+  (REApp (RApp (REVar x) (RELit (l $ LiteralInt 1) :| [])))
+ where
+  y = l $ ValueName "y" (NameIntId 1)
+  z = l $ ValueName "z" (NameIntId 2)
+  x = l $ ValueName "x" (NameIntId 3)
+
+e3 :: RExpr
+e3 =
+  RELet $
+  RLet
+  [ RBinding x Nothing [y, z] (RELit (l $ LiteralBool True))
+  , RBinding a Nothing [] (RELit (l $ LiteralBool False))
+  ]
+  --(REVar x)
+  --(REApp (RApp (REVar x) (RELit (l $ LiteralInt 1) :| [])))
+  (REApp (RApp (REVar x) ((REVar a) :| [RELit (l $ LiteralBool False)])))
+ where
+  y = l $ ValueName "y" (NameIntId 1)
+  z = l $ ValueName "z" (NameIntId 2)
+  x = l $ ValueName "x" (NameIntId 3)
+  a = l $ ValueName "a" (NameIntId 3)
