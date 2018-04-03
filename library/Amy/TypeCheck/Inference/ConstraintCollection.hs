@@ -9,11 +9,9 @@ module Amy.TypeCheck.Inference.ConstraintCollection
   , TypeError(..)
   , freshTypeVariable
   , letters
-  , inferExpr
+  , inferBindings
+  , inferBinding
   , Constraint(..)
-    -- TODO: Do we need to export these?
-  , Assumptions
-  , assumptionKeys
   ) where
 
 import Control.Monad.Except
@@ -77,6 +75,17 @@ extendMonomorphicSet xs = local (Set.union (Set.fromList xs))
 --
 -- Inference Functions
 --
+
+inferBindings :: [RBinding] -> Inference [([Constraint], Type PrimitiveType)]
+inferBindings bindings = do
+  bindingsInference <- traverse inferBinding bindings
+  let
+    bindingNames = locatedValue . rBindingName <$> bindings
+    allAssumptions = concatAssumptions $ fmap (\(as, _, _) -> as) bindingsInference
+    unbounds = Set.fromList (assumptionKeys allAssumptions) `Set.difference` Set.fromList bindingNames
+  unless (Set.null unbounds) $
+    throwError $ UnboundVariable $ Set.findMin unbounds
+  pure $ (\(_, cs, t) -> (cs, t)) <$> bindingsInference
 
 inferBinding :: RBinding -> Inference (Assumptions, [Constraint], Type PrimitiveType)
 inferBinding (RBinding _ _ args body) = do

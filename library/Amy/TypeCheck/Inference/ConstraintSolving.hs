@@ -25,15 +25,15 @@ import Amy.TypeCheck.Inference.ConstraintCollection
 
 -- | Canonicalize and return the polymorphic type.
 closeOver :: Type PrimitiveType -> Scheme PrimitiveType
-closeOver = normalize . generalize Set.empty
+closeOver = normalize
 
 generalize :: Set.Set TVar -> Type PrimitiveType -> Scheme PrimitiveType
 generalize free t  = Forall as t
  where
   as = Set.toList $ freeTypeVariables t `Set.difference` free
 
-normalize :: Scheme PrimitiveType -> Scheme PrimitiveType
-normalize (Forall _ body) = Forall (map snd ord) (normtype body)
+normalize :: Type PrimitiveType -> Scheme PrimitiveType
+normalize body = Forall (map snd ord) (normtype body)
  where
   ord = zip (nub $ fv body) (map TVar letters)
 
