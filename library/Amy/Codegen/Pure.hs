@@ -69,8 +69,13 @@ textToShortBS = BSS.toShort . encodeUtf8
 llvmType :: T.Type PrimitiveType -> LLVM.Type
 llvmType = go . typeToNonEmpty
  where
-  go (TyCon prim :| []) = llvmPrimitiveType prim
-  go ts =
+  go (ty :| []) =
+    case ty of
+      TyCon prim -> llvmPrimitiveType prim
+      TyVar _ -> error "Can't handle polymorphic type arguments yet"
+      t@TyArr{} -> mkFunctionType (t :| [])
+  go ts = mkFunctionType ts
+  mkFunctionType ts =
     PointerType
       FunctionType
       { resultType = llvmType $ NE.last ts
