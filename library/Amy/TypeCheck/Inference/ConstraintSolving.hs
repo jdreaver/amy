@@ -67,7 +67,7 @@ nextSolvable xs =
   fromMaybe (error "Failed in nextSolvable") $ find solvable (chooseOne xs)
  where
   chooseOne :: [Constraint] -> [(Constraint, [Constraint])]
-  chooseOne xs' = [(x, ys) | x <- xs', let ys = delete x xs]
+  chooseOne xs' = (\x -> (x, delete x xs)) <$> xs'
   solvable (EqConstraint{}, _) = True
   solvable (ExplicitInstanceConstraint{}, _) = True
   solvable (ImplicitInstanceConstraint _ ms t2, cs) =
