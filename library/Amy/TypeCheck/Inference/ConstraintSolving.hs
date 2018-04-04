@@ -71,7 +71,7 @@ nextSolvable xs =
 
 solve' :: (Constraint, [Constraint]) -> Inference Subst
 solve' (EqConstraint t1 t2, cs) = do
-  su1 <- unifies t1 t2
+  su1 <- unify t1 t2
   su2 <- solve (substituteConstraint su1 <$> cs)
   return (su2 `composeSubst` su1)
 solve' (ImplicitInstanceConstraint t1 ms t2, cs) =
@@ -80,17 +80,17 @@ solve' (ExplicitInstanceConstraint t s, cs) = do
   s' <- instantiateScheme s
   solve (EqConstraint t s' : cs)
 
-unifies :: Type PrimitiveType -> Type PrimitiveType -> Inference Subst
-unifies t1 t2 | t1 == t2 = pure emptySubst
-unifies (TyVar v) t = v `bind` t
-unifies t (TyVar v) = v `bind` t
-unifies (TyArr t1 t2) (TyArr t3 t4) = unifyMany [t1, t2] [t3, t4]
-unifies t1 t2 = throwError $ UnificationFail t1 t2
+unify :: Type PrimitiveType -> Type PrimitiveType -> Inference Subst
+unify t1 t2 | t1 == t2 = pure emptySubst
+unify (TyVar v) t = v `bind` t
+unify t (TyVar v) = v `bind` t
+unify (TyArr t1 t2) (TyArr t3 t4) = unifyMany [t1, t2] [t3, t4]
+unify t1 t2 = throwError $ UnificationFail t1 t2
 
 unifyMany :: [Type PrimitiveType] -> [Type PrimitiveType] -> Inference Subst
 unifyMany [] [] = return emptySubst
 unifyMany (t1 : ts1) (t2 : ts2) = do
-  su1 <- unifies t1 t2
+  su1 <- unify t1 t2
   su2 <- unifyMany (substituteType su1 <$> ts1) (substituteType su1 <$> ts2)
   return (su2 `composeSubst` su1)
 unifyMany t1 t2 = throwError $ UnificationMismatch t1 t2

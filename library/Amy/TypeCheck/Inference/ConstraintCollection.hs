@@ -69,8 +69,8 @@ letters :: [Text]
 letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
 
 -- | Add a monomorphic variable to the monomorphic set and run a computation
-extendMonomorphicSet :: [TVar] -> Inference a -> Inference a
-extendMonomorphicSet xs = local (Set.union (Set.fromList xs))
+withAddedMonomorphicVars :: [TVar] -> Inference a -> Inference a
+withAddedMonomorphicVars xs = local (Set.union (Set.fromList xs))
 
 --
 -- Inference Functions
@@ -96,7 +96,7 @@ inferBinding (RBinding _ _ args body) = do
   -- the type variables for the arguments.
   let
     tyVars = snd <$> argsAndTyVars
-  (asBody, consBody, tyBody) <- extendMonomorphicSet tyVars $ inferExpr body
+  (asBody, consBody, tyBody) <- withAddedMonomorphicVars tyVars $ inferExpr body
 
   -- Create equality constraints for each argument by looking up the argument
   -- in the assumptions from the body.
@@ -104,7 +104,10 @@ inferBinding (RBinding _ _ args body) = do
     argConstraint (Located _ argName, argTyVar) =
       (\t -> EqConstraint t (TyVar argTyVar)) <$> lookupAssumption argName asBody
     argConstraints = concatMap argConstraint argsAndTyVars
+
   pure
+    -- Remove the arguments from the assumption set because they are now
+    -- represented in the constraints with fresh type variables.
     ( foldl' removeAssumption asBody (locatedValue <$> args)
     , consBody ++ argConstraints
     , typeFromNonEmpty (NE.fromList $ (TyVar <$> tyVars) ++ [tyBody])
