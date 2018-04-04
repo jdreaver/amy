@@ -4,7 +4,7 @@
 
 module Amy.TypeCheck.Inference.ConstraintSolving
   ( solve
-  , closeOver
+  , normalize
 
   -- * Subst
   , Subst
@@ -22,10 +22,6 @@ import qualified Data.Set as Set
 import Amy.Prim
 import Amy.Type
 import Amy.TypeCheck.Inference.ConstraintCollection
-
--- | Canonicalize and return the polymorphic type.
-closeOver :: Type PrimitiveType -> Scheme PrimitiveType
-closeOver = normalize
 
 generalize :: Set.Set TVar -> Type PrimitiveType -> Scheme PrimitiveType
 generalize free t  = Forall as t

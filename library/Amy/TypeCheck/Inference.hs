@@ -24,7 +24,7 @@ inferType b = do
   (cs, t) <- head <$> inferBindings [b]
   --let cs' = [ExpInstConst t s | (x, s) <- Env.toList env, t <- As.lookup x as]
   subst <- solve cs --(cs ++ cs')
-  pure (subst, closeOver $ substituteType subst t)
+  pure (subst, normalize $ substituteType subst t)
 
 --
 -- Misc
