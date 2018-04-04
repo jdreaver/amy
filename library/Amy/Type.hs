@@ -7,6 +7,8 @@ module Amy.Type
   , TVar(..)
   , typeFromNonEmpty
   , typeToNonEmpty
+  , factorFunctionTypeArguments
+  , FactorFunctionTypeArgumentsResult(..)
   , Typed(..)
   , Scheme(..)
   ) where
@@ -44,6 +46,28 @@ typeToNonEmpty = go
   go ty@(TyCon _) = ty :| []
   go ty@(TyVar _) = ty :| []
   go (t1 `TyArr` t2) = NE.cons t1 (typeToNonEmpty t2)
+
+-- | Assuming a given 'Type' is being used as a function, take a list of
+-- arguments to that function and factor the type into argument types and the
+-- return type. Returns 'TooManyArguments' if there are too many arguments to
+-- the function type.
+factorFunctionTypeArguments
+  :: [a] -- ^ Arguments
+  -> Type ty -- ^ Function type
+  -> FactorFunctionTypeArgumentsResult a ty
+factorFunctionTypeArguments args ty =
+  let
+    typeNE = typeToNonEmpty ty
+    (argTypeList, returnTypeList) = NE.splitAt (length args) typeNE
+    argTypes = zip args argTypeList
+  in
+    case NE.nonEmpty returnTypeList of
+      Nothing -> TooManyArguments (length typeNE) (length args)
+      Just t -> SuccessfullyFactored argTypes (typeFromNonEmpty t)
+
+data FactorFunctionTypeArgumentsResult a ty
+  = SuccessfullyFactored [(a, Type ty)] (Type ty)
+  | TooManyArguments !Int !Int
 
 -- | A value with a type.
 data Typed ty a

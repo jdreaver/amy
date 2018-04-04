@@ -72,20 +72,14 @@ typeCheckBinding binding = do
   bindingType <- maybe (throwError [BindingLacksTypeSignature binding]) pure $ rBindingType binding
 
   -- Sort out which types are for arguments and what the return type is
-  let
-    typeNE = typeToNonEmpty bindingType
-    args = rBindingArgs binding
-    (argTypes, returnTypeList) = NE.splitAt (length args) typeNE
-
-  -- Make sure there aren't too many arguments
-  returnType <-
-    case NE.nonEmpty returnTypeList of
-      Nothing -> throwError []-- TODO: Too many arguments to function
-      Just returnTypeNE -> pure . fmap locatedValue . typeFromNonEmpty $ returnTypeNE
+  (argsAndTypes, returnType) <-
+    case factorFunctionTypeArguments (rBindingArgs binding) bindingType of
+      SuccessfullyFactored args' ret -> pure (args', locatedValue <$> ret)
+      TooManyArguments _ _ -> throwError [] -- TODO: Too many arguments to function
 
   -- Set types for arguments
   args' <-
-    for (zip args argTypes) $ \(Located _ argName, argType) -> do
+    for argsAndTypes $ \(Located _ argName, argType) -> do
       setValueType (locatedValue <$> argType) argName
       pure $ Typed (locatedValue <$> argType) argName
 
