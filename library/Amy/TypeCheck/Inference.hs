@@ -5,9 +5,7 @@ module Amy.TypeCheck.Inference
   , inferType
   ) where
 
-import Control.Monad.Except
 import Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.Set as Set
 
 import Amy.Literal
 import Amy.Names
