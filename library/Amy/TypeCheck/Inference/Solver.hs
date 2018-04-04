@@ -2,7 +2,7 @@
 
 -- | Solve collected constraints
 
-module Amy.TypeCheck.Inference.ConstraintSolving
+module Amy.TypeCheck.Inference.Solver
   ( solve
   , normalize
 
@@ -21,7 +21,7 @@ import qualified Data.Set as Set
 
 import Amy.Prim
 import Amy.Type
-import Amy.TypeCheck.Inference.ConstraintCollection
+import Amy.TypeCheck.Inference.Constraints
 
 generalize :: Set.Set TVar -> Type PrimitiveType -> Scheme PrimitiveType
 generalize free t  = Forall as t

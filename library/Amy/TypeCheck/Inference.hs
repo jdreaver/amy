@@ -13,8 +13,8 @@ import Amy.Prim
 import Amy.Renamer.AST
 import Amy.Syntax.Located
 import Amy.Type
-import Amy.TypeCheck.Inference.ConstraintCollection
-import Amy.TypeCheck.Inference.ConstraintSolving
+import Amy.TypeCheck.Inference.Constraints
+import Amy.TypeCheck.Inference.Solver
 
 -- TODO: Split this function up between inference and constraint solving monads
 inferType :: RBinding -> Inference (Subst, Scheme PrimitiveType)

@@ -3,7 +3,7 @@
 
 -- | Collect constraints from the AST
 
-module Amy.TypeCheck.Inference.ConstraintCollection
+module Amy.TypeCheck.Inference.Constraints
   ( Inference
   , runInference
   , TypeError(..)
