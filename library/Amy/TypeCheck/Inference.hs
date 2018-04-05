@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Type inference module. NOTE: This is currently unused.
+
 module Amy.TypeCheck.Inference
   ( runInference
   , inferType
