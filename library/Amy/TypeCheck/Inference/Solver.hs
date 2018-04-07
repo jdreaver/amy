@@ -4,7 +4,6 @@
 
 module Amy.TypeCheck.Inference.Solver
   ( solve
-  , normalize
 
   -- * Subst
   , Subst
@@ -12,7 +11,7 @@ module Amy.TypeCheck.Inference.Solver
   ) where
 
 import Control.Monad.Except
-import Data.List (delete, find, nub)
+import Data.List (delete, find)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
@@ -23,27 +22,17 @@ import Amy.Prim
 import Amy.Type
 import Amy.TypeCheck.Inference.Constraints
 
+-- | Generalizing a type entails the quantification of that type with all of
+-- the free variables of the type less the free variables in the environment.
+-- This is like finding the type variables that should be "bound" by the
+-- quantification. This is also called finding the "closure" of a type.
 generalize :: Set.Set TVar -> Type PrimitiveType -> Scheme PrimitiveType
 generalize free t  = Forall as t
  where
   as = Set.toList $ freeTypeVariables t `Set.difference` free
 
-normalize :: Type PrimitiveType -> Scheme PrimitiveType
-normalize body = Forall (map snd ord) (normtype body)
- where
-  ord = zip (nub $ fv body) (map TVar letters)
-
-  fv (TyVar a) = [a]
-  fv (TyArr a b) = fv a ++ fv b
-  fv (TyCon _) = []
-
-  normtype (TyArr a b) = TyArr (normtype a) (normtype b)
-  normtype (TyCon a) = TyCon a
-  normtype (TyVar a) =
-    case Prelude.lookup a ord of
-      Just x -> TyVar x
-      Nothing -> error "type variable not in signature"
-
+-- | An instantiation of a type scheme is obtained by the replacement of the
+-- quantified type variables by fresh type variables.
 instantiateScheme :: Scheme PrimitiveType -> Inference (Type PrimitiveType)
 instantiateScheme (Forall as t) = do
   as' <- traverse (fmap TyVar . const freshTypeVariable) as
@@ -84,16 +73,11 @@ unify :: Type PrimitiveType -> Type PrimitiveType -> Inference Subst
 unify t1 t2 | t1 == t2 = pure emptySubst
 unify (TyVar v) t = v `bind` t
 unify t (TyVar v) = v `bind` t
-unify (TyArr t1 t2) (TyArr t3 t4) = unifyMany [t1, t2] [t3, t4]
+unify (TyArr t1 t2) (TyArr t3 t4) = do
+  su1 <- unify t1 t3
+  su2 <- unify (substituteType su1 t2) (substituteType su1 t4)
+  pure (su2 `composeSubst` su1)
 unify t1 t2 = throwError $ UnificationFail t1 t2
-
-unifyMany :: [Type PrimitiveType] -> [Type PrimitiveType] -> Inference Subst
-unifyMany [] [] = return emptySubst
-unifyMany (t1 : ts1) (t2 : ts2) = do
-  su1 <- unify t1 t2
-  su2 <- unifyMany (substituteType su1 <$> ts1) (substituteType su1 <$> ts2)
-  return (su2 `composeSubst` su1)
-unifyMany t1 t2 = throwError $ UnificationMismatch t1 t2
 
 bind ::  TVar -> Type PrimitiveType -> Inference Subst
 bind a t

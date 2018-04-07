@@ -7,6 +7,7 @@ module Amy.TypeCheck.Inference
   , inferType
   ) where
 
+import Data.List (nub)
 import Data.List.NonEmpty (NonEmpty(..))
 
 import Amy.Literal
@@ -25,6 +26,22 @@ inferType b = do
   --let cs' = [ExpInstConst t s | (x, s) <- Env.toList env, t <- As.lookup x as]
   subst <- solve cs --(cs ++ cs')
   pure (subst, normalize $ substituteType subst t)
+
+normalize :: Type PrimitiveType -> Scheme PrimitiveType
+normalize body = Forall (map snd ord) (normtype body)
+ where
+  ord = zip (nub $ fv body) (map TVar letters)
+
+  fv (TyVar a) = [a]
+  fv (TyArr a b) = fv a ++ fv b
+  fv (TyCon _) = []
+
+  normtype (TyArr a b) = TyArr (normtype a) (normtype b)
+  normtype (TyCon a) = TyCon a
+  normtype (TyVar a) =
+    case Prelude.lookup a ord of
+      Just x -> TyVar x
+      Nothing -> error "type variable not in signature"
 
 --
 -- Misc

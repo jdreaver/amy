@@ -55,7 +55,6 @@ data TypeError
   | InfiniteType TVar !(Type PrimitiveType)
   | UnboundVariable ValueName
   | Ambigious [Constraint]
-  | UnificationMismatch [Type PrimitiveType] [Type PrimitiveType]
   deriving (Show, Eq)
 
 -- | Generate a fresh type variable
@@ -157,13 +156,16 @@ inferExpr (RELet (RLet bindings expression)) = do
     bindingConstraints = inferenceResultConstraints <$> bindingResults
     bindingTypes = inferenceResultType <$> bindingResults
 
-    bindingConstraint (bindingName, bindingType) =
-      (\t -> ImplicitInstanceConstraint t monomorphicSet bindingType)
-      <$> lookupAssumption bindingName expressionAssumptions
-    newConstraints = concatMap bindingConstraint (zip bindingNames bindingTypes)
-
     -- Remove binding names from expression assumption
     expressionAssumption = foldl' removeAssumption expressionAssumptions bindingNames
+
+    -- For each binding, add an implicit instance constraint associating the
+    -- binding with the inferred result type, along with the current
+    -- monomorphic set.
+    newConstraints = flip concatMap (zip bindingNames bindingTypes) $
+      \(bindingName, bindingType) ->
+        (\t -> ImplicitInstanceConstraint t monomorphicSet bindingType)
+        <$> lookupAssumption bindingName expressionAssumptions
   pure
     InferenceResult
     { inferenceResultAssumptions = concatAssumptions bindingAssumptions `mergeAssumptions` expressionAssumption
@@ -200,8 +202,12 @@ inferExpr (REApp (RApp func args)) = do
 data Constraint
   = EqConstraint !(Type PrimitiveType) !(Type PrimitiveType)
     -- ^ Indicates types should be unified
-  | ExplicitInstanceConstraint !(Type PrimitiveType) !(Scheme PrimitiveType)
   | ImplicitInstanceConstraint !(Type PrimitiveType) !(Set TVar) !(Type PrimitiveType)
+    -- ^ The first type should be an explicit instance of the generalized
+    -- scheme from the second type. The monomorphized type variables are
+    -- carried around to compute this generalized type.
+  | ExplicitInstanceConstraint !(Type PrimitiveType) !(Scheme PrimitiveType)
+    -- ^ The type must be a generic instance of the given scheme
   deriving (Show, Eq)
 
 --
