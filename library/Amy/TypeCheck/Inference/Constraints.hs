@@ -19,6 +19,8 @@ import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Foldable (foldl')
 import qualified Data.List.NonEmpty as NE
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text, pack)
@@ -211,29 +213,29 @@ data Constraint
 -- expression, and assumptions are bubbled up the AST during bottom-up
 -- constraint collection. There can be more than on assumption for a given
 -- variable.
-newtype AssumptionSet = AssumptionSet { unAssumptionSet :: [(ValueName, Type PrimitiveType)] }
+newtype AssumptionSet = AssumptionSet { unAssumptionSet :: Map ValueName [Type PrimitiveType] }
   deriving (Show, Eq)
 
 emptyAssumptionSet :: AssumptionSet
-emptyAssumptionSet = AssumptionSet []
+emptyAssumptionSet = AssumptionSet Map.empty
 
 -- | Remove an assumption from the assumption set. This is done when we
 -- encounter a binding for a variable, like a lambda or let expression
 -- variable. The assumption gets "converted" into a constraint.
 removeAssumption :: AssumptionSet -> ValueName -> AssumptionSet
-removeAssumption (AssumptionSet xs) name = AssumptionSet (filter (\(n, _) -> n /= name) xs)
+removeAssumption (AssumptionSet xs) name = AssumptionSet (Map.delete name xs)
 
 lookupAssumption :: ValueName -> AssumptionSet -> [Type PrimitiveType]
-lookupAssumption name (AssumptionSet xs) = map snd (filter (\(n, _) -> n == name) xs)
+lookupAssumption name (AssumptionSet xs) = Map.findWithDefault [] name xs
 
 concatAssumptions :: [AssumptionSet] -> AssumptionSet
 concatAssumptions = foldl' mergeAssumptions emptyAssumptionSet
 
 mergeAssumptions :: AssumptionSet -> AssumptionSet -> AssumptionSet
-mergeAssumptions (AssumptionSet a) (AssumptionSet b) = AssumptionSet (a ++ b)
+mergeAssumptions (AssumptionSet a) (AssumptionSet b) = AssumptionSet (Map.unionWith (++) a b)
 
 singletonAssumption :: ValueName -> Type PrimitiveType -> AssumptionSet
-singletonAssumption x y = AssumptionSet [(x, y)]
+singletonAssumption x y = AssumptionSet (Map.singleton x [y])
 
 assumptionKeys :: AssumptionSet -> [ValueName]
-assumptionKeys (AssumptionSet xs) = map fst xs
+assumptionKeys (AssumptionSet xs) = Map.keys xs
