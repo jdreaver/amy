@@ -72,6 +72,13 @@ letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
 withAddedMonomorphicVars :: [TVar] -> Inference a -> Inference a
 withAddedMonomorphicVars xs = local (Set.union (Set.fromList xs))
 
+data InferenceResult
+  = InferenceResult
+  { inferenceResultAssumptions :: !AssumptionSet
+  , inferenceResultConstraints :: ![Constraint]
+  , inferenceResultType :: !(Type PrimitiveType)
+  } deriving (Show, Eq)
+
 --
 -- Inference Functions
 --
@@ -81,13 +88,13 @@ inferBindings bindings = do
   bindingsInference <- traverse inferBinding bindings
   let
     bindingNames = locatedValue . rBindingName <$> bindings
-    allAssumptions = concatAssumptions $ fmap (\(as, _, _) -> as) bindingsInference
+    allAssumptions = concatAssumptions $ inferenceResultAssumptions <$> bindingsInference
     unbounds = Set.fromList (assumptionKeys allAssumptions) `Set.difference` Set.fromList bindingNames
   unless (Set.null unbounds) $
     throwError $ UnboundVariable $ Set.findMin unbounds
-  pure $ (\(_, cs, t) -> (cs, t)) <$> bindingsInference
+  pure $ (\(InferenceResult _ cs t) -> (cs, t)) <$> bindingsInference
 
-inferBinding :: RBinding -> Inference (AssumptionSet, [Constraint], Type PrimitiveType)
+inferBinding :: RBinding -> Inference InferenceResult
 inferBinding (RBinding _ _ args body) = do
   -- Instantiate a fresh type variable for every argument
   argsAndTyVars <- traverse (\arg -> (arg,) <$> freshTypeVariable) args
@@ -96,7 +103,7 @@ inferBinding (RBinding _ _ args body) = do
   -- the type variables for the arguments.
   let
     tyVars = snd <$> argsAndTyVars
-  (asBody, consBody, tyBody) <- withAddedMonomorphicVars tyVars $ inferExpr body
+  (InferenceResult asBody consBody tyBody) <- withAddedMonomorphicVars tyVars $ inferExpr body
 
   -- Create equality constraints for each argument by looking up the argument
   -- in the assumptions from the body.
@@ -106,75 +113,81 @@ inferBinding (RBinding _ _ args body) = do
     argConstraints = concatMap argConstraint argsAndTyVars
 
   pure
-    -- Remove the arguments from the assumption set because they are now
-    -- represented in the constraints with fresh type variables.
-    ( foldl' removeAssumption asBody (locatedValue <$> args)
-    , consBody ++ argConstraints
-    , typeFromNonEmpty (NE.fromList $ (TyVar <$> tyVars) ++ [tyBody])
-    )
+    InferenceResult
+      -- Remove the arguments from the assumption set because they are now
+      -- represented in the constraints with fresh type variables.
+    { inferenceResultAssumptions = foldl' removeAssumption asBody (locatedValue <$> args)
+    , inferenceResultConstraints = consBody ++ argConstraints
+    , inferenceResultType = typeFromNonEmpty (NE.fromList $ (TyVar <$> tyVars) ++ [tyBody])
+    }
 
 -- | Collect constraints for an expression.
-inferExpr :: RExpr -> Inference (AssumptionSet, [Constraint], Type PrimitiveType)
-inferExpr (RELit (Located _ (LiteralInt _))) = pure (emptyAssumptionSet, [], TyCon IntType)
-inferExpr (RELit (Located _ (LiteralDouble _))) = pure (emptyAssumptionSet, [], TyCon DoubleType)
-inferExpr (RELit (Located _ (LiteralBool _))) = pure (emptyAssumptionSet, [], TyCon BoolType)
+inferExpr :: RExpr -> Inference InferenceResult
+inferExpr (RELit (Located _ (LiteralInt _))) = pure $ InferenceResult emptyAssumptionSet [] (TyCon IntType)
+inferExpr (RELit (Located _ (LiteralDouble _))) = pure $ InferenceResult emptyAssumptionSet [] (TyCon DoubleType)
+inferExpr (RELit (Located _ (LiteralBool _))) = pure $ InferenceResult emptyAssumptionSet [] (TyCon BoolType)
 inferExpr (REVar (Located _ name)) = do
   -- For a Var, generate a fresh type variable and add it to the assumption set
   tyVar <- TyVar <$> freshTypeVariable
-  pure (singletonAssumption name tyVar, [], tyVar)
+  pure $ InferenceResult (singletonAssumption name tyVar) [] tyVar
 inferExpr (REIf (RIf pred' then' else')) = do
   -- If statements are simple. Merge all the assumptions/constraints from each
   -- sub expression. Then add a constraint saying the predicate must be a Bool,
   -- and that the then and else branches have equal types.
-  (asPred, consPred, tyPred) <- inferExpr pred'
-  (asThen, consThen, tyThen) <- inferExpr then'
-  (asElse, consElse, tyElse) <- inferExpr else'
+  (InferenceResult predAssumptions predConstraints predTy) <- inferExpr pred'
+  (InferenceResult thenAssumptions thenConstraints thenTy) <- inferExpr then'
+  (InferenceResult elseAssumptions elseConstraints elseTy) <- inferExpr else'
   pure
-    ( asPred `mergeAssumptions` asThen `mergeAssumptions` asElse
-    , consPred ++ consThen ++ consElse ++ [EqConstraint tyPred (TyCon BoolType), EqConstraint tyThen tyElse]
-    , tyThen
-    )
+    InferenceResult
+    { inferenceResultAssumptions = predAssumptions `mergeAssumptions` thenAssumptions `mergeAssumptions` elseAssumptions
+    , inferenceResultConstraints =
+        predConstraints ++ thenConstraints ++ elseConstraints ++
+        [EqConstraint predTy (TyCon BoolType), EqConstraint thenTy elseTy]
+    , inferenceResultType = thenTy
+    }
 inferExpr (RELet (RLet bindings expression)) = do
-  bindingsInference <- traverse inferBinding bindings
-  (asExpression, consExpression, tyExpression) <- inferExpr expression
+  bindingResults <- traverse inferBinding bindings
+  (InferenceResult expressionAssumptions expressionConstraints expressionTy) <- inferExpr expression
   monomorphicSet <- ask
   let
     bindingNames = locatedValue . rBindingName <$> bindings
-    bindingAssumptions = (\(as, _, _) -> as) <$> bindingsInference
-    bindingConstraints = (\(_, cs, _) -> cs) <$> bindingsInference
-    bindingTypes = (\(_, _, t) -> t) <$> bindingsInference
+    bindingAssumptions = inferenceResultAssumptions <$> bindingResults
+    bindingConstraints = inferenceResultConstraints <$> bindingResults
+    bindingTypes = inferenceResultType <$> bindingResults
 
     bindingConstraint (bindingName, bindingType) =
       (\t -> ImplicitInstanceConstraint t monomorphicSet bindingType)
-      <$> lookupAssumption bindingName asExpression
+      <$> lookupAssumption bindingName expressionAssumptions
     newConstraints = concatMap bindingConstraint (zip bindingNames bindingTypes)
 
     -- Remove binding names from expression assumption
-    expressionAssumption = foldl' removeAssumption asExpression bindingNames
+    expressionAssumption = foldl' removeAssumption expressionAssumptions bindingNames
   pure
-    ( concatAssumptions bindingAssumptions `mergeAssumptions` expressionAssumption
-    , concat bindingConstraints ++ consExpression ++ newConstraints
-    , tyExpression
-    )
+    InferenceResult
+    { inferenceResultAssumptions = concatAssumptions bindingAssumptions `mergeAssumptions` expressionAssumption
+    , inferenceResultConstraints = concat bindingConstraints ++ expressionConstraints ++ newConstraints
+    , inferenceResultType = expressionTy
+    }
 inferExpr (REApp (RApp func args)) = do
   -- For an App, we first collect constraints for the function and the
   -- arguments. Then, we instantiate a fresh type variable. The assumption sets
   -- and constraint sets are merged, and the additional constraint that the
   -- function is a TyApp from the args to the fresh type variable is added.
-  (asFunc, consFunc, tyFunc) <- inferExpr func
-  argsInference <- NE.toList <$> traverse inferExpr args
+  (InferenceResult asFunc consFunc tyFunc) <- inferExpr func
+  argResults <- NE.toList <$> traverse inferExpr args
   let
-    argAssumptions = (\(as, _, _) -> as) <$> argsInference
-    argConstraints = (\(_, cs, _) -> cs) <$> argsInference
-    argTypes = (\(_, _, t) -> t) <$> argsInference
+    argAssumptions = inferenceResultAssumptions <$> argResults
+    argConstraints = inferenceResultConstraints <$> argResults
+    argTypes = inferenceResultType <$> argResults
   tyVar <- TyVar <$> freshTypeVariable
   let
     newConstraint = EqConstraint tyFunc (typeFromNonEmpty $ NE.fromList (argTypes ++ [tyVar]))
   pure
-    ( concatAssumptions argAssumptions `mergeAssumptions` asFunc
-    , consFunc ++ concat argConstraints ++ [newConstraint]
-    , tyVar
-    )
+    InferenceResult
+    { inferenceResultAssumptions = concatAssumptions argAssumptions `mergeAssumptions` asFunc
+    , inferenceResultConstraints = consFunc ++ concat argConstraints ++ [newConstraint]
+    , inferenceResultType = tyVar
+    }
 
 --
 -- Constraints
