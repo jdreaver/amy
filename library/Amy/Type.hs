@@ -62,12 +62,13 @@ factorFunctionTypeArguments args ty =
     argTypes = zip args argTypeList
   in
     case NE.nonEmpty returnTypeList of
-      Nothing -> TooManyArguments (length typeNE) (length args)
+      Nothing -> TooManyArguments (length typeNE - 1) (length args)
       Just t -> SuccessfullyFactored argTypes (typeFromNonEmpty t)
 
 data FactorFunctionTypeArgumentsResult a ty
   = SuccessfullyFactored [(a, Type ty)] (Type ty)
   | TooManyArguments !Int !Int
+  deriving (Show, Eq)
 
 -- | A value with a type.
 data Typed ty a
