@@ -87,7 +87,7 @@ inferBindings bindings = do
     throwError $ UnboundVariable $ Set.findMin unbounds
   pure $ (\(_, cs, t) -> (cs, t)) <$> bindingsInference
 
-inferBinding :: RBinding -> Inference (Assumptions, [Constraint], Type PrimitiveType)
+inferBinding :: RBinding -> Inference (AssumptionSet, [Constraint], Type PrimitiveType)
 inferBinding (RBinding _ _ args body) = do
   -- Instantiate a fresh type variable for every argument
   argsAndTyVars <- traverse (\arg -> (arg,) <$> freshTypeVariable) args
@@ -114,10 +114,10 @@ inferBinding (RBinding _ _ args body) = do
     )
 
 -- | Collect constraints for an expression.
-inferExpr :: RExpr -> Inference (Assumptions, [Constraint], Type PrimitiveType)
-inferExpr (RELit (Located _ (LiteralInt _))) = pure (emptyAssumptions, [], TyCon IntType)
-inferExpr (RELit (Located _ (LiteralDouble _))) = pure (emptyAssumptions, [], TyCon DoubleType)
-inferExpr (RELit (Located _ (LiteralBool _))) = pure (emptyAssumptions, [], TyCon BoolType)
+inferExpr :: RExpr -> Inference (AssumptionSet, [Constraint], Type PrimitiveType)
+inferExpr (RELit (Located _ (LiteralInt _))) = pure (emptyAssumptionSet, [], TyCon IntType)
+inferExpr (RELit (Located _ (LiteralDouble _))) = pure (emptyAssumptionSet, [], TyCon DoubleType)
+inferExpr (RELit (Located _ (LiteralBool _))) = pure (emptyAssumptionSet, [], TyCon BoolType)
 inferExpr (REVar (Located _ name)) = do
   -- For a Var, generate a fresh type variable and add it to the assumption set
   tyVar <- TyVar <$> freshTypeVariable
@@ -190,7 +190,7 @@ data Constraint
   deriving (Show, Eq)
 
 --
--- Assumptions
+-- AssumptionSet
 --
 
 -- | An Assumption is an assignment of a type variable to a free variable in an
@@ -198,29 +198,29 @@ data Constraint
 -- expression, and assumptions are bubbled up the AST during bottom-up
 -- constraint collection. There can be more than on assumption for a given
 -- variable.
-newtype Assumptions = Assumptions { unAssumptions :: [(ValueName, Type PrimitiveType)] }
+newtype AssumptionSet = AssumptionSet { unAssumptionSet :: [(ValueName, Type PrimitiveType)] }
   deriving (Show, Eq)
 
-emptyAssumptions :: Assumptions
-emptyAssumptions = Assumptions []
+emptyAssumptionSet :: AssumptionSet
+emptyAssumptionSet = AssumptionSet []
 
 -- | Remove an assumption from the assumption set. This is done when we
 -- encounter a binding for a variable, like a lambda or let expression
 -- variable. The assumption gets "converted" into a constraint.
-removeAssumption :: Assumptions -> ValueName -> Assumptions
-removeAssumption (Assumptions xs) name = Assumptions (filter (\(n, _) -> n /= name) xs)
+removeAssumption :: AssumptionSet -> ValueName -> AssumptionSet
+removeAssumption (AssumptionSet xs) name = AssumptionSet (filter (\(n, _) -> n /= name) xs)
 
-lookupAssumption :: ValueName -> Assumptions -> [Type PrimitiveType]
-lookupAssumption name (Assumptions xs) = map snd (filter (\(n, _) -> n == name) xs)
+lookupAssumption :: ValueName -> AssumptionSet -> [Type PrimitiveType]
+lookupAssumption name (AssumptionSet xs) = map snd (filter (\(n, _) -> n == name) xs)
 
-concatAssumptions :: [Assumptions] -> Assumptions
-concatAssumptions = foldl' mergeAssumptions emptyAssumptions
+concatAssumptions :: [AssumptionSet] -> AssumptionSet
+concatAssumptions = foldl' mergeAssumptions emptyAssumptionSet
 
-mergeAssumptions :: Assumptions -> Assumptions -> Assumptions
-mergeAssumptions (Assumptions a) (Assumptions b) = Assumptions (a ++ b)
+mergeAssumptions :: AssumptionSet -> AssumptionSet -> AssumptionSet
+mergeAssumptions (AssumptionSet a) (AssumptionSet b) = AssumptionSet (a ++ b)
 
-singletonAssumption :: ValueName -> Type PrimitiveType -> Assumptions
-singletonAssumption x y = Assumptions [(x, y)]
+singletonAssumption :: ValueName -> Type PrimitiveType -> AssumptionSet
+singletonAssumption x y = AssumptionSet [(x, y)]
 
-assumptionKeys :: Assumptions -> [ValueName]
-assumptionKeys (Assumptions xs) = map fst xs
+assumptionKeys :: AssumptionSet -> [ValueName]
+assumptionKeys (AssumptionSet xs) = map fst xs
