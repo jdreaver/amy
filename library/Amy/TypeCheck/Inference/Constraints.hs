@@ -110,7 +110,7 @@ inferBinding (RBinding _ _ args body) = do
   -- in the assumptions from the body.
   let
     argConstraint (Located _ argName, argTyVar) =
-      (\t -> EqConstraint t (TyVar argTyVar)) <$> lookupAssumption argName asBody
+      (\t -> EqConstraint (TyVar t) (TyVar argTyVar)) <$> lookupAssumption argName asBody
     argConstraints = concatMap argConstraint argsAndTyVars
 
   pure
@@ -129,8 +129,8 @@ inferExpr (RELit (Located _ (LiteralDouble _))) = pure $ InferenceResult emptyAs
 inferExpr (RELit (Located _ (LiteralBool _))) = pure $ InferenceResult emptyAssumptionSet [] (TyCon BoolType)
 inferExpr (REVar (Located _ name)) = do
   -- For a Var, generate a fresh type variable and add it to the assumption set
-  tyVar <- TyVar <$> freshTypeVariable
-  pure $ InferenceResult (singletonAssumption name tyVar) [] tyVar
+  tyVar <- freshTypeVariable
+  pure $ InferenceResult (singletonAssumption name tyVar) [] (TyVar tyVar)
 inferExpr (REIf (RIf pred' then' else')) = do
   -- If statements are simple. Merge all the assumptions/constraints from each
   -- sub expression. Then add a constraint saying the predicate must be a Bool,
@@ -164,7 +164,7 @@ inferExpr (RELet (RLet bindings expression)) = do
     -- monomorphic set.
     newConstraints = flip concatMap (zip bindingNames bindingTypes) $
       \(bindingName, bindingType) ->
-        (\t -> ImplicitInstanceConstraint t monomorphicSet bindingType)
+        (\t -> ImplicitInstanceConstraint (TyVar t) monomorphicSet bindingType)
         <$> lookupAssumption bindingName expressionAssumptions
   pure
     InferenceResult
@@ -219,7 +219,7 @@ data Constraint
 -- expression, and assumptions are bubbled up the AST during bottom-up
 -- constraint collection. There can be more than on assumption for a given
 -- variable.
-newtype AssumptionSet = AssumptionSet { unAssumptionSet :: Map ValueName [Type PrimitiveType] }
+newtype AssumptionSet = AssumptionSet { unAssumptionSet :: Map ValueName [TVar] }
   deriving (Show, Eq)
 
 emptyAssumptionSet :: AssumptionSet
@@ -231,7 +231,7 @@ emptyAssumptionSet = AssumptionSet Map.empty
 removeAssumption :: AssumptionSet -> ValueName -> AssumptionSet
 removeAssumption (AssumptionSet xs) name = AssumptionSet (Map.delete name xs)
 
-lookupAssumption :: ValueName -> AssumptionSet -> [Type PrimitiveType]
+lookupAssumption :: ValueName -> AssumptionSet -> [TVar]
 lookupAssumption name (AssumptionSet xs) = Map.findWithDefault [] name xs
 
 concatAssumptions :: [AssumptionSet] -> AssumptionSet
@@ -240,7 +240,7 @@ concatAssumptions = foldl' mergeAssumptions emptyAssumptionSet
 mergeAssumptions :: AssumptionSet -> AssumptionSet -> AssumptionSet
 mergeAssumptions (AssumptionSet a) (AssumptionSet b) = AssumptionSet (Map.unionWith (++) a b)
 
-singletonAssumption :: ValueName -> Type PrimitiveType -> AssumptionSet
+singletonAssumption :: ValueName -> TVar -> AssumptionSet
 singletonAssumption x y = AssumptionSet (Map.singleton x [y])
 
 assumptionKeys :: AssumptionSet -> [ValueName]
