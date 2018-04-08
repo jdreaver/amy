@@ -59,14 +59,14 @@ factorFunctionTypeArguments args ty =
   let
     typeNE = typeToNonEmpty ty
     (argTypeList, returnTypeList) = NE.splitAt (length args) typeNE
-    argTypes = zip args argTypeList
+    argTypes = uncurry Typed <$> zip argTypeList args
   in
     case NE.nonEmpty returnTypeList of
       Nothing -> TooManyArguments (length typeNE - 1) (length args)
       Just t -> SuccessfullyFactored argTypes (typeFromNonEmpty t)
 
 data FactorFunctionTypeArgumentsResult a ty
-  = SuccessfullyFactored [(a, Type ty)] (Type ty)
+  = SuccessfullyFactored [Typed ty a] (Type ty)
   | TooManyArguments !Int !Int
   deriving (Show, Eq)
 

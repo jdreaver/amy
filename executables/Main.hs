@@ -55,7 +55,7 @@ process inputFile input =
     eModule = do
       parsed <- first ((:[]) . ParserError) $ parse parseModule inputFile input
       renamed <- rename parsed
-      typed <- typeCheck renamed
+      typed <- first (:[]) $ inferModule renamed
       codegenPure typed
   in do
     eCodegenString <- traverse generateLLVMIR eModule

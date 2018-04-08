@@ -9,5 +9,5 @@ main =
     y = x
   in y
 
-f :: Int -> Int
+# f :: Int -> Int
 f x = if True then abs x else 300

@@ -34,7 +34,7 @@ data TModule
 data TBinding
   = TBinding
   { tBindingName :: !ValueName
-  , tBindingType :: !(Type PrimitiveType)
+  , tBindingType :: !(Scheme PrimitiveType)
     -- ^ Type for whole function
   , tBindingArgs :: ![Typed PrimitiveType ValueName]
     -- ^ Argument names and types split out from 'tBindingType'
@@ -75,8 +75,8 @@ data TLet
 data TApp
   = TApp
   { tAppFunction :: !TExpr
-  , tAppArgs :: !(NonEmpty (Typed PrimitiveType TExpr))
-  , tAppReturnType :: !PrimitiveType
+  , tAppArgs :: !(NonEmpty TExpr)
+  , tAppReturnType :: !(Type PrimitiveType)
   } deriving (Show, Eq)
 
 expressionType :: TExpr -> Type PrimitiveType
@@ -84,4 +84,4 @@ expressionType (TELit lit) = TyCon $ literalType lit
 expressionType (TEVar (Typed ty _)) = ty
 expressionType (TEIf if') = expressionType (tIfThen if') -- Checker ensure "then" and "else" types match
 expressionType (TELet let') = expressionType (tLetExpression let')
-expressionType (TEApp app) = TyCon $ tAppReturnType app
+expressionType (TEApp app) = tAppReturnType app

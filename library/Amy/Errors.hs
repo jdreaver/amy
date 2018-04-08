@@ -13,7 +13,6 @@ import Text.Megaparsec
 
 import Amy.Names
 import Amy.Prim
-import Amy.Renamer.AST
 import Amy.Syntax.Located
 import Amy.Type
 import Amy.TypeCheck.AST
@@ -25,15 +24,20 @@ data Error
   -- Renamer
   | UnknownVariable !(Located Text)
   | VariableShadowed !(Located Text) !ValueName
+  | UnknownTypeName !(Located Text)
 
   -- Type checker
-  | BindingLacksTypeSignature !RBinding
-  | TypeMismatch !(Type PrimitiveType) !(Type PrimitiveType)
-  | UnknownTypeName !(Located Text)
-  | CantFindType !(Located ValueName)
-  | WrongNumberOfArguments !Int !Int
-  | ExpectedPrimitiveType !(Maybe (Located ValueName)) !(Type PrimitiveType)
-  | ExpectedFunctionType !(Type PrimitiveType)
+  -- TODO: Add source spans here
+  | UnificationFail !(Type PrimitiveType) !(Type PrimitiveType)
+  | InfiniteType TVar !(Type PrimitiveType)
+  | UnboundVariable ValueName
+
+  -- | BindingLacksTypeSignature !RBinding
+  -- | TypeMismatch !(Type PrimitiveType) !(Type PrimitiveType)
+  -- | CantFindType !(Located ValueName)
+  -- | WrongNumberOfArguments !Int !Int
+  -- | ExpectedPrimitiveType !(Maybe (Located ValueName)) !(Type PrimitiveType)
+  -- | ExpectedFunctionType !(Type PrimitiveType)
 
   -- Codegen
   | CodegenMissingSymbol !ValueName
@@ -48,14 +52,18 @@ errorLocation e =
     ParserError{} -> Nothing
     UnknownVariable (Located s _) -> Just s
     VariableShadowed (Located s _) _ -> Just s
-
-    BindingLacksTypeSignature bind -> Just $ locatedSpan $ rBindingName bind
-    TypeMismatch{} -> Nothing
     UnknownTypeName (Located s _) -> Just s
-    CantFindType{} -> Nothing
-    WrongNumberOfArguments{} -> Nothing
-    ExpectedPrimitiveType mLocated _ -> locatedSpan <$> mLocated
-    ExpectedFunctionType{} -> Nothing
+
+    UnificationFail{} -> Nothing
+    InfiniteType{} -> Nothing
+    UnboundVariable{} -> Nothing
+
+    -- BindingLacksTypeSignature bind -> Just $ locatedSpan $ rBindingName bind
+    -- TypeMismatch{} -> Nothing
+    -- CantFindType{} -> Nothing
+    -- WrongNumberOfArguments{} -> Nothing
+    -- ExpectedPrimitiveType mLocated _ -> locatedSpan <$> mLocated
+    -- ExpectedFunctionType{} -> Nothing
 
     CodegenMissingSymbol{} -> Nothing
     CodegenExpectedPrimitiveType{} -> Nothing

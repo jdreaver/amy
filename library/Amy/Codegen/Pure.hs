@@ -55,7 +55,7 @@ bindingIdentifier :: TBinding -> (ValueName, CodegenIdentifier)
 bindingIdentifier binding = (name', ident)
  where
   name' = tBindingName binding
-  funcType = llvmType (tBindingType binding)
+  funcType = llvmType (assertNoTypeVariables $ tBindingType binding)
   op = ConstantOperand $ C.GlobalReference funcType (valueNameToLLVM name')
   ident =
     if null (tBindingArgs binding)
@@ -64,6 +64,10 @@ bindingIdentifier binding = (name', ident)
 
 textToShortBS :: Text -> ShortByteString
 textToShortBS = BSS.toShort . encodeUtf8
+
+assertNoTypeVariables :: T.Scheme PrimitiveType -> T.Type PrimitiveType
+assertNoTypeVariables (Forall [] t) = t
+assertNoTypeVariables _ = error "encountered type variables. I can't compile that!"
 
 -- TODO: Add tests for this
 llvmType :: T.Type PrimitiveType -> LLVM.Type
@@ -200,7 +204,7 @@ codegenExpression (TELet (TLet bindings expression)) = do
   codegenExpression expression
 codegenExpression (TEApp app) = do
   -- Evaluate argument expressions
-  argOps <- traverse codegenExpression (typedValue <$> tAppArgs app)
+  argOps <- traverse codegenExpression (tAppArgs app)
 
   -- Get the function expression variable
   fnVarName <-
@@ -210,7 +214,9 @@ codegenExpression (TEApp app) = do
 
   -- Generate code for function
   case valueNameId fnVarName of
-    PrimitiveFunctionId primName -> codegenPrimitiveFunction primName argOps (tAppReturnType app)
+    PrimitiveFunctionId primName -> do
+      returnType' <- assertPrimitiveType (tAppReturnType app)
+      codegenPrimitiveFunction primName argOps returnType'
     NameIntId _ -> do
       ident <- lookupSymbolOrError fnVarName
 
@@ -221,6 +227,10 @@ codegenExpression (TEApp app) = do
             GlobalFunctionNoArgs op -> op
             GlobalFunction op -> op
       functionCallInstruction funcOperand (toList argOps)
+
+assertPrimitiveType :: (MonadError [Error] m) => T.Type PrimitiveType -> m PrimitiveType
+assertPrimitiveType (TyCon prim) = pure prim
+assertPrimitiveType t = throwError [CodegenExpectedPrimitiveType t]
 
 codegenPrimitiveFunction
   :: PrimitiveFunctionName
