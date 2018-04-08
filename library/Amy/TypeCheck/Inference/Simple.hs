@@ -12,7 +12,6 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Foldable (foldl')
-import Data.List (nub)
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -66,6 +65,8 @@ lookupEnv key (TyEnv tys) = Map.lookup key tys
 newtype Inference a = Inference (ReaderT TyEnv (StateT Int (Except TypeError)) a)
   deriving (Functor, Applicative, Monad, MonadReader TyEnv, MonadState Int, MonadError TypeError)
 
+-- TODO: Don't use Except, use Validation
+
 runInference :: TyEnv -> Inference a -> Either TypeError a
 runInference env (Inference action) = runExcept $ evalStateT (runReaderT action env) 0
 
@@ -80,6 +81,8 @@ freshTypeVariable = do
 letters :: [Text]
 letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
 
+-- | Extends the current typing environment with a list of names and schemes
+-- for those names.
 extendEnvM :: [(ValueName, Scheme PrimitiveType)] -> Inference a -> Inference a
 extendEnvM tys = local (flip extendEnvList tys)
 
@@ -89,35 +92,38 @@ lookupEnvM name = do
   mTy <- lookupEnv name <$> ask
   maybe (throwError $ UnboundVariable name) instantiate mTy
 
+-- | Convert a scheme into a type by replacing all the type variables with
+-- fresh names. Types are instantiated when they are looked up so we can make
+-- constraints with the type variables and not worry about name collisions.
 instantiate :: Scheme PrimitiveType -> Inference (Type PrimitiveType)
 instantiate (Forall as t) = do
   as' <- traverse (const freshTypeVariable) as
   let s = Subst $ Map.fromList $ zip as (TyVar <$> as')
   return $ substituteType s t
 
+-- | Generalizing a type is the quantification of that type with all of the
+-- free variables of the type minus the free variables in the environment. This
+-- is like finding the type variables that should be "bound" by the
+-- quantification. This is also called finding the "closure" of a type.
 generalize :: TyEnv -> Type PrimitiveType -> Scheme PrimitiveType
 generalize env t  = Forall as t
  where
   as = Set.toList $ freeTypeVariables t `Set.difference` freeEnvTypeVariables env
 
+-- | Produces a type scheme from a type by finding all the free type variables
+-- in the type, replacing them with sequential letters, and collecting the free
+-- type variables in the Forall quantifier.
 normalize :: Type PrimitiveType -> Scheme PrimitiveType
-normalize body = Forall (map snd ord) (normtype body)
+normalize body = Forall (Map.elems letterMap) (normtype body)
  where
-  ord = zip (nub $ fv body) (map TVar letters)
-
-  fv (TyVar a) = [a]
-  fv (TyArr a b) = fv a ++ fv b
-  fv (TyCon _) = []
+  letterMap = Map.fromList $ zip (Set.toList $ freeTypeVariables body) (TVar <$> letters)
 
   normtype (TyArr a b) = TyArr (normtype a) (normtype b)
   normtype (TyCon a) = TyCon a
   normtype (TyVar a) =
-    case Prelude.lookup a ord of
+    case Map.lookup a letterMap of
       Just x -> TyVar x
       Nothing -> error "type variable not in signature"
-
-
--- TODO: Don't use Except, use Validation
 
 -- TODO: Move these into the main Error type
 -- TODO: Include source spans in these errors
@@ -125,9 +131,9 @@ data TypeError
   = UnificationFail !(Type PrimitiveType) !(Type PrimitiveType)
   | InfiniteType TVar !(Type PrimitiveType)
   | UnboundVariable ValueName
-  | Ambigious [Constraint]
   deriving (Show, Eq)
 
+-- | A 'Constraint' is a statement that two types should be equal.
 newtype Constraint = Constraint { unConstraint :: (Type PrimitiveType, Type PrimitiveType) }
   deriving (Show, Eq)
 
@@ -135,14 +141,18 @@ newtype Constraint = Constraint { unConstraint :: (Type PrimitiveType, Type Prim
 -- Inference
 --
 
-inferTopLevel :: TyEnv -> RBinding -> Either TypeError (Scheme PrimitiveType)
-inferTopLevel env ex =
-  case runInference env (inferBinding ex) of
+inferTopLevel :: TyEnv -> [RBinding] -> Either TypeError [(ValueName, Scheme PrimitiveType)]
+inferTopLevel env bindings =
+  case runInference env (inferBindings bindings) of
     Left err -> Left err
-    Right (ty, cs) ->
-      case runSolve cs of
-        Left err -> Left err
-        Right subst -> Right $ normalize $ substituteType subst ty
+    Right results ->
+      let
+        schemes = (\(name, scheme, _) -> (name, scheme)) <$> results
+        constraints = concatMap (\(_, _, cs) -> cs) results
+      in
+        case runSolve constraints of
+          Left err -> Left err
+          Right subst -> Right $ (\(name, Forall _ ty) -> (name, normalize $ substituteType subst ty)) <$> schemes
 
 inferBindings :: [RBinding] -> Inference [(ValueName, Scheme PrimitiveType, [Constraint])]
 inferBindings bindings = do
