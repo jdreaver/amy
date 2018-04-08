@@ -1,3 +1,5 @@
+--{-# LANGUAGE MonoLocalBinds, NoMonomorphismRestriction #-}
+
 -- | Interesting Haskell examples for parsing, type inference, etc
 
 main = pure ()
@@ -7,6 +9,7 @@ f y z =
 
 g x = (1 :: Int)
 
+h :: a -> (Bool, Int, a)
 h k =
   let
     id' x = x
@@ -70,3 +73,33 @@ cons x (One y ps) = Zero (cons (x,y) ps)
 --    |                   ^^^
 --
 -- f' g = (g True, g 'a')
+
+
+data BalancedTree a
+  = Zero' a
+  | Succ (BalancedTree (a,a))
+
+zig :: BalancedTree a -> a
+zig (Zero' a) = a
+zig (Succ t) = fst (zag t)
+
+-- zag :: BalancedTree a -> a
+zag (Zero' a) = a
+zag (Succ t) = snd (zig t)
+
+
+f' x = x + 1
+g' x = let h y = f' y * 2
+           k z = z+x
+       in  h x + k x
+
+
+-- Fails to type check if {-# LANGUAGE MonoLocalBinds,
+-- NoMonomorphismRestriction #-} is set. The function @b@ will be assumed to be
+-- of type b :: a -> Bool -> (a, Bool) instead of the more general b :: a -> b
+-- -> (a, b)
+a x =
+  let
+    --b :: _
+    b y = (x,y)
+  in (b 3, b False)
