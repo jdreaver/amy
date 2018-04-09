@@ -19,6 +19,7 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text, pack)
+import Data.Traversable (for)
 
 import Amy.Errors
 import Amy.Literal
@@ -167,30 +168,57 @@ inferTopLevel env bindings =
           Left err -> Left err
           Right subst -> Right $ normalizeTBinding . substituteTBinding subst <$> bindings'
 
+-- | Infer a group of bindings.
+--
+-- Binding groups can depend on one another, and even be mutually recursive. We
+-- cannot simply just solve them in order. We first have to add all of their
+-- types to the environment (either their declared type or a fresh type
+-- variable), then we can gather constraints for each binding one by one. We
+-- then collect all the constraints and solve them together.
 inferBindings :: [RBinding] -> Inference [(TBinding, [Constraint])]
 inferBindings bindings = do
-  bindingsAndTyVars <- traverse (\binding -> (binding,) <$> freshTypeVariable) bindings
-  let bindingNameSchemes = (\(binding, tvar) -> (locatedValue $ rBindingName binding, Forall [] (TyVar tvar))) <$> bindingsAndTyVars
-  bindingsInference <- extendEnvM bindingNameSchemes $ traverse (uncurry inferBinding) bindingsAndTyVars
+  let
+    setBindingVariable binding = do
+      ty <-
+        case rBindingType binding of
+          -- There is an explicit type annotation. Use it.
+          Just ty -> pure (locatedValue <$> ty)
+          -- No explicit type annotation
+          Nothing -> TyVar <$> freshTypeVariable
+      pure (binding, ty)
+  bindingsAndTypes <- traverse setBindingVariable bindings
+
+  -- Add all the binding type variables to the typing environment and then
+  -- collect constraints for all bindings.
+  let bindingNameSchemes = (\(binding, ty) -> (locatedValue $ rBindingName binding, Forall [] ty)) <$> bindingsAndTypes
+  bindingsInference <- extendEnvM bindingNameSchemes $ for bindingsAndTypes $ \(binding, ty) -> do
+    (binding', constraints) <- inferBinding binding
+    let
+      -- Add the constraint for the binding itself
+      (Forall _ bindingType) = tBindingType binding'
+      bindingConstraint = Constraint (ty, bindingType)
+    pure (binding', constraints ++ [bindingConstraint])
+
+  -- Solve all constraints together.
   let
     constraints = concatMap snd bindingsInference
-  case runSolve constraints of
-    Left err -> throwError err
-    Right subst -> do
-      env <- ask
-      pure $ flip fmap bindingsInference $ \(binding, bodyCons) ->
-        let
-          (Forall _ bindingType) = tBindingType binding
-          scheme = generalize (substituteEnv subst env) (substituteType subst bindingType)
-          binding' = binding { tBindingType = scheme }
-        in
-          ( binding'
-          , bodyCons
-          )
+  subst <- either throwError pure $ runSolve constraints
 
--- TODO: Explicit types
-inferBinding :: RBinding -> TVar -> Inference (TBinding, [Constraint])
-inferBinding (RBinding (Located _ name) _ args body) bindingTVar = do
+  -- Use the produced Substitution and substitute all the type variables we
+  -- generated for each binding.
+  env <- ask
+  pure $ flip fmap bindingsInference $ \(binding, bodyCons) ->
+    let
+      (Forall _ bindingType) = tBindingType binding
+      scheme = generalize (substituteEnv subst env) (substituteType subst bindingType)
+      binding' = binding { tBindingType = scheme }
+    in
+      ( binding'
+      , bodyCons
+      )
+
+inferBinding :: RBinding -> Inference (TBinding, [Constraint])
+inferBinding (RBinding (Located _ name) _ args body) = do
   argsAndTyVars <- traverse (\(Located _ arg) -> (arg,) <$> freshTypeVariable) args
   let argsAndSchemes = (\(arg, t) -> (arg, Forall [] (TyVar t))) <$> argsAndTyVars
   (body', bodyCons) <- extendEnvM argsAndSchemes $ inferExpr body
@@ -200,13 +228,16 @@ inferBinding (RBinding (Located _ name) _ args body) bindingTVar = do
     binding' =
       TBinding
       { tBindingName = name
+        -- Type is placeholder until we can solve all constraints and
+        -- generalize to get a scheme. If we were really principled we would
+        -- have some new intermediate TCBinding type or something with a Type
+        -- instead of a Scheme.
       , tBindingType = Forall [] bindingType
       , tBindingArgs = (\(name', tvar) -> Typed (TyVar tvar) name') <$> argsAndTyVars
       , tBindingReturnType = returnType
       , tBindingBody = body'
       }
-    bindingCons = Constraint (TyVar bindingTVar, bindingType)
-  pure (binding', bodyCons ++ [bindingCons])
+  pure (binding', bodyCons)
 
 inferExpr :: RExpr -> Inference (TExpr, [Constraint])
 inferExpr (RELit (Located _ lit)) = pure (TELit lit, [])
