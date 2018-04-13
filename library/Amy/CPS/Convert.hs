@@ -19,6 +19,8 @@ convertCPSModule (TModule bindings _) =
 convertCPSExpr :: TExpr -> (CPSVal -> CPSExpr) -> CPSExpr
 convertCPSExpr (TELit lit) c = c (CPSLit lit)
 convertCPSExpr (TEVar var) c = c (CPSVar (typedValue var))
+-- TODO: Handle primops here. If the function is a primitive function, we can
+-- just emit a PrimOp.
 convertCPSExpr (TEApp (TApp funcExpr args _)) c =
   let
     returnName = ValueName "r" (NameIntId 0)
