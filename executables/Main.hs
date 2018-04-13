@@ -25,20 +25,10 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    [] -> do
-      -- See if there is anything in stding
-      stdinString <- getContents
-      if null stdinString
-      then
-        -- Run REPL
-        runInputT defaultSettings loop
-      else
-        -- Assume a program was passed in
-        process "<stdin>" (pack stdinString)
-
-    -- User passed a file path
+    ["repl"] -> runInputT defaultSettings loop
+    ["-"] -> getContents >>= process "<stdin>" . pack
     [path] -> TIO.readFile path >>= process path
-    _ -> die "Usage: amy [file]"
+    _ -> die "Usage: amy [file|repl|-]"
  where
   loop = do
     minput <- getInputLine "amy> "
