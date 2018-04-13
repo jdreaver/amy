@@ -6,7 +6,11 @@ module Amy.CPS.AST
   , CPSFixBinding(..)
   , CPSIf(..)
   , CPSPrimOp(..)
+  , freeCPSFixVariables
   ) where
+
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 import Amy.Literal
 import Amy.Names
@@ -56,6 +60,40 @@ data CPSPrimOp
   = CPSPrimOp
   { cpsPrimOpFunction :: !PrimitiveFunctionName
   , cpsPrimOpArgs :: ![CPSVal]
-  , cpsPrimOpOutput :: !ValueName
-  , cpsPrimOpExpr :: !CPSExpr
+  , cpsPrimOpOutputs :: ![ValueName]
+  , cpsPrimOpContinuations :: ![CPSExpr]
   } deriving (Show, Eq)
+
+--
+-- Free Variables
+--
+
+freeCPSFixVariables :: CPSFix -> Set ValueName
+freeCPSFixVariables (CPSFix bindings body) =
+  freeCPSExprVariables body
+    `Set.union` Set.unions (freeCPSFixBindingVariables <$> bindings)
+    `Set.difference` Set.fromList (cpsFixBindingName <$> bindings)
+
+freeCPSFixBindingVariables :: CPSFixBinding -> Set ValueName
+freeCPSFixBindingVariables (CPSFixBinding _ args body) =
+  freeCPSExprVariables body `Set.difference` Set.fromList args
+
+freeCPSExprVariables :: CPSExpr -> Set ValueName
+freeCPSExprVariables expr =
+  case expr of
+    CPSEApp (CPSApp f args) -> Set.unions (freeCPSValVariables <$> (f : args))
+    CPSEFix fix -> freeCPSFixVariables fix
+    CPSEIf (CPSIf pred' then' else') ->
+      freeCPSValVariables pred'
+      `Set.union` freeCPSExprVariables then'
+      `Set.union` freeCPSExprVariables else'
+    CPSEPrimOp (CPSPrimOp _ args outputs conts) ->
+      Set.unions (freeCPSValVariables <$> args)
+      `Set.union` Set.unions (freeCPSExprVariables <$> conts)
+      `Set.difference` Set.fromList outputs
+    CPSHalt -> Set.empty
+
+freeCPSValVariables :: CPSVal -> Set ValueName
+freeCPSValVariables (CPSVar v) = Set.singleton v
+freeCPSValVariables (CPSLabel v) = Set.singleton v
+freeCPSValVariables (CPSLit _) = Set.empty
