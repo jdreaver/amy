@@ -1,5 +1,6 @@
 module Amy.Names
   ( Name(..)
+  , identName
   , Ident(..)
   , IdentId
   ) where
@@ -13,6 +14,10 @@ data Name
   = PrimitiveName !PrimitiveFunctionName
   | IdentName !Ident
   deriving (Show, Eq, Ord)
+
+identName :: Name -> Maybe Ident
+identName (IdentName ident) = Just ident
+identName _ = Nothing
 
 -- | An identifier from source code
 data Ident

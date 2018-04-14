@@ -9,6 +9,7 @@ module Amy.TypeCheck.AST
   , TLet(..)
   , TApp(..)
   , expressionType
+  , tModuleNames
 
     -- Re-export
   , Literal(..)
@@ -85,3 +86,29 @@ expressionType (TEVar (Typed ty _)) = ty
 expressionType (TEIf if') = expressionType (tIfThen if') -- Checker ensure "then" and "else" types match
 expressionType (TELet let') = expressionType (tLetExpression let')
 expressionType (TEApp app) = tAppReturnType app
+
+-- | Get all the 'Name's in a module.
+tModuleNames :: TModule -> [Name]
+tModuleNames (TModule bindings externs) =
+  concatMap bindingNames bindings
+  ++ fmap tExternName externs
+
+bindingNames :: TBinding -> [Name]
+bindingNames binding =
+  tBindingName binding
+  : (typedValue <$> tBindingArgs binding)
+  ++ exprNames (tBindingBody binding)
+
+exprNames :: TExpr -> [Name]
+exprNames (TELit _) = []
+exprNames (TEVar var) = [typedValue var]
+exprNames (TEIf (TIf pred' then' else')) =
+  exprNames pred'
+  ++ exprNames then'
+  ++ exprNames else'
+exprNames (TELet (TLet bindings expr)) =
+  concatMap bindingNames bindings
+  ++ exprNames expr
+exprNames (TEApp (TApp f args _)) =
+  exprNames f
+  ++ concatMap exprNames args
