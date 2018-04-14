@@ -22,7 +22,6 @@ import Data.Text (Text, pack)
 import Data.Traversable (for)
 
 import Amy.Errors
-import Amy.Literal
 import Amy.Names
 import Amy.Prim
 import Amy.Renamer.AST
@@ -36,22 +35,22 @@ import Amy.TypeCheck.AST
 
 -- | A 'TyEnv' is the typing environment. It contains known names with their
 -- type schemes.
-newtype TyEnv = TyEnv { unTyEnv :: Map ValueName (Scheme PrimitiveType) }
+newtype TyEnv = TyEnv { unTyEnv :: Map Name (Scheme PrimitiveType) }
   deriving (Show, Eq)
 
 emptyEnv :: TyEnv
 emptyEnv = TyEnv Map.empty
 
-extendEnv :: TyEnv -> (ValueName, Scheme PrimitiveType) -> TyEnv
+extendEnv :: TyEnv -> (Name, Scheme PrimitiveType) -> TyEnv
 extendEnv (TyEnv env) (x, s) = TyEnv (Map.insert x s env)
 
-extendEnvList :: TyEnv -> [(ValueName, Scheme PrimitiveType)] -> TyEnv
+extendEnvList :: TyEnv -> [(Name, Scheme PrimitiveType)] -> TyEnv
 extendEnvList = foldl' extendEnv
 
--- removeEnv :: TyEnv -> ValueName -> TyEnv
+-- removeEnv :: TyEnv -> Name -> TyEnv
 -- removeEnv (TyEnv env) var = TyEnv (Map.delete var env)
 
-lookupEnv :: ValueName -> TyEnv -> Maybe (Scheme PrimitiveType)
+lookupEnv :: Name -> TyEnv -> Maybe (Scheme PrimitiveType)
 lookupEnv key (TyEnv tys) = Map.lookup key tys
 
 -- mergeEnv :: TyEnv -> TyEnv -> TyEnv
@@ -87,11 +86,11 @@ letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
 
 -- | Extends the current typing environment with a list of names and schemes
 -- for those names.
-extendEnvM :: [(ValueName, Scheme PrimitiveType)] -> Inference a -> Inference a
+extendEnvM :: [(Name, Scheme PrimitiveType)] -> Inference a -> Inference a
 extendEnvM tys = local (flip extendEnvList tys)
 
 -- | Lookup type in the environment
-lookupEnvM :: ValueName -> Inference (Type PrimitiveType)
+lookupEnvM :: Name -> Inference (Type PrimitiveType)
 lookupEnvM name = do
   mTy <- lookupEnv name <$> ask
   maybe (throwError $ UnboundVariable name) instantiate mTy
@@ -149,7 +148,7 @@ inferModule (RModule bindings externs) = do
     externSchemes = (\(TExtern name ty) -> (name, Forall [] ty)) <$> externs'
     mkPrimFuncType prim = Forall [] $ typeFromNonEmpty . fmap TyCon . primitiveFunctionType $ primitiveFunction prim
     primFuncSchemes =
-      (\prim -> (ValueName (showPrimitiveFunctionName prim) (PrimitiveFunctionId prim), mkPrimFuncType prim))
+      (\prim -> (PrimitiveName prim, mkPrimFuncType prim))
       <$> allPrimitiveFunctionNames
     env = TyEnv $ Map.fromList $ externSchemes ++ primFuncSchemes
   bindings' <- inferTopLevel env bindings
@@ -389,65 +388,3 @@ freeSchemeTypeVariables (Forall tvs t) = freeTypeVariables t `Set.difference` Se
 
 freeEnvTypeVariables :: TyEnv -> Set TVar
 freeEnvTypeVariables (TyEnv env) = foldl' Set.union Set.empty $ freeSchemeTypeVariables <$> Map.elems env
-
---
--- Misc
---
-
-_l :: a -> Located a
-_l = Located (SourceSpan "" 1 1 1 1)
-
-_b1 :: RBinding
-_b1 =
-  RBinding
-  x
-  Nothing
-  [y, z]
-  ( REApp (RApp (REVar y) (NE.fromList $ [REVar z, RELit (_l $ LiteralBool False)]))
-  )
- where
-  y = _l $ ValueName "y" (NameIntId 1)
-  z = _l $ ValueName "z" (NameIntId 2)
-  x = _l $ ValueName "x" (NameIntId 3)
-
-_idBind :: RBinding
-_idBind =
-  RBinding
-  id'
-  Nothing
-  [x]
-  (REVar x)
- where
-  id' = _l $ ValueName "id" (NameIntId 1)
-  x = _l $ ValueName "x" (NameIntId 2)
-
-_constBind :: RBinding
-_constBind =
-  RBinding
-  const'
-  Nothing
-  [x, y]
-  (REVar x)
- where
-  const' = _l $ ValueName "const" (NameIntId 1)
-  x = _l $ ValueName "x" (NameIntId 2)
-  y = _l $ ValueName "y" (NameIntId 3)
-
--- f x =
---   let
---     g y = x
---   in g 3
-
-_b2 :: RBinding
-_b2 =
-  RBinding
-  f
-  Nothing
-  [x]
-  (RELet (RLet [RBinding g Nothing [y] (REVar x)] (REApp (RApp (REVar g) (NE.fromList [RELit three])))))
- where
-  f = _l $ ValueName "f" (NameIntId 1)
-  g = _l $ ValueName "g" (NameIntId 2)
-  x = _l $ ValueName "x" (NameIntId 3)
-  y = _l $ ValueName "y" (NameIntId 4)
-  three = _l $ LiteralInt 3

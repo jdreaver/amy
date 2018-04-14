@@ -33,23 +33,23 @@ data RModule
 -- 'BindingType' after they've been paired together.
 data RBinding
   = RBinding
-  { rBindingName :: !(Located ValueName)
+  { rBindingName :: !(Located Name)
   , rBindingType :: !(Maybe (Type (Located PrimitiveType)))
-  , rBindingArgs :: ![Located ValueName]
+  , rBindingArgs :: ![Located Name]
   , rBindingBody :: !RExpr
   } deriving (Show, Eq)
 
 -- | A renamed extern declaration.
 data RExtern
   = RExtern
-  { rExternName :: !(Located ValueName)
+  { rExternName :: !(Located Name)
   , rExternType :: !(Type (Located PrimitiveType))
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'
 data RExpr
   = RELit !(Located Literal)
-  | REVar !(Located ValueName)
+  | REVar !(Located Name)
   | REIf !RIf
   | RELet !RLet
   | REApp !RApp

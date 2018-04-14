@@ -24,7 +24,7 @@ import LLVM.AST.Global as LLVM
 
 import Amy.Codegen.Monad
 import Amy.Errors
-import Amy.Names
+import Amy.Names as Amy
 import Amy.Prim
 import Amy.Type as T
 import Amy.TypeCheck.AST
@@ -44,19 +44,19 @@ codegenPure (TModule bindings externs) = do
     , moduleDefinitions = externDefs ++ bindingDefs
     }
 
-externIdentifier :: TExtern -> (ValueName, CodegenIdentifier)
+externIdentifier :: TExtern -> (Amy.Name, CodegenIdentifier)
 externIdentifier extern = (name', GlobalFunction op)
  where
   name' = tExternName extern
   ty = llvmType $ tExternType extern
-  op = ConstantOperand $ C.GlobalReference ty (valueNameToLLVM name')
+  op = ConstantOperand $ C.GlobalReference ty (nameToLLVM name')
 
-bindingIdentifier :: TBinding -> (ValueName, CodegenIdentifier)
+bindingIdentifier :: TBinding -> (Amy.Name, CodegenIdentifier)
 bindingIdentifier binding = (name', ident)
  where
   name' = tBindingName binding
   funcType = llvmType (assertNoTypeVariables $ tBindingType binding)
-  op = ConstantOperand $ C.GlobalReference funcType (valueNameToLLVM name')
+  op = ConstantOperand $ C.GlobalReference funcType (nameToLLVM name')
   ident =
     if null (tBindingArgs binding)
     then GlobalFunctionNoArgs op
@@ -64,6 +64,9 @@ bindingIdentifier binding = (name', ident)
 
 textToShortBS :: Text -> ShortByteString
 textToShortBS = BSS.toShort . encodeUtf8
+
+stringToShortBS :: String -> ShortByteString
+stringToShortBS = BSS.toShort . BS8.pack
 
 assertNoTypeVariables :: T.Scheme PrimitiveType -> T.Type PrimitiveType
 assertNoTypeVariables (Forall [] t) = t
@@ -106,42 +109,43 @@ codegenExtern extern = do
   pure $
     GlobalDefinition
     functionDefaults
-    { name = valueNameToLLVM $ tExternName extern
+    { name = nameToLLVM $ tExternName extern
     , parameters = (params, False)
     , LLVM.returnType = returnType'
     }
 
-codegenBinding :: [(ValueName, CodegenIdentifier)] -> TBinding -> Either [Error] Definition
+codegenBinding :: [(Amy.Name, CodegenIdentifier)] -> TBinding -> Either [Error] Definition
 codegenBinding allTopLevelIdentifiers binding = do
   blocks <- runGenBlocks $ do
     -- Add top-level names to symbol table
     forM_ allTopLevelIdentifiers $ uncurry addNameToSymbolTable
 
     -- Add args to symbol table
-    forM_ (tBindingArgs binding) $ \(Typed argType valueName) ->
-      let op = LocalReference (llvmType argType) (valueNameToLLVM valueName)
-      in addNameToSymbolTable valueName (LocalOperand op)
+    forM_ (tBindingArgs binding) $ \(Typed argType name') ->
+      let op = LocalReference (llvmType argType) (nameToLLVM name')
+      in addNameToSymbolTable name' (LocalOperand op)
 
     -- Codegen the expression
     codegenExpression $ tBindingBody binding
 
   let
     params =
-      (\(Typed ty valueName) -> Parameter (llvmType ty) (Name . textToShortBS $ valueNameRaw valueName) [])
+      (\(Typed ty name') -> Parameter (llvmType ty) (nameToLLVM name') [])
       <$> tBindingArgs binding
     returnType' = llvmType $ tBindingReturnType binding
 
   pure $
     GlobalDefinition
     functionDefaults
-    { name = valueNameToLLVM $ tBindingName binding
+    { name = nameToLLVM $ tBindingName binding
     , parameters = (params, False)
     , LLVM.returnType = returnType'
     , basicBlocks = blocks
     }
 
-valueNameToLLVM :: ValueName -> Name
-valueNameToLLVM (ValueName name' _) = Name $ textToShortBS name'
+nameToLLVM :: Amy.Name -> LLVM.Name
+nameToLLVM (PrimitiveName prim) = LLVM.Name $ stringToShortBS $ show prim
+nameToLLVM (IdentName (Ident name' _)) = LLVM.Name $ textToShortBS name'
 
 codegenExpression :: TExpr -> FunctionGen Operand
 codegenExpression (TELit lit) =
@@ -150,9 +154,9 @@ codegenExpression (TELit lit) =
       LiteralInt i -> C.Int 32 (fromIntegral i)
       LiteralDouble x -> C.Float (F.Double x)
       LiteralBool x -> C.Int 1 $ if x then 1 else 0
-codegenExpression (TEVar (Typed _ valueName)) = do
+codegenExpression (TEVar (Typed _ name')) = do
   -- Check if a value exists in the symbol table
-  ident <- lookupSymbolOrError valueName
+  ident <- lookupSymbolOrError name'
 
   case ident of
     LocalOperand op -> pure op
@@ -168,9 +172,9 @@ codegenExpression expr@(TEIf (TIf predicate thenExpression elseExpression)) = do
   -- Generate unique block names
   uniqueId <- currentId
   let
-    thenBlockName = Name $ BSS.toShort $ BS8.pack $ "if.then." ++ show uniqueId
-    elseBlockName = Name $ BSS.toShort $ BS8.pack $ "if.else." ++ show uniqueId
-    endBlockName = Name $ BSS.toShort $ BS8.pack $ "if.end." ++ show uniqueId
+    thenBlockName = LLVM.Name $ BSS.toShort $ BS8.pack $ "if.then." ++ show uniqueId
+    elseBlockName = LLVM.Name $ BSS.toShort $ BS8.pack $ "if.else." ++ show uniqueId
+    endBlockName = LLVM.Name $ BSS.toShort $ BS8.pack $ "if.end." ++ show uniqueId
 
   -- Generate code for the predicate
   predicateOp <- codegenExpression predicate
@@ -207,18 +211,18 @@ codegenExpression (TEApp app) = do
   argOps <- traverse codegenExpression (tAppArgs app)
 
   -- Get the function expression variable
-  fnVarName <-
+  fnName <-
     case tAppFunction app of
       (TEVar (Typed _ var)) -> pure var
       _ -> throwError [NoCurrying app]
 
   -- Generate code for function
-  case valueNameId fnVarName of
-    PrimitiveFunctionId primName -> do
+  case fnName of
+    PrimitiveName primName -> do
       returnType' <- assertPrimitiveType (tAppReturnType app)
       codegenPrimitiveFunction primName argOps returnType'
-    NameIntId _ -> do
-      ident <- lookupSymbolOrError fnVarName
+    IdentName _ -> do
+      ident <- lookupSymbolOrError fnName
 
       let
         funcOperand =

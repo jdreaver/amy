@@ -23,8 +23,8 @@ convertCPSExpr (TEVar var) c = c (CPSVar (typedValue var))
 -- just emit a PrimOp.
 convertCPSExpr (TEApp (TApp funcExpr args _)) c =
   let
-    returnName = ValueName "r" (NameIntId 0)
-    returnVal = ValueName "_x_" (NameIntId 0)
+    returnName = IdentName $ Ident "r" 0
+    returnVal = IdentName $ Ident "_x_" 0
   in
     CPSEFix $ CPSFix [CPSFixBinding returnName [returnVal] (c (CPSVar returnVal))] $
       convertCPSExpr funcExpr $ \f ->
@@ -58,5 +58,5 @@ convertBinding :: TBinding -> CPSFixBinding
 convertBinding (TBinding name _ args _ expr) =
   CPSFixBinding name ((typedValue <$> args) ++ [contVar]) (convertCPSExpr expr c')
  where
-  contVar = ValueName "k" (NameIntId 0)
+  contVar = IdentName $ Ident "k" 0
   c' z = CPSEApp $ CPSApp (CPSVar contVar) [z]

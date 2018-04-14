@@ -1,24 +1,24 @@
 module Amy.Names
-  ( ValueName(..)
-  , NameIntId
-  , NameId(..)
+  ( Name(..)
+  , Ident(..)
+  , IdentId
   ) where
 
 import Data.Text (Text)
 
 import Amy.Prim
 
--- | An 'ValueName' is a value name tagged with a unique ID.
-data ValueName
-  = ValueName
-  { valueNameRaw :: !Text
-  , valueNameId :: !NameId
-  } deriving (Show, Eq, Ord)
-
--- | How a name is identified after renaming.
-data NameId
-  = NameIntId !NameIntId
-  | PrimitiveFunctionId !PrimitiveFunctionName
+-- | A 'Name' is an identified name of something from the source code after renaming.
+data Name
+  = PrimitiveName !PrimitiveFunctionName
+  | IdentName !Ident
   deriving (Show, Eq, Ord)
 
-type NameIntId = Int
+-- | An identifier from source code
+data Ident
+  = Ident
+  { identText :: !Text
+  , identId :: !IdentId
+  } deriving (Show, Eq, Ord)
+
+type IdentId = Int

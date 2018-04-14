@@ -30,9 +30,9 @@ runRenamer initialState (Renamer action) = evalState action initialState
 
 data RenamerState
   = RenamerState
-  { renamerStateLastId :: !NameIntId
+  { renamerStateLastId :: !IdentId
     -- ^ Last 'NameIntId' generated
-  , renamerStateValues :: !(Map Text ValueName)
+  , renamerStateValues :: !(Map Text Name)
     -- ^ Values in scope
   } deriving (Show, Eq)
 
@@ -43,36 +43,36 @@ emptyRenamerState =
   , renamerStateValues = primitiveFunctionNames
   }
 
-primitiveFunctionNames :: Map Text ValueName
+primitiveFunctionNames :: Map Text Name
 primitiveFunctionNames =
   Map.fromList $
     (\prim ->
        ( showPrimitiveFunctionName prim
-       , ValueName (showPrimitiveFunctionName prim) (PrimitiveFunctionId prim)
+       , PrimitiveName prim
        ))
     <$> allPrimitiveFunctionNames
 
 -- | Generate a new 'NameIntId'
-freshId :: Renamer NameId
+freshId :: Renamer IdentId
 freshId = do
   modify' (\s -> s { renamerStateLastId = 1 + renamerStateLastId s })
-  NameIntId <$> gets renamerStateLastId
+  gets renamerStateLastId
 
-addValueToScope :: Located Text -> Renamer (Validation [Error] (Located ValueName))
+addValueToScope :: Located Text -> Renamer (Validation [Error] (Located Name))
 addValueToScope lName@(Located span' name) = do
   nameId <- freshId
-  let valueName = ValueName name nameId
+  let name' = IdentName (Ident name nameId)
   mExistingId <- lookupValueInScope name
   case mExistingId of
     Just nid -> pure $ Failure [VariableShadowed lName nid]
     Nothing -> do
-      modify' (\s -> s { renamerStateValues = Map.insert name valueName (renamerStateValues s) })
-      pure $ Success (Located span' valueName)
+      modify' (\s -> s { renamerStateValues = Map.insert name name' (renamerStateValues s) })
+      pure $ Success (Located span' name')
 
-lookupValueInScope :: Text -> Renamer (Maybe ValueName)
+lookupValueInScope :: Text -> Renamer (Maybe Name)
 lookupValueInScope name = Map.lookup name <$> gets renamerStateValues
 
-lookupValueInScopeOrError :: Located Text -> Renamer (Validation [Error] (Located ValueName))
+lookupValueInScopeOrError :: Located Text -> Renamer (Validation [Error] (Located Name))
 lookupValueInScopeOrError name@(Located span' name') =
   maybe (Failure [UnknownVariable name]) (Success . Located span') <$> lookupValueInScope name'
 

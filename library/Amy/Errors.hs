@@ -23,24 +23,24 @@ data Error
 
   -- Renamer
   | UnknownVariable !(Located Text)
-  | VariableShadowed !(Located Text) !ValueName
+  | VariableShadowed !(Located Text) !Name
   | UnknownTypeName !(Located Text)
 
   -- Type checker
   -- TODO: Add source spans here
   | UnificationFail !(Type PrimitiveType) !(Type PrimitiveType)
   | InfiniteType TVar !(Type PrimitiveType)
-  | UnboundVariable ValueName
+  | UnboundVariable Name
 
   -- | BindingLacksTypeSignature !RBinding
   -- | TypeMismatch !(Type PrimitiveType) !(Type PrimitiveType)
-  -- | CantFindType !(Located ValueName)
+  -- | CantFindType !(Located Name)
   -- | WrongNumberOfArguments !Int !Int
-  -- | ExpectedPrimitiveType !(Maybe (Located ValueName)) !(Type PrimitiveType)
+  -- | ExpectedPrimitiveType !(Maybe (Located Name)) !(Type PrimitiveType)
   -- | ExpectedFunctionType !(Type PrimitiveType)
 
   -- Codegen
-  | CodegenMissingSymbol !ValueName
+  | CodegenMissingSymbol !Name
   | CodegenExpectedPrimitiveType !(Type PrimitiveType)
   | NoCurrying !TApp
   | UnknownOperandType !Operand

@@ -33,10 +33,10 @@ data TModule
 -- 'BindingType' after they've been paired together.
 data TBinding
   = TBinding
-  { tBindingName :: !ValueName
+  { tBindingName :: !Name
   , tBindingType :: !(Scheme PrimitiveType)
     -- ^ Type for whole function
-  , tBindingArgs :: ![Typed PrimitiveType ValueName]
+  , tBindingArgs :: ![Typed PrimitiveType Name]
     -- ^ Argument names and types split out from 'tBindingType'
   , tBindingReturnType :: !(Type PrimitiveType)
     -- ^ Return type split out from 'tBindingType'
@@ -46,14 +46,14 @@ data TBinding
 -- | A renamed extern declaration.
 data TExtern
   = TExtern
-  { tExternName :: !ValueName
+  { tExternName :: !Name
   , tExternType :: !(Type PrimitiveType)
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'
 data TExpr
   = TELit !Literal
-  | TEVar !(Typed PrimitiveType ValueName)
+  | TEVar !(Typed PrimitiveType Name)
   | TEIf !TIf
   | TELet !TLet
   | TEApp !TApp

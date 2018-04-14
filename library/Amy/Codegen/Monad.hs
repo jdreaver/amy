@@ -29,10 +29,10 @@ import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
-import LLVM.AST
+import LLVM.AST as LLVM
 
 import Amy.Errors
-import Amy.Names
+import Amy.Names as Amy
 
 newtype FunctionGen a = FunctionGen (ExceptT [Error] (State FunctionGenState) a)
   deriving (Functor, Applicative, Monad, MonadState FunctionGenState, MonadError [Error])
@@ -50,7 +50,7 @@ data FunctionGenState
     -- ^ Last incrementing ID. Used to generate intermediate instruction names.
   , functionGenStateBlockStack :: !(NonEmpty BlockGenState)
     -- ^ Stack of simple blocks. Needs to be reversed before generating LLVM.
-  , functionGenStateSymbolTable :: !(Map ValueName CodegenIdentifier)
+  , functionGenStateSymbolTable :: !(Map Amy.Name CodegenIdentifier)
     -- ^ Map from Amy variable names to operands
   } deriving (Show, Eq)
 
@@ -65,7 +65,7 @@ data CodegenIdentifier
 
 data BlockGenState
   = BlockGenState
-  { blockGenStateBlockName :: !Name
+  { blockGenStateBlockName :: !LLVM.Name
     -- ^ Name of the block
   , blockGenStateInstructionStack :: ![Named Instruction]
     -- ^ Stack of instructions for the current function (needs to be reversed
@@ -74,7 +74,7 @@ data BlockGenState
     -- ^ Final terminator of block
   } deriving (Show, Eq)
 
-defaultFunctionGenState :: Name -> FunctionGenState
+defaultFunctionGenState :: LLVM.Name -> FunctionGenState
 defaultFunctionGenState name' =
   FunctionGenState
   { functionGenStateLastId = 0
@@ -82,7 +82,7 @@ defaultFunctionGenState name' =
   , functionGenStateSymbolTable = Map.empty
   }
 
-defaultBlockGenState :: Name -> BlockGenState
+defaultBlockGenState :: LLVM.Name -> BlockGenState
 defaultBlockGenState name' =
   BlockGenState
   { blockGenStateBlockName =  name'
@@ -117,10 +117,10 @@ currentId :: FunctionGen Word
 currentId = gets functionGenStateLastId
 
 -- | Generate a new name using 'UnName' and 'generateId'
-generateUnName :: FunctionGen Name
+generateUnName :: FunctionGen LLVM.Name
 generateUnName = UnName <$> generateId
 
-startNewBlock :: Name -> FunctionGen ()
+startNewBlock :: LLVM.Name -> FunctionGen ()
 startNewBlock blockName =
   modify' $ \s ->
     s
@@ -141,7 +141,7 @@ modifyCurrentBlock f =
       { functionGenStateBlockStack = f currentBlock :| restBlocks
       }
 
-addNameToSymbolTable :: ValueName -> CodegenIdentifier -> FunctionGen ()
+addNameToSymbolTable :: Amy.Name -> CodegenIdentifier -> FunctionGen ()
 addNameToSymbolTable name ident =
   modify' $
     \s ->
@@ -150,10 +150,10 @@ addNameToSymbolTable name ident =
         Map.insert name ident (functionGenStateSymbolTable s)
       }
 
-lookupSymbol :: ValueName -> FunctionGen (Maybe CodegenIdentifier)
+lookupSymbol :: Amy.Name -> FunctionGen (Maybe CodegenIdentifier)
 lookupSymbol name = Map.lookup name <$> gets functionGenStateSymbolTable
 
-lookupSymbolOrError :: ValueName -> FunctionGen CodegenIdentifier
+lookupSymbolOrError :: Amy.Name -> FunctionGen CodegenIdentifier
 lookupSymbolOrError name = maybe (throwError [CodegenMissingSymbol name]) pure =<< lookupSymbol name
 
 -- | Adds an instruction to the stack
@@ -166,7 +166,7 @@ addInstruction instruction =
     }
 
 -- | Add an instruction to the stack and return the 'UnName'
-addUnNamedInstruction :: Instruction -> FunctionGen Name
+addUnNamedInstruction :: Instruction -> FunctionGen LLVM.Name
 addUnNamedInstruction instruction = do
   instructionName <- generateUnName
   addInstruction (instructionName := instruction)
@@ -183,13 +183,13 @@ terminator term =
     { blockGenStateTerminator = Just term
     }
 
-br :: Name -> FunctionGen ()
+br :: LLVM.Name -> FunctionGen ()
 br val = terminator $ Do $ Br val []
 
-cbr :: Operand -> Name -> Name -> FunctionGen ()
+cbr :: Operand -> LLVM.Name -> LLVM.Name -> FunctionGen ()
 cbr cond tr fl = terminator $ Do $ CondBr cond tr fl []
 
-phi :: Type -> [(Operand, Name)] -> FunctionGen Operand
+phi :: Type -> [(Operand, LLVM.Name)] -> FunctionGen Operand
 phi ty incoming = instr ty $ Phi ty incoming []
 
 ret :: Operand -> FunctionGen ()

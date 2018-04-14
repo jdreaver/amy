@@ -26,7 +26,7 @@ data PrimitiveType
   = IntType
   | DoubleType
   | BoolType
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 readPrimitiveType :: Text -> Maybe PrimitiveType
 readPrimitiveType t =
