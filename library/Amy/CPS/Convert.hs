@@ -24,7 +24,7 @@ convertCPSExpr (TEVar var) c = c (CPSVar (typedValue var))
 convertCPSExpr (TEApp (TApp funcExpr args _)) c =
   let
     returnName = ValueName "r" (NameIntId 0)
-    returnVal = ValueName "x" (NameIntId 0)
+    returnVal = ValueName "_x_" (NameIntId 0)
   in
     CPSEFix $ CPSFix [CPSFixBinding returnName [returnVal] (c (CPSVar returnVal))] $
       convertCPSExpr funcExpr $ \f ->
