@@ -10,9 +10,10 @@ module Amy.ANF.AST
 import Amy.Literal
 import Amy.Names
 import Amy.Prim
+import Amy.Type
 
 data ANFVal
-  = ANFVar !Name
+  = ANFVar !(Typed PrimitiveType Name)
   | ANFLit !Literal
   | ANFPrim !PrimitiveFunctionName
   deriving (Show, Eq)
@@ -33,7 +34,9 @@ data ANFLet
 data ANFBinding
   = ANFBinding
   { anfBindingName :: !Name
-  , anfBindingArgs :: ![Name]
+  , anfBindingType :: !(Scheme PrimitiveType)
+  , anfBindingArgs :: ![Typed PrimitiveType Name]
+  , anfBindingReturnType :: !(Type PrimitiveType)
   , anfBindingBody :: !ANFExpr
   } deriving (Show, Eq)
 
@@ -48,4 +51,5 @@ data ANFApp
   = ANFApp
   { anfAppFunction :: !ANFVal
   , anfAppArgs :: ![ANFVal]
+  , anfAppReturnType :: !(Type PrimitiveType)
   } deriving (Show, Eq)

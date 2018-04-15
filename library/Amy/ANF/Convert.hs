@@ -25,13 +25,13 @@ normalizeModule module' =
   in runANFConvert (maxId + 1) $ traverse normalizeTopLevelBinding (tModuleBindings module')
 
 normalizeTopLevelBinding :: TBinding -> ANFConvert ANFBinding
-normalizeTopLevelBinding (TBinding name _ args _ body) = do
+normalizeTopLevelBinding (TBinding name ty args retTy body) = do
   body' <- normalizeTerm body
-  pure $ ANFBinding name (typedValue <$> args) body'
+  pure $ ANFBinding name ty args retTy body'
 
 normalizeExpr :: TExpr -> (ANFExpr -> ANFConvert ANFExpr) -> ANFConvert ANFExpr
 normalizeExpr (TELit lit) c = c $ ANFEVal $ ANFLit lit
-normalizeExpr (TEVar var) c = c $ ANFEVal $ ANFVar (typedValue var)
+normalizeExpr (TEVar var) c = c $ ANFEVal $ ANFVar var
 normalizeExpr (TEIf (TIf pred' then' else')) c =
   normalizeName pred' $ \predVal -> do
     then'' <- normalizeTerm then'
@@ -41,9 +41,9 @@ normalizeExpr (TELet (TLet bindings expr)) c =
   normalizeList normalizeBinding bindings $ \bindings' -> do
     expr' <- normalizeExpr expr c
     pure $ ANFELet $ ANFLet bindings' expr'
-normalizeExpr (TEApp (TApp func args _)) c =
+normalizeExpr (TEApp (TApp func args retTy)) c =
   normalizeList normalizeName (toList args) $ \argVals ->
-  let mkApp funcVal = c $ ANFEApp $ ANFApp funcVal argVals
+  let mkApp funcVal = c $ ANFEApp $ ANFApp funcVal argVals retTy
   in
     case func of
       (TEVar (Typed _ (PrimitiveName prim))) -> mkApp (ANFPrim prim)
@@ -54,17 +54,18 @@ normalizeTerm expr = normalizeExpr expr pure
 
 normalizeName :: TExpr -> (ANFVal -> ANFConvert ANFExpr) -> ANFConvert ANFExpr
 normalizeName (TELit lit) c = c $ ANFLit lit
-normalizeName (TEVar var) c = c $ ANFVar (typedValue var)
+normalizeName (TEVar var) c = c $ ANFVar var
 normalizeName expr c = do
   expr' <- normalizeTerm expr
+  let exprType = expressionType expr
   newName <- IdentName <$> freshIdent "t"
-  body <- c $ ANFVar newName
-  pure $ ANFELet $ ANFLet [ANFBinding newName [] expr'] body
+  body <- c $ ANFVar (Typed exprType newName)
+  pure $ ANFELet $ ANFLet [ANFBinding newName (Forall [] exprType) [] exprType expr'] body
 
 normalizeBinding :: TBinding -> (ANFBinding -> ANFConvert ANFExpr) -> ANFConvert ANFExpr
-normalizeBinding (TBinding name _ args _ body) c = do
+normalizeBinding (TBinding name ty args retTy body) c = do
   body' <- normalizeTerm body
-  c $ ANFBinding name (typedValue <$> args) body'
+  c $ ANFBinding name ty args retTy body'
 
 -- | Helper for normalizing lists of things
 normalizeList :: (Monad m) => (a -> (b -> m c) -> m c) -> [a] -> ([b] -> m c) -> m c
