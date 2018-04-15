@@ -42,12 +42,12 @@ normalizeExpr (TELet (TLet bindings expr)) c =
     expr' <- normalizeExpr expr c
     pure $ ANFELet $ ANFLet bindings' expr'
 normalizeExpr (TEApp (TApp func args _)) c =
-  case func of
-    -- TODO: PrimOp case
-    _ ->
-      normalizeName func $ \funcVal ->
-      normalizeList normalizeName (toList args) $ \argVals ->
-      c $ ANFEApp $ ANFApp funcVal argVals
+  normalizeList normalizeName (toList args) $ \argVals ->
+  let mkApp funcVal = c $ ANFEApp $ ANFApp funcVal argVals
+  in
+    case func of
+      (TEVar (Typed _ (PrimitiveName prim))) -> mkApp (ANFPrim prim)
+      _ -> normalizeName func mkApp
 
 normalizeTerm :: TExpr -> ANFConvert ANFExpr
 normalizeTerm expr = normalizeExpr expr pure

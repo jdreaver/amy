@@ -14,7 +14,7 @@ import Amy.Prim
 data ANFVal
   = ANFVar !Name
   | ANFLit !Literal
-  | ANFPrim !PrimitiveFunction
+  | ANFPrim !PrimitiveFunctionName
   deriving (Show, Eq)
 
 data ANFExpr
