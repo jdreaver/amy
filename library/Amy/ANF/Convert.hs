@@ -23,14 +23,9 @@ normalizeModule module' =
       if null moduleIdentIds
       then 0
       else maximum moduleIdentIds
-    bindings' = runANFConvert (maxId + 1) $ traverse normalizeTopLevelBinding (tModuleBindings module')
+    bindings' = runANFConvert (maxId + 1) $ traverse normalizeBinding (tModuleBindings module')
     externs' = mkANFExtern <$> tModuleExterns module'
   in ANFModule bindings' externs'
-
-normalizeTopLevelBinding :: TBinding -> ANFConvert ANFBinding
-normalizeTopLevelBinding (TBinding name ty args retTy body) = do
-  body' <- normalizeTerm body
-  pure $ ANFBinding name ty args retTy body'
 
 mkANFExtern :: TExtern -> ANFExtern
 mkANFExtern (TExtern name ty) = ANFExtern name ty
@@ -43,10 +38,10 @@ normalizeExpr (TEIf (TIf pred' then' else')) c =
     then'' <- normalizeTerm then'
     else'' <- normalizeTerm else'
     c $ ANFEIf $ ANFIf predVal then'' else''
-normalizeExpr (TELet (TLet bindings expr)) c =
-  normalizeList normalizeBinding bindings $ \bindings' -> do
-    expr' <- normalizeExpr expr c
-    pure $ ANFELet $ ANFLet bindings' expr'
+normalizeExpr (TELet (TLet bindings expr)) c = do
+  bindings' <- traverse normalizeBinding bindings
+  expr' <- normalizeExpr expr c
+  pure $ ANFELet $ ANFLet bindings' expr'
 normalizeExpr (TEApp (TApp func args retTy)) c =
   normalizeList normalizeName (toList args) $ \argVals ->
   let mkApp funcVal = c $ ANFEApp $ ANFApp funcVal argVals retTy
@@ -77,10 +72,10 @@ mkNormalizeLet expr exprType c = do
   body <- c $ ANFVar (Typed exprType newName)
   pure $ ANFELet $ ANFLet [ANFBinding newName (Forall [] exprType) [] exprType expr] body
 
-normalizeBinding :: TBinding -> (ANFBinding -> ANFConvert ANFExpr) -> ANFConvert ANFExpr
-normalizeBinding (TBinding name ty args retTy body) c = do
+normalizeBinding :: TBinding -> ANFConvert ANFBinding
+normalizeBinding (TBinding name ty args retTy body) = do
   body' <- normalizeTerm body
-  c $ ANFBinding name ty args retTy body'
+  pure $ ANFBinding name ty args retTy body'
 
 -- | Helper for normalizing lists of things
 normalizeList :: (Monad m) => (a -> (b -> m c) -> m c) -> [a] -> ([b] -> m c) -> m c
