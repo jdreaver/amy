@@ -10,6 +10,7 @@ import Data.Maybe (mapMaybe)
 import Amy.ANF.AST
 import Amy.ANF.Monad
 import Amy.Names
+import Amy.Prim
 import Amy.Type
 import Amy.TypeCheck.AST
 
@@ -54,13 +55,22 @@ normalizeTerm expr = normalizeExpr expr pure
 
 normalizeName :: TExpr -> (ANFVal -> ANFConvert ANFExpr) -> ANFConvert ANFExpr
 normalizeName (TELit lit) c = c $ ANFLit lit
-normalizeName (TEVar var) c = c $ ANFVar var
+normalizeName (TEVar tvar@(Typed ty var)) c =
+  case var of
+    -- Top-level values need to be first called as functions
+    IdentName (Ident _ _ True) -> mkNormalizeLet (ANFEApp $ ANFApp (ANFVar tvar) [] ty) ty c
+    -- Not a top-level value, just return
+    _ -> c $ ANFVar tvar
 normalizeName expr c = do
   expr' <- normalizeTerm expr
   let exprType = expressionType expr
+  mkNormalizeLet expr' exprType c
+
+mkNormalizeLet :: ANFExpr -> Type PrimitiveType -> (ANFVal -> ANFConvert ANFExpr) -> ANFConvert ANFExpr
+mkNormalizeLet expr exprType c = do
   newName <- IdentName <$> freshIdent "t"
   body <- c $ ANFVar (Typed exprType newName)
-  pure $ ANFELet $ ANFLet [ANFBinding newName (Forall [] exprType) [] exprType expr'] body
+  pure $ ANFELet $ ANFLet [ANFBinding newName (Forall [] exprType) [] exprType expr] body
 
 normalizeBinding :: TBinding -> (ANFBinding -> ANFConvert ANFExpr) -> ANFConvert ANFExpr
 normalizeBinding (TBinding name ty args retTy body) c = do
