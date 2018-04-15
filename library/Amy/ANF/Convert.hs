@@ -14,7 +14,7 @@ import Amy.Prim
 import Amy.Type
 import Amy.TypeCheck.AST
 
-normalizeModule :: TModule -> [ANFBinding]
+normalizeModule :: TModule -> ANFModule
 normalizeModule module' =
   let
     moduleNames = tModuleNames module'
@@ -23,12 +23,17 @@ normalizeModule module' =
       if null moduleIdentIds
       then 0
       else maximum moduleIdentIds
-  in runANFConvert (maxId + 1) $ traverse normalizeTopLevelBinding (tModuleBindings module')
+    bindings' = runANFConvert (maxId + 1) $ traverse normalizeTopLevelBinding (tModuleBindings module')
+    externs' = mkANFExtern <$> tModuleExterns module'
+  in ANFModule bindings' externs'
 
 normalizeTopLevelBinding :: TBinding -> ANFConvert ANFBinding
 normalizeTopLevelBinding (TBinding name ty args retTy body) = do
   body' <- normalizeTerm body
   pure $ ANFBinding name ty args retTy body'
+
+mkANFExtern :: TExtern -> ANFExtern
+mkANFExtern (TExtern name ty) = ANFExtern name ty
 
 normalizeExpr :: TExpr -> (ANFExpr -> ANFConvert ANFExpr) -> ANFConvert ANFExpr
 normalizeExpr (TELit lit) c = c $ ANFEVal $ ANFLit lit

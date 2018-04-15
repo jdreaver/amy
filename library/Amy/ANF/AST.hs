@@ -1,8 +1,10 @@
 module Amy.ANF.AST
-  ( ANFVal(..)
+  ( ANFModule(..)
+  , ANFBinding(..)
+  , ANFExtern(..)
+  , ANFVal(..)
   , ANFExpr(..)
   , ANFLet(..)
-  , ANFBinding(..)
   , ANFIf(..)
   , ANFApp(..)
   ) where
@@ -11,6 +13,27 @@ import Amy.Literal
 import Amy.Names
 import Amy.Prim
 import Amy.Type
+
+data ANFModule
+  = ANFModule
+  { anfModuleBindings :: ![ANFBinding]
+  , anfModuleExterns :: ![ANFExtern]
+  } deriving (Show, Eq)
+
+data ANFBinding
+  = ANFBinding
+  { anfBindingName :: !Name
+  , anfBindingType :: !(Scheme PrimitiveType)
+  , anfBindingArgs :: ![Typed PrimitiveType Name]
+  , anfBindingReturnType :: !(Type PrimitiveType)
+  , anfBindingBody :: !ANFExpr
+  } deriving (Show, Eq)
+
+data ANFExtern
+  = ANFExtern
+  { anfExternName :: !Name
+  , anfExternType :: !(Type PrimitiveType)
+  } deriving (Show, Eq)
 
 data ANFVal
   = ANFVar !(Typed PrimitiveType Name)
@@ -29,15 +52,6 @@ data ANFLet
   = ANFLet
   { anfLetBindings :: ![ANFBinding]
   , anfLetExpression :: !ANFExpr
-  } deriving (Show, Eq)
-
-data ANFBinding
-  = ANFBinding
-  { anfBindingName :: !Name
-  , anfBindingType :: !(Scheme PrimitiveType)
-  , anfBindingArgs :: ![Typed PrimitiveType Name]
-  , anfBindingReturnType :: !(Type PrimitiveType)
-  , anfBindingBody :: !ANFExpr
   } deriving (Show, Eq)
 
 data ANFIf
