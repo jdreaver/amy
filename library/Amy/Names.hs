@@ -24,6 +24,7 @@ data Ident
   = Ident
   { identText :: !Text
   , identId :: !IdentId
+  , identIsTopLevel :: !Bool
   } deriving (Show, Eq, Ord)
 
 type IdentId = Int

@@ -58,10 +58,10 @@ freshId = do
   modify' (\s -> s { renamerStateLastId = 1 + renamerStateLastId s })
   gets renamerStateLastId
 
-addValueToScope :: Located Text -> Renamer (Validation [Error] (Located Name))
-addValueToScope lName@(Located span' name) = do
+addValueToScope :: Bool -> Located Text -> Renamer (Validation [Error] (Located Name))
+addValueToScope isTopLevel lName@(Located span' name) = do
   nameId <- freshId
-  let name' = IdentName (Ident name nameId)
+  let name' = IdentName (Ident name nameId isTopLevel)
   mExistingId <- lookupValueInScope name
   case mExistingId of
     Just nid -> pure $ Failure [VariableShadowed lName nid]

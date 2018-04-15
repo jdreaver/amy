@@ -145,7 +145,7 @@ codegenBinding allTopLevelIdentifiers binding = do
 
 nameToLLVM :: Amy.Name -> LLVM.Name
 nameToLLVM (PrimitiveName prim) = LLVM.Name $ stringToShortBS $ show prim
-nameToLLVM (IdentName (Ident name' _)) = LLVM.Name $ textToShortBS name'
+nameToLLVM (IdentName (Ident name' _ _)) = LLVM.Name $ textToShortBS name'
 
 codegenExpression :: TExpr -> FunctionGen Operand
 codegenExpression (TELit lit) =

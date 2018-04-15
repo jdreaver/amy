@@ -23,4 +23,5 @@ newtype ANFConvertState = ANFConvertState { lastId :: Int }
 freshIdent :: Text -> ANFConvert Ident
 freshIdent t = do
   modify' (\s -> s { lastId = 1 + lastId s })
-  Ident t <$> gets lastId
+  id' <- gets lastId
+  pure $ Ident t id' False
