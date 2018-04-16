@@ -189,9 +189,6 @@ nameToLLVM (IdentName ident) = identToLLVM ident
 identToLLVM :: Ident -> LLVM.Name
 identToLLVM (Ident name' _ _) = LLVM.Name $ textToShortBS name'
 
-identTextName :: Ident -> Text
-identTextName (Ident name' _ _) = name'
-
 -- | Convert from a amy primitive type to an LLVM type
 llvmPrimitiveType :: PrimitiveType -> LLVM.Type
 llvmPrimitiveType IntType = IntegerType 32
