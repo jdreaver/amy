@@ -113,28 +113,20 @@ codegenExpr' (ANFEIf (ANFIf pred' then' else' ty)) = do
   -- Generate end block
   addInstruction $ endOpName := Phi ty' [(thenOp, thenBlockName), (elseOp, elseBlockName)] []
   pure endOpRef
-codegenExpr' (ANFEApp (ANFApp func args' returnTy)) = do
+codegenExpr' (ANFEApp (ANFApp (Typed ty ident) args' returnTy)) = do
+  funcOperand <- valOperand (ANFVar $ Typed ty (IdentName ident))
+  let
+    mkInstruction argOps = Call Nothing CC.C [] (Right funcOperand) ((\arg -> (arg, [])) <$> argOps) [] []
+  codegenFunctionApp args' returnTy mkInstruction
+codegenExpr' (ANFEPrimOp (ANFApp prim args' returnTy)) =
+  codegenFunctionApp args' returnTy (primitiveFunctionInstruction prim)
+
+codegenFunctionApp :: [ANFVal] -> T.Type PrimitiveType -> ([Operand] -> Instruction) -> BlockGen Operand
+codegenFunctionApp args' returnTy mkInstruction = do
+  opName <- freshUnName
   argOps <- traverse valOperand args'
-  case func of
-    ANFLit lit -> error $ "Tried to apply function on literal " ++ show lit
-    ANFVar (Typed ty name') -> do
-      opName <- freshUnName
-      let
-        instruction =
-          case name' of
-            PrimitiveName primName -> primitiveFunctionInstruction primName argOps
-            IdentName (Ident nameText _ isTopLevel) ->
-              let
-                ty' = llvmType ty
-                name'' = LLVM.Name $ textToShortBS nameText
-                funcOperand =
-                  if isTopLevel
-                  then ConstantOperand $ C.GlobalReference ty' name''
-                  else LocalReference ty' name''
-                args'' = (\arg -> (arg, [])) <$> argOps
-              in Call Nothing CC.C [] (Right funcOperand) args'' [] []
-      addInstruction $ opName := instruction
-      pure $ LocalReference (llvmPrimitiveType $ assertPrimitiveType returnTy) opName
+  addInstruction $ opName := mkInstruction argOps
+  pure $ LocalReference (llvmPrimitiveType $ assertPrimitiveType returnTy) opName
 
 valOperand :: ANFVal -> BlockGen Operand
 valOperand (ANFVar (Typed ty name')) =

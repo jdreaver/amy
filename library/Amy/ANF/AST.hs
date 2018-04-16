@@ -44,7 +44,8 @@ data ANFExpr
   = ANFEVal !ANFVal
   | ANFELet !ANFLet
   | ANFEIf !ANFIf
-  | ANFEApp !ANFApp
+  | ANFEApp !(ANFApp (Typed PrimitiveType Ident))
+  | ANFEPrimOp !(ANFApp PrimitiveFunctionName)
   deriving (Show, Eq)
 
 data ANFLet
@@ -61,9 +62,9 @@ data ANFIf
   , anfIfType :: !(Type PrimitiveType)
   } deriving (Show, Eq)
 
-data ANFApp
+data ANFApp f
   = ANFApp
-  { anfAppFunction :: !ANFVal
+  { anfAppFunction :: !f
   , anfAppArgs :: ![ANFVal]
   , anfAppReturnType :: !(Type PrimitiveType)
   } deriving (Show, Eq)

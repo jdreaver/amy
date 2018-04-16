@@ -45,11 +45,11 @@ normalizeExpr (TELet (TLet bindings expr)) c = do
   pure $ ANFELet $ ANFLet bindings' expr'
 normalizeExpr (TEApp (TApp func args retTy)) c =
   normalizeList normalizeName (toList args) $ \argVals ->
-  let mkApp funcVal = c $ ANFEApp $ ANFApp funcVal argVals retTy
-  in
-    case func of
-      -- (TEVar (Typed _ (PrimitiveName prim))) -> mkApp (ANFPrim prim)
-      _ -> normalizeName func mkApp
+  normalizeName func $ \funcVal ->
+  case funcVal of
+    (ANFLit lit) -> error $ "Encountered lit function application " ++ show lit
+    (ANFVar (Typed _ (PrimitiveName prim))) -> c $ ANFEPrimOp $ ANFApp prim argVals retTy
+    (ANFVar (Typed ty (IdentName ident))) -> c $ ANFEApp $ ANFApp (Typed ty ident) argVals retTy
 
 normalizeTerm :: TExpr -> ANFConvert ANFExpr
 normalizeTerm expr = normalizeExpr expr pure
@@ -59,7 +59,7 @@ normalizeName (TELit lit) c = c $ ANFLit lit
 normalizeName (TEVar tvar@(Typed ty var)) c =
   case (ty, var) of
     -- Top-level values need to be first called as functions
-    (TyCon _, IdentName (Ident _ _ True)) -> mkNormalizeLet (ANFEApp $ ANFApp (ANFVar tvar) [] ty) ty c
+    (TyCon _, IdentName ident@(Ident _ _ True)) -> mkNormalizeLet (ANFEApp $ ANFApp (Typed ty ident) [] ty) ty c
     -- Not a top-level value, just return
     _ -> c $ ANFVar tvar
 normalizeName expr c = do
