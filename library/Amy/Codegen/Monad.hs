@@ -38,7 +38,7 @@ partialBlock :: LLVM.Name -> PartialBlock
 partialBlock name' = PartialBlock name' []
 
 makeBasicBlock :: PartialBlock -> Named Terminator -> BasicBlock
-makeBasicBlock (PartialBlock name' instructions) terminator = BasicBlock name' instructions terminator
+makeBasicBlock (PartialBlock name' instructions) terminator = BasicBlock name' (reverse instructions) terminator
 
 addInstruction :: Named Instruction -> BlockGen ()
 addInstruction instr =
