@@ -81,7 +81,7 @@ codegenExpr' (ANFELet (ANFLet bindings expr)) = do
   codegenExpr' expr
 codegenExpr' (ANFEIf (ANFIf pred' then' else' ty)) = do
   let
-    one = ConstantOperand $ C.Int 32 1
+    one = ConstantOperand $ C.Int 1 1
     true = one
 
   -- Name blocks and operands
