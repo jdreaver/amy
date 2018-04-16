@@ -20,8 +20,8 @@ if.else.0:                                        ; preds = %entry
   br label %if.end.0
 
 if.end.0:                                         ; preds = %if.else.0, %if.then.0
-  %4 = phi i32 [ %1, %if.then.0 ], [ %3, %if.else.0 ]
-  ret i32 %4
+  %end.0 = phi i32 [ %1, %if.then.0 ], [ %3, %if.else.0 ]
+  ret i32 %end.0
 }
 
 define i32 @f(i32 %x) {
@@ -36,7 +36,7 @@ if.else.0:                                        ; preds = %entry
   br label %if.end.0
 
 if.end.0:                                         ; preds = %if.else.0, %if.then.0
-  %1 = phi i32 [ %0, %if.then.0 ], [ 300, %if.else.0 ]
-  ret i32 %1
+  %end.0 = phi i32 [ %0, %if.then.0 ], [ 300, %if.else.0 ]
+  ret i32 %end.0
 }
 

@@ -5,16 +5,16 @@ source_filename = "<string>"
 
 define i32 @main() {
 entry:
-  br i1 true, label %if.then.1, label %if.else.1
+  br i1 true, label %if.then.2, label %if.else.2
 
-if.then.1:                                        ; preds = %entry
-  br label %if.end.1
+if.then.2:                                        ; preds = %entry
+  br label %if.end.2
 
-if.else.1:                                        ; preds = %entry
-  br label %if.end.1
+if.else.2:                                        ; preds = %entry
+  br label %if.end.2
 
-if.end.1:                                         ; preds = %if.else.1, %if.then.1
-  %0 = phi i32 [ 100, %if.then.1 ], [ 200, %if.else.1 ]
-  ret i32 %0
+if.end.2:                                         ; preds = %if.else.2, %if.then.2
+  %end.2 = phi i32 [ 100, %if.then.2 ], [ 200, %if.else.2 ]
+  ret i32 %end.2
 }
 

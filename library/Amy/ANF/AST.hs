@@ -58,7 +58,6 @@ data ANFIf
   { anfIfPredicate :: !ANFVal
   , anfIfThen :: !ANFExpr
   , anfIfElse :: !ANFExpr
-  , anfIfId :: !IdentId
   , anfIfType :: !(Type PrimitiveType)
   } deriving (Show, Eq)
 

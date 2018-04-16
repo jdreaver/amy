@@ -37,9 +37,8 @@ normalizeExpr (TEIf (TIf pred' then' else')) c =
   normalizeName pred' $ \predVal -> do
     then'' <- normalizeTerm then'
     else'' <- normalizeTerm else'
-    ifId <- freshId
     let ty = expressionType then'
-    c $ ANFEIf $ ANFIf predVal then'' else'' ifId ty
+    c $ ANFEIf $ ANFIf predVal then'' else'' ty
 normalizeExpr (TELet (TLet bindings expr)) c = do
   bindings' <- traverse normalizeBinding bindings
   expr' <- normalizeExpr expr c

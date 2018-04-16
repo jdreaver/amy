@@ -79,12 +79,13 @@ codegenExpr' (ANFELet (ANFLet bindings expr)) = do
     op <- codegenExpr' (anfBindingBody binding)
     addSymbolToTable (IdentName $ anfBindingName binding) op
   codegenExpr' expr
-codegenExpr' (ANFEIf (ANFIf pred' then' else' ifId ty)) = do
+codegenExpr' (ANFEIf (ANFIf pred' then' else' ty)) = do
   let
     one = ConstantOperand $ C.Int 32 1
     true = one
 
   -- Name blocks and operands
+  ifId <- freshId
   let
     mkIfName nameBase = LLVM.Name $ stringToShortBS $ nameBase ++ show ifId
     testOpName = mkIfName "test."
@@ -117,8 +118,8 @@ codegenExpr' (ANFEApp (ANFApp func args' returnTy)) = do
   case func of
     ANFLit lit -> error $ "Tried to apply function on literal " ++ show lit
     ANFVar (Typed ty name') -> do
+      opName <- freshUnName
       let
-        opName = LLVM.Name $ stringToShortBS $ "func." ++ show (1 :: Int) -- TODO Get an ID here
         instruction =
           case name' of
             PrimitiveName primName -> primitiveFunctionInstruction primName argOps

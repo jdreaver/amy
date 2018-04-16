@@ -8,6 +8,8 @@ module Amy.Codegen.Monad
   , terminateBlock
   , addSymbolToTable
   , lookupSymbol
+  , freshId
+  , freshUnName
   ) where
 
 import Data.Map.Strict (Map)
@@ -23,19 +25,20 @@ newtype BlockGen a = BlockGen (State BlockGenState a)
 runBlockGen :: BlockGen Operand -> [BasicBlock]
 runBlockGen (BlockGen action) =
   let
-    (operand, BlockGenState lastBlock blockStack _) = runState action (blockGenState "entry")
+    (operand, BlockGenState lastBlock blockStack _ _) = runState action (blockGenState "entry")
     blocks = reverse $ makeBasicBlock lastBlock (Do $ Ret (Just operand) []) : blockStack
   in blocks
 
 data BlockGenState
   = BlockGenState
-  { blockGenStateCurrentBlock :: PartialBlock
-  , blockGenStateBlockStack :: [BasicBlock]
-  , blockGenStateSymbolTable :: Map Amy.Name Operand
+  { blockGenStateCurrentBlock :: !PartialBlock
+  , blockGenStateBlockStack :: ![BasicBlock]
+  , blockGenStateSymbolTable :: !(Map Amy.Name Operand)
+  , blockGenStateLastId :: !Word
   } deriving (Show, Eq)
 
 blockGenState :: LLVM.Name -> BlockGenState
-blockGenState name' = BlockGenState (partialBlock name') [] Map.empty
+blockGenState name' = BlockGenState (partialBlock name') [] Map.empty 0
 
 -- | In-progress 'BasicBlock' without terminator
 data PartialBlock
@@ -59,11 +62,11 @@ addInstruction instr =
 terminateBlock :: Named Terminator -> LLVM.Name -> BlockGen ()
 terminateBlock term newName =
   modify'
-  (\(BlockGenState current stack syms) ->
-     BlockGenState
-     (partialBlock newName)
-     (makeBasicBlock current term : stack)
-     syms
+  (\s@(BlockGenState current stack _ _) ->
+     s
+     { blockGenStateCurrentBlock = partialBlock newName
+     , blockGenStateBlockStack = makeBasicBlock current term : stack
+     }
   )
 
 addSymbolToTable :: Amy.Name -> Operand -> BlockGen ()
@@ -72,3 +75,12 @@ addSymbolToTable name' op = modify' (\s -> s { blockGenStateSymbolTable = Map.in
 lookupSymbol :: Amy.Name -> BlockGen (Maybe Operand)
 lookupSymbol name' =
   Map.lookup name' <$> gets blockGenStateSymbolTable
+
+freshId :: BlockGen Word
+freshId = do
+  id' <- gets blockGenStateLastId
+  modify' (\s -> s { blockGenStateLastId = 1 + blockGenStateLastId s })
+  pure id'
+
+freshUnName :: BlockGen LLVM.Name
+freshUnName = UnName <$> freshId
