@@ -1,11 +1,9 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Amy.Codegen.Pure
   ( codegenModule
   ) where
 
-import Control.Monad.State.Strict
 import qualified Data.ByteString.Char8 as BS8
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
@@ -23,6 +21,7 @@ import qualified LLVM.AST.IntegerPredicate as IP
 import LLVM.AST.Global as LLVM
 
 import Amy.ANF
+import Amy.Codegen.Monad
 import Amy.Literal
 import Amy.Names as Amy
 import Amy.Prim
@@ -68,53 +67,7 @@ codegenTopLevelBinding binding =
     }
 
 codegenExpr :: ANFExpr -> [BasicBlock]
-codegenExpr expr =
-  let
-    (operand, BlockGenState lastBlock blockStack) = runBlockGen $ codegenExpr' expr
-    blocks = reverse $ makeBasicBlock lastBlock (Do $ Ret (Just operand) []) : blockStack
-  in blocks
-
--- | In-progress 'BasicBlock' without terminator
-data PartialBlock
-  = PartialBlock
-  { partialBlockName :: LLVM.Name
-  , partialBlockInstructions :: [Named Instruction] -- NB: In reverse order
-  } deriving (Show, Eq)
-
-partialBlock :: LLVM.Name -> PartialBlock
-partialBlock name' = PartialBlock name' []
-
-makeBasicBlock :: PartialBlock -> Named Terminator -> BasicBlock
-makeBasicBlock (PartialBlock name' instructions) terminator = BasicBlock name' instructions terminator
-
--- TODO: Move all this monad stuff to a Monad.hs module
-
-newtype BlockGen a = BlockGen (State BlockGenState a)
-  deriving (Functor, Applicative, Monad, MonadState BlockGenState)
-
-runBlockGen :: BlockGen a -> (a, BlockGenState)
-runBlockGen (BlockGen action) = runState action (BlockGenState (partialBlock "entry") [])
-
-data BlockGenState
-  = BlockGenState
-  { blockGenStateCurrentBlock :: PartialBlock
-  , blockGenStateBlockStack :: [BasicBlock]
-  } deriving (Show, Eq)
-
-addInstruction :: Named Instruction -> BlockGen ()
-addInstruction instr =
-  modify' $ \s -> s { blockGenStateCurrentBlock = addInstruction' (blockGenStateCurrentBlock s) }
- where
-  addInstruction' block = block { partialBlockInstructions = instr : partialBlockInstructions block }
-
-terminateBlock :: Named Terminator -> LLVM.Name -> BlockGen ()
-terminateBlock term newName =
-  modify'
-  (\(BlockGenState current stack) ->
-     BlockGenState
-     (partialBlock newName)
-     (makeBasicBlock current term : stack)
-  )
+codegenExpr expr = runBlockGen $ codegenExpr' expr
 
 codegenExpr' :: ANFExpr -> BlockGen Operand
 codegenExpr' (ANFEVal val) = pure $ valOperand val
