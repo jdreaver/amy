@@ -80,10 +80,6 @@ codegenExpr' (ANFELet (ANFLet bindings expr)) = do
     addSymbolToTable (IdentName $ anfBindingName binding) op
   codegenExpr' expr
 codegenExpr' (ANFEIf (ANFIf pred' then' else' ty)) = do
-  let
-    one = ConstantOperand $ C.Int 1 1
-    true = one
-
   -- Name blocks and operands
   ifId <- freshId
   let
@@ -99,6 +95,8 @@ codegenExpr' (ANFEIf (ANFIf pred' then' else' ty)) = do
 
   -- Generate predicate operation
   predOp <- valOperand pred'
+  let
+    true = ConstantOperand $ C.Int 1 1
   addInstruction (testOpName := ICmp IP.EQ true predOp [])
   terminateBlock (Do $ CondBr testOpRef thenBlockName elseBlockName []) thenBlockName
 
