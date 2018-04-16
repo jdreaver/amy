@@ -58,9 +58,9 @@ normalizeTerm expr = normalizeExpr expr pure
 normalizeName :: TExpr -> (ANFVal -> ANFConvert ANFExpr) -> ANFConvert ANFExpr
 normalizeName (TELit lit) c = c $ ANFLit lit
 normalizeName (TEVar tvar@(Typed ty var)) c =
-  case var of
+  case (ty, var) of
     -- Top-level values need to be first called as functions
-    IdentName (Ident _ _ True) -> mkNormalizeLet (ANFEApp $ ANFApp (ANFVar tvar) [] ty) ty c
+    (TyCon _, IdentName (Ident _ _ True)) -> mkNormalizeLet (ANFEApp $ ANFApp (ANFVar tvar) [] ty) ty c
     -- Not a top-level value, just return
     _ -> c $ ANFVar tvar
 normalizeName expr c = do
