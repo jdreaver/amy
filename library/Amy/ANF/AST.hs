@@ -38,7 +38,6 @@ data ANFExtern
 data ANFVal
   = ANFVar !(Typed PrimitiveType Name)
   | ANFLit !Literal
-  | ANFPrim !PrimitiveFunctionName
   deriving (Show, Eq)
 
 data ANFExpr
@@ -59,6 +58,8 @@ data ANFIf
   { anfIfPredicate :: !ANFVal
   , anfIfThen :: !ANFExpr
   , anfIfElse :: !ANFExpr
+  , anfIfId :: !IdentId
+  , anfIfType :: !(Type PrimitiveType)
   } deriving (Show, Eq)
 
 data ANFApp

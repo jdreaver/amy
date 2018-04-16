@@ -3,6 +3,7 @@
 module Amy.ANF.Monad
   ( ANFConvert
   , runANFConvert
+  , freshId
   , freshIdent
   ) where
 
@@ -20,8 +21,12 @@ runANFConvert startingId (ANFConvert action) = evalState action (ANFConvertState
 newtype ANFConvertState = ANFConvertState { lastId :: Int }
   deriving (Show, Eq)
 
+freshId :: ANFConvert IdentId
+freshId = do
+  modify' (\s -> s { lastId = 1 + lastId s })
+  gets lastId
+
 freshIdent :: Text -> ANFConvert Ident
 freshIdent t = do
-  modify' (\s -> s { lastId = 1 + lastId s })
-  id' <- gets lastId
+  id' <- freshId
   pure $ Ident t id' False

@@ -15,6 +15,7 @@ import System.Exit (die)
 import System.IO (hPutStrLn, stderr)
 import Text.Megaparsec
 
+import Amy.ANF
 import Amy.Codegen
 import Amy.Errors
 import Amy.Renamer
@@ -46,7 +47,8 @@ process inputFile input =
       parsed <- first ((:[]) . ParserError) $ parse parseModule inputFile input
       renamed <- rename parsed
       typed <- first (:[]) $ inferModule renamed
-      codegenPure typed
+      let anf = normalizeModule typed
+      pure $ codegenModule anf
   in do
     eCodegenString <- traverse generateLLVMIR eModule
     either (hPutStrLn stderr . intercalate "\n" . fmap showError) BS8.putStrLn eCodegenString

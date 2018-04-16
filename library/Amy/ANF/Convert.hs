@@ -37,7 +37,9 @@ normalizeExpr (TEIf (TIf pred' then' else')) c =
   normalizeName pred' $ \predVal -> do
     then'' <- normalizeTerm then'
     else'' <- normalizeTerm else'
-    c $ ANFEIf $ ANFIf predVal then'' else''
+    ifId <- freshId
+    let ty = expressionType then'
+    c $ ANFEIf $ ANFIf predVal then'' else'' ifId ty
 normalizeExpr (TELet (TLet bindings expr)) c = do
   bindings' <- traverse normalizeBinding bindings
   expr' <- normalizeExpr expr c
@@ -47,7 +49,7 @@ normalizeExpr (TEApp (TApp func args retTy)) c =
   let mkApp funcVal = c $ ANFEApp $ ANFApp funcVal argVals retTy
   in
     case func of
-      (TEVar (Typed _ (PrimitiveName prim))) -> mkApp (ANFPrim prim)
+      -- (TEVar (Typed _ (PrimitiveName prim))) -> mkApp (ANFPrim prim)
       _ -> normalizeName func mkApp
 
 normalizeTerm :: TExpr -> ANFConvert ANFExpr
