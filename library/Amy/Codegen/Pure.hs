@@ -7,9 +7,10 @@ module Amy.Codegen.Pure
 import qualified Data.ByteString.Char8 as BS8
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
-import Data.Foldable (traverse_)
+import Data.Foldable (for_)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
 import LLVM.AST as LLVM
@@ -70,11 +71,13 @@ codegenExpr :: ANFExpr -> [BasicBlock]
 codegenExpr expr = runBlockGen $ codegenExpr' expr
 
 codegenExpr' :: ANFExpr -> BlockGen Operand
-codegenExpr' (ANFEVal val) = pure $ valOperand val
+codegenExpr' (ANFEVal val) = valOperand val
 codegenExpr' (ANFELet (ANFLet bindings expr)) = do
   -- TODO: If the binding body is just a literal, then we have to somehow
   -- assign that literal to the binding name.
-  traverse_ codegenExpr' (anfBindingBody <$> bindings)
+  for_ bindings $ \binding -> do
+    op <- codegenExpr' (anfBindingBody binding)
+    addSymbolToTable (IdentName $ anfBindingName binding) op
   codegenExpr' expr
 codegenExpr' (ANFEIf (ANFIf pred' then' else' ifId ty)) = do
   let
@@ -94,7 +97,8 @@ codegenExpr' (ANFEIf (ANFIf pred' then' else' ifId ty)) = do
     endOpRef = LocalReference ty' endOpName
 
   -- Generate predicate operation
-  addInstruction (testOpName := ICmp IP.EQ true (valOperand pred') [])
+  predOp <- valOperand pred'
+  addInstruction (testOpName := ICmp IP.EQ true predOp [])
   terminateBlock (Do $ CondBr testOpRef thenBlockName elseBlockName []) thenBlockName
 
   -- Generate then block
@@ -109,8 +113,7 @@ codegenExpr' (ANFEIf (ANFIf pred' then' else' ifId ty)) = do
   addInstruction $ endOpName := Phi ty' [(thenOp, thenBlockName), (elseOp, elseBlockName)] []
   pure endOpRef
 codegenExpr' (ANFEApp (ANFApp func args' returnTy)) = do
-  let
-    argOps = valOperand <$> args'
+  argOps <- traverse valOperand args'
   case func of
     ANFLit lit -> error $ "Tried to apply function on literal " ++ show lit
     ANFVar (Typed ty name') -> do
@@ -132,18 +135,17 @@ codegenExpr' (ANFEApp (ANFApp func args' returnTy)) = do
       addInstruction $ opName := instruction
       pure $ LocalReference (llvmPrimitiveType $ assertPrimitiveType returnTy) opName
 
-valOperand :: ANFVal -> Operand
+valOperand :: ANFVal -> BlockGen Operand
 valOperand (ANFVar (Typed ty name')) =
   let
     ty' = llvmType ty
     name'' = nameToLLVM name'
   in
     case name' of
-      (IdentName (Ident _ _ True)) -> ConstantOperand $ C.GlobalReference ty' name''
-      _ -> LocalReference ty' name''
-
+      (IdentName (Ident _ _ True)) -> pure $ ConstantOperand $ C.GlobalReference ty' name''
+      _ -> fromMaybe (LocalReference ty' name'') <$> lookupSymbol name'
 valOperand (ANFLit lit) =
-  ConstantOperand $
+  pure $ ConstantOperand $
     case lit of
       LiteralInt i -> C.Int 32 (fromIntegral i)
       LiteralDouble x -> C.Float (F.Double x)
