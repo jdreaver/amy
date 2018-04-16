@@ -3,7 +3,13 @@ main =
   let
     x :: Int
     x = 2
+  in f x
+
+
+# f :: Int -> Int
+f x =
+  let
     y :: Int
     y = iAdd x 5
   in
-    if iLessThan x 5 then 100 else 200
+    if iLessThan 5 (iSub 3 y) then 100 else 200
