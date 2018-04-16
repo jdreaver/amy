@@ -133,7 +133,15 @@ codegenExpr' (ANFEApp (ANFApp func args' returnTy)) = do
       pure $ LocalReference (llvmPrimitiveType $ assertPrimitiveType returnTy) opName
 
 valOperand :: ANFVal -> Operand
-valOperand (ANFVar (Typed ty name')) = LocalReference (llvmType ty) (nameToLLVM name')
+valOperand (ANFVar (Typed ty name')) =
+  let
+    ty' = llvmType ty
+    name'' = nameToLLVM name'
+  in
+    case name' of
+      (IdentName (Ident _ _ True)) -> ConstantOperand $ C.GlobalReference ty' name''
+      _ -> LocalReference ty' name''
+
 valOperand (ANFLit lit) =
   ConstantOperand $
     case lit of
