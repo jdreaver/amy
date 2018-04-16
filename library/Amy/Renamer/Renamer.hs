@@ -12,6 +12,7 @@ import Data.Text (Text)
 import Data.Validation
 
 import Amy.Errors
+import Amy.Names
 import Amy.Renamer.AST
 import Amy.Renamer.Monad
 import Amy.Prim
@@ -57,7 +58,13 @@ renameType name =
 
 renameBinding :: Map Text (Type (Located Text)) -> Binding -> Renamer (Validation [Error] RBinding)
 renameBinding typeMap binding = withNewScope $ do -- Begin new scope
-  rBindingName <- lookupValueInScopeOrError (bindingName binding)
+  name <- lookupValueInScopeOrError (bindingName binding)
+  let
+    rBindingName =
+      case name of
+        (Success (Located l (IdentName ident))) -> pure (Located l ident)
+        (Success _) -> Failure [NonIdentifierName (bindingName binding)]
+        Failure f -> Failure f
   let rBindingType = traverse (traverse renameType) $ Map.lookup (locatedValue $ bindingName binding) typeMap
   rBindingArgs <- traverse (addValueToScope False) (bindingArgs binding)
   rBindingBody <- renameExpression (bindingBody binding)

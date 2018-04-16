@@ -22,7 +22,7 @@ data ANFModule
 
 data ANFBinding
   = ANFBinding
-  { anfBindingName :: !Name
+  { anfBindingName :: !Ident
   , anfBindingType :: !(Scheme PrimitiveType)
   , anfBindingArgs :: ![Typed PrimitiveType Name]
   , anfBindingReturnType :: !(Type PrimitiveType)

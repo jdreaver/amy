@@ -60,7 +60,7 @@ codegenTopLevelBinding binding =
   in
     GlobalDefinition
     functionDefaults
-    { name = nameToLLVM $ anfBindingName binding
+    { name = identToLLVM $ anfBindingName binding
     , parameters = (params, False)
     , LLVM.returnType = returnType'
     , basicBlocks = blocks
@@ -184,7 +184,13 @@ llvmType = go . typeToNonEmpty
 
 nameToLLVM :: Amy.Name -> LLVM.Name
 nameToLLVM (PrimitiveName prim) = LLVM.Name $ stringToShortBS $ show prim
-nameToLLVM (IdentName (Ident name' _ _)) = LLVM.Name $ textToShortBS name'
+nameToLLVM (IdentName ident) = identToLLVM ident
+
+identToLLVM :: Ident -> LLVM.Name
+identToLLVM (Ident name' _ _) = LLVM.Name $ textToShortBS name'
+
+identTextName :: Ident -> Text
+identTextName (Ident name' _ _) = name'
 
 -- | Convert from a amy primitive type to an LLVM type
 llvmPrimitiveType :: PrimitiveType -> LLVM.Type

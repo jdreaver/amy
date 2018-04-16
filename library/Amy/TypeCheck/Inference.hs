@@ -189,7 +189,9 @@ inferBindings bindings = do
 
   -- Add all the binding type variables to the typing environment and then
   -- collect constraints for all bindings.
-  let bindingNameSchemes = (\(binding, ty) -> (locatedValue $ rBindingName binding, Forall [] ty)) <$> bindingsAndTypes
+  let
+    bindingNameSchemes =
+      (\(binding, ty) -> (IdentName $ locatedValue $ rBindingName binding, Forall [] ty)) <$> bindingsAndTypes
   bindingsInference <- extendEnvM bindingNameSchemes $ for bindingsAndTypes $ \(binding, ty) -> do
     (binding', constraints) <- inferBinding binding
     let
@@ -259,7 +261,7 @@ inferExpr (REIf (RIf pred' then' else')) = do
 inferExpr (RELet (RLet bindings expression)) = do
   bindingsInference <- inferBindings bindings
   let
-    bindingSchemes = (\(binding, _) -> (tBindingName binding, tBindingType binding)) <$> bindingsInference
+    bindingSchemes = (\(binding, _) -> (IdentName $ tBindingName binding, tBindingType binding)) <$> bindingsInference
     bindingCons = concatMap snd bindingsInference
   (expression', expCons) <- extendEnvM bindingSchemes $ inferExpr expression
   pure

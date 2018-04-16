@@ -34,7 +34,7 @@ data TModule
 -- 'BindingType' after they've been paired together.
 data TBinding
   = TBinding
-  { tBindingName :: !Name
+  { tBindingName :: !Ident
   , tBindingType :: !(Scheme PrimitiveType)
     -- ^ Type for whole function
   , tBindingArgs :: ![Typed PrimitiveType Name]
@@ -95,7 +95,7 @@ tModuleNames (TModule bindings externs) =
 
 bindingNames :: TBinding -> [Name]
 bindingNames binding =
-  tBindingName binding
+  (IdentName $ tBindingName binding)
   : (typedValue <$> tBindingArgs binding)
   ++ exprNames (tBindingBody binding)
 

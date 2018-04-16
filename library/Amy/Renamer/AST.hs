@@ -33,7 +33,7 @@ data RModule
 -- 'BindingType' after they've been paired together.
 data RBinding
   = RBinding
-  { rBindingName :: !(Located Name)
+  { rBindingName :: !(Located Ident)
   , rBindingType :: !(Maybe (Type (Located PrimitiveType)))
   , rBindingArgs :: ![Located Name]
   , rBindingBody :: !RExpr

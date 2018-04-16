@@ -70,8 +70,8 @@ normalizeName expr c = do
 
 mkNormalizeLet :: ANFExpr -> Type PrimitiveType -> (ANFVal -> ANFConvert ANFExpr) -> ANFConvert ANFExpr
 mkNormalizeLet expr exprType c = do
-  newName <- IdentName <$> freshIdent "t"
-  body <- c $ ANFVar (Typed exprType newName)
+  newName <- freshIdent "t"
+  body <- c $ ANFVar (Typed exprType (IdentName newName))
   pure $ ANFELet $ ANFLet [ANFBinding newName (Forall [] exprType) [] exprType expr] body
 
 normalizeBinding :: TBinding -> ANFConvert ANFBinding

@@ -25,6 +25,7 @@ data Error
   | UnknownVariable !(Located Text)
   | VariableShadowed !(Located Text) !Name
   | UnknownTypeName !(Located Text)
+  | NonIdentifierName !(Located Text)
 
   -- Type checker
   -- TODO: Add source spans here
@@ -53,6 +54,7 @@ errorLocation e =
     UnknownVariable (Located s _) -> Just s
     VariableShadowed (Located s _) _ -> Just s
     UnknownTypeName (Located s _) -> Just s
+    NonIdentifierName (Located s _) -> Just s
 
     UnificationFail{} -> Nothing
     InfiniteType{} -> Nothing
