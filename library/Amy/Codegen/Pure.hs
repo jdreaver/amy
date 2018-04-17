@@ -73,8 +73,6 @@ codegenExpr expr = runBlockGen $ codegenExpr' expr
 codegenExpr' :: ANFExpr -> BlockGen Operand
 codegenExpr' (ANFEVal val) = valOperand val
 codegenExpr' (ANFELet (ANFLet bindings expr)) = do
-  -- TODO: If the binding body is just a literal, then we have to somehow
-  -- assign that literal to the binding name.
   for_ bindings $ \binding -> do
     op <- codegenExpr' (anfBindingBody binding)
     addSymbolToTable (IdentName $ anfBindingName binding) op
