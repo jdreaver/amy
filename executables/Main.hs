@@ -8,7 +8,6 @@ import Data.Bifunctor (first)
 import Data.List (intercalate)
 import Data.Text (Text, pack)
 import qualified Data.Text.IO as TIO
-import LLVM.AST (Module)
 import System.Console.Haskeline
 import System.Environment (getArgs)
 import System.Exit (die)
@@ -42,13 +41,11 @@ main = do
 process :: FilePath -> Text -> IO ()
 process inputFile input =
   let
-    eModule :: Either [Error] LLVM.AST.Module
+    eModule :: Either [Error] TModule
     eModule = do
       parsed <- first ((:[]) . ParserError) $ parse parseModule inputFile input
       renamed <- rename parsed
-      typed <- first (:[]) $ inferModule renamed
-      let anf = normalizeModule typed
-      pure $ codegenModule anf
+      first (:[]) $ inferModule renamed
   in do
-    eCodegenString <- traverse generateLLVMIR eModule
+    eCodegenString <- traverse (generateLLVMIR . codegenModule . normalizeModule) eModule
     either (hPutStrLn stderr . intercalate "\n" . fmap showError) BS8.putStrLn eCodegenString
