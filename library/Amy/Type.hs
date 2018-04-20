@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Amy.Type
   ( Type(..)
@@ -16,6 +17,7 @@ module Amy.Type
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
+import GHC.Exts (IsString)
 
 data Type ty
   = TyCon !ty
@@ -29,7 +31,7 @@ data Type ty
 infixr 0 `TyArr`
 
 newtype TVar = TVar { unTyVar :: Text }
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, IsString)
 
 -- | Turns a 'NonEmpty' list of 'Type' values into a 'Type' via 'TyArr'.
 typeFromNonEmpty :: NonEmpty (Type ty) -> Type ty

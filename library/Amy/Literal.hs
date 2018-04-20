@@ -2,6 +2,7 @@
 
 module Amy.Literal
   ( Literal(..)
+  , showLiteral
   , literalType
   ) where
 
@@ -14,6 +15,11 @@ data Literal
   | LiteralDouble !Double
   | LiteralBool !Bool
   deriving (Show, Eq)
+
+showLiteral :: Literal -> String
+showLiteral (LiteralInt x) = show x
+showLiteral (LiteralDouble x) = show x
+showLiteral (LiteralBool x) = show x
 
 literalType :: Literal -> PrimitiveType
 literalType (LiteralInt _) = IntType
