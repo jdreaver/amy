@@ -11,6 +11,7 @@
 module Amy.Prim
   ( PrimitiveType(..)
   , readPrimitiveType
+  , showPrimitiveType
   , PrimitiveFunction(..)
   , PrimitiveFunctionName(..)
   , allPrimitiveFunctionNames
@@ -35,6 +36,13 @@ readPrimitiveType t =
     "Double" -> Just DoubleType
     "Bool" -> Just BoolType
     _ -> Nothing
+
+showPrimitiveType :: PrimitiveType -> Text
+showPrimitiveType t =
+  case t of
+    IntType -> "Int"
+    DoubleType -> "Double"
+    BoolType -> "Bool"
 
 data PrimitiveFunction
   = PrimitiveFunction
