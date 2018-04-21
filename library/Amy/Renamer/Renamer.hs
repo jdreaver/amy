@@ -12,7 +12,6 @@ import Data.Text (Text)
 import Data.Validation
 
 import Amy.Errors
-import Amy.Names
 import Amy.Renamer.AST
 import Amy.Renamer.Monad
 import Amy.Prim
@@ -62,7 +61,7 @@ renameBinding typeMap binding = withNewScope $ do -- Begin new scope
   let
     rBindingName =
       case name of
-        (Success (Located l (IdentName ident))) -> pure (Located l ident)
+        (Success (Located l (RIdentName ident))) -> pure (Located l ident)
         (Success _) -> Failure [NonIdentifierName (bindingName binding)]
         Failure f -> Failure f
   let rBindingType = traverse (traverse renameType) $ Map.lookup (locatedValue $ bindingName binding) typeMap

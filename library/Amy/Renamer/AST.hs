@@ -9,6 +9,9 @@ module Amy.Renamer.AST
   , RLet(..)
   , RApp(..)
 
+  , RName(..)
+  , RIdent(..)
+
     -- Re-export
   , Literal(..)
   ) where
@@ -16,9 +19,9 @@ module Amy.Renamer.AST
 import Data.List.NonEmpty (NonEmpty)
 
 import Amy.Literal (Literal(..))
-import Amy.Names
 import Amy.Prim
 import Amy.Syntax.Located
+import Data.Text (Text)
 import Amy.Type
 
 -- | An 'RModule' is a 'Module' after renaming.
@@ -33,23 +36,23 @@ data RModule
 -- 'BindingType' after they've been paired together.
 data RBinding
   = RBinding
-  { rBindingName :: !(Located Ident)
+  { rBindingName :: !(Located RIdent)
   , rBindingType :: !(Maybe (Scheme (Located PrimitiveType)))
-  , rBindingArgs :: ![Located Name]
+  , rBindingArgs :: ![Located RName]
   , rBindingBody :: !RExpr
   } deriving (Show, Eq)
 
 -- | A renamed extern declaration.
 data RExtern
   = RExtern
-  { rExternName :: !(Located Name)
+  { rExternName :: !(Located RName)
   , rExternType :: !(Type (Located PrimitiveType))
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'
 data RExpr
   = RELit !(Located Literal)
-  | REVar !(Located Name)
+  | REVar !(Located RName)
   | REIf !RIf
   | RELet !RLet
   | REApp !RApp
@@ -75,3 +78,18 @@ data RApp
   { rAppFunction :: !RExpr
   , rAppArgs :: !(NonEmpty RExpr)
   } deriving (Show, Eq)
+
+-- | An 'RName' is an identified name of something from the source code after
+-- renaming.
+data RName
+  = RPrimitiveName !PrimitiveFunctionName
+  | RIdentName !RIdent
+  deriving (Show, Eq, Ord)
+
+-- | An identifier from source code
+data RIdent
+  = RIdent
+  { rIdentText :: !Text
+  , rIdentId :: !Int
+  , rIdentIsTopLevel :: !Bool
+  } deriving (Show, Eq, Ord)

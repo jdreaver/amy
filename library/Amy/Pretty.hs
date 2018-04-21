@@ -31,7 +31,6 @@ import Data.Text.Prettyprint.Doc as X
 
 import Amy.ANF.AST
 import Amy.Literal
-import Amy.Names
 import Amy.Prim
 import Amy.Syntax.AST
 import Amy.Type
@@ -156,24 +155,24 @@ prettyTModule (TModule bindings externs) =
 
 prettyTExtern :: TExtern -> Doc ann
 prettyTExtern (TExtern name ty) =
-  prettyExtern (prettyName name) (showPrimitiveType <$> ty)
+  prettyExtern (prettyTName name) (showPrimitiveType <$> ty)
 
 prettyTBinding :: TBinding -> Doc ann
 prettyTBinding (TBinding ident scheme args _ body) =
-  prettyBindingScheme' (prettyIdent ident) (showPrimitiveType <$> scheme) <>
+  prettyBindingScheme' (prettyTIdent ident) (showPrimitiveType <$> scheme) <>
   hardline <>
-  prettyBinding' (prettyIdent ident) (prettyName . typedValue <$> args) (prettyTExpr body)
+  prettyBinding' (prettyTIdent ident) (prettyTName . typedValue <$> args) (prettyTExpr body)
 
-prettyName :: Name -> Doc ann
-prettyName (PrimitiveName prim) = pretty $ showPrimitiveFunctionName prim
-prettyName (IdentName ident) = prettyIdent ident
+prettyTName :: TName -> Doc ann
+prettyTName (TPrimitiveName prim) = pretty $ showPrimitiveFunctionName prim
+prettyTName (TIdentName ident) = prettyTIdent ident
 
-prettyIdent :: Ident -> Doc ann
-prettyIdent (Ident name _ _) = pretty name
+prettyTIdent :: TIdent -> Doc ann
+prettyTIdent (TIdent name _ _) = pretty name
 
 prettyTExpr :: TExpr -> Doc ann
 prettyTExpr (TELit lit) = pretty $ showLiteral lit
-prettyTExpr (TEVar (Typed _ var)) = prettyName var
+prettyTExpr (TEVar (Typed _ var)) = prettyTName var
 prettyTExpr (TEIf (TIf pred' then' else')) =
   prettyIf (prettyTExpr pred') (prettyTExpr then') (prettyTExpr else')
 prettyTExpr (TELet (TLet bindings body)) =
@@ -191,16 +190,23 @@ prettyANFModule (ANFModule bindings externs) =
 
 prettyANFExtern :: ANFExtern -> Doc ann
 prettyANFExtern (ANFExtern name ty) =
-  prettyExtern (prettyName name) (showPrimitiveType <$> ty)
+  prettyExtern (prettyANFName name) (showPrimitiveType <$> ty)
 
 prettyANFBinding :: ANFBinding -> Doc ann
 prettyANFBinding (ANFBinding ident scheme args _ body) =
-  prettyBindingScheme' (prettyIdent ident) (showPrimitiveType <$> scheme) <>
+  prettyBindingScheme' (prettyANFIdent ident) (showPrimitiveType <$> scheme) <>
   hardline <>
-  prettyBinding' (prettyIdent ident) (prettyName . typedValue <$> args) (prettyANFExpr body)
+  prettyBinding' (prettyANFIdent ident) (prettyANFName . typedValue <$> args) (prettyANFExpr body)
+
+prettyANFName :: ANFName -> Doc ann
+prettyANFName (ANFPrimitiveName prim) = pretty $ showPrimitiveFunctionName prim
+prettyANFName (ANFIdentName ident) = prettyANFIdent ident
+
+prettyANFIdent :: ANFIdent -> Doc ann
+prettyANFIdent (ANFIdent name _ _) = pretty name
 
 prettyANFVal :: ANFVal -> Doc ann
-prettyANFVal (ANFVar (Typed _ var)) = prettyName var
+prettyANFVal (ANFVar (Typed _ var)) = prettyANFName var
 prettyANFVal (ANFLit lit) = pretty $ showLiteral lit
 
 prettyANFExpr :: ANFExpr -> Doc ann
@@ -209,6 +215,6 @@ prettyANFExpr (ANFEIf (ANFIf pred' then' else' _)) =
   prettyIf (prettyANFVal pred') (prettyANFExpr then') (prettyANFExpr else')
 prettyANFExpr (ANFELet (ANFLet bindings body)) =
   prettyLet (prettyANFBinding <$> bindings) (prettyANFExpr body)
-prettyANFExpr (ANFEApp (ANFApp f args _)) = sep $ prettyIdent (typedValue f) : (prettyANFVal <$> args)
+prettyANFExpr (ANFEApp (ANFApp f args _)) = sep $ prettyANFIdent (typedValue f) : (prettyANFVal <$> args)
 prettyANFExpr (ANFEPrimOp (ANFApp f args _)) =
   sep $ pretty (showPrimitiveFunctionName f) : (prettyANFVal <$> args)

@@ -10,7 +10,7 @@ module Amy.ANF.Monad
 import Control.Monad.State.Strict
 import Data.Text (Text, pack)
 
-import Amy.Names
+import Amy.ANF.AST
 
 newtype ANFConvert a = ANFConvert (State ANFConvertState a)
   deriving (Functor, Applicative, Monad, MonadState ANFConvertState)
@@ -21,12 +21,12 @@ runANFConvert startingId (ANFConvert action) = evalState action (ANFConvertState
 newtype ANFConvertState = ANFConvertState { lastId :: Int }
   deriving (Show, Eq)
 
-freshId :: ANFConvert IdentId
+freshId :: ANFConvert Int
 freshId = do
   modify' (\s -> s { lastId = 1 + lastId s })
   gets lastId
 
-freshIdent :: Text -> ANFConvert Ident
+freshIdent :: Text -> ANFConvert ANFIdent
 freshIdent t = do
   id' <- freshId
-  pure $ Ident (t <> pack (show id')) id' False
+  pure $ ANFIdent (t <> pack (show id')) id' False

@@ -24,7 +24,6 @@ import LLVM.AST.Global as LLVM
 import Amy.ANF
 import Amy.Codegen.Monad
 import Amy.Literal
-import Amy.Names as Amy
 import Amy.Prim
 import Amy.Type as T
 
@@ -75,7 +74,7 @@ codegenExpr' (ANFEVal val) = valOperand val
 codegenExpr' (ANFELet (ANFLet bindings expr)) = do
   for_ bindings $ \binding -> do
     op <- codegenExpr' (anfBindingBody binding)
-    addSymbolToTable (IdentName $ anfBindingName binding) op
+    addSymbolToTable (ANFIdentName $ anfBindingName binding) op
   codegenExpr' expr
 codegenExpr' (ANFEIf (ANFIf pred' then' else' ty)) = do
   -- Name blocks and operands
@@ -116,7 +115,7 @@ codegenExpr' (ANFEIf (ANFIf pred' then' else' ty)) = do
   addInstruction $ endOpName := Phi ty' [(thenOp, thenBlockFinalName), (elseOp, elseBlockFinalName)] []
   pure endOpRef
 codegenExpr' (ANFEApp (ANFApp (Typed ty ident) args' returnTy)) = do
-  funcOperand <- valOperand (ANFVar $ Typed ty (IdentName ident))
+  funcOperand <- valOperand (ANFVar $ Typed ty (ANFIdentName ident))
   let
     mkInstruction argOps = Call Nothing CC.C [] (Right funcOperand) ((\arg -> (arg, [])) <$> argOps) [] []
   codegenFunctionApp args' returnTy mkInstruction
@@ -137,7 +136,7 @@ valOperand (ANFVar (Typed ty name')) =
     name'' = nameToLLVM name'
   in
     case name' of
-      (IdentName (Ident _ _ True)) -> pure $ ConstantOperand $ C.GlobalReference ty' name''
+      (ANFIdentName (ANFIdent _ _ True)) -> pure $ ConstantOperand $ C.GlobalReference ty' name''
       _ -> fromMaybe (LocalReference ty' name'') <$> lookupSymbol name'
 valOperand (ANFLit lit) =
   pure $ ConstantOperand $
@@ -187,12 +186,12 @@ llvmType = go . typeToNonEmpty
       }
       (AddrSpace 0)
 
-nameToLLVM :: Amy.Name -> LLVM.Name
-nameToLLVM (PrimitiveName prim) = LLVM.Name $ stringToShortBS $ show prim
-nameToLLVM (IdentName ident) = identToLLVM ident
+nameToLLVM :: ANFName -> LLVM.Name
+nameToLLVM (ANFPrimitiveName prim) = LLVM.Name $ stringToShortBS $ show prim
+nameToLLVM (ANFIdentName ident) = identToLLVM ident
 
-identToLLVM :: Ident -> LLVM.Name
-identToLLVM (Ident name' _ _) = LLVM.Name $ textToShortBS name'
+identToLLVM :: ANFIdent -> LLVM.Name
+identToLLVM (ANFIdent name' _ _) = LLVM.Name $ textToShortBS name'
 
 -- | Convert from a amy primitive type to an LLVM type
 llvmPrimitiveType :: PrimitiveType -> LLVM.Type

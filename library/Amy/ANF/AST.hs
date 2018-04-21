@@ -7,10 +7,14 @@ module Amy.ANF.AST
   , ANFLet(..)
   , ANFIf(..)
   , ANFApp(..)
+
+  , ANFName(..)
+  , ANFIdent(..)
   ) where
 
+import Data.Text (Text)
+
 import Amy.Literal
-import Amy.Names
 import Amy.Prim
 import Amy.Type
 
@@ -22,21 +26,21 @@ data ANFModule
 
 data ANFBinding
   = ANFBinding
-  { anfBindingName :: !Ident
+  { anfBindingName :: !ANFIdent
   , anfBindingType :: !(Scheme PrimitiveType)
-  , anfBindingArgs :: ![Typed PrimitiveType Name]
+  , anfBindingArgs :: ![Typed PrimitiveType ANFName]
   , anfBindingReturnType :: !(Type PrimitiveType)
   , anfBindingBody :: !ANFExpr
   } deriving (Show, Eq)
 
 data ANFExtern
   = ANFExtern
-  { anfExternName :: !Name
+  { anfExternName :: !ANFName
   , anfExternType :: !(Type PrimitiveType)
   } deriving (Show, Eq)
 
 data ANFVal
-  = ANFVar !(Typed PrimitiveType Name)
+  = ANFVar !(Typed PrimitiveType ANFName)
   | ANFLit !Literal
   deriving (Show, Eq)
 
@@ -44,7 +48,7 @@ data ANFExpr
   = ANFEVal !ANFVal
   | ANFELet !ANFLet
   | ANFEIf !ANFIf
-  | ANFEApp !(ANFApp (Typed PrimitiveType Ident))
+  | ANFEApp !(ANFApp (Typed PrimitiveType ANFIdent))
   | ANFEPrimOp !(ANFApp PrimitiveFunctionName)
   deriving (Show, Eq)
 
@@ -68,3 +72,16 @@ data ANFApp f
   , anfAppArgs :: ![ANFVal]
   , anfAppReturnType :: !(Type PrimitiveType)
   } deriving (Show, Eq)
+
+data ANFName
+  = ANFPrimitiveName !PrimitiveFunctionName
+  | ANFIdentName !ANFIdent
+  deriving (Show, Eq, Ord)
+
+-- | An identifier from source code
+data ANFIdent
+  = ANFIdent
+  { anfIdentText :: !Text
+  , anfIdentId :: !Int
+  , anfIdentIsTopLevel :: !Bool
+  } deriving (Show, Eq, Ord)

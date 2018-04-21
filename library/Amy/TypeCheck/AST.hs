@@ -11,14 +11,17 @@ module Amy.TypeCheck.AST
   , expressionType
   , tModuleNames
 
+  , TName(..)
+  , TIdent(..)
+
     -- Re-export
   , Literal(..)
   ) where
 
 import Data.List.NonEmpty (NonEmpty)
+import Data.Text (Text)
 
 import Amy.Literal
-import Amy.Names
 import Amy.Prim
 import Amy.Type
 
@@ -34,10 +37,10 @@ data TModule
 -- 'BindingType' after they've been paired together.
 data TBinding
   = TBinding
-  { tBindingName :: !Ident
+  { tBindingName :: !TIdent
   , tBindingType :: !(Scheme PrimitiveType)
     -- ^ Type for whole function
-  , tBindingArgs :: ![Typed PrimitiveType Name]
+  , tBindingArgs :: ![Typed PrimitiveType TName]
     -- ^ Argument names and types split out from 'tBindingType'
   , tBindingReturnType :: !(Type PrimitiveType)
     -- ^ Return type split out from 'tBindingType'
@@ -47,14 +50,14 @@ data TBinding
 -- | A renamed extern declaration.
 data TExtern
   = TExtern
-  { tExternName :: !Name
+  { tExternName :: !TName
   , tExternType :: !(Type PrimitiveType)
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'
 data TExpr
   = TELit !Literal
-  | TEVar !(Typed PrimitiveType Name)
+  | TEVar !(Typed PrimitiveType TName)
   | TEIf !TIf
   | TELet !TLet
   | TEApp !TApp
@@ -90,18 +93,18 @@ expressionType (TEApp app) = tAppReturnType app
 expressionType (TEParens expr) = expressionType expr
 
 -- | Get all the 'Name's in a module.
-tModuleNames :: TModule -> [Name]
+tModuleNames :: TModule -> [TName]
 tModuleNames (TModule bindings externs) =
   concatMap bindingNames bindings
   ++ fmap tExternName externs
 
-bindingNames :: TBinding -> [Name]
+bindingNames :: TBinding -> [TName]
 bindingNames binding =
-  (IdentName $ tBindingName binding)
+  (TIdentName $ tBindingName binding)
   : (typedValue <$> tBindingArgs binding)
   ++ exprNames (tBindingBody binding)
 
-exprNames :: TExpr -> [Name]
+exprNames :: TExpr -> [TName]
 exprNames (TELit _) = []
 exprNames (TEVar var) = [typedValue var]
 exprNames (TEIf (TIf pred' then' else')) =
@@ -115,3 +118,16 @@ exprNames (TEApp (TApp f args _)) =
   exprNames f
   ++ concatMap exprNames args
 exprNames (TEParens expr) = exprNames expr
+
+data TName
+  = TPrimitiveName !PrimitiveFunctionName
+  | TIdentName !TIdent
+  deriving (Show, Eq, Ord)
+
+-- | An identifier from source code
+data TIdent
+  = TIdent
+  { tIdentText :: !Text
+  , tIdentId :: !Int
+  , tIdentIsTopLevel :: !Bool
+  } deriving (Show, Eq, Ord)

@@ -77,7 +77,7 @@ data Typed ty a
   = Typed
   { typedType :: !(Type ty)
   , typedValue :: !a
-  } deriving (Show, Eq, Ord)
+  } deriving (Show, Eq, Ord, Functor)
 
 data Scheme ty
   = Forall [TVar] !(Type ty)

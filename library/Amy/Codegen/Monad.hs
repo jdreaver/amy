@@ -18,7 +18,7 @@ import qualified Data.Map.Strict as Map
 import Control.Monad.State.Strict
 import LLVM.AST as LLVM
 
-import Amy.Names as Amy
+import Amy.ANF.AST
 
 newtype BlockGen a = BlockGen (State BlockGenState a)
   deriving (Functor, Applicative, Monad, MonadState BlockGenState)
@@ -34,7 +34,7 @@ data BlockGenState
   = BlockGenState
   { blockGenStateCurrentBlock :: !PartialBlock
   , blockGenStateBlockStack :: ![BasicBlock]
-  , blockGenStateSymbolTable :: !(Map Amy.Name Operand)
+  , blockGenStateSymbolTable :: !(Map ANFName Operand)
   , blockGenStateLastId :: !Word
   } deriving (Show, Eq)
 
@@ -73,10 +73,10 @@ terminateBlock term newName =
 currentBlockName :: BlockGen LLVM.Name
 currentBlockName = gets (partialBlockName . blockGenStateCurrentBlock)
 
-addSymbolToTable :: Amy.Name -> Operand -> BlockGen ()
+addSymbolToTable :: ANFName -> Operand -> BlockGen ()
 addSymbolToTable name' op = modify' (\s -> s { blockGenStateSymbolTable = Map.insert name' op (blockGenStateSymbolTable s) })
 
-lookupSymbol :: Amy.Name -> BlockGen (Maybe Operand)
+lookupSymbol :: ANFName -> BlockGen (Maybe Operand)
 lookupSymbol name' =
   Map.lookup name' <$> gets blockGenStateSymbolTable
 

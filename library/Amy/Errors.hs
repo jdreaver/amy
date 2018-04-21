@@ -11,8 +11,9 @@ import Data.Void (Void)
 import LLVM.AST (Operand)
 import Text.Megaparsec
 
-import Amy.Names
+import Amy.ANF.AST
 import Amy.Prim
+import Amy.Renamer.AST
 import Amy.Syntax.Located
 import Amy.Type
 import Amy.TypeCheck.AST
@@ -23,7 +24,7 @@ data Error
 
   -- Renamer
   | UnknownVariable !(Located Text)
-  | VariableShadowed !(Located Text) !Name
+  | VariableShadowed !(Located Text) !RName
   | UnknownTypeName !(Located Text)
   | NonIdentifierName !(Located Text)
 
@@ -31,7 +32,7 @@ data Error
   -- TODO: Add source spans here
   | UnificationFail !(Type PrimitiveType) !(Type PrimitiveType)
   | InfiniteType TVar !(Type PrimitiveType)
-  | UnboundVariable Name
+  | UnboundVariable !TName
 
   -- | BindingLacksTypeSignature !RBinding
   -- | TypeMismatch !(Type PrimitiveType) !(Type PrimitiveType)
@@ -41,7 +42,7 @@ data Error
   -- | ExpectedFunctionType !(Type PrimitiveType)
 
   -- Codegen
-  | CodegenMissingSymbol !Name
+  | CodegenMissingSymbol !ANFName
   | CodegenExpectedPrimitiveType !(Type PrimitiveType)
   | NoCurrying !TApp
   | UnknownOperandType !Operand
