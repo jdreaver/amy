@@ -127,7 +127,7 @@ codegenFunctionApp args' returnTy mkInstruction = do
   opName <- freshUnName
   argOps <- traverse valOperand args'
   addInstruction $ opName := mkInstruction argOps
-  pure $ LocalReference (llvmPrimitiveType $ assertPrimitiveType returnTy) opName
+  pure $ LocalReference (llvmType returnTy) opName
 
 valOperand :: ANFVal -> BlockGen Operand
 valOperand (ANFVar (Typed ty name')) =
@@ -198,10 +198,6 @@ llvmPrimitiveType :: PrimitiveType -> LLVM.Type
 llvmPrimitiveType IntType = IntegerType 64
 llvmPrimitiveType DoubleType = FloatingPointType DoubleFP
 llvmPrimitiveType BoolType = IntegerType 1
-
-assertPrimitiveType :: T.Type PrimitiveType -> PrimitiveType
-assertPrimitiveType (TyCon prim) = prim
-assertPrimitiveType t = error $ "Expected PrimitiveType, got " ++ show t
 
 textToShortBS :: Text -> ShortByteString
 textToShortBS = BSS.toShort . encodeUtf8
