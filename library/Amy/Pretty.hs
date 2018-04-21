@@ -20,11 +20,16 @@ module Amy.Pretty
     -- Typed AST
   , prettyTModule
   , prettyTExpr
+
+    -- ANF AST
+  , prettyANFModule
+  , prettyANFExpr
   ) where
 
 import Data.Foldable (toList)
 import Data.Text.Prettyprint.Doc as X
 
+import Amy.ANF.AST
 import Amy.Literal
 import Amy.Names
 import Amy.Prim
@@ -78,9 +83,12 @@ prettyScheme (Forall vars ty) =
 
 prettyIf :: Doc ann -> Doc ann -> Doc ann -> Doc ann
 prettyIf pred' then' else' =
-  "if" <+> pred' <+>
-  "then" <+> then' <+>
-  "else" <+> else'
+  align $
+    vsep
+    [ "if" <> groupOrHang pred'
+    , "then" <> groupOrHang then'
+    , "else" <> groupOrHang else'
+    ]
 
 prettyLet :: [Doc ann] -> Doc ann -> Doc ann
 prettyLet bindings body =
@@ -91,15 +99,15 @@ prettyLet bindings body =
   indent (-2) "in" <>
   groupOrHang body
 
---prettyExtern :: Doc ann -> Doc ann -> Doc ann
---prettyExtern name ty = "extern" <+> name <+> "::" <+> ty
-
 prettyBinding' :: Doc ann -> [Doc ann] -> Doc ann -> Doc ann
 prettyBinding' name args body =
   sep (name : args) <+> "=" <> groupOrHang body
 
 prettyBindingType' :: (Pretty a) => Doc ann -> Type a -> Doc ann
 prettyBindingType' name ty = name <+> "::" <+> prettyType ty
+
+prettyBindingScheme' :: (Pretty a) => Doc ann -> Scheme a -> Doc ann
+prettyBindingScheme' name scheme = name <+> "::" <+> prettyScheme scheme
 
 prettyExtern :: (Pretty a) => Doc ann -> Type a -> Doc ann
 prettyExtern name ty = "extern" <+> prettyBindingType' name ty
@@ -152,9 +160,7 @@ prettyTExtern (TExtern name ty) =
 
 prettyTBinding :: TBinding -> Doc ann
 prettyTBinding (TBinding ident scheme args _ body) =
-  -- TODO: Once all ASTs have Schemes instead of just Type, share a helper
-  -- here.
-  prettyIdent ident <+> "::" <+> prettyScheme (showPrimitiveType <$> scheme) <>
+  prettyBindingScheme' (prettyIdent ident) (showPrimitiveType <$> scheme) <>
   hardline <>
   prettyBinding' (prettyIdent ident) (prettyName . typedValue <$> args) (prettyTExpr body)
 
@@ -173,3 +179,35 @@ prettyTExpr (TEIf (TIf pred' then' else')) =
 prettyTExpr (TELet (TLet bindings body)) =
   prettyLet (prettyTBinding <$> bindings) (prettyTExpr body)
 prettyTExpr (TEApp (TApp f args _)) = sep $ prettyTExpr f : (prettyTExpr <$> toList args)
+
+--
+-- ANF AST
+--
+
+prettyANFModule :: ANFModule -> Doc ann
+prettyANFModule (ANFModule bindings externs) =
+  vcatHardLines $ (prettyANFExtern <$> externs) ++ (prettyANFBinding <$> bindings)
+
+prettyANFExtern :: ANFExtern -> Doc ann
+prettyANFExtern (ANFExtern name ty) =
+  prettyExtern (prettyName name) (showPrimitiveType <$> ty)
+
+prettyANFBinding :: ANFBinding -> Doc ann
+prettyANFBinding (ANFBinding ident scheme args _ body) =
+  prettyBindingScheme' (prettyIdent ident) (showPrimitiveType <$> scheme) <>
+  hardline <>
+  prettyBinding' (prettyIdent ident) (prettyName . typedValue <$> args) (prettyANFExpr body)
+
+prettyANFVal :: ANFVal -> Doc ann
+prettyANFVal (ANFVar (Typed _ var)) = prettyName var
+prettyANFVal (ANFLit lit) = pretty $ showLiteral lit
+
+prettyANFExpr :: ANFExpr -> Doc ann
+prettyANFExpr (ANFEVal val) = prettyANFVal val
+prettyANFExpr (ANFEIf (ANFIf pred' then' else' _)) =
+  prettyIf (prettyANFVal pred') (prettyANFExpr then') (prettyANFExpr else')
+prettyANFExpr (ANFELet (ANFLet bindings body)) =
+  prettyLet (prettyANFBinding <$> bindings) (prettyANFExpr body)
+prettyANFExpr (ANFEApp (ANFApp f args _)) = sep $ prettyIdent (typedValue f) : (prettyANFVal <$> args)
+prettyANFExpr (ANFEPrimOp (ANFApp f args _)) =
+  sep $ pretty (showPrimitiveFunctionName f) : (prettyANFVal <$> args)
