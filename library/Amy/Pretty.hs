@@ -165,7 +165,7 @@ prettyTBinding (TBinding ident scheme args _ body) =
   prettyBinding' (prettyIdent ident) (prettyName . typedValue <$> args) (prettyTExpr body)
 
 prettyName :: Name -> Doc ann
-prettyName (PrimitiveName prim) = pretty $ show prim
+prettyName (PrimitiveName prim) = pretty $ showPrimitiveFunctionName prim
 prettyName (IdentName ident) = prettyIdent ident
 
 prettyIdent :: Ident -> Doc ann
