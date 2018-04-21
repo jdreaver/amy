@@ -35,7 +35,7 @@ data ANFBinding
 
 data ANFExtern
   = ANFExtern
-  { anfExternName :: !ANFName
+  { anfExternName :: !ANFIdent
   , anfExternType :: !(Type PrimitiveType)
   } deriving (Show, Eq)
 

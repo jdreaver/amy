@@ -50,7 +50,7 @@ data TBinding
 -- | A renamed extern declaration.
 data TExtern
   = TExtern
-  { tExternName :: !TName
+  { tExternName :: !TIdent
   , tExternType :: !(Type PrimitiveType)
   } deriving (Show, Eq)
 
@@ -96,7 +96,7 @@ expressionType (TEParens expr) = expressionType expr
 tModuleNames :: TModule -> [TName]
 tModuleNames (TModule bindings externs) =
   concatMap bindingNames bindings
-  ++ fmap tExternName externs
+  ++ fmap (TIdentName . tExternName) externs
 
 bindingNames :: TBinding -> [TName]
 bindingNames binding =

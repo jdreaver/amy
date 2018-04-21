@@ -143,9 +143,9 @@ newtype Constraint = Constraint { unConstraint :: (Type PrimitiveType, Type Prim
 inferModule :: RModule -> Either Error TModule
 inferModule (RModule bindings externs) = do
   let
-    externs' = (\(RExtern (Located _ name) ty) -> TExtern (convertRName name) (locatedValue <$> ty)) <$> externs
-    externSchemes = (\(TExtern name ty) -> (name, Forall [] ty)) <$> externs'
     mkPrimFuncType prim = Forall [] $ typeFromNonEmpty . fmap TyCon . primitiveFunctionType $ primitiveFunction prim
+    externs' = (\(RExtern (Located _ name) ty) -> TExtern (convertRIdent name) (locatedValue <$> ty)) <$> externs
+    externSchemes = (\(TExtern name ty) -> (TIdentName name, Forall [] ty)) <$> externs'
     primFuncSchemes =
       (\prim -> (TPrimitiveName prim, mkPrimFuncType prim))
       <$> allPrimitiveFunctionNames

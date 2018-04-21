@@ -45,7 +45,7 @@ data RBinding
 -- | A renamed extern declaration.
 data RExtern
   = RExtern
-  { rExternName :: !(Located RName)
+  { rExternName :: !(Located RIdent)
   , rExternType :: !(Type (Located PrimitiveType))
   } deriving (Show, Eq)
 

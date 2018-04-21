@@ -45,7 +45,7 @@ codegenExtern extern =
   in
     GlobalDefinition
     functionDefaults
-    { name = nameToLLVM $ anfExternName extern
+    { name = identToLLVM $ anfExternName extern
     , parameters = (params, False)
     , LLVM.returnType = returnType'
     }

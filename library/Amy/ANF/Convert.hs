@@ -30,7 +30,7 @@ normalizeModule module' =
   in ANFModule bindings' externs'
 
 mkANFExtern :: TExtern -> ANFExtern
-mkANFExtern (TExtern name ty) = ANFExtern (convertTName name) ty
+mkANFExtern (TExtern name ty) = ANFExtern (convertTIdent name) ty
 
 convertTName :: TName -> ANFName
 convertTName (TPrimitiveName prim) = ANFPrimitiveName prim

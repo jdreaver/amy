@@ -71,7 +71,7 @@ renameBinding typeMap binding = withNewScope $ do -- Begin new scope
     RBinding
     <$> rBindingName
     <*> rBindingType
-    <*> sequenceA rBindingArgs
+    <*> (fmap (fmap RIdentName) <$> sequenceA rBindingArgs)
     <*> rBindingBody
 
 renameExpression :: Expr -> Renamer (Validation [Error] RExpr)

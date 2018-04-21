@@ -155,7 +155,7 @@ prettyTModule (TModule bindings externs) =
 
 prettyTExtern :: TExtern -> Doc ann
 prettyTExtern (TExtern name ty) =
-  prettyExtern (prettyTName name) (showPrimitiveType <$> ty)
+  prettyExtern (prettyTIdent name) (showPrimitiveType <$> ty)
 
 prettyTBinding :: TBinding -> Doc ann
 prettyTBinding (TBinding ident scheme args _ body) =
@@ -190,7 +190,7 @@ prettyANFModule (ANFModule bindings externs) =
 
 prettyANFExtern :: ANFExtern -> Doc ann
 prettyANFExtern (ANFExtern name ty) =
-  prettyExtern (prettyANFName name) (showPrimitiveType <$> ty)
+  prettyExtern (prettyANFIdent name) (showPrimitiveType <$> ty)
 
 prettyANFBinding :: ANFBinding -> Doc ann
 prettyANFBinding (ANFBinding ident scheme args _ body) =

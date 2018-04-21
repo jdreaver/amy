@@ -58,16 +58,18 @@ freshId = do
   modify' (\s -> s { renamerStateLastId = 1 + renamerStateLastId s })
   gets renamerStateLastId
 
-addValueToScope :: Bool -> Located Text -> Renamer (Validation [Error] (Located RName))
+addValueToScope :: Bool -> Located Text -> Renamer (Validation [Error] (Located RIdent))
 addValueToScope isTopLevel lName@(Located span' name) = do
   nameId <- freshId
-  let name' = RIdentName (RIdent name nameId isTopLevel)
+  let
+    ident = RIdent name nameId isTopLevel
+    name' = RIdentName ident
   mExistingName <- lookupValueInScope name
   case mExistingName of
     Just existingName -> pure $ Failure [VariableShadowed lName existingName]
     Nothing -> do
       modify' (\s -> s { renamerStateValues = Map.insert name name' (renamerStateValues s) })
-      pure $ Success (Located span' name')
+      pure $ Success (Located span' ident)
 
 lookupValueInScope :: Text -> Renamer (Maybe RName)
 lookupValueInScope name = Map.lookup name <$> gets renamerStateValues
