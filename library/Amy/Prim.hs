@@ -20,8 +20,9 @@ module Amy.Prim
   , primitiveFunction
   ) where
 
-import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
+
+import Amy.Type
 
 data PrimitiveType
   = IntType
@@ -47,7 +48,7 @@ showPrimitiveType t =
 data PrimitiveFunction
   = PrimitiveFunction
   { primitiveFunctionName :: !PrimitiveFunctionName
-  , primitiveFunctionType :: !(NonEmpty PrimitiveType)
+  , primitiveFunctionType :: !(Type PrimitiveType)
   } deriving (Show, Eq)
 
 data PrimitiveFunctionName
@@ -94,11 +95,10 @@ readPrimitiveFunctionName name =
 primitiveFunction :: PrimitiveFunctionName -> PrimitiveFunction
 primitiveFunction name =
   case name of
-    PrimIAdd -> PrimitiveFunction PrimIAdd [IntType, IntType, IntType]
-    PrimISub -> PrimitiveFunction PrimISub [IntType, IntType, IntType]
-    PrimIEquals -> PrimitiveFunction PrimIEquals [IntType, IntType, BoolType]
-    PrimIGreaterThan -> PrimitiveFunction PrimIGreaterThan [IntType, IntType, BoolType]
-    PrimILessThan -> PrimitiveFunction PrimILessThan [IntType, IntType, BoolType]
-
-    PrimDAdd -> PrimitiveFunction PrimDAdd [DoubleType, DoubleType, DoubleType]
-    PrimDSub -> PrimitiveFunction PrimDSub [DoubleType, DoubleType, DoubleType]
+    PrimIAdd -> PrimitiveFunction PrimIAdd (TyCon IntType `TyFun` TyCon IntType `TyFun` TyCon IntType)
+    PrimISub -> PrimitiveFunction PrimISub (TyCon IntType `TyFun` TyCon IntType `TyFun` TyCon IntType)
+    PrimIEquals -> PrimitiveFunction PrimIEquals (TyCon IntType `TyFun` TyCon IntType `TyFun` TyCon BoolType)
+    PrimIGreaterThan -> PrimitiveFunction PrimIGreaterThan (TyCon IntType `TyFun` TyCon IntType `TyFun` TyCon BoolType)
+    PrimILessThan -> PrimitiveFunction PrimILessThan (TyCon IntType `TyFun` TyCon IntType `TyFun` TyCon BoolType)
+    PrimDAdd -> PrimitiveFunction PrimDAdd (TyCon DoubleType `TyFun` TyCon DoubleType `TyFun` TyCon DoubleType)
+    PrimDSub -> PrimitiveFunction PrimDSub (TyCon DoubleType `TyFun` TyCon DoubleType `TyFun` TyCon DoubleType)
