@@ -73,6 +73,38 @@ prettyScheme (Forall vars ty) =
     _ -> "forall" <+> hcat (punctuate space (pretty . unTyVar <$> vars)) <> "." <+> prettyType ty
 
 --
+-- General AST Helpers
+--
+
+prettyIf :: Doc ann -> Doc ann -> Doc ann -> Doc ann
+prettyIf pred' then' else' =
+  "if" <+> pred' <+>
+  "then" <+> then' <+>
+  "else" <+> else'
+
+prettyLet :: [Doc ann] -> Doc ann -> Doc ann
+prettyLet bindings body =
+  "let" <>
+  line <>
+  indent 2 (vcat bindings) <>
+  line <>
+  indent (-2) "in" <>
+  groupOrHang body
+
+--prettyExtern :: Doc ann -> Doc ann -> Doc ann
+--prettyExtern name ty = "extern" <+> name <+> "::" <+> ty
+
+prettyBinding' :: Doc ann -> [Doc ann] -> Doc ann -> Doc ann
+prettyBinding' name args body =
+  sep (name : args) <+> "=" <> groupOrHang body
+
+prettyBindingType' :: (Pretty a) => Doc ann -> Type a -> Doc ann
+prettyBindingType' name ty = name <+> "::" <+> prettyType ty
+
+prettyExtern :: (Pretty a) => Doc ann -> Type a -> Doc ann
+prettyExtern name ty = "extern" <+> prettyBindingType' name ty
+
+--
 -- Syntax AST
 --
 
@@ -82,25 +114,24 @@ prettyModule (Module decls) = vcatHardLines (prettyDeclaration <$> decls)
 prettyDeclaration :: Declaration -> Doc ann
 prettyDeclaration (DeclBinding binding) = prettyBinding binding
 prettyDeclaration (DeclBindingType bindingType) = prettyBindingType bindingType
-prettyDeclaration (DeclExtern bindingType) = "extern" <+> prettyBindingType bindingType
+prettyDeclaration (DeclExtern (BindingType (Located _ name) ty)) =
+  prettyExtern (pretty name) (locatedValue <$> ty)
 
 prettyBinding :: Binding -> Doc ann
 prettyBinding (Binding (Located _ name) args body) =
-  sep (pretty name : (pretty . locatedValue <$> args)) <+> "=" <+> prettyExpr body
+  prettyBinding' (pretty name) (pretty . locatedValue <$> args) (prettyExpr body)
 
 prettyBindingType :: BindingType -> Doc ann
 prettyBindingType (BindingType (Located _ name) ty) =
-  pretty name <+> "::" <+> prettyType (locatedValue <$> ty)
+  prettyBindingType' (pretty name) (locatedValue <$> ty)
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
 prettyExpr (EVar (Located _ var)) = pretty var
 prettyExpr (EIf (If pred' then' else')) =
-  "if" <+> prettyExpr pred' <+>
-  "then" <+> prettyExpr then' <+>
-  "else" <+> prettyExpr else'
+  prettyIf (prettyExpr pred') (prettyExpr then') (prettyExpr else')
 prettyExpr (ELet (Let bindings body)) =
-  "let" <+> vcat (prettyLetBinding <$> bindings) <+> "in" <> groupOrHang (prettyExpr body)
+  prettyLet (prettyLetBinding <$> bindings) (prettyExpr body)
  where
   prettyLetBinding (LetBinding binding) = prettyBinding binding
   prettyLetBinding (LetBindingType bindingType) = prettyBindingType bindingType
@@ -117,15 +148,15 @@ prettyTModule (TModule bindings externs) =
 
 prettyTExtern :: TExtern -> Doc ann
 prettyTExtern (TExtern name ty) =
-  "extern" <+> prettyName name <+> "::" <+> prettyType (showPrimitiveType <$> ty)
+  prettyExtern (prettyName name) (showPrimitiveType <$> ty)
 
 prettyTBinding :: TBinding -> Doc ann
 prettyTBinding (TBinding ident scheme args _ body) =
+  -- TODO: Once all ASTs have Schemes instead of just Type, share a helper
+  -- here.
   prettyIdent ident <+> "::" <+> prettyScheme (showPrimitiveType <$> scheme) <>
   hardline <>
-  sep (prettyIdent ident : (prettyName . typedValue <$> args)) <+>
-  "=" <>
-  groupOrHang (prettyTExpr body)
+  prettyBinding' (prettyIdent ident) (prettyName . typedValue <$> args) (prettyTExpr body)
 
 prettyName :: Name -> Doc ann
 prettyName (PrimitiveName prim) = pretty $ show prim
@@ -138,14 +169,7 @@ prettyTExpr :: TExpr -> Doc ann
 prettyTExpr (TELit lit) = pretty $ showLiteral lit
 prettyTExpr (TEVar (Typed _ var)) = prettyName var
 prettyTExpr (TEIf (TIf pred' then' else')) =
-  "if" <+> prettyTExpr pred' <+>
-  "then" <+> prettyTExpr then' <+>
-  "else" <+> prettyTExpr else'
+  prettyIf (prettyTExpr pred') (prettyTExpr then') (prettyTExpr else')
 prettyTExpr (TELet (TLet bindings body)) =
-  "let" <>
-  line <>
-  indent 2 (vcat (prettyTBinding <$> bindings)) <>
-  line <>
-  indent (-2) "in" <>
-  groupOrHang (prettyTExpr body)
+  prettyLet (prettyTBinding <$> bindings) (prettyTExpr body)
 prettyTExpr (TEApp (TApp f args _)) = sep $ prettyTExpr f : (prettyTExpr <$> toList args)
