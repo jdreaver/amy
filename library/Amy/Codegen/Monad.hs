@@ -6,6 +6,7 @@ module Amy.Codegen.Monad
   , BlockGen
   , addInstruction
   , terminateBlock
+  , currentBlockName
   , addSymbolToTable
   , lookupSymbol
   , freshId
@@ -68,6 +69,9 @@ terminateBlock term newName =
      , blockGenStateBlockStack = makeBasicBlock current term : stack
      }
   )
+
+currentBlockName :: BlockGen LLVM.Name
+currentBlockName = gets (partialBlockName . blockGenStateCurrentBlock)
 
 addSymbolToTable :: Amy.Name -> Operand -> BlockGen ()
 addSymbolToTable name' op = modify' (\s -> s { blockGenStateSymbolTable = Map.insert name' op (blockGenStateSymbolTable s) })

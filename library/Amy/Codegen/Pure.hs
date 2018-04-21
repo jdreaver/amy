@@ -100,14 +100,20 @@ codegenExpr' (ANFEIf (ANFIf pred' then' else' ty)) = do
 
   -- Generate then block
   thenOp <- codegenExpr' then'
+  -- NB: The codegen for the then/else sub-expressions could themselves
+  -- produces new blocks. This happens with nested if expressions, for example.
+  -- We have to know what block we *actually* came from when generating the phi
+  -- function at the end of this if expression.
+  thenBlockFinalName <- currentBlockName
   terminateBlock (Do $ Br endBlockName []) elseBlockName
 
   -- Generate else block
   elseOp <- codegenExpr' else'
+  elseBlockFinalName <- currentBlockName
   terminateBlock (Do $ Br endBlockName []) endBlockName
 
   -- Generate end block
-  addInstruction $ endOpName := Phi ty' [(thenOp, thenBlockName), (elseOp, elseBlockName)] []
+  addInstruction $ endOpName := Phi ty' [(thenOp, thenBlockFinalName), (elseOp, elseBlockFinalName)] []
   pure endOpRef
 codegenExpr' (ANFEApp (ANFApp (Typed ty ident) args' returnTy)) = do
   funcOperand <- valOperand (ANFVar $ Typed ty (IdentName ident))
