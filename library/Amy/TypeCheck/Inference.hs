@@ -183,7 +183,7 @@ inferBindings bindings = do
           -- There is an explicit type annotation. Use it.
           Just ty -> pure (locatedValue <$> ty)
           -- No explicit type annotation
-          Nothing -> TyVar <$> freshTypeVariable
+          Nothing -> Forall [] . TyVar <$> freshTypeVariable
       pure (binding, ty)
   bindingsAndTypes <- traverse setBindingVariable bindings
 
@@ -191,9 +191,10 @@ inferBindings bindings = do
   -- collect constraints for all bindings.
   let
     bindingNameSchemes =
-      (\(binding, ty) -> (IdentName $ locatedValue $ rBindingName binding, Forall [] ty)) <$> bindingsAndTypes
-  bindingsInference <- extendEnvM bindingNameSchemes $ for bindingsAndTypes $ \(binding, ty) -> do
+      (\(binding, ty) -> (IdentName $ locatedValue $ rBindingName binding, ty)) <$> bindingsAndTypes
+  bindingsInference <- extendEnvM bindingNameSchemes $ for bindingsAndTypes $ \(binding, scheme) -> do
     (binding', constraints) <- inferBinding binding
+    ty <- instantiate scheme
     let
       -- Add the constraint for the binding itself
       (Forall _ bindingType) = tBindingType binding'

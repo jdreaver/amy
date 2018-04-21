@@ -10,6 +10,7 @@ module Amy.Syntax.Lexer
   , identifier
   , typeIdentifier
   , extern
+  , forall
   , if'
   , then'
   , else'
@@ -20,6 +21,7 @@ module Amy.Syntax.Lexer
   , parens
   , optionalParens
   , comma
+  , dot
   , doubleColon
   , equals
   , typeSeparatorArrow
@@ -102,6 +104,9 @@ reservedWords =
 extern :: Lexer ()
 extern = void $ symbol "extern"
 
+forall :: Lexer ()
+forall = void $ symbol "forall"
+
 if' :: Lexer ()
 if' = void $ symbol "if"
 
@@ -135,6 +140,9 @@ optionalParens p = parens p <|> p
 
 comma :: Lexer ()
 comma = char ',' >> spaceConsumer
+
+dot :: Lexer ()
+dot = char '.' >> spaceConsumer
 
 doubleColon :: Lexer ()
 doubleColon = char ':' >> char ':' >> spaceConsumer

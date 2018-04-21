@@ -34,7 +34,7 @@ data RModule
 data RBinding
   = RBinding
   { rBindingName :: !(Located Ident)
-  , rBindingType :: !(Maybe (Type (Located PrimitiveType)))
+  , rBindingType :: !(Maybe (Scheme (Located PrimitiveType)))
   , rBindingArgs :: ![Located Name]
   , rBindingBody :: !RExpr
   } deriving (Show, Eq)

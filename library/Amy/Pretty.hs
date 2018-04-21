@@ -122,7 +122,7 @@ prettyModule (Module decls) = vcatHardLines (prettyDeclaration <$> decls)
 prettyDeclaration :: Declaration -> Doc ann
 prettyDeclaration (DeclBinding binding) = prettyBinding binding
 prettyDeclaration (DeclBindingType bindingType) = prettyBindingType bindingType
-prettyDeclaration (DeclExtern (BindingType (Located _ name) ty)) =
+prettyDeclaration (DeclExtern (Extern (Located _ name) ty)) =
   prettyExtern (pretty name) (locatedValue <$> ty)
 
 prettyBinding :: Binding -> Doc ann
@@ -131,7 +131,7 @@ prettyBinding (Binding (Located _ name) args body) =
 
 prettyBindingType :: BindingType -> Doc ann
 prettyBindingType (BindingType (Located _ name) ty) =
-  prettyBindingType' (pretty name) (locatedValue <$> ty)
+  prettyBindingScheme' (pretty name) (locatedValue <$> ty)
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit

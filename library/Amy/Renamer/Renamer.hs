@@ -40,13 +40,13 @@ rename' (Module declarations) = do
     <$> sequenceA rModuleBindings
     <*> sequenceA rModuleExterns
 
-bindingTypesMap :: [BindingType] -> Map Text (Type (Located Text))
+bindingTypesMap :: [BindingType] -> Map Text (Scheme (Located Text))
 bindingTypesMap = Map.fromList . fmap (\(BindingType (Located _ name) ts) -> (name, ts))
 
-renameExtern :: BindingType -> Renamer (Validation [Error] RExtern)
-renameExtern bindingType = do
-  rExternName <- addValueToScope True (bindingTypeName bindingType)
-  let rExternType = traverse renameType (bindingTypeTypeNames bindingType)
+renameExtern :: Extern -> Renamer (Validation [Error] RExtern)
+renameExtern extern = do
+  rExternName <- addValueToScope True (externName extern)
+  let rExternType = traverse renameType (externType extern)
   pure $
     RExtern
       <$> rExternName
@@ -56,7 +56,7 @@ renameType :: Located Text -> Validation [Error] (Located PrimitiveType)
 renameType name =
   maybe (Failure [UnknownTypeName name]) Success $ traverse readPrimitiveType name
 
-renameBinding :: Map Text (Type (Located Text)) -> Binding -> Renamer (Validation [Error] RBinding)
+renameBinding :: Map Text (Scheme (Located Text)) -> Binding -> Renamer (Validation [Error] RBinding)
 renameBinding typeMap binding = withNewScope $ do -- Begin new scope
   name <- lookupValueInScopeOrError (bindingName binding)
   let

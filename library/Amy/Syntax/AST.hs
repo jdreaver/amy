@@ -8,6 +8,7 @@ module Amy.Syntax.AST
   , declExtern
   , Binding(..)
   , BindingType(..)
+  , Extern(..)
   , Expr(..)
   , If(..)
   , Let(..)
@@ -36,7 +37,7 @@ newtype Module = Module { unModule :: [Declaration] }
 data Declaration
   = DeclBinding !Binding
   | DeclBindingType !BindingType
-  | DeclExtern !BindingType
+  | DeclExtern !Extern
   deriving (Show, Eq)
 
 declBinding :: Declaration -> Maybe Binding
@@ -47,7 +48,7 @@ declBindingType :: Declaration -> Maybe BindingType
 declBindingType (DeclBindingType x) = Just x
 declBindingType _ = Nothing
 
-declExtern :: Declaration -> Maybe BindingType
+declExtern :: Declaration -> Maybe Extern
 declExtern (DeclExtern x) = Just x
 declExtern _ = Nothing
 
@@ -65,7 +66,15 @@ data Binding
 data BindingType
   = BindingType
   { bindingTypeName :: !(Located Text)
-  , bindingTypeTypeNames :: !(Type (Located Text))
+  , bindingTypeScheme :: !(Scheme (Located Text))
+  } deriving (Show, Eq)
+
+-- | A 'BindingType' is a top-level declaration of a 'Binding' type, like @x ::
+-- Int@ or @f :: Int -> Int@
+data Extern
+  = Extern
+  { externName :: !(Located Text)
+  , externType :: !(Type (Located Text))
   } deriving (Show, Eq)
 
 data Expr

@@ -81,4 +81,4 @@ data Typed ty a
 
 data Scheme ty
   = Forall [TVar] !(Type ty)
-  deriving (Show, Eq, Ord, Functor)
+  deriving (Show, Eq, Ord, Functor, Foldable, Traversable)

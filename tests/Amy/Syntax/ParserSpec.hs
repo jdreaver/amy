@@ -27,7 +27,8 @@ spec = do
         [ DeclBindingType
           BindingType
           { bindingTypeName = Located (SourceSpan "" 2 1 2 1) "f"
-          , bindingTypeTypeNames =
+          , bindingTypeScheme =
+            Forall [] $
             TyCon (Located (SourceSpan "" 2 6 2 8) "Int")
             `TyArr`
             TyCon (Located (SourceSpan "" 2 13 2 18) "Double")
@@ -42,7 +43,7 @@ spec = do
         , DeclBindingType
           BindingType
           { bindingTypeName = Located (SourceSpan "" 5 1 5 4) "main"
-          , bindingTypeTypeNames = TyCon (Located (SourceSpan "" 5 9 5 11) "Int")
+          , bindingTypeScheme = Forall [] $ TyCon (Located (SourceSpan "" 5 9 5 11) "Int")
           }
         , DeclBinding
           Binding
@@ -55,7 +56,7 @@ spec = do
                 [ LetBindingType
                   BindingType
                   { bindingTypeName = Located (SourceSpan "" 8 5 8 5) "x"
-                  , bindingTypeTypeNames = TyCon (Located (SourceSpan "" 8 10 8 12) "Int")
+                  , bindingTypeScheme = Forall [] $ TyCon (Located (SourceSpan "" 8 10 8 12) "Int")
                   }
                 , LetBinding
                   Binding
@@ -105,16 +106,16 @@ spec = do
           ]
         )
 
-  describe "externType" $ do
+  describe "externDecl" $ do
     it "parses extern declaration" $ do
-      parse externType "" "extern f :: Int"
+      parse externDecl "" "extern f :: Int"
         `shouldParse`
-        BindingType
+        Extern
           (Located (SourceSpan "" 1 8 1 8) "f")
           (TyCon (Located (SourceSpan "" 1 13 1 15) "Int"))
-      parse externType "" "extern f :: Int -> Double"
+      parse externDecl "" "extern f :: Int -> Double"
         `shouldParse`
-        BindingType
+        Extern
           (Located (SourceSpan "" 1 8 1 8) "f")
           ( TyCon (Located (SourceSpan "" 1 13 1 15) "Int")
             `TyArr`
@@ -127,14 +128,33 @@ spec = do
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
-          (TyCon (Located (SourceSpan "" 1 6 1 8) "Int"))
+          (Forall [] $ TyCon (Located (SourceSpan "" 1 6 1 8) "Int"))
       parse bindingType "" "f :: Int -> Double"
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
-          ( TyCon (Located (SourceSpan "" 1 6 1 8) "Int")
+          ( Forall [] $
+            TyCon (Located (SourceSpan "" 1 6 1 8) "Int")
             `TyArr`
             TyCon (Located (SourceSpan "" 1 13 1 18) "Double")
+          )
+
+    it "parses polymorphic types" $ do
+      parse bindingType "" "f :: forall a. a"
+        `shouldParse`
+        BindingType
+          (Located (SourceSpan "" 1 1 1 1) "f")
+          (Forall [TVar "a"] $ TyVar (TVar "a"))
+      parse bindingType "" "f :: forall a b. a -> b -> a"
+        `shouldParse`
+        BindingType
+          (Located (SourceSpan "" 1 1 1 1) "f")
+          ( Forall [TVar "a", TVar "b"] $
+            TyVar (TVar "a")
+            `TyArr`
+            TyVar (TVar "b")
+            `TyArr`
+            TyVar (TVar "a")
           )
 
   describe "parseType" $ do

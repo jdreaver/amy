@@ -2,8 +2,9 @@ module Amy.Syntax.Parser
   ( parseModule
 
   , declaration
-  , externType
+  , externDecl
   , bindingType
+  , parseScheme
   , parseType
   , binding
   , expression
@@ -16,6 +17,7 @@ module Amy.Syntax.Parser
 
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Void (Void)
 import Text.Megaparsec
@@ -35,30 +37,50 @@ parseModule = Module <$> do
 
 declaration :: Parser Declaration
 declaration =
-  (DeclExtern <$> externType)
+  (DeclExtern <$> externDecl)
   <|> try (DeclBindingType <$> bindingType)
   <|> (DeclBinding <$> binding)
 
-externType :: Parser BindingType
-externType = do
+externDecl :: Parser Extern
+externDecl = do
   extern
-  bindingType
+  name <- identifier
+  doubleColon
+  ty <- parseType
+  pure
+    Extern
+    { externName = name
+    , externType = ty
+    }
 
 bindingType :: Parser BindingType
 bindingType = do
   name <- identifier
   doubleColon
-  typeNames <- parseType
+  scheme <- parseScheme
   pure
     BindingType
     { bindingTypeName = name
-    , bindingTypeTypeNames = typeNames
+    , bindingTypeScheme = scheme
     }
+
+parseScheme :: Parser (Scheme (Located Text))
+parseScheme = do
+  vars <- optional parseSchemeVars
+  ty <- parseType
+  pure $ Forall (fromMaybe [] vars) ty
+
+parseSchemeVars :: Parser [TVar]
+parseSchemeVars = do
+  forall
+  vars <- many identifier
+  dot
+  pure (TVar . locatedValue <$> vars)
 
 parseType :: Parser (Type (Located Text))
 parseType = makeExprParser term table
  where
-  tVar = TyCon <$> typeIdentifier
+  tVar = (TyCon <$> typeIdentifier) <|> (TyVar . TVar . locatedValue <$> identifier)
   table = [[InfixR (TyArr <$ typeSeparatorArrow)]]
   term = parens parseType <|> tVar
 
