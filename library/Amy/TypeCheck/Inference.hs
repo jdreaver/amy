@@ -120,7 +120,7 @@ normalize body = Forall (Map.elems letterMap) (normtype body)
  where
   letterMap = Map.fromList $ zip (Set.toList $ freeTypeVariables body) (TVar <$> letters)
 
-  normtype (TyArr a b) = TyArr (normtype a) (normtype b)
+  normtype (TyFun a b) = TyFun (normtype a) (normtype b)
   normtype (TyCon a) = TyCon a
   normtype (TyVar a) =
     case Map.lookup a letterMap of
@@ -311,7 +311,7 @@ unifies :: Type PrimitiveType -> Type PrimitiveType -> Solve Subst
 unifies t1 t2 | t1 == t2 = return emptySubst
 unifies (TyVar v) t = v `bind` t
 unifies t (TyVar v) = v `bind` t
-unifies (TyArr t1 t2) (TyArr t3 t4) = do
+unifies (TyFun t1 t2) (TyFun t3 t4) = do
   su1 <- unifies t1 t3
   su2 <- unifies (substituteType su1 t2) (substituteType su1 t4)
   pure (su2 `composeSubst` su1)
@@ -353,7 +353,7 @@ substituteScheme (Subst subst) (Forall vars ty) = Forall vars $ substituteType s
 substituteType :: Subst -> Type PrimitiveType -> Type PrimitiveType
 substituteType (Subst subst) t@(TyVar var) = Map.findWithDefault t var subst
 substituteType _ (TyCon a) = TyCon a
-substituteType s (t1 `TyArr` t2) = substituteType s t1 `TyArr` substituteType s t2
+substituteType s (t1 `TyFun` t2) = substituteType s t1 `TyFun` substituteType s t2
 
 substituteConstraint :: Subst -> Constraint -> Constraint
 substituteConstraint subst (Constraint (t1, t2)) = Constraint (substituteType subst t1, substituteType subst t2)
@@ -388,7 +388,7 @@ substituteTExpr subst (TEParens expr) = TEParens (substituteTExpr subst expr)
 freeTypeVariables :: Type PrimitiveType -> Set TVar
 freeTypeVariables TyCon{} = Set.empty
 freeTypeVariables (TyVar var) = Set.singleton var
-freeTypeVariables (t1 `TyArr` t2) = freeTypeVariables t1 `Set.union` freeTypeVariables t2
+freeTypeVariables (t1 `TyFun` t2) = freeTypeVariables t1 `Set.union` freeTypeVariables t2
 
 freeSchemeTypeVariables :: Scheme PrimitiveType -> Set TVar
 freeSchemeTypeVariables (Forall tvs t) = freeTypeVariables t `Set.difference` Set.fromList tvs

@@ -30,7 +30,7 @@ spec = do
           , bindingTypeScheme =
             Forall [] $
             TyCon (Located (SourceSpan "" 2 6 2 8) "Int")
-            `TyArr`
+            `TyFun`
             TyCon (Located (SourceSpan "" 2 13 2 18) "Double")
           }
         , DeclBinding
@@ -118,7 +118,7 @@ spec = do
         Extern
           (Located (SourceSpan "" 1 8 1 8) "f")
           ( TyCon (Located (SourceSpan "" 1 13 1 15) "Int")
-            `TyArr`
+            `TyFun`
             TyCon (Located (SourceSpan "" 1 20 1 25) "Double")
           )
 
@@ -135,7 +135,7 @@ spec = do
           (Located (SourceSpan "" 1 1 1 1) "f")
           ( Forall [] $
             TyCon (Located (SourceSpan "" 1 6 1 8) "Int")
-            `TyArr`
+            `TyFun`
             TyCon (Located (SourceSpan "" 1 13 1 18) "Double")
           )
 
@@ -151,9 +151,9 @@ spec = do
           (Located (SourceSpan "" 1 1 1 1) "f")
           ( Forall [TVar "a", TVar "b"] $
             TyVar (TVar "a")
-            `TyArr`
+            `TyFun`
             TyVar (TVar "b")
-            `TyArr`
+            `TyFun`
             TyVar (TVar "a")
           )
 
@@ -163,15 +163,15 @@ spec = do
       parse parseType "" "A -> B"
         `shouldParse` (
           TyCon (Located (SourceSpan "" 1 1 1 1) "A")
-          `TyArr`
+          `TyFun`
           TyCon (Located (SourceSpan "" 1 6 1 6) "B")
         )
       parse parseType "" "A -> B -> C"
         `shouldParse` (
           TyCon (Located (SourceSpan "" 1 1 1 1) "A")
-          `TyArr`
+          `TyFun`
           TyCon (Located (SourceSpan "" 1 6 1 6) "B")
-          `TyArr`
+          `TyFun`
           TyCon (Located (SourceSpan "" 1 11 1 11) "C")
         )
 
@@ -181,27 +181,27 @@ spec = do
       parse parseType "" "((A)) -> ((B))"
         `shouldParse` (
           TyCon (Located (SourceSpan "" 1 3 1 3) "A")
-          `TyArr`
+          `TyFun`
           TyCon (Located (SourceSpan "" 1 12 1 12) "B")
         )
       parse parseType "" "(A -> B) -> C"
         `shouldParse` (
           ( TyCon (Located (SourceSpan "" 1 2 1 2) "A")
-            `TyArr`
+            `TyFun`
             TyCon (Located (SourceSpan "" 1 7 1 7) "B")
           )
-          `TyArr`
+          `TyFun`
           TyCon (Located (SourceSpan "" 1 13 1 13) "C")
         )
       parse parseType "" "A -> (B -> C) -> D"
         `shouldParse` (
           TyCon (Located (SourceSpan "" 1 1 1 1) "A")
-          `TyArr`
+          `TyFun`
           ( TyCon (Located (SourceSpan "" 1 7 1 7) "B")
-            `TyArr`
+            `TyFun`
              TyCon (Located (SourceSpan "" 1 12 1 12) "C")
           )
-          `TyArr`
+          `TyFun`
           TyCon (Located (SourceSpan "" 1 18 1 18) "D")
         )
 

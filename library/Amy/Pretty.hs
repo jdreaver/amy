@@ -64,10 +64,10 @@ prettyType t =
   case t of
     TyCon ty -> pretty ty
     TyVar (TVar var) -> pretty var
-    TyArr tyLeft tyRight ->
+    TyFun tyLeft tyRight ->
       parensIf (isArr tyLeft) (prettyType tyLeft) <+> "->" <+> prettyType tyRight
  where
-  isArr TyArr{} = True
+  isArr TyFun{} = True
   isArr _ = False
 
 prettyScheme :: (Pretty a) => Scheme a -> Doc ann

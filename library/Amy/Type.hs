@@ -22,22 +22,22 @@ data Type ty
     -- ^ A type constructor
   | TyVar !TVar
     -- ^ A type variable, also used in inference
-  | TyArr !(Type ty) !(Type ty)
-    -- ^ Two types linked by "->" (short for Type Array)
+  | TyFun !(Type ty) !(Type ty)
+    -- ^ Two types linked by "->" (short for Type Function)
   deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-infixr 0 `TyArr`
+infixr 0 `TyFun`
 
 newtype TVar = TVar { unTyVar :: Text }
   deriving (Show, Eq, Ord, IsString)
 
--- | Turns a 'NonEmpty' list of 'Type' values into a 'Type' via 'TyArr'.
+-- | Turns a 'NonEmpty' list of 'Type' values into a 'Type' via 'TyFun'.
 typeFromNonEmpty :: NonEmpty (Type ty) -> Type ty
-typeFromNonEmpty = foldr1 TyArr
+typeFromNonEmpty = foldr1 TyFun
 
 -- | Inverse of 'typeFromNonEmpty'
 typeToNonEmpty :: Type ty -> NonEmpty (Type ty)
-typeToNonEmpty (t1 `TyArr` t2) = NE.cons t1 (typeToNonEmpty t2)
+typeToNonEmpty (t1 `TyFun` t2) = NE.cons t1 (typeToNonEmpty t2)
 typeToNonEmpty ty = ty :| []
 
 -- | A value with a type.

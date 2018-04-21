@@ -81,7 +81,7 @@ parseType :: Parser (Type (Located Text))
 parseType = makeExprParser term table
  where
   tVar = (TyCon <$> typeIdentifier) <|> (TyVar . TVar . locatedValue <$> identifier)
-  table = [[InfixR (TyArr <$ typeSeparatorArrow)]]
+  table = [[InfixR (TyFun <$ typeSeparatorArrow)]]
   term = parens parseType <|> tVar
 
 binding :: Parser Binding

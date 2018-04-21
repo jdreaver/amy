@@ -175,7 +175,7 @@ llvmType = go . typeToNonEmpty
     case ty of
       TyCon prim -> llvmPrimitiveType prim
       TyVar _ -> error "Can't handle polymorphic type arguments yet"
-      t@TyArr{} -> mkFunctionType (t :| [])
+      t@TyFun{} -> mkFunctionType (t :| [])
   go ts = mkFunctionType ts
   mkFunctionType ts =
     PointerType
