@@ -8,7 +8,7 @@ module Amy.ANF.Monad
   ) where
 
 import Control.Monad.State.Strict
-import Data.Text (Text)
+import Data.Text (Text, pack)
 
 import Amy.Names
 
@@ -29,4 +29,4 @@ freshId = do
 freshIdent :: Text -> ANFConvert Ident
 freshIdent t = do
   id' <- freshId
-  pure $ Ident t id' False
+  pure $ Ident (t <> pack (show id')) id' False
