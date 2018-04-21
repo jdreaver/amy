@@ -43,6 +43,14 @@ parensIf False = id
 vcatHardLines :: [Doc ann] -> Doc ann
 vcatHardLines = concatWith (\x y -> x <> hardline <> hardline <> y)
 
+groupOrHang :: Doc ann -> Doc ann
+groupOrHang doc =
+  group (
+    flatAlt
+    (line <> indent 2 doc)
+    (space <> doc)
+  )
+
 --
 -- Types
 --
@@ -92,7 +100,7 @@ prettyExpr (EIf (If pred' then' else')) =
   "then" <+> prettyExpr then' <+>
   "else" <+> prettyExpr else'
 prettyExpr (ELet (Let bindings body)) =
-  "let" <+> vcat (prettyLetBinding <$> bindings) <+> "in" <+> prettyExpr body
+  "let" <+> vcat (prettyLetBinding <$> bindings) <+> "in" <> groupOrHang (prettyExpr body)
  where
   prettyLetBinding (LetBinding binding) = prettyBinding binding
   prettyLetBinding (LetBindingType bindingType) = prettyBindingType bindingType
@@ -108,7 +116,8 @@ prettyTModule (TModule bindings externs) =
   vcatHardLines $ (prettyTExtern <$> externs) ++ (prettyTBinding <$> bindings)
 
 prettyTExtern :: TExtern -> Doc ann
-prettyTExtern (TExtern name ty) = "extern" <+> prettyName name <+> "::" <+> prettyType (showPrimitiveType <$> ty)
+prettyTExtern (TExtern name ty) =
+  "extern" <+> prettyName name <+> "::" <+> prettyType (showPrimitiveType <$> ty)
 
 prettyTBinding :: TBinding -> Doc ann
 prettyTBinding (TBinding ident scheme args _ body) =
@@ -116,8 +125,7 @@ prettyTBinding (TBinding ident scheme args _ body) =
   hardline <>
   sep (prettyIdent ident : (prettyName . typedValue <$> args)) <+>
   "=" <>
-  hardline <>
-  indent 2 (prettyTExpr body)
+  groupOrHang (prettyTExpr body)
 
 prettyName :: Name -> Doc ann
 prettyName (PrimitiveName prim) = pretty $ show prim
@@ -135,10 +143,9 @@ prettyTExpr (TEIf (TIf pred' then' else')) =
   "else" <+> prettyTExpr else'
 prettyTExpr (TELet (TLet bindings body)) =
   "let" <>
-  hardline <>
+  line <>
   indent 2 (vcat (prettyTBinding <$> bindings)) <>
-  hardline <>
+  line <>
   indent (-2) "in" <>
-  hardline <>
-  indent 2 (prettyTExpr body)
+  groupOrHang (prettyTExpr body)
 prettyTExpr (TEApp (TApp f args _)) = sep $ prettyTExpr f : (prettyTExpr <$> toList args)
