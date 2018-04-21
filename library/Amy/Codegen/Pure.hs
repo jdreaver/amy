@@ -142,7 +142,7 @@ valOperand (ANFVar (Typed ty name')) =
 valOperand (ANFLit lit) =
   pure $ ConstantOperand $
     case lit of
-      LiteralInt i -> C.Int 32 (fromIntegral i)
+      LiteralInt i -> C.Int 64 (fromIntegral i)
       LiteralDouble x -> C.Float (F.Double x)
       LiteralBool x -> C.Int 1 $ if x then 1 else 0
 
@@ -196,7 +196,7 @@ identToLLVM (Ident name' _ _) = LLVM.Name $ textToShortBS name'
 
 -- | Convert from a amy primitive type to an LLVM type
 llvmPrimitiveType :: PrimitiveType -> LLVM.Type
-llvmPrimitiveType IntType = IntegerType 32
+llvmPrimitiveType IntType = IntegerType 64
 llvmPrimitiveType DoubleType = FloatingPointType DoubleFP
 llvmPrimitiveType BoolType = IntegerType 1
 
