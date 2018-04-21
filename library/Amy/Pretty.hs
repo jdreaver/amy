@@ -179,6 +179,7 @@ prettyTExpr (TEIf (TIf pred' then' else')) =
 prettyTExpr (TELet (TLet bindings body)) =
   prettyLet (prettyTBinding <$> bindings) (prettyTExpr body)
 prettyTExpr (TEApp (TApp f args _)) = sep $ prettyTExpr f : (prettyTExpr <$> toList args)
+prettyTExpr (TEParens expr) = parens $ prettyTExpr expr
 
 --
 -- ANF AST

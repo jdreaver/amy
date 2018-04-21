@@ -109,4 +109,4 @@ renameExpression (EApp app) = do
     $ RApp
     <$> rAppFunction
     <*> sequenceA rAppArgs
-renameExpression (EParens expr) = renameExpression expr
+renameExpression (EParens expr) = fmap REParens <$> renameExpression expr

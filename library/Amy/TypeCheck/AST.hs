@@ -58,6 +58,7 @@ data TExpr
   | TEIf !TIf
   | TELet !TLet
   | TEApp !TApp
+  | TEParens !TExpr
   deriving (Show, Eq)
 
 data TIf
@@ -86,6 +87,7 @@ expressionType (TEVar (Typed ty _)) = ty
 expressionType (TEIf if') = expressionType (tIfThen if') -- Checker ensure "then" and "else" types match
 expressionType (TELet let') = expressionType (tLetExpression let')
 expressionType (TEApp app) = tAppReturnType app
+expressionType (TEParens expr) = expressionType expr
 
 -- | Get all the 'Name's in a module.
 tModuleNames :: TModule -> [Name]
@@ -112,3 +114,4 @@ exprNames (TELet (TLet bindings expr)) =
 exprNames (TEApp (TApp f args _)) =
   exprNames f
   ++ concatMap exprNames args
+exprNames (TEParens expr) = exprNames expr

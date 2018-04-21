@@ -281,6 +281,9 @@ inferExpr (REApp (RApp func args)) = do
     ( TEApp (TApp func' args' tyVar)
     , funcConstraints ++ concat argConstraints ++ [newConstraint]
     )
+inferExpr (REParens expr) = do
+  (expr', constraints) <- inferExpr expr
+  pure (TEParens expr', constraints)
 
 --
 -- Constraint Solver
@@ -375,6 +378,7 @@ substituteTExpr subst (TELet (TLet bindings expr)) =
   TELet (TLet (substituteTBinding subst <$> bindings) (substituteTExpr subst expr))
 substituteTExpr subst (TEApp (TApp func args returnType)) =
   TEApp (TApp (substituteTExpr subst func) (substituteTExpr subst <$> args) (substituteType subst returnType))
+substituteTExpr subst (TEParens expr) = TEParens (substituteTExpr subst expr)
 
 --
 -- Free and Active type variables

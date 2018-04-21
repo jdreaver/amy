@@ -53,6 +53,7 @@ data RExpr
   | REIf !RIf
   | RELet !RLet
   | REApp !RApp
+  | REParens !RExpr
   deriving (Show, Eq)
 
 data RIf

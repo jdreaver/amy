@@ -50,6 +50,7 @@ normalizeExpr (TEApp (TApp func args retTy)) c =
     (ANFLit lit) -> error $ "Encountered lit function application " ++ show lit
     (ANFVar (Typed _ (PrimitiveName prim))) -> c $ ANFEPrimOp $ ANFApp prim argVals retTy
     (ANFVar (Typed ty (IdentName ident))) -> c $ ANFEApp $ ANFApp (Typed ty ident) argVals retTy
+normalizeExpr (TEParens expr) c = normalizeExpr expr c
 
 normalizeTerm :: TExpr -> ANFConvert ANFExpr
 normalizeTerm expr = normalizeExpr expr pure
