@@ -9,7 +9,6 @@ module Amy.Renamer.AST
   , RLet(..)
   , RApp(..)
 
-  , RName(..)
   , RIdent(..)
 
     -- Re-export
@@ -38,7 +37,7 @@ data RBinding
   = RBinding
   { rBindingName :: !(Located RIdent)
   , rBindingType :: !(Maybe (Scheme (Located PrimitiveType)))
-  , rBindingArgs :: ![Located RName]
+  , rBindingArgs :: ![Located RIdent]
   , rBindingBody :: !RExpr
   } deriving (Show, Eq)
 
@@ -52,7 +51,7 @@ data RExtern
 -- | A renamed 'Expr'
 data RExpr
   = RELit !(Located Literal)
-  | REVar !(Located RName)
+  | REVar !(Located RIdent)
   | REIf !RIf
   | RELet !RLet
   | REApp !RApp
@@ -79,17 +78,11 @@ data RApp
   , rAppArgs :: !(NonEmpty RExpr)
   } deriving (Show, Eq)
 
--- | An 'RName' is an identified name of something from the source code after
--- renaming.
-data RName
-  = RPrimitiveName !PrimitiveFunctionName
-  | RIdentName !RIdent
-  deriving (Show, Eq, Ord)
-
 -- | An identifier from source code
 data RIdent
   = RIdent
   { rIdentText :: !Text
   , rIdentId :: !Int
+  , rIdentPrimitiveName :: !(Maybe PrimitiveFunctionName)
   , rIdentIsTopLevel :: !Bool
   } deriving (Show, Eq, Ord)

@@ -34,22 +34,22 @@ import Amy.TypeCheck.AST
 
 -- | A 'TyEnv' is the typing environment. It contains known names with their
 -- type schemes.
-newtype TyEnv = TyEnv { unTyEnv :: Map TName (Scheme PrimitiveType) }
+newtype TyEnv = TyEnv { unTyEnv :: Map TIdent (Scheme PrimitiveType) }
   deriving (Show, Eq)
 
 emptyEnv :: TyEnv
 emptyEnv = TyEnv Map.empty
 
-extendEnv :: TyEnv -> (TName, Scheme PrimitiveType) -> TyEnv
+extendEnv :: TyEnv -> (TIdent, Scheme PrimitiveType) -> TyEnv
 extendEnv (TyEnv env) (x, s) = TyEnv (Map.insert x s env)
 
-extendEnvList :: TyEnv -> [(TName, Scheme PrimitiveType)] -> TyEnv
+extendEnvList :: TyEnv -> [(TIdent, Scheme PrimitiveType)] -> TyEnv
 extendEnvList = foldl' extendEnv
 
 -- removeEnv :: TyEnv -> Name -> TyEnv
 -- removeEnv (TyEnv env) var = TyEnv (Map.delete var env)
 
-lookupEnv :: TName -> TyEnv -> Maybe (Scheme PrimitiveType)
+lookupEnv :: TIdent -> TyEnv -> Maybe (Scheme PrimitiveType)
 lookupEnv key (TyEnv tys) = Map.lookup key tys
 
 -- mergeEnv :: TyEnv -> TyEnv -> TyEnv
@@ -85,11 +85,11 @@ letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
 
 -- | Extends the current typing environment with a list of names and schemes
 -- for those names.
-extendEnvM :: [(TName, Scheme PrimitiveType)] -> Inference a -> Inference a
+extendEnvM :: [(TIdent, Scheme PrimitiveType)] -> Inference a -> Inference a
 extendEnvM tys = local (flip extendEnvList tys)
 
 -- | Lookup type in the environment
-lookupEnvM :: TName -> Inference (Type PrimitiveType)
+lookupEnvM :: TIdent -> Inference (Type PrimitiveType)
 lookupEnvM name = do
   mTy <- lookupEnv name <$> ask
   maybe (throwError $ UnboundVariable name) instantiate mTy
@@ -144,11 +144,11 @@ inferModule :: RModule -> Either Error TModule
 inferModule (RModule bindings externs) = do
   let
     externs' = (\(RExtern (Located _ name) ty) -> TExtern (convertRIdent name) (locatedValue <$> ty)) <$> externs
-    externSchemes = (\(TExtern name ty) -> (TIdentName name, Forall [] ty)) <$> externs'
+    externSchemes = (\(TExtern name ty) -> (name, Forall [] ty)) <$> externs'
     mkPrimFuncType prim = Forall [] $ primitiveFunctionType $ primitiveFunction prim
     primFuncSchemes =
-      (\prim -> (TPrimitiveName prim, mkPrimFuncType prim))
-      <$> allPrimitiveFunctionNames
+      (\(id', prim) -> (TIdent (showPrimitiveFunctionName prim) id' (Just prim) False, mkPrimFuncType prim))
+      <$> allPrimitiveFunctionNamesAndIds
     env = TyEnv $ Map.fromList $ externSchemes ++ primFuncSchemes
   bindings' <- inferTopLevel env bindings
   pure (TModule bindings' externs')
@@ -190,7 +190,7 @@ inferBindings bindings = do
   -- collect constraints for all bindings.
   let
     bindingNameSchemes =
-      (\(binding, ty) -> (TIdentName . convertRIdent . locatedValue $ rBindingName binding, ty)) <$> bindingsAndTypes
+      (\(binding, ty) -> (convertRIdent . locatedValue $ rBindingName binding, ty)) <$> bindingsAndTypes
   bindingsInference <- extendEnvM bindingNameSchemes $ for bindingsAndTypes $ \(binding, scheme) -> do
     (binding', constraints) <- inferBinding binding
     ty <- instantiate scheme
@@ -220,7 +220,7 @@ inferBindings bindings = do
 
 inferBinding :: RBinding -> Inference (TBinding, [Constraint])
 inferBinding (RBinding (Located _ name) _ args body) = do
-  argsAndTyVars <- traverse (\(Located _ arg) -> (convertRName arg,) <$> freshTypeVariable) args
+  argsAndTyVars <- traverse (\(Located _ arg) -> (convertRIdent arg,) <$> freshTypeVariable) args
   let argsAndSchemes = (\(arg, t) -> (arg, Forall [] (TyVar t))) <$> argsAndTyVars
   (body', bodyCons) <- extendEnvM argsAndSchemes $ inferExpr body
   let
@@ -243,7 +243,7 @@ inferBinding (RBinding (Located _ name) _ args body) = do
 inferExpr :: RExpr -> Inference (TExpr, [Constraint])
 inferExpr (RELit (Located _ lit)) = pure (TELit lit, [])
 inferExpr (REVar (Located _ var)) = do
-  let var' = convertRName var
+  let var' = convertRIdent var
   t <- lookupEnvM var'
   pure (TEVar (Typed t var'), [])
 inferExpr (REIf (RIf pred' then' else')) = do
@@ -262,7 +262,7 @@ inferExpr (REIf (RIf pred' then' else')) = do
 inferExpr (RELet (RLet bindings expression)) = do
   bindingsInference <- inferBindings bindings
   let
-    bindingSchemes = (\(binding, _) -> (TIdentName $ tBindingName binding, tBindingType binding)) <$> bindingsInference
+    bindingSchemes = (\(binding, _) -> (tBindingName binding, tBindingType binding)) <$> bindingsInference
     bindingCons = concatMap snd bindingsInference
   (expression', expCons) <- extendEnvM bindingSchemes $ inferExpr expression
   pure
@@ -400,9 +400,5 @@ freeEnvTypeVariables (TyEnv env) = foldl' Set.union Set.empty $ freeSchemeTypeVa
 -- Names
 --
 
-convertRName :: RName -> TName
-convertRName (RPrimitiveName prim) = TPrimitiveName prim
-convertRName (RIdentName ident) = TIdentName (convertRIdent ident)
-
 convertRIdent :: RIdent -> TIdent
-convertRIdent (RIdent name id' isTopLevel) = TIdent name id' isTopLevel
+convertRIdent (RIdent name id' mPrim isTopLevel) = TIdent name id' mPrim isTopLevel

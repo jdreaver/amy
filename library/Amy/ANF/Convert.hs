@@ -5,7 +5,7 @@ module Amy.ANF.Convert
   ) where
 
 import Data.Foldable (toList)
-import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 
 import Amy.ANF.AST
@@ -18,9 +18,7 @@ normalizeModule :: TModule -> ANFModule
 normalizeModule module' =
   let
     moduleNames = tModuleNames module'
-    tIdentName (TIdentName ident) = Just ident
-    tIdentName _ = Nothing
-    moduleIdentIds = tIdentId <$> mapMaybe tIdentName moduleNames
+    moduleIdentIds = tIdentId <$> moduleNames
     maxId =
       if null moduleIdentIds
       then 0
@@ -32,12 +30,8 @@ normalizeModule module' =
 mkANFExtern :: TExtern -> ANFExtern
 mkANFExtern (TExtern name ty) = ANFExtern (convertTIdent name) ty
 
-convertTName :: TName -> ANFName
-convertTName (TPrimitiveName prim) = ANFPrimitiveName prim
-convertTName (TIdentName ident) = ANFIdentName (convertTIdent ident)
-
 convertTIdent :: TIdent -> ANFIdent
-convertTIdent (TIdent name id' isTopLevel) = ANFIdent name id' isTopLevel
+convertTIdent (TIdent name id' mPrim isTopLevel) = ANFIdent name id' mPrim isTopLevel
 
 normalizeExpr
   :: Text -- ^ Base name for generated variables
@@ -45,7 +39,7 @@ normalizeExpr
   -> (ANFExpr -> ANFConvert ANFExpr) -- ^ Logical continuation (TODO: Is this needed?)
   -> ANFConvert ANFExpr
 normalizeExpr _ (TELit lit) c = c $ ANFEVal $ ANFLit lit
-normalizeExpr _ (TEVar var) c = c $ ANFEVal $ ANFVar (convertTName <$> var)
+normalizeExpr _ (TEVar var) c = c $ ANFEVal $ ANFVar (convertTIdent <$> var)
 normalizeExpr name (TEIf (TIf pred' then' else')) c =
   normalizeName name pred' $ \predVal -> do
     then'' <- normalizeTerm name then'
@@ -61,8 +55,8 @@ normalizeExpr name (TEApp (TApp func args retTy)) c =
   normalizeName name func $ \funcVal ->
   case funcVal of
     (ANFLit lit) -> error $ "Encountered lit function application " ++ show lit
-    (ANFVar (Typed _ (ANFPrimitiveName prim))) -> c $ ANFEPrimOp $ ANFApp prim argVals retTy
-    (ANFVar (Typed ty (ANFIdentName ident))) -> c $ ANFEApp $ ANFApp (Typed ty ident) argVals retTy
+    (ANFVar (Typed _ (ANFIdent _ _ (Just prim) _))) -> c $ ANFEPrimOp $ ANFApp prim argVals retTy
+    (ANFVar (Typed ty ident)) -> c $ ANFEApp $ ANFApp (Typed ty ident) argVals retTy
 normalizeExpr name (TEParens expr) c = normalizeExpr name expr c
 
 normalizeTerm :: Text -> TExpr -> ANFConvert ANFExpr
@@ -73,10 +67,10 @@ normalizeName _ (TELit lit) c = c $ ANFLit lit
 normalizeName name (TEVar tvar@(Typed ty var)) c =
   case (ty, var) of
     -- Top-level values need to be first called as functions
-    (TyCon _, TIdentName ident@(TIdent _ _ True)) ->
+    (TyCon _, ident@(TIdent _ _ _ True)) ->
       mkNormalizeLet name (ANFEApp $ ANFApp (Typed ty (convertTIdent ident)) [] ty) ty c
     -- Not a top-level value, just return
-    _ -> c $ ANFVar (convertTName <$> tvar)
+    _ -> c $ ANFVar (convertTIdent <$> tvar)
 normalizeName name expr c = do
   expr' <- normalizeTerm name expr
   let exprType = expressionType expr
@@ -85,16 +79,16 @@ normalizeName name expr c = do
 mkNormalizeLet :: Text -> ANFExpr -> Type PrimitiveType -> (ANFVal -> ANFConvert ANFExpr) -> ANFConvert ANFExpr
 mkNormalizeLet name expr exprType c = do
   newIdent <- freshIdent name
-  body <- c $ ANFVar (Typed exprType (ANFIdentName newIdent))
+  body <- c $ ANFVar (Typed exprType newIdent)
   pure $ ANFELet $ ANFLet [ANFBinding newIdent (Forall [] exprType) [] exprType expr] body
 
 normalizeBinding :: Maybe Text -> TBinding -> ANFConvert ANFBinding
-normalizeBinding mName (TBinding ident@(TIdent name _ _) ty args retTy body) = do
+normalizeBinding mName (TBinding ident@(TIdent name _ _ _) ty args retTy body) = do
   -- If we are given a base name, then use it. Otherwise use the binding name
   -- as the base name for all sub expressions.
   let subName = fromMaybe name mName
   body' <- normalizeTerm subName body
-  pure $ ANFBinding (convertTIdent ident) ty (fmap convertTName <$> args) retTy body'
+  pure $ ANFBinding (convertTIdent ident) ty (fmap convertTIdent <$> args) retTy body'
 
 -- | Helper for normalizing lists of things
 normalizeList :: (Monad m) => (a -> (b -> m c) -> m c) -> [a] -> ([b] -> m c) -> m c

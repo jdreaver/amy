@@ -53,7 +53,7 @@ codegenExtern extern =
 codegenTopLevelBinding :: ANFBinding -> Definition
 codegenTopLevelBinding binding =
   let
-    argToParam (Typed ty name') = Parameter (llvmType ty) (nameToLLVM name') []
+    argToParam (Typed ty ident) = Parameter (llvmType ty) (identToLLVM ident) []
     params = argToParam <$> anfBindingArgs binding
     returnType' = llvmType $ anfBindingReturnType binding
     blocks = codegenExpr $ anfBindingBody binding
@@ -74,7 +74,7 @@ codegenExpr' (ANFEVal val) = valOperand val
 codegenExpr' (ANFELet (ANFLet bindings expr)) = do
   for_ bindings $ \binding -> do
     op <- codegenExpr' (anfBindingBody binding)
-    addSymbolToTable (ANFIdentName $ anfBindingName binding) op
+    addSymbolToTable (anfBindingName binding) op
   codegenExpr' expr
 codegenExpr' (ANFEIf (ANFIf pred' then' else' ty)) = do
   -- Name blocks and operands
@@ -115,7 +115,7 @@ codegenExpr' (ANFEIf (ANFIf pred' then' else' ty)) = do
   addInstruction $ endOpName := Phi ty' [(thenOp, thenBlockFinalName), (elseOp, elseBlockFinalName)] []
   pure endOpRef
 codegenExpr' (ANFEApp (ANFApp (Typed ty ident) args' returnTy)) = do
-  funcOperand <- valOperand (ANFVar $ Typed ty (ANFIdentName ident))
+  funcOperand <- valOperand (ANFVar $ Typed ty ident)
   let
     mkInstruction argOps = Call Nothing CC.C [] (Right funcOperand) ((\arg -> (arg, [])) <$> argOps) [] []
   codegenFunctionApp args' returnTy mkInstruction
@@ -130,14 +130,14 @@ codegenFunctionApp args' returnTy mkInstruction = do
   pure $ LocalReference (llvmType returnTy) opName
 
 valOperand :: ANFVal -> BlockGen Operand
-valOperand (ANFVar (Typed ty name')) =
+valOperand (ANFVar (Typed ty ident)) =
   let
     ty' = llvmType ty
-    name'' = nameToLLVM name'
+    ident' = identToLLVM ident
   in
-    case name' of
-      (ANFIdentName (ANFIdent _ _ True)) -> pure $ ConstantOperand $ C.GlobalReference ty' name''
-      _ -> fromMaybe (LocalReference ty' name'') <$> lookupSymbol name'
+    case ident of
+      (ANFIdent _ _ _ True) -> pure $ ConstantOperand $ C.GlobalReference ty' ident'
+      _ -> fromMaybe (LocalReference ty' ident') <$> lookupSymbol ident
 valOperand (ANFLit lit) =
   pure $ ConstantOperand $
     case lit of
@@ -186,12 +186,8 @@ llvmType = go . typeToNonEmpty
       }
       (AddrSpace 0)
 
-nameToLLVM :: ANFName -> LLVM.Name
-nameToLLVM (ANFPrimitiveName prim) = LLVM.Name $ stringToShortBS $ show prim
-nameToLLVM (ANFIdentName ident) = identToLLVM ident
-
 identToLLVM :: ANFIdent -> LLVM.Name
-identToLLVM (ANFIdent name' _ _) = LLVM.Name $ textToShortBS name'
+identToLLVM (ANFIdent name' _ _ _) = LLVM.Name $ textToShortBS name'
 
 -- | Convert from a amy primitive type to an LLVM type
 llvmPrimitiveType :: PrimitiveType -> LLVM.Type

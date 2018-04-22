@@ -29,4 +29,4 @@ freshId = do
 freshIdent :: Text -> ANFConvert ANFIdent
 freshIdent t = do
   id' <- freshId
-  pure $ ANFIdent (t <> pack (show id')) id' False
+  pure $ ANFIdent (t <> pack (show id')) id' Nothing False

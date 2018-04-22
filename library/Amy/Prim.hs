@@ -15,6 +15,7 @@ module Amy.Prim
   , PrimitiveFunction(..)
   , PrimitiveFunctionName(..)
   , allPrimitiveFunctionNames
+  , allPrimitiveFunctionNamesAndIds
   , showPrimitiveFunctionName
   , readPrimitiveFunctionName
   , primitiveFunction
@@ -66,6 +67,9 @@ data PrimitiveFunctionName
 
 allPrimitiveFunctionNames :: [PrimitiveFunctionName]
 allPrimitiveFunctionNames = [minBound..maxBound]
+
+allPrimitiveFunctionNamesAndIds :: [(Int, PrimitiveFunctionName)]
+allPrimitiveFunctionNamesAndIds = zip [0..] allPrimitiveFunctionNames
 
 showPrimitiveFunctionName :: PrimitiveFunctionName -> Text
 showPrimitiveFunctionName name =

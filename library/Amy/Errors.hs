@@ -24,7 +24,7 @@ data Error
 
   -- Renamer
   | UnknownVariable !(Located Text)
-  | VariableShadowed !(Located Text) !RName
+  | VariableShadowed !(Located Text) !RIdent
   | UnknownTypeName !(Located Text)
   | NonIdentifierName !(Located Text)
 
@@ -32,7 +32,7 @@ data Error
   -- TODO: Add source spans here
   | UnificationFail !(Type PrimitiveType) !(Type PrimitiveType)
   | InfiniteType TVar !(Type PrimitiveType)
-  | UnboundVariable !TName
+  | UnboundVariable !TIdent
 
   -- | BindingLacksTypeSignature !RBinding
   -- | TypeMismatch !(Type PrimitiveType) !(Type PrimitiveType)
@@ -42,7 +42,7 @@ data Error
   -- | ExpectedFunctionType !(Type PrimitiveType)
 
   -- Codegen
-  | CodegenMissingSymbol !ANFName
+  | CodegenMissingSymbol !ANFIdent
   | CodegenExpectedPrimitiveType !(Type PrimitiveType)
   | NoCurrying !TApp
   | UnknownOperandType !Operand

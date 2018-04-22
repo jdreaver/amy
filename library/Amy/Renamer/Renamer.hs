@@ -61,8 +61,7 @@ renameBinding typeMap binding = withNewScope $ do -- Begin new scope
   let
     rBindingName =
       case name of
-        (Success (Located l (RIdentName ident))) -> pure (Located l ident)
-        (Success _) -> Failure [NonIdentifierName (bindingName binding)]
+        (Success (Located l ident)) -> pure (Located l ident)
         Failure f -> Failure f
   let rBindingType = traverse (traverse renameType) $ Map.lookup (locatedValue $ bindingName binding) typeMap
   rBindingArgs <- traverse (addValueToScope False) (bindingArgs binding)
@@ -71,7 +70,7 @@ renameBinding typeMap binding = withNewScope $ do -- Begin new scope
     RBinding
     <$> rBindingName
     <*> rBindingType
-    <*> (fmap (fmap RIdentName) <$> sequenceA rBindingArgs)
+    <*> sequenceA rBindingArgs
     <*> rBindingBody
 
 renameExpression :: Expr -> Renamer (Validation [Error] RExpr)

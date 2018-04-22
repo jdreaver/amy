@@ -34,7 +34,7 @@ data BlockGenState
   = BlockGenState
   { blockGenStateCurrentBlock :: !PartialBlock
   , blockGenStateBlockStack :: ![BasicBlock]
-  , blockGenStateSymbolTable :: !(Map ANFName Operand)
+  , blockGenStateSymbolTable :: !(Map ANFIdent Operand)
   , blockGenStateLastId :: !Word
   } deriving (Show, Eq)
 
@@ -73,12 +73,12 @@ terminateBlock term newName =
 currentBlockName :: BlockGen LLVM.Name
 currentBlockName = gets (partialBlockName . blockGenStateCurrentBlock)
 
-addSymbolToTable :: ANFName -> Operand -> BlockGen ()
-addSymbolToTable name' op = modify' (\s -> s { blockGenStateSymbolTable = Map.insert name' op (blockGenStateSymbolTable s) })
+addSymbolToTable :: ANFIdent -> Operand -> BlockGen ()
+addSymbolToTable ident op = modify' (\s -> s { blockGenStateSymbolTable = Map.insert ident op (blockGenStateSymbolTable s) })
 
-lookupSymbol :: ANFName -> BlockGen (Maybe Operand)
-lookupSymbol name' =
-  Map.lookup name' <$> gets blockGenStateSymbolTable
+lookupSymbol :: ANFIdent -> BlockGen (Maybe Operand)
+lookupSymbol ident =
+  Map.lookup ident <$> gets blockGenStateSymbolTable
 
 freshId :: BlockGen Word
 freshId = do

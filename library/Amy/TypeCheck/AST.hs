@@ -11,7 +11,6 @@ module Amy.TypeCheck.AST
   , expressionType
   , tModuleNames
 
-  , TName(..)
   , TIdent(..)
 
     -- Re-export
@@ -40,7 +39,7 @@ data TBinding
   { tBindingName :: !TIdent
   , tBindingType :: !(Scheme PrimitiveType)
     -- ^ Type for whole function
-  , tBindingArgs :: ![Typed PrimitiveType TName]
+  , tBindingArgs :: ![Typed PrimitiveType TIdent]
     -- ^ Argument names and types split out from 'tBindingType'
   , tBindingReturnType :: !(Type PrimitiveType)
     -- ^ Return type split out from 'tBindingType'
@@ -57,7 +56,7 @@ data TExtern
 -- | A renamed 'Expr'
 data TExpr
   = TELit !Literal
-  | TEVar !(Typed PrimitiveType TName)
+  | TEVar !(Typed PrimitiveType TIdent)
   | TEIf !TIf
   | TELet !TLet
   | TEApp !TApp
@@ -93,18 +92,18 @@ expressionType (TEApp app) = tAppReturnType app
 expressionType (TEParens expr) = expressionType expr
 
 -- | Get all the 'Name's in a module.
-tModuleNames :: TModule -> [TName]
+tModuleNames :: TModule -> [TIdent]
 tModuleNames (TModule bindings externs) =
   concatMap bindingNames bindings
-  ++ fmap (TIdentName . tExternName) externs
+  ++ fmap tExternName externs
 
-bindingNames :: TBinding -> [TName]
+bindingNames :: TBinding -> [TIdent]
 bindingNames binding =
-  (TIdentName $ tBindingName binding)
+  tBindingName binding
   : (typedValue <$> tBindingArgs binding)
   ++ exprNames (tBindingBody binding)
 
-exprNames :: TExpr -> [TName]
+exprNames :: TExpr -> [TIdent]
 exprNames (TELit _) = []
 exprNames (TEVar var) = [typedValue var]
 exprNames (TEIf (TIf pred' then' else')) =
@@ -119,15 +118,10 @@ exprNames (TEApp (TApp f args _)) =
   ++ concatMap exprNames args
 exprNames (TEParens expr) = exprNames expr
 
-data TName
-  = TPrimitiveName !PrimitiveFunctionName
-  | TIdentName !TIdent
-  deriving (Show, Eq, Ord)
-
--- | An identifier from source code
 data TIdent
   = TIdent
   { tIdentText :: !Text
   , tIdentId :: !Int
+  , tIdentPrimitiveName :: !(Maybe PrimitiveFunctionName)
   , tIdentIsTopLevel :: !Bool
   } deriving (Show, Eq, Ord)

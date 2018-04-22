@@ -8,7 +8,6 @@ module Amy.ANF.AST
   , ANFIf(..)
   , ANFApp(..)
 
-  , ANFName(..)
   , ANFIdent(..)
   ) where
 
@@ -28,7 +27,7 @@ data ANFBinding
   = ANFBinding
   { anfBindingName :: !ANFIdent
   , anfBindingType :: !(Scheme PrimitiveType)
-  , anfBindingArgs :: ![Typed PrimitiveType ANFName]
+  , anfBindingArgs :: ![Typed PrimitiveType ANFIdent]
   , anfBindingReturnType :: !(Type PrimitiveType)
   , anfBindingBody :: !ANFExpr
   } deriving (Show, Eq)
@@ -40,7 +39,7 @@ data ANFExtern
   } deriving (Show, Eq)
 
 data ANFVal
-  = ANFVar !(Typed PrimitiveType ANFName)
+  = ANFVar !(Typed PrimitiveType ANFIdent)
   | ANFLit !Literal
   deriving (Show, Eq)
 
@@ -73,15 +72,11 @@ data ANFApp f
   , anfAppReturnType :: !(Type PrimitiveType)
   } deriving (Show, Eq)
 
-data ANFName
-  = ANFPrimitiveName !PrimitiveFunctionName
-  | ANFIdentName !ANFIdent
-  deriving (Show, Eq, Ord)
-
 -- | An identifier from source code
 data ANFIdent
   = ANFIdent
   { anfIdentText :: !Text
   , anfIdentId :: !Int
+  , anfIdentPrimitiveName :: !(Maybe PrimitiveFunctionName)
   , anfIdentIsTopLevel :: !Bool
   } deriving (Show, Eq, Ord)

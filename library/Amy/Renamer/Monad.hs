@@ -32,25 +32,25 @@ data RenamerState
   = RenamerState
   { renamerStateLastId :: !Int
     -- ^ Last 'NameIntId' generated
-  , renamerStateValues :: !(Map Text RName)
+  , renamerStateValues :: !(Map Text RIdent)
     -- ^ Values in scope
   } deriving (Show, Eq)
 
 emptyRenamerState :: RenamerState
 emptyRenamerState =
   RenamerState
-  { renamerStateLastId = -1
+  { renamerStateLastId = maximum (fst <$> allPrimitiveFunctionNamesAndIds) + 1
   , renamerStateValues = primitiveFunctionNames
   }
 
-primitiveFunctionNames :: Map Text RName
+primitiveFunctionNames :: Map Text RIdent
 primitiveFunctionNames =
   Map.fromList $
-    (\prim ->
+    (\(id', prim) ->
        ( showPrimitiveFunctionName prim
-       , RPrimitiveName prim
+       , RIdent (showPrimitiveFunctionName prim) id' (Just prim) False
        ))
-    <$> allPrimitiveFunctionNames
+    <$> allPrimitiveFunctionNamesAndIds
 
 -- | Generate a new 'NameIntId'
 freshId :: Renamer Int
@@ -62,19 +62,18 @@ addValueToScope :: Bool -> Located Text -> Renamer (Validation [Error] (Located 
 addValueToScope isTopLevel lName@(Located span' name) = do
   nameId <- freshId
   let
-    ident = RIdent name nameId isTopLevel
-    name' = RIdentName ident
+    ident = RIdent name nameId Nothing isTopLevel
   mExistingName <- lookupValueInScope name
   case mExistingName of
     Just existingName -> pure $ Failure [VariableShadowed lName existingName]
     Nothing -> do
-      modify' (\s -> s { renamerStateValues = Map.insert name name' (renamerStateValues s) })
+      modify' (\s -> s { renamerStateValues = Map.insert name ident (renamerStateValues s) })
       pure $ Success (Located span' ident)
 
-lookupValueInScope :: Text -> Renamer (Maybe RName)
+lookupValueInScope :: Text -> Renamer (Maybe RIdent)
 lookupValueInScope name = Map.lookup name <$> gets renamerStateValues
 
-lookupValueInScopeOrError :: Located Text -> Renamer (Validation [Error] (Located RName))
+lookupValueInScopeOrError :: Located Text -> Renamer (Validation [Error] (Located RIdent))
 lookupValueInScopeOrError name@(Located span' name') =
   maybe (Failure [UnknownVariable name]) (Success . Located span') <$> lookupValueInScope name'
 
