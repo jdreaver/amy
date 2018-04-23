@@ -30,7 +30,7 @@ rename' (Module declarations) = do
   let
     bindings = mapMaybe declBinding declarations
     bindingTypeMap = bindingTypesMap $ mapMaybe declBindingType declarations
-  traverse_ (addValueToScope True) (bindingName <$> bindings)
+  traverse_ addValueToScope (bindingName <$> bindings)
   rModuleBindings <- traverse (renameBinding bindingTypeMap) bindings
 
   pure
@@ -43,7 +43,7 @@ bindingTypesMap = Map.fromList . fmap (\(BindingType (Located _ name) ts) -> (na
 
 renameExtern :: Extern -> Renamer (Validation [Error] RExtern)
 renameExtern extern = do
-  rExternName <- addValueToScope True (externName extern)
+  rExternName <- addValueToScope (externName extern)
   rExternType <- renameType (externType extern)
   pure $
     RExtern
@@ -90,7 +90,7 @@ renameBinding typeMap binding = withNewScope $ do -- Begin new scope
         (Success (Located l ident)) -> pure (Located l ident)
         Failure f -> Failure f
   rBindingType <- traverse renameScheme $ Map.lookup (locatedValue $ bindingName binding) typeMap
-  rBindingArgs <- traverse (addValueToScope False) (bindingArgs binding)
+  rBindingArgs <- traverse addValueToScope (bindingArgs binding)
   rBindingBody <- renameExpression (bindingBody binding)
   pure $
     RBinding
@@ -117,7 +117,7 @@ renameExpression (ELet (Let bindings expression)) =
     let
       bindings' = mapMaybe letBinding bindings
       bindingTypeMap = bindingTypesMap $ mapMaybe letBindingType bindings
-    traverse_ (addValueToScope False) (bindingName <$> bindings')
+    traverse_ addValueToScope (bindingName <$> bindings')
     rLetBindings <- traverse (renameBinding bindingTypeMap) bindings'
     rLetExpression <- renameExpression expression
     pure

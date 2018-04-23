@@ -154,7 +154,7 @@ inferModule (RModule bindings externs) = do
 
 primitiveFunctionScheme :: (Int, PrimitiveFunctionName) -> (TIdent, TScheme)
 primitiveFunctionScheme (id', prim) =
-  (TIdent (showPrimitiveFunctionName prim) id' (Just prim) False, mkPrimFunctionScheme prim)
+  (TIdent (showPrimitiveFunctionName prim) id' (Just prim), mkPrimFunctionScheme prim)
 
 mkPrimFunctionScheme :: PrimitiveFunctionName -> TScheme
 mkPrimFunctionScheme prim = TForall [] $ foldr1 TTyFun $ primitiveTyCon <$> primitiveFunctionType (primitiveFunction prim)
@@ -407,7 +407,7 @@ freeEnvTypeVariables (TyEnv env) = foldl' Set.union Set.empty $ freeSchemeTypeVa
 --
 
 convertRIdent :: RIdent -> TIdent
-convertRIdent (RIdent name id' mPrim isTopLevel) = TIdent name id' mPrim isTopLevel
+convertRIdent (RIdent name id' mPrim) = TIdent name id' mPrim
 
 convertRScheme :: RScheme -> TScheme
 convertRScheme (RForall vars ty) = TForall (convertRTypeName <$> vars) (convertRType ty)

@@ -13,23 +13,35 @@ import Amy.ANF.Monad
 import Amy.TypeCheck.AST
 
 normalizeModule :: TModule -> ANFModule
-normalizeModule module' =
+normalizeModule module'@(TModule bindings externs) =
   let
+    -- Compute max ID from module
     moduleNames = tModuleNames module'
     moduleIdentIds = tIdentId <$> moduleNames
     maxId =
       if null moduleIdentIds
       then 0
       else maximum moduleIdentIds
-    bindings' = runANFConvert (maxId + 1) $ traverse (normalizeBinding (Just "res")) (tModuleBindings module')
-    externs' = mkANFExtern <$> tModuleExterns module'
+
+    -- Record top-level names
+    topLevelNames = (tBindingName <$> bindings) ++ (tExternName <$> externs)
+
+    -- Actual conversion
+    convertState = anfConvertState (maxId + 1) topLevelNames
+    bindings' = runANFConvert convertState $ traverse (normalizeBinding (Just "res")) bindings
+    externs' = mkANFExtern <$> externs
   in ANFModule bindings' externs'
 
 mkANFExtern :: TExtern -> ANFExtern
-mkANFExtern (TExtern name ty) = ANFExtern (convertTIdent name) (convertTType ty)
+mkANFExtern (TExtern name ty) = ANFExtern (convertTIdent True name) (convertTType ty)
 
-convertTIdent :: TIdent -> ANFIdent
-convertTIdent (TIdent name id' mPrim isTopLevel) = ANFIdent name id' mPrim isTopLevel
+convertTIdent :: Bool -> TIdent -> ANFIdent
+convertTIdent isTopLevel (TIdent name id' mPrim) = ANFIdent name id' mPrim isTopLevel
+
+convertTIdent' :: TIdent -> ANFConvert ANFIdent
+convertTIdent' ident@(TIdent name id' mPrim) = do
+  isTopLevel <- isIdentTopLevel ident
+  pure $ ANFIdent name id' mPrim isTopLevel
 
 convertTScheme :: TScheme -> ANFScheme
 convertTScheme (TForall vars ty) = ANFForall (convertTTypeName <$> vars) (convertTType ty)
@@ -48,7 +60,9 @@ normalizeExpr
   -> (ANFExpr -> ANFConvert ANFExpr) -- ^ Logical continuation (TODO: Is this needed?)
   -> ANFConvert ANFExpr
 normalizeExpr _ (TELit lit) c = c $ ANFEVal $ ANFLit lit
-normalizeExpr _ (TEVar (TTyped ty var)) c = c $ ANFEVal $ ANFVar (ANFTyped (convertTType ty) (convertTIdent var))
+normalizeExpr _ (TEVar (TTyped ty ident)) c = do
+  ident' <- convertTIdent' ident
+  c $ ANFEVal $ ANFVar (ANFTyped (convertTType ty) ident')
 normalizeExpr name (TEIf (TIf pred' then' else')) c =
   normalizeName name pred' $ \predVal -> do
     then'' <- normalizeTerm name then'
@@ -73,14 +87,15 @@ normalizeTerm name expr = normalizeExpr name expr pure
 
 normalizeName :: Text -> TExpr -> (ANFVal -> ANFConvert ANFExpr) -> ANFConvert ANFExpr
 normalizeName _ (TELit lit) c = c $ ANFLit lit
-normalizeName name (TEVar (TTyped ty var)) c =
+normalizeName name (TEVar (TTyped ty ident)) c = do
   let ty' = convertTType ty
-  in case (ty, var) of
+  ident' <- convertTIdent' ident
+  case (ty, ident') of
     -- Top-level values need to be first called as functions
-    (TTyCon _, ident@(TIdent _ _ _ True)) ->
-      mkNormalizeLet name (ANFEApp $ ANFApp (ANFTyped (convertTType ty) (convertTIdent ident)) [] ty') ty' c
+    (TTyCon _, (ANFIdent _ _ _ True)) ->
+      mkNormalizeLet name (ANFEApp $ ANFApp (ANFTyped (convertTType ty) ident') [] ty') ty' c
     -- Not a top-level value, just return
-    _ -> c $ ANFVar (ANFTyped ty' (convertTIdent var))
+    _ -> c $ ANFVar (ANFTyped ty' ident')
 normalizeName name expr c = do
   expr' <- normalizeTerm name expr
   let exprType = expressionType expr
@@ -93,13 +108,15 @@ mkNormalizeLet name expr exprType c = do
   pure $ ANFELet $ ANFLet [ANFBinding newIdent (ANFForall [] exprType) [] exprType expr] body
 
 normalizeBinding :: Maybe Text -> TBinding -> ANFConvert ANFBinding
-normalizeBinding mName (TBinding ident@(TIdent name _ _ _) ty args retTy body) = do
+normalizeBinding mName (TBinding ident@(TIdent name _ _) ty args retTy body) = do
   -- If we are given a base name, then use it. Otherwise use the binding name
   -- as the base name for all sub expressions.
   let subName = fromMaybe name mName
   body' <- normalizeTerm subName body
-  let convertArg (TTyped ty' arg) = ANFTyped (convertTType ty') (convertTIdent arg)
-  pure $ ANFBinding (convertTIdent ident) (convertTScheme ty) (convertArg <$> args) (convertTType retTy) body'
+  let convertArg (TTyped ty' arg) = ANFTyped (convertTType ty') <$> convertTIdent' arg
+  ident' <- convertTIdent' ident
+  args' <- traverse convertArg args
+  pure $ ANFBinding ident' (convertTScheme ty) args' (convertTType retTy) body'
 
 -- | Helper for normalizing lists of things
 normalizeList :: (Monad m) => (a -> (b -> m c) -> m c) -> [a] -> ([b] -> m c) -> m c

@@ -86,7 +86,6 @@ data RIdent
   { rIdentText :: !Text
   , rIdentId :: !Int
   , rIdentPrimitiveName :: !(Maybe PrimitiveFunctionName)
-  , rIdentIsTopLevel :: !Bool
   } deriving (Show, Eq, Ord)
 
 data RType

@@ -130,7 +130,6 @@ data TIdent
   { tIdentText :: !Text
   , tIdentId :: !Int
   , tIdentPrimitiveName :: !(Maybe PrimitiveFunctionName)
-  , tIdentIsTopLevel :: !Bool
   } deriving (Show, Eq, Ord)
 
 data TType

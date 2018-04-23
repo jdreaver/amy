@@ -48,7 +48,7 @@ primitiveFunctionNames =
   Map.fromList $
     (\(id', prim) ->
        ( showPrimitiveFunctionName prim
-       , RIdent (showPrimitiveFunctionName prim) id' (Just prim) False
+       , RIdent (showPrimitiveFunctionName prim) id' (Just prim)
        ))
     <$> allPrimitiveFunctionNamesAndIds
 
@@ -58,11 +58,11 @@ freshId = do
   modify' (\s -> s { renamerStateLastId = 1 + renamerStateLastId s })
   gets renamerStateLastId
 
-addValueToScope :: Bool -> Located Text -> Renamer (Validation [Error] (Located RIdent))
-addValueToScope isTopLevel lName@(Located span' name) = do
+addValueToScope :: Located Text -> Renamer (Validation [Error] (Located RIdent))
+addValueToScope lName@(Located span' name) = do
   nameId <- freshId
   let
-    ident = RIdent name nameId Nothing isTopLevel
+    ident = RIdent name nameId Nothing
   mExistingName <- lookupValueInScope name
   case mExistingName of
     Just existingName -> pure $ Failure [VariableShadowed lName existingName]

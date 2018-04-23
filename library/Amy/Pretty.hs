@@ -186,7 +186,7 @@ prettyTBinding (TBinding ident scheme args _ body) =
   prettyBinding' (prettyTIdent ident) (prettyTIdent . tTypedValue <$> args) (prettyTExpr body)
 
 prettyTIdent :: TIdent -> Doc ann
-prettyTIdent (TIdent name _ _ _) = pretty name
+prettyTIdent (TIdent name _ _) = pretty name
 
 prettyTExpr :: TExpr -> Doc ann
 prettyTExpr (TELit lit) = pretty $ showLiteral lit
