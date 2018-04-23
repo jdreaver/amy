@@ -180,23 +180,24 @@ inferTopLevel env bindings = do
 -- then collect all the constraints and solve them together.
 inferBindings :: [RBinding] -> Inference [(TBinding, [Constraint])]
 inferBindings bindings = do
-  let
-    setBindingVariable binding = do
-      scheme <-
-        case rBindingType binding of
-          -- There is an explicit type annotation. Use it.
-          Just scheme -> pure (convertRScheme scheme)
-          -- No explicit type annotation
-          Nothing -> TForall [] . TTyVar <$> freshTypeVariable
-      pure (binding, scheme)
-  bindingsAndTypes <- traverse setBindingVariable bindings
+  -- Generate constraints separately
+  bindingsInference <- generateBindingConstraints bindings
+
+  -- Solve constraints together
+  env <- ask
+  either throwError pure $ solveBindingConstraints env bindingsInference
+
+generateBindingConstraints :: [RBinding] -> Inference [(TBinding, [Constraint])]
+generateBindingConstraints bindings = do
+  -- Record schemes for each binding
+  bindingsAndTypes <- traverse (\binding -> (binding,) <$> generateBindingScheme binding) bindings
 
   -- Add all the binding type variables to the typing environment and then
   -- collect constraints for all bindings.
   let
     bindingNameSchemes =
       (\(binding, ty) -> (convertRIdent . locatedValue $ rBindingName binding, ty)) <$> bindingsAndTypes
-  bindingsInference <- extendEnvM bindingNameSchemes $ for bindingsAndTypes $ \(binding, scheme) -> do
+  extendEnvM bindingNameSchemes $ for bindingsAndTypes $ \(binding, scheme) -> do
     (binding', constraints) <- inferBinding binding
     ty <- instantiate scheme
     let
@@ -205,23 +206,27 @@ inferBindings bindings = do
       bindingConstraint = Constraint (ty, bindingType)
     pure (binding', constraints ++ [bindingConstraint])
 
+generateBindingScheme :: RBinding -> Inference TScheme
+generateBindingScheme binding =
+  maybe
+    -- No explicit type annotation, generate a type variable
+    (TForall [] . TTyVar <$> freshTypeVariable)
+    -- There is an explicit type annotation. Use it.
+    (pure . convertRScheme)
+    (rBindingType binding)
+
+solveBindingConstraints :: TyEnv -> [(TBinding, [Constraint])] -> Either Error [(TBinding, [Constraint])]
+solveBindingConstraints env bindingsInference = do
   -- Solve all constraints together.
   let
     constraints = concatMap snd bindingsInference
-  subst <- either throwError pure $ runSolve constraints
-
-  -- Use the produced Substitution and substitute all the type variables we
-  -- generated for each binding.
-  env <- ask
+  subst <- runSolve constraints
   pure $ flip fmap bindingsInference $ \(binding, bodyCons) ->
     let
       (TForall _ bindingType) = tBindingType binding
       scheme = generalize (substituteEnv subst env) (substituteType subst bindingType)
       binding' = binding { tBindingType = scheme }
-    in
-      ( binding'
-      , bodyCons
-      )
+    in (binding', bodyCons)
 
 inferBinding :: RBinding -> Inference (TBinding, [Constraint])
 inferBinding (RBinding (Located _ name) _ args body) = do
