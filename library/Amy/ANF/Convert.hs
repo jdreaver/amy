@@ -60,9 +60,7 @@ normalizeExpr
   -> (ANFExpr -> ANFConvert ANFExpr) -- ^ Logical continuation (TODO: Is this needed?)
   -> ANFConvert ANFExpr
 normalizeExpr _ (TELit lit) c = c $ ANFEVal $ ANFLit lit
-normalizeExpr _ (TEVar (TTyped ty ident)) c = do
-  ident' <- convertTIdent' ident
-  c $ ANFEVal $ ANFVar (ANFTyped (convertTType ty) ident')
+normalizeExpr name var@TEVar{} c = normalizeName name var (c . ANFEVal)
 normalizeExpr name (TEIf (TIf pred' then' else')) c =
   normalizeName name pred' $ \predVal -> do
     then'' <- normalizeTerm name then'
@@ -92,7 +90,7 @@ normalizeName name (TEVar (TTyped ty ident)) c = do
   ident' <- convertTIdent' ident
   case (ty, ident') of
     -- Top-level values need to be first called as functions
-    (TTyCon _, (ANFIdent _ _ _ True)) ->
+    (TTyCon _, ANFIdent _ _ _ True) ->
       mkNormalizeLet name (ANFEApp $ ANFApp (ANFTyped (convertTType ty) ident') [] ty') ty' c
     -- Not a top-level value, just return
     _ -> c $ ANFVar (ANFTyped ty' ident')

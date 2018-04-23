@@ -131,12 +131,11 @@ codegenFunctionApp args' returnTy mkInstruction = do
 valOperand :: ANFVal -> BlockGen Operand
 valOperand (ANFVar (ANFTyped ty ident)) =
   let
-    ty' = llvmType ty
     ident' = identToLLVM ident
   in
     case ident of
-      (ANFIdent _ _ _ True) -> pure $ ConstantOperand $ C.GlobalReference ty' ident'
-      _ -> fromMaybe (LocalReference ty' ident') <$> lookupSymbol ident
+      (ANFIdent _ _ _ True) -> pure $ ConstantOperand $ C.GlobalReference (mkFunctionType ty) ident'
+      _ -> fromMaybe (LocalReference (llvmType ty) ident') <$> lookupSymbol ident
 valOperand (ANFLit lit) =
   pure $ ConstantOperand $
     case lit of
@@ -172,24 +171,28 @@ typeToNonEmpty ty = ty :| []
 
 -- TODO: Add tests for this
 llvmType :: ANFType -> LLVM.Type
-llvmType = go . typeToNonEmpty
+llvmType ty = go (typeToNonEmpty ty)
  where
-  go (ty :| []) =
-    case ty of
+  go (ty' :| []) =
+    case ty' of
       ANFTyCon tyName ->
         let prim = fromMaybe (error $ "Expected primitive TyCon, got " ++ show tyName) (anfTypeNamePrimitiveType tyName)
         in llvmPrimitiveType prim
       ANFTyVar _ -> error "Can't handle polymorphic type arguments yet"
-      t@ANFTyFun{} -> mkFunctionType (t :| [])
-  go ts = mkFunctionType ts
-  mkFunctionType ts =
-    PointerType
-      FunctionType
-      { resultType = llvmType $ NE.last ts
-      , argumentTypes = llvmType <$> NE.init ts
-      , isVarArg = False
-      }
-      (AddrSpace 0)
+      ANFTyFun{} -> mkFunctionType ty
+  go _ = mkFunctionType ty
+
+mkFunctionType :: ANFType -> LLVM.Type
+mkFunctionType ty =
+  PointerType
+    FunctionType
+    { resultType = llvmType $ NE.last ts
+    , argumentTypes = llvmType <$> NE.init ts
+    , isVarArg = False
+    }
+    (AddrSpace 0)
+ where
+  ts = typeToNonEmpty ty
 
 identToLLVM :: ANFIdent -> LLVM.Name
 identToLLVM (ANFIdent name' _ _ _) = LLVM.Name $ textToShortBS name'

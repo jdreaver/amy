@@ -33,10 +33,16 @@ if.then.0:                                        ; preds = %entry
   br label %if.end.0
 
 if.else.0:                                        ; preds = %entry
+  %1 = call i64 @threeHundred()
   br label %if.end.0
 
 if.end.0:                                         ; preds = %if.else.0, %if.then.0
-  %end.0 = phi i64 [ %0, %if.then.0 ], [ 300, %if.else.0 ]
+  %end.0 = phi i64 [ %0, %if.then.0 ], [ %1, %if.else.0 ]
   ret i64 %end.0
+}
+
+define i64 @threeHundred() {
+entry:
+  ret i64 100
 }
 

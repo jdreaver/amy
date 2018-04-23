@@ -10,4 +10,7 @@ main =
   in y
 
 # f :: Int -> Int
-f x = if True then abs x else 300
+f x = if True then abs x else threeHundred
+
+threeHundred :: Int
+threeHundred = 100
