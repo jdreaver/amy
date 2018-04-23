@@ -8,6 +8,9 @@ module Amy.Renamer.Monad
   , addValueToScope
   , lookupValueInScope
   , lookupValueInScopeOrError
+  , addTypeToScope
+  , lookupTypeInScope
+  , lookupTypeInScopeOrError
   , withNewScope
   ) where
 
@@ -32,15 +35,16 @@ data RenamerState
   = RenamerState
   { renamerStateLastId :: !Int
     -- ^ Last 'NameIntId' generated
-  , renamerStateValues :: !(Map Text RIdent)
-    -- ^ Values in scope
+  , renamerStateValuesInScope :: !(Map Text RIdent)
+  , renamerStateTypesInScope :: !(Map Text RTypeName)
   } deriving (Show, Eq)
 
 emptyRenamerState :: RenamerState
 emptyRenamerState =
   RenamerState
   { renamerStateLastId = maximum (fst <$> allPrimitiveFunctionNamesAndIds) + 1
-  , renamerStateValues = primitiveFunctionNames
+  , renamerStateValuesInScope = primitiveFunctionNames
+  , renamerStateTypesInScope = Map.empty
   }
 
 primitiveFunctionNames :: Map Text RIdent
@@ -67,15 +71,34 @@ addValueToScope lName@(Located span' name) = do
   case mExistingName of
     Just existingName -> pure $ Failure [VariableShadowed lName existingName]
     Nothing -> do
-      modify' (\s -> s { renamerStateValues = Map.insert name ident (renamerStateValues s) })
+      modify' (\s -> s { renamerStateValuesInScope = Map.insert name ident (renamerStateValuesInScope s) })
       pure $ Success (Located span' ident)
 
 lookupValueInScope :: Text -> Renamer (Maybe RIdent)
-lookupValueInScope name = Map.lookup name <$> gets renamerStateValues
+lookupValueInScope name = Map.lookup name <$> gets renamerStateValuesInScope
 
 lookupValueInScopeOrError :: Located Text -> Renamer (Validation [Error] (Located RIdent))
 lookupValueInScopeOrError name@(Located span' name') =
   maybe (Failure [UnknownVariable name]) (Success . Located span') <$> lookupValueInScope name'
+
+addTypeToScope :: Located Text -> Renamer (Validation [Error] RTypeName)
+addTypeToScope (Located span' name) = do
+  nameId <- freshId
+  let
+    tname = RTypeName name span' nameId Nothing
+  mExistingName <- lookupTypeInScope name
+  case mExistingName of
+    Just _ -> pure () -- These will be set to equal during inference
+    Nothing ->
+      modify' (\s -> s { renamerStateTypesInScope = Map.insert name tname (renamerStateTypesInScope s) })
+  pure $ Success tname
+
+lookupTypeInScope :: Text -> Renamer (Maybe RTypeName)
+lookupTypeInScope name = Map.lookup name <$> gets renamerStateTypesInScope
+
+lookupTypeInScopeOrError :: Located Text -> Renamer (Validation [Error] RTypeName)
+lookupTypeInScopeOrError name@(Located _ name') =
+  maybe (Failure [UnknownTypeName name]) Success <$> lookupTypeInScope name'
 
 -- | Runs a 'Renamer' action in a fresh scope and restores the original scope
 -- when the action is done.
@@ -85,7 +108,8 @@ withNewScope action = do
   result <- action
   modify'
     (\s -> s
-      { renamerStateValues = renamerStateValues originalState
+      { renamerStateValuesInScope = renamerStateValuesInScope originalState
+      , renamerStateTypesInScope = renamerStateTypesInScope originalState
       }
     )
   pure result
