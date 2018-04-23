@@ -10,6 +10,9 @@ module Amy.Renamer.AST
   , RApp(..)
 
   , RIdent(..)
+  , RType(..)
+  , RTypeName(..)
+  , RScheme(..)
 
     -- Re-export
   , Literal(..)
@@ -21,7 +24,6 @@ import Amy.Literal (Literal(..))
 import Amy.Prim
 import Amy.Syntax.Located
 import Data.Text (Text)
-import Amy.Type
 
 -- | An 'RModule' is a 'Module' after renaming.
 data RModule
@@ -36,7 +38,7 @@ data RModule
 data RBinding
   = RBinding
   { rBindingName :: !(Located RIdent)
-  , rBindingType :: !(Maybe (Scheme (Located PrimitiveType)))
+  , rBindingType :: !(Maybe RScheme)
   , rBindingArgs :: ![Located RIdent]
   , rBindingBody :: !RExpr
   } deriving (Show, Eq)
@@ -45,7 +47,7 @@ data RBinding
 data RExtern
   = RExtern
   { rExternName :: !(Located RIdent)
-  , rExternType :: !(Type (Located PrimitiveType))
+  , rExternType :: !RType
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'
@@ -86,3 +88,23 @@ data RIdent
   , rIdentPrimitiveName :: !(Maybe PrimitiveFunctionName)
   , rIdentIsTopLevel :: !Bool
   } deriving (Show, Eq, Ord)
+
+data RType
+  = RTyCon !RTypeName
+  | RTyVar !RTypeName
+  | RTyFun !RType !RType
+  deriving (Show, Eq)
+
+infixr 0 `RTyFun`
+
+data RTypeName
+  = RTypeName
+  { rTypeNameText :: !Text
+  , rTypeNameLocation :: !SourceSpan
+  , rTypeNameId :: !Int
+  , rTypeNamePrimitiveType :: !(Maybe PrimitiveType)
+  } deriving (Show, Eq)
+
+data RScheme
+  = RForall ![RTypeName] RType
+  deriving (Show, Eq)

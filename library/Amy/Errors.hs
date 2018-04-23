@@ -12,10 +12,8 @@ import LLVM.AST (Operand)
 import Text.Megaparsec
 
 import Amy.ANF.AST
-import Amy.Prim
 import Amy.Renamer.AST
 import Amy.Syntax.Located
-import Amy.Type
 import Amy.TypeCheck.AST
 
 data Error
@@ -30,8 +28,8 @@ data Error
 
   -- Type checker
   -- TODO: Add source spans here
-  | UnificationFail !(Type PrimitiveType) !(Type PrimitiveType)
-  | InfiniteType TVar !(Type PrimitiveType)
+  | UnificationFail !TType !TType
+  | InfiniteType TTypeName !TType
   | UnboundVariable !TIdent
 
   -- | BindingLacksTypeSignature !RBinding
@@ -43,7 +41,6 @@ data Error
 
   -- Codegen
   | CodegenMissingSymbol !ANFIdent
-  | CodegenExpectedPrimitiveType !(Type PrimitiveType)
   | NoCurrying !TApp
   | UnknownOperandType !Operand
   deriving (Show, Eq)
@@ -69,7 +66,6 @@ errorLocation e =
     -- ExpectedFunctionType{} -> Nothing
 
     CodegenMissingSymbol{} -> Nothing
-    CodegenExpectedPrimitiveType{} -> Nothing
     NoCurrying{} -> Nothing
     UnknownOperandType{} -> Nothing
 

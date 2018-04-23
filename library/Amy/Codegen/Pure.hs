@@ -25,7 +25,6 @@ import Amy.ANF
 import Amy.Codegen.Monad
 import Amy.Literal
 import Amy.Prim
-import Amy.Type as T
 
 codegenModule :: ANFModule -> Module
 codegenModule (ANFModule bindings externs) =
@@ -53,7 +52,7 @@ codegenExtern extern =
 codegenTopLevelBinding :: ANFBinding -> Definition
 codegenTopLevelBinding binding =
   let
-    argToParam (Typed ty ident) = Parameter (llvmType ty) (identToLLVM ident) []
+    argToParam (ANFTyped ty ident) = Parameter (llvmType ty) (identToLLVM ident) []
     params = argToParam <$> anfBindingArgs binding
     returnType' = llvmType $ anfBindingReturnType binding
     blocks = codegenExpr $ anfBindingBody binding
@@ -114,15 +113,15 @@ codegenExpr' (ANFEIf (ANFIf pred' then' else' ty)) = do
   -- Generate end block
   addInstruction $ endOpName := Phi ty' [(thenOp, thenBlockFinalName), (elseOp, elseBlockFinalName)] []
   pure endOpRef
-codegenExpr' (ANFEApp (ANFApp (Typed ty ident) args' returnTy)) = do
-  funcOperand <- valOperand (ANFVar $ Typed ty ident)
+codegenExpr' (ANFEApp (ANFApp (ANFTyped ty ident) args' returnTy)) = do
+  funcOperand <- valOperand (ANFVar $ ANFTyped ty ident)
   let
     mkInstruction argOps = Call Nothing CC.C [] (Right funcOperand) ((\arg -> (arg, [])) <$> argOps) [] []
   codegenFunctionApp args' returnTy mkInstruction
 codegenExpr' (ANFEPrimOp (ANFApp prim args' returnTy)) =
   codegenFunctionApp args' returnTy (primitiveFunctionInstruction prim)
 
-codegenFunctionApp :: [ANFVal] -> T.Type PrimitiveType -> ([Operand] -> Instruction) -> BlockGen Operand
+codegenFunctionApp :: [ANFVal] -> ANFType -> ([Operand] -> Instruction) -> BlockGen Operand
 codegenFunctionApp args' returnTy mkInstruction = do
   opName <- freshUnName
   argOps <- traverse valOperand args'
@@ -130,7 +129,7 @@ codegenFunctionApp args' returnTy mkInstruction = do
   pure $ LocalReference (llvmType returnTy) opName
 
 valOperand :: ANFVal -> BlockGen Operand
-valOperand (ANFVar (Typed ty ident)) =
+valOperand (ANFVar (ANFTyped ty ident)) =
   let
     ty' = llvmType ty
     ident' = identToLLVM ident
@@ -167,15 +166,21 @@ primitiveFunctionInstruction primFuncName argumentOperands =
         PrimDSub -> FSub noFastMathFlags op0 op1 []
   in instruction
 
+typeToNonEmpty :: ANFType -> NonEmpty ANFType
+typeToNonEmpty (t1 `ANFTyFun` t2) = NE.cons t1 (typeToNonEmpty t2)
+typeToNonEmpty ty = ty :| []
+
 -- TODO: Add tests for this
-llvmType :: T.Type PrimitiveType -> LLVM.Type
+llvmType :: ANFType -> LLVM.Type
 llvmType = go . typeToNonEmpty
  where
   go (ty :| []) =
     case ty of
-      TyCon prim -> llvmPrimitiveType prim
-      TyVar _ -> error "Can't handle polymorphic type arguments yet"
-      t@TyFun{} -> mkFunctionType (t :| [])
+      ANFTyCon tyName ->
+        let prim = fromMaybe (error $ "Expected primitive TyCon, got " ++ show tyName) (anfTypeNamePrimitiveType tyName)
+        in llvmPrimitiveType prim
+      ANFTyVar _ -> error "Can't handle polymorphic type arguments yet"
+      t@ANFTyFun{} -> mkFunctionType (t :| [])
   go ts = mkFunctionType ts
   mkFunctionType ts =
     PointerType

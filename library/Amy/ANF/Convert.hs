@@ -10,8 +10,6 @@ import Data.Text (Text)
 
 import Amy.ANF.AST
 import Amy.ANF.Monad
-import Amy.Prim
-import Amy.Type
 import Amy.TypeCheck.AST
 
 normalizeModule :: TModule -> ANFModule
@@ -28,10 +26,21 @@ normalizeModule module' =
   in ANFModule bindings' externs'
 
 mkANFExtern :: TExtern -> ANFExtern
-mkANFExtern (TExtern name ty) = ANFExtern (convertTIdent name) ty
+mkANFExtern (TExtern name ty) = ANFExtern (convertTIdent name) (convertTType ty)
 
 convertTIdent :: TIdent -> ANFIdent
 convertTIdent (TIdent name id' mPrim isTopLevel) = ANFIdent name id' mPrim isTopLevel
+
+convertTScheme :: TScheme -> ANFScheme
+convertTScheme (TForall vars ty) = ANFForall (convertTTypeName <$> vars) (convertTType ty)
+
+convertTType :: TType -> ANFType
+convertTType (TTyCon name) = ANFTyCon (convertTTypeName name)
+convertTType (TTyVar name) = ANFTyVar (convertTTypeName name)
+convertTType (TTyFun ty1 ty2) = ANFTyFun (convertTType ty1) (convertTType ty2)
+
+convertTTypeName :: TTypeName -> ANFTypeName
+convertTTypeName (TTypeName name' id' mPrim) = ANFTypeName name' id' mPrim
 
 normalizeExpr
   :: Text -- ^ Base name for generated variables
@@ -39,13 +48,13 @@ normalizeExpr
   -> (ANFExpr -> ANFConvert ANFExpr) -- ^ Logical continuation (TODO: Is this needed?)
   -> ANFConvert ANFExpr
 normalizeExpr _ (TELit lit) c = c $ ANFEVal $ ANFLit lit
-normalizeExpr _ (TEVar var) c = c $ ANFEVal $ ANFVar (convertTIdent <$> var)
+normalizeExpr _ (TEVar (TTyped ty var)) c = c $ ANFEVal $ ANFVar (ANFTyped (convertTType ty) (convertTIdent var))
 normalizeExpr name (TEIf (TIf pred' then' else')) c =
   normalizeName name pred' $ \predVal -> do
     then'' <- normalizeTerm name then'
     else'' <- normalizeTerm name else'
     let ty = expressionType then'
-    c $ ANFEIf $ ANFIf predVal then'' else'' ty
+    c $ ANFEIf $ ANFIf predVal then'' else'' (convertTType ty)
 normalizeExpr name (TELet (TLet bindings expr)) c = do
   bindings' <- traverse (normalizeBinding Nothing) bindings
   expr' <- normalizeExpr name expr c
@@ -55,8 +64,8 @@ normalizeExpr name (TEApp (TApp func args retTy)) c =
   normalizeName name func $ \funcVal ->
   case funcVal of
     (ANFLit lit) -> error $ "Encountered lit function application " ++ show lit
-    (ANFVar (Typed _ (ANFIdent _ _ (Just prim) _))) -> c $ ANFEPrimOp $ ANFApp prim argVals retTy
-    (ANFVar (Typed ty ident)) -> c $ ANFEApp $ ANFApp (Typed ty ident) argVals retTy
+    (ANFVar (ANFTyped _ (ANFIdent _ _ (Just prim) _))) -> c $ ANFEPrimOp $ ANFApp prim argVals (convertTType retTy)
+    (ANFVar (ANFTyped ty ident)) -> c $ ANFEApp $ ANFApp (ANFTyped ty ident) argVals (convertTType retTy)
 normalizeExpr name (TEParens expr) c = normalizeExpr name expr c
 
 normalizeTerm :: Text -> TExpr -> ANFConvert ANFExpr
@@ -64,23 +73,24 @@ normalizeTerm name expr = normalizeExpr name expr pure
 
 normalizeName :: Text -> TExpr -> (ANFVal -> ANFConvert ANFExpr) -> ANFConvert ANFExpr
 normalizeName _ (TELit lit) c = c $ ANFLit lit
-normalizeName name (TEVar tvar@(Typed ty var)) c =
-  case (ty, var) of
+normalizeName name (TEVar (TTyped ty var)) c =
+  let ty' = convertTType ty
+  in case (ty, var) of
     -- Top-level values need to be first called as functions
-    (TyCon _, ident@(TIdent _ _ _ True)) ->
-      mkNormalizeLet name (ANFEApp $ ANFApp (Typed ty (convertTIdent ident)) [] ty) ty c
+    (TTyCon _, ident@(TIdent _ _ _ True)) ->
+      mkNormalizeLet name (ANFEApp $ ANFApp (ANFTyped (convertTType ty) (convertTIdent ident)) [] ty') ty' c
     -- Not a top-level value, just return
-    _ -> c $ ANFVar (convertTIdent <$> tvar)
+    _ -> c $ ANFVar (ANFTyped ty' (convertTIdent var))
 normalizeName name expr c = do
   expr' <- normalizeTerm name expr
   let exprType = expressionType expr
-  mkNormalizeLet name expr' exprType c
+  mkNormalizeLet name expr' (convertTType exprType) c
 
-mkNormalizeLet :: Text -> ANFExpr -> Type PrimitiveType -> (ANFVal -> ANFConvert ANFExpr) -> ANFConvert ANFExpr
+mkNormalizeLet :: Text -> ANFExpr -> ANFType -> (ANFVal -> ANFConvert ANFExpr) -> ANFConvert ANFExpr
 mkNormalizeLet name expr exprType c = do
   newIdent <- freshIdent name
-  body <- c $ ANFVar (Typed exprType newIdent)
-  pure $ ANFELet $ ANFLet [ANFBinding newIdent (Forall [] exprType) [] exprType expr] body
+  body <- c $ ANFVar (ANFTyped exprType newIdent)
+  pure $ ANFELet $ ANFLet [ANFBinding newIdent (ANFForall [] exprType) [] exprType expr] body
 
 normalizeBinding :: Maybe Text -> TBinding -> ANFConvert ANFBinding
 normalizeBinding mName (TBinding ident@(TIdent name _ _ _) ty args retTy body) = do
@@ -88,7 +98,8 @@ normalizeBinding mName (TBinding ident@(TIdent name _ _ _) ty args retTy body) =
   -- as the base name for all sub expressions.
   let subName = fromMaybe name mName
   body' <- normalizeTerm subName body
-  pure $ ANFBinding (convertTIdent ident) ty (fmap convertTIdent <$> args) retTy body'
+  let convertArg (TTyped ty' arg) = ANFTyped (convertTType ty') (convertTIdent arg)
+  pure $ ANFBinding (convertTIdent ident) (convertTScheme ty) (convertArg <$> args) (convertTType retTy) body'
 
 -- | Helper for normalizing lists of things
 normalizeList :: (Monad m) => (a -> (b -> m c) -> m c) -> [a] -> ([b] -> m c) -> m c

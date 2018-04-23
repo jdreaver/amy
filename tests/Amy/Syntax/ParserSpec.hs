@@ -14,7 +14,6 @@ import Text.Shakespeare.Text (st)
 
 import Amy.Syntax.AST
 import Amy.Syntax.Parser
-import Amy.Type
 
 spec :: Spec
 spec = do
@@ -144,17 +143,19 @@ spec = do
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
-          (Forall [TVar "a"] $ TyVar (TVar "a"))
+          (Forall [Located (SourceSpan "" 1 13 1 13) "a"] $ TyVar (Located (SourceSpan "" 1 16 1 16) "a"))
       parse bindingType "" "f :: forall a b. a -> b -> a"
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
-          ( Forall [TVar "a", TVar "b"] $
-            TyVar (TVar "a")
+          ( Forall
+              [ Located (SourceSpan "" 1 13 1 13) "a"
+              , Located (SourceSpan "" 1 15 1 15) "b"] $
+            TyVar (Located (SourceSpan "" 1 18 1 18) "a")
             `TyFun`
-            TyVar (TVar "b")
+            TyVar (Located (SourceSpan "" 1 23 1 23) "b")
             `TyFun`
-            TyVar (TVar "a")
+            TyVar (Located (SourceSpan "" 1 28 1 28) "a")
           )
 
   describe "parseType" $ do

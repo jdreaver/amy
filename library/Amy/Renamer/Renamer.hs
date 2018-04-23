@@ -16,7 +16,6 @@ import Amy.Renamer.AST
 import Amy.Renamer.Monad
 import Amy.Prim
 import Amy.Syntax.AST
-import Amy.Type
 
 -- | Gives a unique identity to all names in the AST
 rename :: Module -> Either [Error] RModule
@@ -39,23 +38,50 @@ rename' (Module declarations) = do
     <$> sequenceA rModuleBindings
     <*> sequenceA rModuleExterns
 
-bindingTypesMap :: [BindingType] -> Map Text (Scheme (Located Text))
+bindingTypesMap :: [BindingType] -> Map Text Scheme
 bindingTypesMap = Map.fromList . fmap (\(BindingType (Located _ name) ts) -> (name, ts))
 
 renameExtern :: Extern -> Renamer (Validation [Error] RExtern)
 renameExtern extern = do
   rExternName <- addValueToScope True (externName extern)
-  let rExternType = traverse renameType (externType extern)
+  rExternType <- renameType (externType extern)
   pure $
     RExtern
       <$> rExternName
       <*> rExternType
 
-renameType :: Located Text -> Validation [Error] (Located PrimitiveType)
-renameType name =
-  maybe (Failure [UnknownTypeName name]) Success $ traverse readPrimitiveType name
+-- renameType :: Located Text -> Validation [Error] (Located PrimitiveType)
+-- renameType name =
+--   maybe (Failure [UnknownTypeName name]) Success $ traverse readPrimitiveType name
 
-renameBinding :: Map Text (Scheme (Located Text)) -> Binding -> Renamer (Validation [Error] RBinding)
+renameScheme :: Scheme -> Renamer (Validation [Error] RScheme)
+renameScheme (Forall vars ty) = do
+  -- TODO: Actually add these type variables into some scope properly. They can
+  -- be used in the current type definition and any other type definitions
+  -- (like for let bindings) inside the binding body.
+  let vars' = (\(Located span' name) -> RTypeName name span' (-1) Nothing) <$> vars
+  ty' <- renameType ty
+  pure $ RForall vars' <$> ty'
+
+renameType :: Type -> Renamer (Validation [Error] RType)
+renameType (TyCon name@(Located span' name')) =
+  let primName = readPrimitiveTyCon name
+  in traverse (\prim -> pure $ RTyCon $ RTypeName name' span' (primitiveTypeId prim) (Just prim)) primName
+renameType (TyVar name) =
+  -- TODO: Actually look up TyVar names
+  pure $ Failure [UnknownTypeName name]
+renameType (TyFun ty1 ty2) = do
+  ty1' <- renameType ty1
+  ty2' <- renameType ty2
+  pure $
+    RTyFun
+    <$> ty1'
+    <*> ty2'
+
+readPrimitiveTyCon :: Located Text -> Validation [Error] PrimitiveType
+readPrimitiveTyCon name@(Located _ name') = maybe (Failure [UnknownTypeName name]) Success $ readPrimitiveType name'
+
+renameBinding :: Map Text Scheme -> Binding -> Renamer (Validation [Error] RBinding)
 renameBinding typeMap binding = withNewScope $ do -- Begin new scope
   name <- lookupValueInScopeOrError (bindingName binding)
   let
@@ -63,13 +89,13 @@ renameBinding typeMap binding = withNewScope $ do -- Begin new scope
       case name of
         (Success (Located l ident)) -> pure (Located l ident)
         Failure f -> Failure f
-  let rBindingType = traverse (traverse renameType) $ Map.lookup (locatedValue $ bindingName binding) typeMap
+  rBindingType <- traverse renameScheme $ Map.lookup (locatedValue $ bindingName binding) typeMap
   rBindingArgs <- traverse (addValueToScope False) (bindingArgs binding)
   rBindingBody <- renameExpression (bindingBody binding)
   pure $
     RBinding
     <$> rBindingName
-    <*> rBindingType
+    <*> sequenceA rBindingType
     <*> sequenceA rBindingArgs
     <*> rBindingBody
 

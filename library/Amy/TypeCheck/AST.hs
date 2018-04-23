@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveFunctor #-}
+
 -- | Version of a renamer 'RModule' after type checking.
 
 module Amy.TypeCheck.AST
@@ -12,6 +14,10 @@ module Amy.TypeCheck.AST
   , tModuleNames
 
   , TIdent(..)
+  , TType(..)
+  , TTypeName(..)
+  , TScheme(..)
+  , TTyped(..)
 
     -- Re-export
   , Literal(..)
@@ -22,7 +28,6 @@ import Data.Text (Text)
 
 import Amy.Literal
 import Amy.Prim
-import Amy.Type
 
 -- | A 'TModule' is an 'RModule' after renaming.
 data TModule
@@ -37,11 +42,11 @@ data TModule
 data TBinding
   = TBinding
   { tBindingName :: !TIdent
-  , tBindingType :: !(Scheme PrimitiveType)
+  , tBindingType :: !TScheme
     -- ^ Type for whole function
-  , tBindingArgs :: ![Typed PrimitiveType TIdent]
+  , tBindingArgs :: ![TTyped TIdent]
     -- ^ Argument names and types split out from 'tBindingType'
-  , tBindingReturnType :: !(Type PrimitiveType)
+  , tBindingReturnType :: !TType
     -- ^ Return type split out from 'tBindingType'
   , tBindingBody :: !TExpr
   } deriving (Show, Eq)
@@ -50,13 +55,13 @@ data TBinding
 data TExtern
   = TExtern
   { tExternName :: !TIdent
-  , tExternType :: !(Type PrimitiveType)
+  , tExternType :: !TType
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'
 data TExpr
   = TELit !Literal
-  | TEVar !(Typed PrimitiveType TIdent)
+  | TEVar !(TTyped TIdent)
   | TEIf !TIf
   | TELet !TLet
   | TEApp !TApp
@@ -80,12 +85,14 @@ data TApp
   = TApp
   { tAppFunction :: !TExpr
   , tAppArgs :: !(NonEmpty TExpr)
-  , tAppReturnType :: !(Type PrimitiveType)
+  , tAppReturnType :: !TType
   } deriving (Show, Eq)
 
-expressionType :: TExpr -> Type PrimitiveType
-expressionType (TELit lit) = TyCon $ literalType lit
-expressionType (TEVar (Typed ty _)) = ty
+expressionType :: TExpr -> TType
+expressionType (TELit lit) =
+  let primTy = literalType lit
+  in TTyCon $ TTypeName (showPrimitiveType primTy) (primitiveTypeId primTy) (Just primTy)
+expressionType (TEVar (TTyped ty _)) = ty
 expressionType (TEIf if') = expressionType (tIfThen if') -- Checker ensure "then" and "else" types match
 expressionType (TELet let') = expressionType (tLetExpression let')
 expressionType (TEApp app) = tAppReturnType app
@@ -100,12 +107,12 @@ tModuleNames (TModule bindings externs) =
 bindingNames :: TBinding -> [TIdent]
 bindingNames binding =
   tBindingName binding
-  : (typedValue <$> tBindingArgs binding)
+  : (tTypedValue <$> tBindingArgs binding)
   ++ exprNames (tBindingBody binding)
 
 exprNames :: TExpr -> [TIdent]
 exprNames (TELit _) = []
-exprNames (TEVar var) = [typedValue var]
+exprNames (TEVar var) = [tTypedValue var]
 exprNames (TEIf (TIf pred' then' else')) =
   exprNames pred'
   ++ exprNames then'
@@ -125,3 +132,28 @@ data TIdent
   , tIdentPrimitiveName :: !(Maybe PrimitiveFunctionName)
   , tIdentIsTopLevel :: !Bool
   } deriving (Show, Eq, Ord)
+
+data TType
+  = TTyCon !TTypeName
+  | TTyVar !TTypeName
+  | TTyFun !TType !TType
+  deriving (Show, Eq, Ord)
+
+infixr 0 `TTyFun`
+
+data TTypeName
+  = TTypeName
+  { tTypeNameText :: !Text
+  , tTypeNameId :: !Int
+  , tTypeNamePrimitiveType :: !(Maybe PrimitiveType)
+  } deriving (Show, Eq, Ord)
+
+data TScheme
+  = TForall ![TTypeName] TType
+  deriving (Show, Eq)
+
+data TTyped a
+  = TTyped
+  { tTypedType :: !TType
+  , tTypedValue :: !a
+  } deriving (Show, Eq, Ord, Functor)

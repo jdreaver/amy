@@ -26,7 +26,6 @@ import qualified Text.Megaparsec.Char.Lexer as L
 
 import Amy.Syntax.AST
 import Amy.Syntax.Lexer
-import Amy.Type
 
 type Parser = Parsec Void Text
 
@@ -64,23 +63,23 @@ bindingType = do
     , bindingTypeScheme = scheme
     }
 
-parseScheme :: Parser (Scheme (Located Text))
+parseScheme :: Parser Scheme
 parseScheme = do
   vars <- optional parseSchemeVars
   ty <- parseType
   pure $ Forall (fromMaybe [] vars) ty
 
-parseSchemeVars :: Parser [TVar]
+parseSchemeVars :: Parser [Located Text]
 parseSchemeVars = do
   forall
   vars <- many identifier
   dot
-  pure (TVar . locatedValue <$> vars)
+  pure vars
 
-parseType :: Parser (Type (Located Text))
+parseType :: Parser Type
 parseType = makeExprParser term table
  where
-  tVar = (TyCon <$> typeIdentifier) <|> (TyVar . TVar . locatedValue <$> identifier)
+  tVar = (TyCon <$> typeIdentifier) <|> (TyVar <$> identifier)
   table = [[InfixR (TyFun <$ typeSeparatorArrow)]]
   term = parens parseType <|> tVar
 

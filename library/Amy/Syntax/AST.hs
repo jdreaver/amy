@@ -16,6 +16,8 @@ module Amy.Syntax.AST
   , letBindingType
   , LetBinding(..)
   , App(..)
+  , Type(..)
+  , Scheme(..)
 
     -- Re-export
   , Literal(..)
@@ -28,7 +30,6 @@ import Data.Text (Text)
 
 import Amy.Literal (Literal(..))
 import Amy.Syntax.Located
-import Amy.Type
 
 -- | A 'Module' is simply a list of 'Declaration' values.
 newtype Module = Module { unModule :: [Declaration] }
@@ -66,7 +67,7 @@ data Binding
 data BindingType
   = BindingType
   { bindingTypeName :: !(Located Text)
-  , bindingTypeScheme :: !(Scheme (Located Text))
+  , bindingTypeScheme :: !Scheme
   } deriving (Show, Eq)
 
 -- | A 'BindingType' is a top-level declaration of a 'Binding' type, like @x ::
@@ -74,7 +75,7 @@ data BindingType
 data Extern
   = Extern
   { externName :: !(Located Text)
-  , externType :: !(Type (Located Text))
+  , externType :: !Type
   } deriving (Show, Eq)
 
 data Expr
@@ -118,3 +119,15 @@ data App
   { appFunction :: !Expr
   , appArgs :: !(NonEmpty Expr)
   } deriving (Show, Eq)
+
+data Type
+  = TyCon !(Located Text)
+  | TyVar !(Located Text)
+  | TyFun !Type !Type
+  deriving (Show, Eq)
+
+infixr 0 `TyFun`
+
+data Scheme
+  = Forall ![Located Text] Type
+  deriving (Show, Eq)

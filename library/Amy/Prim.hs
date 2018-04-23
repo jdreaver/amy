@@ -12,6 +12,7 @@ module Amy.Prim
   ( PrimitiveType(..)
   , readPrimitiveType
   , showPrimitiveType
+  , primitiveTypeId
   , PrimitiveFunction(..)
   , PrimitiveFunctionName(..)
   , allPrimitiveFunctionNames
@@ -21,15 +22,16 @@ module Amy.Prim
   , primitiveFunction
   ) where
 
+import Data.List.NonEmpty (NonEmpty)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-
-import Amy.Type
 
 data PrimitiveType
   = IntType
   | DoubleType
   | BoolType
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Enum, Bounded)
 
 readPrimitiveType :: Text -> Maybe PrimitiveType
 readPrimitiveType t =
@@ -46,10 +48,19 @@ showPrimitiveType t =
     DoubleType -> "Double"
     BoolType -> "Bool"
 
+allPrimitiveTypes :: [PrimitiveType]
+allPrimitiveTypes = [minBound..maxBound]
+
+primitiveTypeIds :: Map PrimitiveType Int
+primitiveTypeIds = Map.fromList $ zip allPrimitiveTypes [0..]
+
+primitiveTypeId :: PrimitiveType -> Int
+primitiveTypeId = (Map.!) primitiveTypeIds
+
 data PrimitiveFunction
   = PrimitiveFunction
   { primitiveFunctionName :: !PrimitiveFunctionName
-  , primitiveFunctionType :: !(Type PrimitiveType)
+  , primitiveFunctionType :: !(NonEmpty PrimitiveType)
   } deriving (Show, Eq)
 
 data PrimitiveFunctionName
@@ -99,10 +110,10 @@ readPrimitiveFunctionName name =
 primitiveFunction :: PrimitiveFunctionName -> PrimitiveFunction
 primitiveFunction name =
   case name of
-    PrimIAdd -> PrimitiveFunction PrimIAdd (TyCon IntType `TyFun` TyCon IntType `TyFun` TyCon IntType)
-    PrimISub -> PrimitiveFunction PrimISub (TyCon IntType `TyFun` TyCon IntType `TyFun` TyCon IntType)
-    PrimIEquals -> PrimitiveFunction PrimIEquals (TyCon IntType `TyFun` TyCon IntType `TyFun` TyCon BoolType)
-    PrimIGreaterThan -> PrimitiveFunction PrimIGreaterThan (TyCon IntType `TyFun` TyCon IntType `TyFun` TyCon BoolType)
-    PrimILessThan -> PrimitiveFunction PrimILessThan (TyCon IntType `TyFun` TyCon IntType `TyFun` TyCon BoolType)
-    PrimDAdd -> PrimitiveFunction PrimDAdd (TyCon DoubleType `TyFun` TyCon DoubleType `TyFun` TyCon DoubleType)
-    PrimDSub -> PrimitiveFunction PrimDSub (TyCon DoubleType `TyFun` TyCon DoubleType `TyFun` TyCon DoubleType)
+    PrimIAdd -> PrimitiveFunction PrimIAdd [IntType, IntType, IntType]
+    PrimISub -> PrimitiveFunction PrimISub [IntType, IntType, IntType]
+    PrimIEquals -> PrimitiveFunction PrimIEquals [IntType, IntType, BoolType]
+    PrimIGreaterThan -> PrimitiveFunction PrimIGreaterThan [IntType, IntType, BoolType]
+    PrimILessThan -> PrimitiveFunction PrimILessThan [IntType, IntType, BoolType]
+    PrimDAdd -> PrimitiveFunction PrimDAdd [DoubleType, DoubleType, DoubleType]
+    PrimDSub -> PrimitiveFunction PrimDSub [DoubleType, DoubleType, DoubleType]
