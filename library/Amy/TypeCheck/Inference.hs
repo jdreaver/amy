@@ -12,6 +12,7 @@ module Amy.TypeCheck.Inference
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State.Strict
+import Data.Bifunctor (first)
 import Data.Foldable (foldl')
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
@@ -190,14 +191,13 @@ inferBindings bindings = do
 generateBindingConstraints :: [RBinding] -> Inference [(TBinding, [Constraint])]
 generateBindingConstraints bindings = do
   -- Record schemes for each binding
-  bindingsAndTypes <- traverse (\binding -> (binding,) <$> generateBindingScheme binding) bindings
+  bindingsAndSchemes <- traverse (\binding -> (binding,) <$> generateBindingScheme binding) bindings
 
   -- Add all the binding type variables to the typing environment and then
   -- collect constraints for all bindings.
   let
-    bindingNameSchemes =
-      (\(binding, ty) -> (convertRIdent . locatedValue $ rBindingName binding, ty)) <$> bindingsAndTypes
-  extendEnvM bindingNameSchemes $ for bindingsAndTypes $ \(binding, scheme) -> do
+    bindingNameSchemes = first (convertRIdent . locatedValue . rBindingName) <$> bindingsAndSchemes
+  extendEnvM bindingNameSchemes $ for bindingsAndSchemes $ \(binding, scheme) -> do
     (binding', constraints) <- inferBinding binding
     ty <- instantiate scheme
     let
