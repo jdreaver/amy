@@ -85,7 +85,7 @@ symbol = L.symbol spaceConsumer
 identifier :: Lexer (Located Text)
 identifier = try (p >>= traverse check)
  where
-  p = lexeme ((:) <$> lowerChar <*> many alphaNumChar)
+  p = lexeme ((:) <$> lowerChar <*> many (alphaNumChar <|> char '\''))
   check x =
     if x `elem` reservedWords
     then fail $ "keyword " ++ show x ++ " cannot be an identifier"

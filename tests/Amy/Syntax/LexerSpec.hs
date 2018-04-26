@@ -16,6 +16,11 @@ import Amy.Syntax.Located
 spec :: Spec
 spec = do
 
+  describe "identifer" $ do
+    it "parses identifiers" $ do
+      parse identifier "" "hello" `shouldParse` Located (SourceSpan "" 1 1 1 5) "hello"
+      parse identifier "" "hello'" `shouldParse` Located (SourceSpan "" 1 1 1 6) "hello'"
+
   describe "text" $ do
 
     it "parses strings properly" $ do
