@@ -270,23 +270,20 @@ inferExpr (REIf (RIf pred' then' else')) = do
     , predCon ++ thenCon ++ elseCon ++ newConstraints
     )
 inferExpr (RELet (RLet bindings expression)) = do
-  bindingsInference <- inferBindings bindings
+  (bindings', bindingsCons) <- unzip <$> inferBindings bindings
   let
-    bindingSchemes = (\(binding, _) -> (tBindingName binding, tBindingType binding)) <$> bindingsInference
-    bindingCons = concatMap snd bindingsInference
+    bindingSchemes = (\binding -> (tBindingName binding, tBindingType binding)) <$> bindings'
   (expression', expCons) <- extendEnvM bindingSchemes $ inferExpr expression
   pure
-    ( TELet (TLet (fst <$> bindingsInference) expression')
-    , bindingCons ++ expCons
+    ( TELet (TLet bindings' expression')
+    , concat bindingsCons ++ expCons
     )
 inferExpr (REApp (RApp func args)) = do
   (func', funcConstraints) <- inferExpr func
-  argsInference <- traverse inferExpr args
+  (args', argConstraints) <- NE.unzip <$> traverse inferExpr args
   tyVar <- TTyVar <$> freshTypeVariable
   let
-    args' = fst <$> argsInference
     argTypes = NE.toList $ expressionType <$> args'
-    argConstraints = NE.toList $ snd <$> argsInference
     newConstraint = Constraint (expressionType func', foldr1 TTyFun (argTypes ++ [tyVar]))
   pure
     ( TEApp (TApp func' args' tyVar)
