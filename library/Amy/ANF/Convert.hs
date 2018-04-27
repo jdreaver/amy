@@ -52,7 +52,10 @@ convertTType (TTyVar name) = ANFTyVar (convertTTypeName name)
 convertTType (TTyFun ty1 ty2) = ANFTyFun (convertTType ty1) (convertTType ty2)
 
 convertTTypeName :: TTypeName -> ANFTypeName
-convertTTypeName (TTypeName name' id' mPrim) = ANFTypeName name' id' mPrim
+convertTTypeName ty@(TTypeName name' id' isGenerated mPrim) =
+  if isGenerated
+  then error $ "Found generated type name, bad! " ++ show ty
+  else ANFTypeName name' id' mPrim
 
 normalizeExpr
   :: Text -- ^ Base name for generated variables

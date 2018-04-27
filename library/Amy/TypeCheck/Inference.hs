@@ -76,7 +76,7 @@ freshTypeVariable :: Inference TTypeName
 freshTypeVariable = do
   modify' (+ 1)
   id' <- get
-  pure $ TTypeName (letters !! id') id' Nothing
+  pure $ TTypeName (letters !! id') id' True Nothing
 
 -- TODO: Don't use letters for type variables, just use integers. Then at the
 -- end of inference we can turn all the type variables into letters so the user
@@ -121,7 +121,7 @@ normalize body = TForall (Map.elems letterMap) (normtype body)
  where
   -- TODO: Generated type variables should be explicitly marked as generated,
   -- not given fake IDs.
-  letterMap = Map.fromList $ zip (Set.toList $ freeTypeVariables body) ((\c -> TTypeName c (-1) Nothing) <$> letters)
+  letterMap = Map.fromList $ zip (Set.toList $ freeTypeVariables body) ((\c -> TTypeName c (-1) False Nothing) <$> letters)
 
   normtype (TTyFun a b) = TTyFun (normtype a) (normtype b)
   normtype (TTyCon a) = TTyCon a
@@ -161,7 +161,7 @@ mkPrimFunctionScheme :: PrimitiveFunctionName -> TScheme
 mkPrimFunctionScheme prim = TForall [] $ foldr1 TTyFun $ primitiveTyCon <$> primitiveFunctionType (primitiveFunction prim)
 
 primitiveTyCon :: PrimitiveType -> TType
-primitiveTyCon prim = TTyCon $ TTypeName (showPrimitiveType prim) (primitiveTypeId prim) (Just prim)
+primitiveTyCon prim = TTyCon $ TTypeName (showPrimitiveType prim) (primitiveTypeId prim) False (Just prim)
 
 inferTopLevel :: TyEnv -> [RBinding] -> Either Error [TBinding]
 inferTopLevel env bindings = do
@@ -313,8 +313,8 @@ solver (su, cs) =
 
 unifies :: TType -> TType -> Solve Subst
 unifies t1 t2 | t1 == t2 = return emptySubst
-unifies (TTyVar v) t = v `bind` t
-unifies t (TTyVar v) = v `bind` t
+unifies (TTyVar v@(TTypeName _ _ True _)) t = v `bind` t
+unifies t (TTyVar v@(TTypeName _ _ True _)) = v `bind` t
 unifies (TTyFun t1 t2) (TTyFun t3 t4) = do
   su1 <- unifies t1 t3
   su2 <- unifies (substituteType su1 t2) (substituteType su1 t4)
@@ -413,4 +413,4 @@ convertRType (RTyVar name) = TTyVar (convertRTypeName name)
 convertRType (RTyFun ty1 ty2) = TTyFun (convertRType ty1) (convertRType ty2)
 
 convertRTypeName :: RTypeName -> TTypeName
-convertRTypeName (RTypeName name' _ id' mPrim) = TTypeName name' id' mPrim
+convertRTypeName (RTypeName name' _ id' mPrim) = TTypeName name' id' False mPrim

@@ -91,7 +91,7 @@ data TApp
 expressionType :: TExpr -> TType
 expressionType (TELit lit) =
   let primTy = literalType lit
-  in TTyCon $ TTypeName (showPrimitiveType primTy) (primitiveTypeId primTy) (Just primTy)
+  in TTyCon $ TTypeName (showPrimitiveType primTy) (primitiveTypeId primTy) False (Just primTy)
 expressionType (TEVar (TTyped ty _)) = ty
 expressionType (TEIf if') = expressionType (tIfThen if') -- Checker ensure "then" and "else" types match
 expressionType (TELet let') = expressionType (tLetExpression let')
@@ -144,6 +144,7 @@ data TTypeName
   = TTypeName
   { tTypeNameText :: !Text
   , tTypeNameId :: !Int
+  , tTypeNameGenerated :: !Bool
   , tTypeNamePrimitiveType :: !(Maybe PrimitiveType)
   } deriving (Show, Eq, Ord)
 
