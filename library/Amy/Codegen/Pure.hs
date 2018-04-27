@@ -13,6 +13,7 @@ import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
+import Data.Traversable (for)
 import LLVM.AST as LLVM
 import LLVM.AST.AddrSpace
 import qualified LLVM.AST.CallingConvention as CC
@@ -28,34 +29,37 @@ import Amy.Prim
 
 codegenModule :: ANFModule -> Module
 codegenModule (ANFModule bindings externs) =
-  defaultModule
-  { moduleName = "amy-module"
-  , moduleDefinitions = (codegenExtern <$> externs) ++ (codegenTopLevelBinding <$> bindings)
-  }
+  let
+    topLevelTypes =
+      ((\(ANFBinding name' (ANFForall _ ty) _ _ _) -> (name', ty)) <$> bindings)
+      ++ ((\(ANFExtern name' ty) -> (name', ty)) <$> externs)
+  in
+    defaultModule
+    { moduleName = "amy-module"
+    , moduleDefinitions = (codegenExtern <$> externs) ++ (codegenTopLevelBinding topLevelTypes <$> bindings)
+    }
 
 codegenExtern :: ANFExtern -> Definition
 codegenExtern extern =
   let
-    types = anfExternType extern
-    paramTypes = llvmType <$> NE.init (typeToNonEmpty types)
+    (paramTypes, returnType') = argAndReturnTypes (anfExternType extern)
     params =
-      (\ty -> Parameter ty (UnName 0) []) <$> paramTypes
-    returnType' = llvmType . NE.last . typeToNonEmpty $ types
+      (\ty -> Parameter (llvmType ty) (UnName 0) []) <$> paramTypes
   in
     GlobalDefinition
     functionDefaults
     { name = identToLLVM $ anfExternName extern
     , parameters = (params, False)
-    , LLVM.returnType = returnType'
+    , LLVM.returnType = llvmType returnType'
     }
 
-codegenTopLevelBinding :: ANFBinding -> Definition
-codegenTopLevelBinding binding =
+codegenTopLevelBinding :: [(ANFIdent, ANFType)] -> ANFBinding -> Definition
+codegenTopLevelBinding topLevelTypes binding =
   let
     argToParam (ANFTyped ty ident) = Parameter (llvmType ty) (identToLLVM ident) []
     params = argToParam <$> anfBindingArgs binding
     returnType' = llvmType $ anfBindingReturnType binding
-    blocks = codegenExpr $ anfBindingBody binding
+    blocks = codegenExpr topLevelTypes $ anfBindingBody binding
   in
     GlobalDefinition
     functionDefaults
@@ -65,8 +69,13 @@ codegenTopLevelBinding binding =
     , basicBlocks = blocks
     }
 
-codegenExpr :: ANFExpr -> [BasicBlock]
-codegenExpr expr = runBlockGen $ codegenExpr' expr
+argAndReturnTypes :: ANFType -> ([ANFType], ANFType)
+argAndReturnTypes ty = (NE.init tyNE, NE.last tyNE)
+ where
+  tyNE = typeToNonEmpty ty
+
+codegenExpr :: [(ANFIdent, ANFType)] -> ANFExpr -> [BasicBlock]
+codegenExpr topLevelTypes expr = runBlockGen topLevelTypes $ codegenExpr' expr
 
 codegenExpr' :: ANFExpr -> BlockGen Operand
 codegenExpr' (ANFEVal val) = valOperand val
@@ -113,20 +122,48 @@ codegenExpr' (ANFEIf (ANFIf pred' then' else' ty)) = do
   -- Generate end block
   addInstruction $ endOpName := Phi ty' [(thenOp, thenBlockFinalName), (elseOp, elseBlockFinalName)] []
   pure endOpRef
-codegenExpr' (ANFEApp (ANFApp (ANFTyped ty ident) args' returnTy)) = do
+codegenExpr' (ANFEApp (ANFApp (ANFTyped originalTy ident) args' returnTy)) = do
+  ty <- fromMaybe originalTy <$> topLevelType ident
   funcOperand <- valOperand (ANFVar $ ANFTyped ty ident)
   let
-    mkInstruction argOps = Call Nothing CC.C [] (Right funcOperand) ((\arg -> (arg, [])) <$> argOps) [] []
-  codegenFunctionApp args' returnTy mkInstruction
-codegenExpr' (ANFEPrimOp (ANFApp prim args' returnTy)) =
-  codegenFunctionApp args' returnTy (primitiveFunctionInstruction prim)
+    (argTys', returnTy') = argAndReturnTypes ty
+  opName <- freshUnName
+  -- Convert arguments to pointers if we have to
+  argOps <- for (zip args' argTys') $ \(arg, argTy) -> do
+    originalOp <- valOperand arg
+    maybeConvertPointer originalOp (anfValType arg) argTy
 
-codegenFunctionApp :: [ANFVal] -> ANFType -> ([Operand] -> Instruction) -> BlockGen Operand
-codegenFunctionApp args' returnTy mkInstruction = do
+  -- Add call instruction
+  addInstruction $ opName := Call Nothing CC.C [] (Right funcOperand) ((\arg -> (arg, [])) <$> argOps) [] []
+
+  -- Return operand, maybe converting it too
+  maybeConvertPointer (LocalReference (llvmType returnTy) opName) returnTy' returnTy
+codegenExpr' (ANFEPrimOp (ANFApp prim args' returnTy)) = do
   opName <- freshUnName
   argOps <- traverse valOperand args'
-  addInstruction $ opName := mkInstruction argOps
+  addInstruction $ opName := primitiveFunctionInstruction prim argOps
   pure $ LocalReference (llvmType returnTy) opName
+
+maybeConvertPointer :: Operand -> ANFType -> ANFType -> BlockGen Operand
+maybeConvertPointer op originalTy argTy =
+  case (originalTy, argTy) of
+    (ANFTyVar _, ANFTyVar _) -> pure op
+    (_, ANFTyVar _) -> convertToIntPointer op
+    (ANFTyVar _, _) -> convertFromIntPointer op argTy
+    (_, _) -> pure op
+
+convertToIntPointer :: Operand -> BlockGen Operand
+convertToIntPointer op = do
+  opName <- freshUnName
+  let ptrTy = PointerType (IntegerType 64) (AddrSpace 0)
+  addInstruction $ opName := IntToPtr op ptrTy []
+  pure $ LocalReference ptrTy opName
+
+convertFromIntPointer :: Operand -> ANFType -> BlockGen Operand
+convertFromIntPointer op ty = do
+  opName <- freshUnName
+  addInstruction $ opName := PtrToInt op (llvmType ty) []
+  pure $ LocalReference (llvmType ty) opName
 
 valOperand :: ANFVal -> BlockGen Operand
 valOperand (ANFVar (ANFTyped ty ident)) =
@@ -178,7 +215,7 @@ llvmType ty = go (typeToNonEmpty ty)
       ANFTyCon tyName ->
         let prim = fromMaybe (error $ "Expected primitive TyCon, got " ++ show tyName) (anfTypeNamePrimitiveType tyName)
         in llvmPrimitiveType prim
-      ANFTyVar _ -> error "Can't handle polymorphic type arguments yet"
+      ANFTyVar _ -> PointerType (IntegerType 64) (AddrSpace 0)
       ANFTyFun{} -> mkFunctionType ty
   go _ = mkFunctionType ty
 

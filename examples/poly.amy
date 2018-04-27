@@ -1,0 +1,17 @@
+main :: Int
+main = const (id 3) 5
+
+id :: forall a. a -> a
+id x = x
+
+const :: forall a b. a -> b -> a
+const x y = x
+
+# Use this once we have lambda lifting
+# const :: forall a b. a -> b -> a
+# const x y =
+#   let
+#     # "a" is in scope from above
+#     const' :: forall c. a -> c -> c
+#     const' x' y' = y'
+#   in const' y x

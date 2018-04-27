@@ -5,6 +5,7 @@ module Amy.ANF.AST
   , ANFBinding(..)
   , ANFExtern(..)
   , ANFVal(..)
+  , anfValType
   , ANFExpr(..)
   , ANFLet(..)
   , ANFIf(..)
@@ -47,6 +48,12 @@ data ANFVal
   = ANFVar !(ANFTyped ANFIdent)
   | ANFLit !Literal
   deriving (Show, Eq)
+
+anfValType :: ANFVal -> ANFType
+anfValType (ANFVar (ANFTyped ty _)) = ty
+anfValType (ANFLit lit) =
+  let primTy = literalType lit
+  in ANFTyCon $ ANFTypeName (showPrimitiveType primTy) (primitiveTypeId primTy) (Just primTy)
 
 data ANFExpr
   = ANFEVal !ANFVal

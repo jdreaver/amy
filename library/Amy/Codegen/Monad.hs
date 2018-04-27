@@ -11,22 +11,25 @@ module Amy.Codegen.Monad
   , lookupSymbol
   , freshId
   , freshUnName
+  , topLevelType
   ) where
 
+import Control.Monad.Reader
+import Control.Monad.State.Strict
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Control.Monad.State.Strict
 import LLVM.AST as LLVM
 
 import Amy.ANF.AST
 
-newtype BlockGen a = BlockGen (State BlockGenState a)
-  deriving (Functor, Applicative, Monad, MonadState BlockGenState)
+newtype BlockGen a = BlockGen (ReaderT (Map ANFIdent ANFType) (State BlockGenState) a)
+  deriving (Functor, Applicative, Monad, MonadReader (Map ANFIdent ANFType), MonadState BlockGenState)
 
-runBlockGen :: BlockGen Operand -> [BasicBlock]
-runBlockGen (BlockGen action) =
+runBlockGen :: [(ANFIdent, ANFType)] -> BlockGen Operand -> [BasicBlock]
+runBlockGen topLevelTypes (BlockGen action) =
   let
-    (operand, BlockGenState lastBlock blockStack _ _) = runState action (blockGenState "entry")
+    typeMap = Map.fromList topLevelTypes
+    (operand, BlockGenState lastBlock blockStack _ _) = runState (runReaderT action typeMap) (blockGenState "entry")
     blocks = reverse $ makeBasicBlock lastBlock (Do $ Ret (Just operand) []) : blockStack
   in blocks
 
@@ -88,3 +91,6 @@ freshId = do
 
 freshUnName :: BlockGen LLVM.Name
 freshUnName = UnName <$> freshId
+
+topLevelType :: ANFIdent -> BlockGen (Maybe ANFType)
+topLevelType ident = Map.lookup ident <$> ask
