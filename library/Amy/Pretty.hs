@@ -19,6 +19,7 @@ module Amy.Pretty
 
     -- Typed AST
   , prettyTModule
+  , prettyTScheme
   , prettyTExpr
 
     -- ANF AST
@@ -181,9 +182,12 @@ prettyTExtern (TExtern name ty) =
 
 prettyTBinding :: TBinding -> Doc ann
 prettyTBinding (TBinding ident scheme args _ body) =
-  prettyBindingScheme' (prettyTIdent ident) (mkPrettyTScheme scheme) <>
+  prettyTScheme ident scheme <>
   hardline <>
   prettyBinding' (prettyTIdent ident) (prettyTIdent . tTypedValue <$> args) (prettyTExpr body)
+
+prettyTScheme :: TIdent -> TScheme -> Doc ann
+prettyTScheme ident scheme = prettyBindingScheme' (prettyTIdent ident) (mkPrettyTScheme scheme)
 
 prettyTIdent :: TIdent -> Doc ann
 prettyTIdent (TIdent name _ _) = pretty name
