@@ -74,6 +74,10 @@ data PrimitiveFunctionName
     -- Double
   | PrimDAdd
   | PrimDSub
+
+    -- Conversion
+  | PrimIntToDouble
+  | PrimDoubleToInt
   deriving (Show, Eq, Enum, Bounded, Ord)
 
 allPrimitiveFunctionNames :: [PrimitiveFunctionName]
@@ -92,6 +96,8 @@ showPrimitiveFunctionName name =
     PrimILessThan -> "iLessThan"
     PrimDAdd -> "dAdd"
     PrimDSub -> "dSub"
+    PrimIntToDouble -> "intToDouble"
+    PrimDoubleToInt -> "doubleToInt"
 
 readPrimitiveFunctionName :: Text -> Maybe PrimitiveFunctionName
 readPrimitiveFunctionName name =
@@ -105,6 +111,9 @@ readPrimitiveFunctionName name =
     "dAdd" -> Just PrimDAdd
     "dSub" -> Just PrimDSub
 
+    "intToDouble" -> Just PrimIntToDouble
+    "doubleToInt" -> Just PrimDoubleToInt
+
     _ -> Nothing
 
 primitiveFunction :: PrimitiveFunctionName -> PrimitiveFunction
@@ -117,3 +126,5 @@ primitiveFunction name =
     PrimILessThan -> PrimitiveFunction PrimILessThan [IntType, IntType, BoolType]
     PrimDAdd -> PrimitiveFunction PrimDAdd [DoubleType, DoubleType, DoubleType]
     PrimDSub -> PrimitiveFunction PrimDSub [DoubleType, DoubleType, DoubleType]
+    PrimIntToDouble -> PrimitiveFunction PrimIntToDouble [IntType, DoubleType]
+    PrimDoubleToInt -> PrimitiveFunction PrimDoubleToInt [DoubleType, IntType]

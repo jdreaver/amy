@@ -239,6 +239,7 @@ primitiveFunctionInstruction primFuncName argumentOperands =
     -- TODO: Better error checking here if number of operands doesn't match
     -- expected number. However, this should be type checked, so a simple panic
     -- should suffice.
+    [op] = argumentOperands
     [op0, op1] = argumentOperands
     instruction =
       case primFuncName of
@@ -250,6 +251,9 @@ primitiveFunctionInstruction primFuncName argumentOperands =
 
         PrimDAdd -> FAdd noFastMathFlags op0 op1 []
         PrimDSub -> FSub noFastMathFlags op0 op1 []
+
+        PrimIntToDouble -> UIToFP op (llvmPrimitiveType DoubleType) []
+        PrimDoubleToInt -> FPToUI op (llvmPrimitiveType IntType) []
   in instruction
 
 typeToNonEmpty :: ANFType -> NonEmpty ANFType
