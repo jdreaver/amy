@@ -196,11 +196,11 @@ generateBindingConstraints bindings = do
     bindingNameSchemes = first (convertRIdent . locatedValue . rBindingName) <$> bindingsAndSchemes
   extendEnvM bindingNameSchemes $ for bindingsAndSchemes $ \(binding, scheme) -> do
     (binding', constraints) <- inferBinding binding
-    ty <- instantiate scheme
     let
       -- Add the constraint for the binding itself
       (TForall _ bindingType) = tBindingType binding'
-      bindingConstraint = Constraint (ty, bindingType)
+      (TForall _ schemeTy) = scheme
+      bindingConstraint = Constraint (schemeTy, bindingType)
     pure (binding', constraints ++ [bindingConstraint])
 
 generateBindingScheme :: RBinding -> Inference TScheme
