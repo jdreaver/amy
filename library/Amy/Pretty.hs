@@ -166,7 +166,7 @@ prettyExpr (EParens expr) = parens $ prettyExpr expr
 
 mkPrettyTType :: TType -> PrettyType ann
 mkPrettyTType (TTyCon name) = PTyDoc $ pretty $ tTypeNameText name
-mkPrettyTType (TTyVar name) = PTyDoc $ pretty $ tTypeNameText name
+mkPrettyTType (TTyVar name _) = PTyDoc $ pretty $ tTypeNameText name
 mkPrettyTType (TTyFun ty1 ty2) = PTyFun (mkPrettyTType ty1) (mkPrettyTType ty2)
 
 mkPrettyTScheme :: TScheme -> PrettyScheme ann

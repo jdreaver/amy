@@ -72,11 +72,11 @@ newtype Inference a = Inference (ReaderT TyEnv (StateT Int (Except Error)) a)
 runInference :: TyEnv -> Inference a -> Either Error a
 runInference env (Inference action) = runExcept $ evalStateT (runReaderT action env) 0
 
-freshTypeVariable :: Inference TTypeName
+freshTypeVariable :: Inference TType
 freshTypeVariable = do
   modify' (+ 1)
   id' <- get
-  pure $ TTypeName (letters !! id') id' True Nothing
+  pure $ TTyVar (TTypeName (letters !! id') id' Nothing) TyVarGenerated
 
 -- TODO: Don't use letters for type variables, just use integers. Then at the
 -- end of inference we can turn all the type variables into letters so the user
@@ -101,7 +101,7 @@ lookupEnvM name = do
 instantiate :: TScheme -> Inference TType
 instantiate (TForall as t) = do
   as' <- traverse (const freshTypeVariable) as
-  let s = Subst $ Map.fromList $ zip as (TTyVar <$> as')
+  let s = Subst $ Map.fromList $ zip as as'
   return $ substituteType s t
 
 -- | Generalizing a type is the quantification of that type with all of the
@@ -121,13 +121,13 @@ normalize body = TForall (Map.elems letterMap) (normtype body)
  where
   -- TODO: Generated type variables should be explicitly marked as generated,
   -- not given fake IDs.
-  letterMap = Map.fromList $ zip (Set.toList $ freeTypeVariables body) ((\c -> TTypeName c (-1) False Nothing) <$> letters)
+  letterMap = Map.fromList $ zip (Set.toList $ freeTypeVariables body) ((\c -> TTypeName c (-1) Nothing) <$> letters)
 
   normtype (TTyFun a b) = TTyFun (normtype a) (normtype b)
   normtype (TTyCon a) = TTyCon a
-  normtype (TTyVar a) =
+  normtype (TTyVar a _) =
     case Map.lookup a letterMap of
-      Just x -> TTyVar x
+      Just x -> TTyVar x TyVarNotGenerated
       Nothing -> error "type variable not in signature"
 
 normalizeTBinding :: TBinding -> TBinding
@@ -161,7 +161,7 @@ mkPrimFunctionScheme :: PrimitiveFunctionName -> TScheme
 mkPrimFunctionScheme prim = TForall [] $ foldr1 TTyFun $ primitiveTyCon <$> primitiveFunctionType (primitiveFunction prim)
 
 primitiveTyCon :: PrimitiveType -> TType
-primitiveTyCon prim = TTyCon $ TTypeName (showPrimitiveType prim) (primitiveTypeId prim) False (Just prim)
+primitiveTyCon prim = TTyCon $ TTypeName (showPrimitiveType prim) (primitiveTypeId prim) (Just prim)
 
 inferTopLevel :: TyEnv -> [RBinding] -> Either Error [TBinding]
 inferTopLevel env bindings = do
@@ -207,7 +207,7 @@ generateBindingScheme :: RBinding -> Inference TScheme
 generateBindingScheme binding =
   maybe
     -- No explicit type annotation, generate a type variable
-    (TForall [] . TTyVar <$> freshTypeVariable)
+    (TForall [] <$> freshTypeVariable)
     -- There is an explicit type annotation. Use it.
     (pure . convertRScheme)
     (rBindingType binding)
@@ -228,11 +228,11 @@ solveBindingConstraints env bindingsInference = do
 inferBinding :: RBinding -> Inference (TBinding, [Constraint])
 inferBinding (RBinding (Located _ name) _ args body) = do
   argsAndTyVars <- traverse (\(Located _ arg) -> (convertRIdent arg,) <$> freshTypeVariable) args
-  let argsAndSchemes = (\(arg, t) -> (arg, TForall [] (TTyVar t))) <$> argsAndTyVars
+  let argsAndSchemes = (\(arg, t) -> (arg, TForall [] t)) <$> argsAndTyVars
   (body', bodyCons) <- extendEnvM argsAndSchemes $ inferExpr body
   let
     returnType = expressionType body'
-    bindingType = foldr1 TTyFun $ (TTyVar . snd <$> argsAndTyVars) ++ [returnType]
+    bindingType = foldr1 TTyFun $ (snd <$> argsAndTyVars) ++ [returnType]
     binding' =
       TBinding
       { tBindingName = convertRIdent name
@@ -241,7 +241,7 @@ inferBinding (RBinding (Located _ name) _ args body) = do
         -- have some new intermediate TCBinding type or something with a Type
         -- instead of a Scheme.
       , tBindingType = TForall [] bindingType
-      , tBindingArgs = (\(name', tvar) -> TTyped (TTyVar tvar) name') <$> argsAndTyVars
+      , tBindingArgs = (\(name', tvar) -> TTyped tvar name') <$> argsAndTyVars
       , tBindingReturnType = returnType
       , tBindingBody = body'
       }
@@ -278,7 +278,7 @@ inferExpr (RELet (RLet bindings expression)) = do
 inferExpr (REApp (RApp func args)) = do
   (func', funcConstraints) <- inferExpr func
   (args', argConstraints) <- NE.unzip <$> traverse inferExpr args
-  tyVar <- TTyVar <$> freshTypeVariable
+  tyVar <- freshTypeVariable
   let
     argTypes = NE.toList $ expressionType <$> args'
     newConstraint = Constraint (expressionType func', foldr1 TTyFun (argTypes ++ [tyVar]))
@@ -313,8 +313,8 @@ solver (su, cs) =
 
 unifies :: TType -> TType -> Solve Subst
 unifies t1 t2 | t1 == t2 = return emptySubst
-unifies (TTyVar v@(TTypeName _ _ True _)) t = v `bind` t
-unifies t (TTyVar v@(TTypeName _ _ True _)) = v `bind` t
+unifies (TTyVar v TyVarGenerated) t = v `bind` t
+unifies t (TTyVar v TyVarGenerated) = v `bind` t
 unifies (TTyFun t1 t2) (TTyFun t3 t4) = do
   su1 <- unifies t1 t3
   su2 <- unifies (substituteType su1 t2) (substituteType su1 t4)
@@ -323,7 +323,7 @@ unifies t1 t2 = throwError $ UnificationFail t1 t2
 
 bind ::  TTypeName -> TType -> Solve Subst
 bind a t
-  | t == TTyVar a = return emptySubst
+  | t == TTyVar a TyVarNotGenerated = return emptySubst
   | occursCheck a t = throwError $ InfiniteType a t
   | otherwise = return (singletonSubst a t)
 
@@ -352,7 +352,7 @@ substituteScheme (Subst subst) (TForall vars ty) = TForall vars $ substituteType
   s' = Subst $ foldr Map.delete subst vars
 
 substituteType :: Subst -> TType -> TType
-substituteType (Subst subst) t@(TTyVar var) = Map.findWithDefault t var subst
+substituteType (Subst subst) t@(TTyVar var _) = Map.findWithDefault t var subst
 substituteType _ (TTyCon a) = TTyCon a
 substituteType s (t1 `TTyFun` t2) = substituteType s t1 `TTyFun` substituteType s t2
 
@@ -388,7 +388,7 @@ substituteTExpr subst (TEParens expr) = TEParens (substituteTExpr subst expr)
 
 freeTypeVariables :: TType -> Set TTypeName
 freeTypeVariables TTyCon{} = Set.empty
-freeTypeVariables (TTyVar var) = Set.singleton var
+freeTypeVariables (TTyVar var _) = Set.singleton var
 freeTypeVariables (t1 `TTyFun` t2) = freeTypeVariables t1 `Set.union` freeTypeVariables t2
 
 freeSchemeTypeVariables :: TScheme -> Set TTypeName
@@ -409,8 +409,8 @@ convertRScheme (RForall vars ty) = TForall (convertRTypeName <$> vars) (convertR
 
 convertRType :: RType -> TType
 convertRType (RTyCon name) = TTyCon (convertRTypeName name)
-convertRType (RTyVar name) = TTyVar (convertRTypeName name)
+convertRType (RTyVar name) = TTyVar (convertRTypeName name) TyVarNotGenerated
 convertRType (RTyFun ty1 ty2) = TTyFun (convertRType ty1) (convertRType ty2)
 
 convertRTypeName :: RTypeName -> TTypeName
-convertRTypeName (RTypeName name' _ id' mPrim) = TTypeName name' id' False mPrim
+convertRTypeName (RTypeName name' _ id' mPrim) = TTypeName name' id' mPrim

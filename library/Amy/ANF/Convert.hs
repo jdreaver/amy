@@ -48,14 +48,12 @@ convertTScheme (TForall vars ty) = ANFForall (convertTTypeName <$> vars) (conver
 
 convertTType :: TType -> ANFType
 convertTType (TTyCon name) = ANFTyCon (convertTTypeName name)
-convertTType (TTyVar name) = ANFTyVar (convertTTypeName name)
+convertTType ty@(TTyVar _ TyVarGenerated) = error $ "Found generated type name, bad! " ++ show ty
+convertTType (TTyVar name TyVarNotGenerated) = ANFTyVar (convertTTypeName name)
 convertTType (TTyFun ty1 ty2) = ANFTyFun (convertTType ty1) (convertTType ty2)
 
 convertTTypeName :: TTypeName -> ANFTypeName
-convertTTypeName ty@(TTypeName name' id' isGenerated mPrim) =
-  if isGenerated
-  then error $ "Found generated type name, bad! " ++ show ty
-  else ANFTypeName name' id' mPrim
+convertTTypeName (TTypeName name' id' mPrim) = ANFTypeName name' id' mPrim
 
 normalizeExpr
   :: Text -- ^ Base name for generated variables

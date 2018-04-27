@@ -15,6 +15,7 @@ module Amy.TypeCheck.AST
 
   , TIdent(..)
   , TType(..)
+  , TyVarGenerated(..)
   , TTypeName(..)
   , TScheme(..)
   , TTyped(..)
@@ -91,7 +92,7 @@ data TApp
 expressionType :: TExpr -> TType
 expressionType (TELit lit) =
   let primTy = literalType lit
-  in TTyCon $ TTypeName (showPrimitiveType primTy) (primitiveTypeId primTy) False (Just primTy)
+  in TTyCon $ TTypeName (showPrimitiveType primTy) (primitiveTypeId primTy) (Just primTy)
 expressionType (TEVar (TTyped ty _)) = ty
 expressionType (TEIf if') = expressionType (tIfThen if') -- Checker ensure "then" and "else" types match
 expressionType (TELet let') = expressionType (tLetExpression let')
@@ -134,8 +135,13 @@ data TIdent
 
 data TType
   = TTyCon !TTypeName
-  | TTyVar !TTypeName
+  | TTyVar !TTypeName !TyVarGenerated
   | TTyFun !TType !TType
+  deriving (Show, Eq, Ord)
+
+data TyVarGenerated
+  = TyVarGenerated
+  | TyVarNotGenerated
   deriving (Show, Eq, Ord)
 
 infixr 0 `TTyFun`
@@ -144,7 +150,6 @@ data TTypeName
   = TTypeName
   { tTypeNameText :: !Text
   , tTypeNameId :: !Int
-  , tTypeNameGenerated :: !Bool
   , tTypeNamePrimitiveType :: !(Maybe PrimitiveType)
   } deriving (Show, Eq, Ord)
 
