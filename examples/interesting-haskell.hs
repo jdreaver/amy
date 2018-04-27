@@ -103,3 +103,14 @@ a x =
     --b :: _
     b y = (x,y)
   in (b 3, b False)
+
+-- This takes a really, really long time to type check! I got it from Types and
+-- Programming Languages, which cites Mairson (1990) as the source.
+-- fun =
+--   let f0 = \x -> (x, x) in
+--     let f1 = \y -> f0 (f0 y) in
+--       let f2 = \y -> f1 (f1 y) in
+--         let f3 = \y -> f2 (f2 y) in
+--           let f4 = \y -> f3 (f3 y) in
+--             let f5 = \y -> f4 (f4 y) in
+--               f5 (\z -> z)
