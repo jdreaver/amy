@@ -165,11 +165,8 @@ primitiveTyCon prim = TTyCon $ TTypeName (showPrimitiveType prim) (primitiveType
 
 inferTopLevel :: TyEnv -> [RBinding] -> Either Error [TBinding]
 inferTopLevel env bindings = do
-  results <- runInference env (inferBindings bindings)
-  let
-    bindings' = fst <$> results
-    constraints = concatMap snd results
-  subst <- runSolve constraints
+  (bindings', constraints) <- unzip <$> runInference env (inferBindings bindings)
+  subst <- runSolve (concat constraints)
   pure $ normalizeTBinding . substituteTBinding subst <$> bindings'
 
 -- | Infer a group of bindings.
