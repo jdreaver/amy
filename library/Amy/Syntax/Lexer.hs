@@ -71,6 +71,7 @@ lineComment  = L.skipLineComment "#"
 blockComment :: Lexer ()
 blockComment = empty
 
+-- TODO: Fix this for Doubles with a ".0". Fails on 1.0, thinks it is an Int
 number :: Lexer (Located (Either Double Int))
 number = fmap floatingOrInteger <$> lexeme L.scientific
 
