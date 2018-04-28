@@ -29,17 +29,12 @@ rename' (Module declarations) = do
   -- Rename binding value declarations
   let
     bindings = mapMaybe declBinding declarations
-    bindingTypeMap = bindingTypesMap $ mapMaybe declBindingType declarations
-  traverse_ addValueToScope (bindingName <$> bindings)
-  rModuleBindings <- traverse (renameBinding bindingTypeMap) bindings
-
+    bindingTypes = mapMaybe declBindingType declarations
+  rModuleBindings <- renameBindingGroup bindings bindingTypes
   pure
     $ RModule
-    <$> sequenceA rModuleBindings
+    <$> rModuleBindings
     <*> sequenceA rModuleExterns
-
-bindingTypesMap :: [BindingType] -> Map Text Scheme
-bindingTypesMap = Map.fromList . fmap (\(BindingType (Located _ name) ts) -> (name, ts))
 
 renameExtern :: Extern -> Renamer (Validation [Error] RExtern)
 renameExtern extern = do
@@ -53,8 +48,21 @@ renameExtern extern = do
 readPrimitiveTyCon :: Located Text -> Validation [Error] PrimitiveType
 readPrimitiveTyCon name@(Located _ name') = maybe (Failure [UnknownTypeName name]) Success $ readPrimitiveType name'
 
+renameBindingGroup :: [Binding] -> [BindingType] -> Renamer (Validation [Error] [RBinding])
+renameBindingGroup bindings bindingTypes = do
+  -- Add each binding name to scope since they can be mutually recursive
+  traverse_ addValueToScope (bindingName <$> bindings)
+  -- Rename each individual binding
+  bindings' <- traverse (renameBinding $ bindingTypesMap bindingTypes) bindings
+  pure $ sequenceA bindings'
+
+bindingTypesMap :: [BindingType] -> Map Text Scheme
+bindingTypesMap = Map.fromList . fmap (\(BindingType (Located _ name) ts) -> (name, ts))
+
 renameBinding :: Map Text Scheme -> Binding -> Renamer (Validation [Error] RBinding)
 renameBinding typeMap binding = withNewScope $ do -- Begin new scope
+  -- N.B. Assumes the binding name was already added to scope in
+  -- renameBindingGroup
   name <- lookupValueInScopeOrError (bindingName binding)
   let
     rBindingName =
@@ -118,14 +126,13 @@ renameExpression (ELet (Let bindings expression)) =
   withNewScope $ do
     let
       bindings' = mapMaybe letBinding bindings
-      bindingTypeMap = bindingTypesMap $ mapMaybe letBindingType bindings
-    traverse_ addValueToScope (bindingName <$> bindings')
-    rLetBindings <- traverse (renameBinding bindingTypeMap) bindings'
+      bindingTypes' = mapMaybe letBindingType bindings
+    rLetBindings <- renameBindingGroup bindings' bindingTypes'
     rLetExpression <- renameExpression expression
     pure
       $ fmap RELet
       $ RLet
-      <$> sequenceA rLetBindings
+      <$> rLetBindings
       <*> rLetExpression
 renameExpression (EApp app) = do
   rAppFunction <- renameExpression (appFunction app)
