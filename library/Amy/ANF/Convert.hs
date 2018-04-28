@@ -68,6 +68,7 @@ normalizeExpr name (TEIf (TIf pred' then' else')) c =
     else'' <- normalizeTerm name else'
     let ty = expressionType then'
     c $ ANFEIf $ ANFIf predVal then'' else'' (convertTType ty)
+normalizeExpr _ (TECase case') _ = error $ "Can't ANF convert case yet " ++ show case'
 normalizeExpr name (TELet (TLet bindings expr)) c = do
   bindings' <- traverse (normalizeBinding Nothing) bindings
   expr' <- normalizeExpr name expr c

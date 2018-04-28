@@ -8,9 +8,14 @@ module Amy.TypeCheck.AST
   , TExtern(..)
   , TExpr(..)
   , TIf(..)
+  , TCase(..)
+  , TMatch(..)
+  , TPattern(..)
   , TLet(..)
   , TApp(..)
+  , literalTType
   , expressionType
+  , patternType
   , tModuleNames
 
   , TIdent(..)
@@ -24,7 +29,7 @@ module Amy.TypeCheck.AST
   , Literal(..)
   ) where
 
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 
 import Amy.Literal
@@ -64,6 +69,7 @@ data TExpr
   = TELit !Literal
   | TEVar !(TTyped TIdent)
   | TEIf !TIf
+  | TECase !TCase
   | TELet !TLet
   | TEApp !TApp
   | TEParens !TExpr
@@ -75,6 +81,23 @@ data TIf
   , tIfThen :: !TExpr
   , tIfElse :: !TExpr
   } deriving (Show, Eq)
+
+data TCase
+  = TCase
+  { tCaseScrutinee :: !TExpr
+  , tCaseAlternatives :: !(NonEmpty TMatch)
+  } deriving (Show, Eq)
+
+data TMatch
+  = TMatch
+  { tMatchPattern :: !TPattern
+  , tMatchBody :: !TExpr
+  } deriving (Show, Eq)
+
+data TPattern
+  = TPatternLit !Literal
+  | TPatternVar !(TTyped TIdent)
+  deriving (Show, Eq)
 
 data TLet
   = TLet
@@ -89,15 +112,23 @@ data TApp
   , tAppReturnType :: !TType
   } deriving (Show, Eq)
 
-expressionType :: TExpr -> TType
-expressionType (TELit lit) =
+literalTType :: Literal -> TType
+literalTType lit =
   let primTy = literalType lit
   in TTyCon $ TTypeName (showPrimitiveType primTy) (primitiveTypeId primTy) (Just primTy)
+
+expressionType :: TExpr -> TType
+expressionType (TELit lit) = literalTType lit
 expressionType (TEVar (TTyped ty _)) = ty
 expressionType (TEIf if') = expressionType (tIfThen if') -- Checker ensure "then" and "else" types match
+expressionType (TECase (TCase _ (TMatch _ expr :| _))) = expressionType expr
 expressionType (TELet let') = expressionType (tLetExpression let')
 expressionType (TEApp app) = tAppReturnType app
 expressionType (TEParens expr) = expressionType expr
+
+patternType :: TPattern -> TType
+patternType (TPatternLit lit) = literalTType lit
+patternType (TPatternVar (TTyped ty _)) = ty
 
 -- | Get all the 'Name's in a module.
 tModuleNames :: TModule -> [TIdent]
@@ -113,11 +144,13 @@ bindingNames binding =
 
 exprNames :: TExpr -> [TIdent]
 exprNames (TELit _) = []
-exprNames (TEVar var) = [tTypedValue var]
+exprNames (TEVar var) = [tTypedValue var] -- TODO: Shouldn't we only need name bindings here?
 exprNames (TEIf (TIf pred' then' else')) =
   exprNames pred'
   ++ exprNames then'
   ++ exprNames else'
+exprNames (TECase (TCase scrutinee matches)) =
+  exprNames scrutinee ++ concatMap matchNames matches
 exprNames (TELet (TLet bindings expr)) =
   concatMap bindingNames bindings
   ++ exprNames expr
@@ -125,6 +158,13 @@ exprNames (TEApp (TApp f args _)) =
   exprNames f
   ++ concatMap exprNames args
 exprNames (TEParens expr) = exprNames expr
+
+matchNames :: TMatch -> [TIdent]
+matchNames (TMatch pat body) = patternNames pat ++ exprNames body
+
+patternNames :: TPattern -> [TIdent]
+patternNames (TPatternLit _) = []
+patternNames (TPatternVar (TTyped _ var)) = [var]
 
 data TIdent
   = TIdent

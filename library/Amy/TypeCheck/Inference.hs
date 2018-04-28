@@ -14,6 +14,7 @@ import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Bifunctor (first)
 import Data.Foldable (foldl')
+import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -266,7 +267,22 @@ inferExpr (REIf (RIf pred' then' else')) = do
     ( TEIf (TIf pred'' then'' else'')
     , predCon ++ thenCon ++ elseCon ++ newConstraints
     )
-inferExpr (RECase case') = error $ "Can't infer case expressions yet " ++ show case'
+inferExpr (RECase (RCase scrutinee matches)) = do
+  (scrutinee', scrutineeCons) <- inferExpr scrutinee
+  (matches', matchesCons) <- NE.unzip <$> traverse inferMatch matches
+  let
+    -- Constraint: match patterns have same type as scrutinee
+    patternTypes = patternType . tMatchPattern <$> matches'
+    scrutineeType = expressionType scrutinee'
+    patternConstraints = (\patTy -> Constraint (scrutineeType, patTy)) <$> patternTypes
+    -- Constraint: match bodies all have same type. Set all of the body types
+    -- equal to the type of the first match body.
+    (matchBodyType :| otherMatchBodyTypes) = expressionType . tMatchBody <$> matches'
+    bodyConstraints = (\bodyTy -> Constraint (matchBodyType, bodyTy)) <$> otherMatchBodyTypes
+  pure
+    ( TECase (TCase scrutinee' matches')
+    , scrutineeCons ++ concat matchesCons ++ NE.toList patternConstraints ++ bodyConstraints
+    )
 inferExpr (RELet (RLet bindings expression)) = do
   (bindings', bindingsCons) <- unzip <$> inferBindings bindings
   let
@@ -290,6 +306,26 @@ inferExpr (REApp (RApp func args)) = do
 inferExpr (REParens expr) = do
   (expr', constraints) <- inferExpr expr
   pure (TEParens expr', constraints)
+
+inferMatch :: RMatch -> Inference (TMatch, [Constraint])
+inferMatch (RMatch pat body) = do
+  pat' <- convertPattern pat
+  let patScheme = patternScheme pat'
+  (body', bodyCons) <- extendEnvM patScheme $ inferExpr body
+  pure
+    ( TMatch pat' body'
+    , bodyCons
+    )
+
+convertPattern :: RPattern -> Inference TPattern
+convertPattern (RPatternLit (Located _ lit)) = pure $ TPatternLit lit
+convertPattern (RPatternVar (Located _ ident)) = do
+  tvar <- freshTypeVariable
+  pure $ TPatternVar $ TTyped tvar (convertRIdent ident)
+
+patternScheme :: TPattern -> [(TIdent, TScheme)]
+patternScheme (TPatternLit _) = []
+patternScheme (TPatternVar (TTyped ty ident)) = [(ident, TForall [] ty)]
 
 --
 -- Constraint Solver
@@ -377,11 +413,22 @@ substituteTExpr _ lit@TELit{} = lit
 substituteTExpr subst (TEVar (TTyped ty name)) = TEVar (TTyped (substituteType subst ty) name)
 substituteTExpr subst (TEIf (TIf pred' then' else')) =
   TEIf (TIf (substituteTExpr subst pred') (substituteTExpr subst then') (substituteTExpr subst else'))
+substituteTExpr subst (TECase (TCase scrutinee matches)) =
+  TECase (TCase (substituteTExpr subst scrutinee) (substituteTMatch subst <$> matches))
 substituteTExpr subst (TELet (TLet bindings expr)) =
   TELet (TLet (substituteTBinding subst <$> bindings) (substituteTExpr subst expr))
 substituteTExpr subst (TEApp (TApp func args returnType)) =
   TEApp (TApp (substituteTExpr subst func) (substituteTExpr subst <$> args) (substituteType subst returnType))
 substituteTExpr subst (TEParens expr) = TEParens (substituteTExpr subst expr)
+
+substituteTMatch :: Subst -> TMatch -> TMatch
+substituteTMatch subst (TMatch pat body) =
+  TMatch (substituteTPattern subst pat) (substituteTExpr subst body)
+
+substituteTPattern :: Subst -> TPattern -> TPattern
+substituteTPattern _ pat@(TPatternLit _) = pat
+substituteTPattern subst (TPatternVar (TTyped ty var)) =
+  TPatternVar (TTyped (substituteType subst ty) var)
 
 --
 -- Free and Active type variables

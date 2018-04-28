@@ -217,10 +217,18 @@ prettyTExpr (TELit lit) = pretty $ showLiteral lit
 prettyTExpr (TEVar (TTyped _ var)) = prettyTIdent var
 prettyTExpr (TEIf (TIf pred' then' else')) =
   prettyIf (prettyTExpr pred') (prettyTExpr then') (prettyTExpr else')
+prettyTExpr (TECase (TCase scrutinee matches)) =
+  prettyCase (prettyTExpr scrutinee) (toList $ mkMatch <$> matches)
+ where
+  mkMatch (TMatch pat body) = (prettyTPattern pat, prettyTExpr body)
 prettyTExpr (TELet (TLet bindings body)) =
   prettyLet (prettyTBinding <$> bindings) (prettyTExpr body)
 prettyTExpr (TEApp (TApp f args _)) = sep $ prettyTExpr f : (prettyTExpr <$> toList args)
 prettyTExpr (TEParens expr) = parens $ prettyTExpr expr
+
+prettyTPattern :: TPattern -> Doc ann
+prettyTPattern (TPatternLit lit) = pretty $ showLiteral lit
+prettyTPattern (TPatternVar (TTyped _ var)) = prettyTIdent var
 
 --
 -- ANF AST
