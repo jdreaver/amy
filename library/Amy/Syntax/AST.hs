@@ -11,6 +11,9 @@ module Amy.Syntax.AST
   , Extern(..)
   , Expr(..)
   , If(..)
+  , Case(..)
+  , Match(..)
+  , Pattern(..)
   , Let(..)
   , letBinding
   , letBindingType
@@ -82,6 +85,7 @@ data Expr
   = ELit !(Located Literal)
   | EVar !(Located Text)
   | EIf !If
+  | ECase !Case
   | ELet !Let
   | EApp !App
   | EParens !Expr
@@ -93,6 +97,23 @@ data If
   , ifThen :: !Expr
   , ifElse :: !Expr
   } deriving (Show, Eq)
+
+data Case
+  = Case
+  { caseScrutinee :: !Expr
+  , caseAlternatives :: ![Match]
+  } deriving (Show, Eq)
+
+data Match
+  = Match
+  { matchPattern :: !Pattern
+  , matchBody :: !Expr
+  } deriving (Show, Eq)
+
+data Pattern
+  = PatternLit !(Located Literal)
+  | PatternVar !(Located Text)
+  deriving (Show, Eq)
 
 data Let
   = Let

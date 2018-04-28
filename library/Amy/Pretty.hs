@@ -96,6 +96,15 @@ prettyIf pred' then' else' =
     , "else" <> groupOrHang else'
     ]
 
+prettyCase :: Doc ann -> [(Doc ann, Doc ann)] -> Doc ann
+prettyCase scrutinee matches =
+  "case" <+> scrutinee <+> "of" <>
+  line <>
+  indent 2 (vcat matches')
+ where
+  prettyMatch pat body = pat <+> "->" <+> body
+  matches' = uncurry prettyMatch <$> matches
+
 prettyLet :: [Doc ann] -> Doc ann -> Doc ann
 prettyLet bindings body =
   "let" <>
@@ -152,6 +161,10 @@ prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
 prettyExpr (EVar (Located _ var)) = pretty var
 prettyExpr (EIf (If pred' then' else')) =
   prettyIf (prettyExpr pred') (prettyExpr then') (prettyExpr else')
+prettyExpr (ECase (Case scrutinee matches)) =
+  prettyCase (prettyExpr scrutinee) (mkMatch <$> matches)
+ where
+  mkMatch (Match pat body) = (prettyPattern pat, prettyExpr body)
 prettyExpr (ELet (Let bindings body)) =
   prettyLet (prettyLetBinding <$> bindings) (prettyExpr body)
  where
@@ -159,6 +172,10 @@ prettyExpr (ELet (Let bindings body)) =
   prettyLetBinding (LetBindingType bindingType) = prettyBindingType bindingType
 prettyExpr (EApp (App f args)) = sep $ prettyExpr f : (prettyExpr <$> toList args)
 prettyExpr (EParens expr) = parens $ prettyExpr expr
+
+prettyPattern :: Pattern -> Doc ann
+prettyPattern (PatternLit (Located _ lit)) = pretty $ showLiteral lit
+prettyPattern (PatternVar (Located _ var)) = pretty var
 
 --
 -- Type Check AST

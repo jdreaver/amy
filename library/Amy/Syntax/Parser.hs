@@ -10,6 +10,7 @@ module Amy.Syntax.Parser
   , expression
   , expression'
   , expressionParens
+  , caseExpression
   , ifExpression
   , letExpression'
   , literal
@@ -118,6 +119,7 @@ expression' =
   (expressionParens <?> "parens")
   <|> (ELit <$> literal <?> "literal")
   <|> (EIf <$> ifExpression <?> "if expression")
+  <|> (ECase <$> caseExpression <?> "case expression")
   <|> (ELet <$> letExpression' <?> "let expression")
   <|> (EVar <$> variable <?> "variable")
 
@@ -146,6 +148,34 @@ ifExpression = do
     , ifThen = thenExpression
     , ifElse = elseExpression
     }
+
+caseExpression :: AmyParser Case
+caseExpression = do
+  case' <* spaceConsumerNewlines
+  scrutinee <- expression <?> "expression"
+  of' <* spaceConsumerNewlines
+  matches <- indentedBlock (caseMatch <?> "case match")
+  pure
+    Case
+    { caseScrutinee = scrutinee
+    , caseAlternatives = matches
+    }
+
+caseMatch :: AmyParser Match
+caseMatch = do
+  pat <- parsePattern <?> "pattern"
+  rightArrow
+  body <- expression <?> "expression"
+  pure
+    Match
+    { matchPattern = pat
+    , matchBody = body
+    }
+
+parsePattern :: AmyParser Pattern
+parsePattern =
+  try (PatternLit <$> literal <?> "pattern literal")
+  <|> (PatternVar <$> variable <?> "pattern variable")
 
 letExpression' :: AmyParser Let
 letExpression' = do

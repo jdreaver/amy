@@ -14,6 +14,8 @@ module Amy.Syntax.Lexer
   , if'
   , then'
   , else'
+  , case'
+  , of'
   , let'
   , in'
   , lparen
@@ -25,6 +27,7 @@ module Amy.Syntax.Lexer
   , semiColon
   , doubleColon
   , equals
+  , rightArrow
   , typeSeparatorArrow
   , text
   , indentedBlock
@@ -97,6 +100,8 @@ reservedWords =
   , "if"
   , "then"
   , "else"
+  , "case"
+  , "of"
   , "let"
   , "in"
   ]
@@ -115,6 +120,12 @@ then' = void $ symbol "then"
 
 else' :: AmyParser ()
 else' = void $ symbol "else"
+
+case' :: AmyParser ()
+case' = void $ symbol "case"
+
+of' :: AmyParser ()
+of' = void $ symbol "of"
 
 let' :: AmyParser ()
 let' = void $ symbol "let"
@@ -153,8 +164,11 @@ doubleColon = char ':' >> char ':' >> spaceConsumer
 equals :: AmyParser ()
 equals = char '=' >> spaceConsumer
 
+rightArrow :: AmyParser ()
+rightArrow = string "->" >> spaceConsumer
+
 typeSeparatorArrow :: AmyParser ()
-typeSeparatorArrow = string "->" >> spaceConsumer
+typeSeparatorArrow = rightArrow
 
 text :: AmyParser Text
 text = fmap pack $ char '"' >> manyTill L.charLiteral (char '"')

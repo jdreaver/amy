@@ -106,6 +106,7 @@ renameExpression (EIf (If predicate thenExpression elseExpression)) = do
     <$> rIfPredicate
     <*> rIfThen
     <*> rIfElse
+renameExpression (ECase case') = error $ "Can't rename case expressions yet " ++ show case'
 renameExpression (ELet (Let bindings expression)) =
   withNewScope $ do
     let
