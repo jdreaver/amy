@@ -21,7 +21,6 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Text.Megaparsec
 import Text.Megaparsec.Expr
-import qualified Text.Megaparsec.Char.Lexer as L
 
 import Amy.Syntax.AST
 import Amy.Syntax.Lexer
@@ -83,12 +82,9 @@ parseType = makeExprParser term table
 
 binding :: AmyParser Binding
 binding = do
-  startingIndent <- L.indentLevel
-  name <- identifier
-  args <- many identifier
-  equals
-  spaceConsumerNewlines
-  _ <- L.indentGuard spaceConsumerNewlines GT startingIndent
+  name <- identifier <* spaceConsumerNewlines
+  args <- many (identifier <* spaceConsumerNewlines)
+  equals <* spaceConsumerNewlines
   body <- expression
   pure
     Binding
@@ -153,24 +149,14 @@ ifExpression = do
 
 letExpression' :: AmyParser Let
 letExpression' = do
-  letIndentation <- L.indentLevel
-  let'
+  let' <* spaceConsumerNewlines
   let
     parser =
       try (LetBinding <$> binding)
       <|> (LetBindingType <$> bindingType)
-  bindings <- many $ do
-    _ <- L.indentGuard spaceConsumerNewlines GT letIndentation
-    parser <* spaceConsumerNewlines
-
-  inIndentation <- L.indentLevel
-  _ <- do
-    -- TODO: What if the "in" and "let" are on the same line?
-    _ <- L.indentGuard spaceConsumerNewlines EQ letIndentation
-    in'
-  expr <- do
-    _ <- L.indentGuard spaceConsumerNewlines GT inIndentation
-    expression
+  bindings <- indentedBlock parser
+  in' <* spaceConsumerNewlines
+  expr <- expression
   pure
     Let
     { letBindings = bindings

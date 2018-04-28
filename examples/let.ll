@@ -21,7 +21,8 @@ if.else.0:                                        ; preds = %entry
 
 if.end.0:                                         ; preds = %if.else.0, %if.then.0
   %end.0 = phi i64 [ %1, %if.then.0 ], [ %3, %if.else.0 ]
-  ret i64 %end.0
+  %4 = add i64 %end.0, %end.0
+  ret i64 %4
 }
 
 define private i64 @f(i64 %x) {
