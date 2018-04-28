@@ -67,7 +67,10 @@ normalizeExpr name (TEIf (TIf pred' then' else')) c =
     else'' <- normalizeTerm name else'
     let ty = expressionType then'
     c $ ANFEIf $ ANFIf predVal then'' else'' (convertTType ty)
-normalizeExpr _ (TECase case') _ = error $ "Can't ANF convert case yet " ++ show case'
+normalizeExpr name (TECase (TCase scrutinee matches)) c =
+  normalizeName name scrutinee $ \scrutineeVal -> do
+    matches' <- traverse normalizeMatch matches
+    c $ ANFECase (ANFCase scrutineeVal matches')
 normalizeExpr name (TELet (TLet bindings expr)) c = do
   bindings' <- traverse (normalizeBinding Nothing) bindings
   expr' <- normalizeExpr name expr c
@@ -116,6 +119,17 @@ normalizeBinding mName (TBinding ident@(TIdent name _ _) ty args retTy body) = d
   ident' <- convertTIdent' ident
   args' <- traverse convertArg args
   pure $ ANFBinding ident' (convertTScheme ty) args' (convertTType retTy) body'
+
+normalizeMatch :: TMatch -> ANFConvert ANFMatch
+normalizeMatch (TMatch pat body) = do
+  let pat' = convertTPattern pat
+  body' <- normalizeTerm "__TODO_pat" body
+  pure $ ANFMatch pat' body'
+
+convertTPattern :: TPattern -> ANFPattern
+convertTPattern (TPatternLit lit) = ANFPatternLit lit
+convertTPattern (TPatternVar (TTyped ty ident)) =
+  ANFPatternVar $ ANFTyped (convertTType ty) $ convertTIdent False ident
 
 -- | Helper for normalizing lists of things
 normalizeList :: (Monad m) => (a -> (b -> m c) -> m c) -> [a] -> ([b] -> m c) -> m c

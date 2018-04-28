@@ -267,8 +267,16 @@ prettyANFExpr :: ANFExpr -> Doc ann
 prettyANFExpr (ANFEVal val) = prettyANFVal val
 prettyANFExpr (ANFEIf (ANFIf pred' then' else' _)) =
   prettyIf (prettyANFVal pred') (prettyANFExpr then') (prettyANFExpr else')
+prettyANFExpr (ANFECase (ANFCase scrutinee matches)) =
+  prettyCase (prettyANFVal scrutinee) (toList $ mkMatch <$> matches)
+ where
+  mkMatch (ANFMatch pat body) = (prettyANFPattern pat, prettyANFExpr body)
 prettyANFExpr (ANFELet (ANFLet bindings body)) =
   prettyLet (prettyANFBinding <$> bindings) (prettyANFExpr body)
 prettyANFExpr (ANFEApp (ANFApp f args _)) = sep $ prettyANFIdent (anfTypedValue f) : (prettyANFVal <$> args)
 prettyANFExpr (ANFEPrimOp (ANFApp f args _)) =
   sep $ pretty (showPrimitiveFunctionName f) : (prettyANFVal <$> args)
+
+prettyANFPattern :: ANFPattern -> Doc ann
+prettyANFPattern (ANFPatternLit lit) = pretty $ showLiteral lit
+prettyANFPattern (ANFPatternVar (ANFTyped _ var)) = prettyANFIdent var

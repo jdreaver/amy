@@ -128,6 +128,7 @@ codegenExpr' (ANFEIf (ANFIf pred' then' else' ty)) = do
   -- Generate end block
   addInstruction $ endOpName := Phi ty' [(thenOp, thenBlockFinalName), (elseOp, elseBlockFinalName)] []
   pure endOpRef
+codegenExpr' (ANFECase case') = error $ "Can't codegen ANF case expression yet " ++ show case'
 codegenExpr' (ANFEApp (ANFApp (ANFTyped originalTy ident) args' returnTy)) = do
   ty <- fromMaybe originalTy <$> topLevelType ident
   funcOperand <- valOperand (ANFVar $ ANFTyped ty ident)

@@ -9,6 +9,9 @@ module Amy.ANF.AST
   , ANFExpr(..)
   , ANFLet(..)
   , ANFIf(..)
+  , ANFCase(..)
+  , ANFMatch(..)
+  , ANFPattern(..)
   , ANFApp(..)
 
   , ANFIdent(..)
@@ -18,6 +21,7 @@ module Amy.ANF.AST
   , ANFTyped(..)
   ) where
 
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 
 import Amy.Literal
@@ -59,6 +63,7 @@ data ANFExpr
   = ANFEVal !ANFVal
   | ANFELet !ANFLet
   | ANFEIf !ANFIf
+  | ANFECase !ANFCase
   | ANFEApp !(ANFApp (ANFTyped ANFIdent))
   | ANFEPrimOp !(ANFApp PrimitiveFunctionName)
   deriving (Show, Eq)
@@ -76,6 +81,23 @@ data ANFIf
   , anfIfElse :: !ANFExpr
   , anfIfType :: !ANFType
   } deriving (Show, Eq)
+
+data ANFCase
+  = ANFCase
+  { anfCaseScrutinee :: !ANFVal
+  , anfCaseAlternatives :: !(NonEmpty ANFMatch)
+  } deriving (Show, Eq)
+
+data ANFMatch
+  = ANFMatch
+  { anfMatchPattern :: !ANFPattern
+  , anfMatchBody :: !ANFExpr
+  } deriving (Show, Eq)
+
+data ANFPattern
+  = ANFPatternLit !Literal
+  | ANFPatternVar !(ANFTyped ANFIdent)
+  deriving (Show, Eq)
 
 data ANFApp f
   = ANFApp
