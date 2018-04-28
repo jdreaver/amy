@@ -93,7 +93,7 @@ extendEnvM tys = local (flip extendEnvList tys)
 -- | Lookup type in the environment
 lookupEnvM :: TIdent -> Inference TType
 lookupEnvM name = do
-  mTy <- lookupEnv name <$> ask
+  mTy <- asks (lookupEnv name)
   maybe (throwError $ UnboundVariable name) instantiate mTy
 
 -- | Convert a scheme into a type by replacing all the type variables with

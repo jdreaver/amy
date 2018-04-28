@@ -1,0 +1,32 @@
+---
+- ignore: {name: "Redundant do", within: spec}
+- ignore: {name: "Use list comprehension"}
+- ignore: {name: "Use section"}
+- ignore: {name: "Use lambda-case"}
+
+# Custom Warnings
+- warn: {lhs: mapM, rhs: traverse}
+- warn: {lhs: mapM_, rhs: traverse_}
+- warn: {lhs: forM, rhs: for}
+- warn: {lhs: forM_, rhs: for_}
+
+- modules:
+  - {name: [Data.Set], as: Set}
+  - {name: [Data.Map], as: Map}
+  - {name: [Data.HashSet], as: HashSet}
+  - {name: [Data.HashMap.Strict], as: HashMap}
+  - {name: [Data.Text], as: T}
+  - {name: [Data.Text.Encoding], as: T}
+  - {name: [Data.Text.IO], as: T}
+  - {name: [Data.Text.Lazy], as: TL}
+  - {name: [Data.Text.Lazy.Encoding], as: TL}
+  - {name: [Data.Text.IO.Lazy], as: TL}
+  - {name: [Data.ByteString], as: BS}
+  - {name: [Data.ByteString.Lazy], as: BSL}
+  - {name: [Data.ByteString.Char8], as: BS8}
+  - {name: [Data.ByteString.Lazy.Char8], as: BSL8}
+  - {name: [Data.List.NonEmpty], as: NE}
+  - {name: [Data.Sequence], as: Seq}
+
+- functions:
+  - {name: unsafePerformIO, within: []}  # never use unsafePerformIO

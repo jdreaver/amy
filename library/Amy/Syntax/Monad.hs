@@ -36,7 +36,7 @@ currentIndentation :: AmyParser Pos
 currentIndentation = get
 
 setIndentation :: Pos -> AmyParser ()
-setIndentation x = modify' (\_ -> x)
+setIndentation x = modify' (const x)
 
 -- | Check that the current indentation level is past the stored indentation
 assertIndented :: AmyParser ()

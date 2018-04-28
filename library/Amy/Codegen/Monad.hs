@@ -55,7 +55,7 @@ partialBlock :: LLVM.Name -> PartialBlock
 partialBlock name' = PartialBlock name' []
 
 makeBasicBlock :: PartialBlock -> Named Terminator -> BasicBlock
-makeBasicBlock (PartialBlock name' instructions) terminator = BasicBlock name' (reverse instructions) terminator
+makeBasicBlock (PartialBlock name' instructions) = BasicBlock name' (reverse instructions)
 
 addInstruction :: Named Instruction -> BlockGen ()
 addInstruction instr =
@@ -93,4 +93,4 @@ freshUnName :: BlockGen LLVM.Name
 freshUnName = UnName <$> freshId
 
 topLevelType :: ANFIdent -> BlockGen (Maybe ANFType)
-topLevelType ident = Map.lookup ident <$> ask
+topLevelType ident = asks (Map.lookup ident)

@@ -39,9 +39,8 @@ convertTIdent :: Bool -> TIdent -> ANFIdent
 convertTIdent isTopLevel (TIdent name id' mPrim) = ANFIdent name id' mPrim isTopLevel
 
 convertTIdent' :: TIdent -> ANFConvert ANFIdent
-convertTIdent' ident@(TIdent name id' mPrim) = do
-  isTopLevel <- isIdentTopLevel ident
-  pure $ ANFIdent name id' mPrim isTopLevel
+convertTIdent' ident@(TIdent name id' mPrim) =
+  ANFIdent name id' mPrim <$> isIdentTopLevel ident
 
 convertTScheme :: TScheme -> ANFScheme
 convertTScheme (TForall vars ty) = ANFForall (convertTTypeName <$> vars) (convertTType ty)
