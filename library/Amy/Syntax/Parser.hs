@@ -19,28 +19,26 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
-import Data.Void (Void)
 import Text.Megaparsec
 import Text.Megaparsec.Expr
 import qualified Text.Megaparsec.Char.Lexer as L
 
 import Amy.Syntax.AST
 import Amy.Syntax.Lexer
+import Amy.Syntax.Monad
 
-type Parser = Parsec Void Text
-
-parseModule :: Parser Module
+parseModule :: AmyParser Module
 parseModule = Module <$> do
   spaceConsumerNewlines
   noIndent (indentedBlock declaration) <* eof
 
-declaration :: Parser Declaration
+declaration :: AmyParser Declaration
 declaration =
   (DeclExtern <$> externDecl)
   <|> try (DeclBindingType <$> bindingType)
   <|> (DeclBinding <$> binding)
 
-externDecl :: Parser Extern
+externDecl :: AmyParser Extern
 externDecl = do
   extern
   name <- identifier
@@ -52,7 +50,7 @@ externDecl = do
     , externType = ty
     }
 
-bindingType :: Parser BindingType
+bindingType :: AmyParser BindingType
 bindingType = do
   name <- identifier
   doubleColon
@@ -63,27 +61,27 @@ bindingType = do
     , bindingTypeScheme = scheme
     }
 
-parseScheme :: Parser Scheme
+parseScheme :: AmyParser Scheme
 parseScheme = do
   vars <- optional parseSchemeVars
   ty <- parseType
   pure $ Forall (fromMaybe [] vars) ty
 
-parseSchemeVars :: Parser [Located Text]
+parseSchemeVars :: AmyParser [Located Text]
 parseSchemeVars = do
   forall
   vars <- many identifier
   dot
   pure vars
 
-parseType :: Parser Type
+parseType :: AmyParser Type
 parseType = makeExprParser term table
  where
   tVar = (TyCon <$> typeIdentifier) <|> (TyVar <$> identifier)
   table = [[InfixR (TyFun <$ typeSeparatorArrow)]]
   term = parens parseType <|> tVar
 
-binding :: Parser Binding
+binding :: AmyParser Binding
 binding = do
   startingIndent <- L.indentLevel
   name <- identifier
@@ -99,7 +97,7 @@ binding = do
     , bindingBody = body
     }
 
-expression :: Parser Expr
+expression :: AmyParser Expr
 expression = do
   -- Parse a NonEmpty list of expressions separated by spaces.
   expressions <- lineFold expression'
@@ -119,7 +117,7 @@ expression = do
 -- | Parses any expression except function application. This is needed to avoid
 -- left recursion. Without this distinction, f a b would be parsed as f (a b)
 -- instead of (f a) b.
-expression' :: Parser Expr
+expression' :: AmyParser Expr
 expression' =
   expressionParens
   <|> (ELit <$> literal)
@@ -127,18 +125,18 @@ expression' =
   <|> (ELet <$> letExpression')
   <|> (EVar <$> variable)
 
-expressionParens :: Parser Expr
+expressionParens :: AmyParser Expr
 expressionParens = EParens <$> parens expression
 
-literal :: Parser (Located Literal)
+literal :: AmyParser (Located Literal)
 literal =
   (fmap (either LiteralDouble LiteralInt) <$> number)
   <|> (fmap LiteralBool <$> bool)
 
-variable :: Parser (Located Text)
+variable :: AmyParser (Located Text)
 variable = identifier
 
-ifExpression :: Parser If
+ifExpression :: AmyParser If
 ifExpression = do
   if'
   predicate <- expression
@@ -153,7 +151,7 @@ ifExpression = do
     , ifElse = elseExpression
     }
 
-letExpression' :: Parser Let
+letExpression' :: AmyParser Let
 letExpression' = do
   letIndentation <- L.indentLevel
   let'

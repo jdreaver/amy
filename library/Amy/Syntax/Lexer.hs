@@ -34,16 +34,14 @@ import Control.Monad (void)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Scientific (floatingOrInteger)
 import Data.Text (Text, pack)
-import Data.Void (Void)
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
 import Amy.Syntax.Located
+import Amy.Syntax.Monad
 
-type Lexer = Parsec Void Text
-
-lexeme :: Lexer a -> Lexer (Located a)
+lexeme :: AmyParser a -> AmyParser (Located a)
 lexeme p = do
   (SourcePos fp startLine startCol) <- getPosition
   val <- p
@@ -59,31 +57,31 @@ lexeme p = do
       (unPos endCol - 1)
   pure (Located sourceSpan val)
 
-spaceConsumer :: Lexer ()
+spaceConsumer :: AmyParser ()
 spaceConsumer = L.space (void $ char ' ') lineComment blockComment
 
-spaceConsumerNewlines :: Lexer ()
+spaceConsumerNewlines :: AmyParser ()
 spaceConsumerNewlines = L.space space1 lineComment blockComment
 
-lineComment :: Lexer ()
+lineComment :: AmyParser ()
 lineComment  = L.skipLineComment "#"
 
-blockComment :: Lexer ()
+blockComment :: AmyParser ()
 blockComment = empty
 
 -- TODO: Fix this for Doubles with a ".0". Fails on 1.0, thinks it is an Int
-number :: Lexer (Located (Either Double Int))
+number :: AmyParser (Located (Either Double Int))
 number = fmap floatingOrInteger <$> lexeme L.scientific
 
-bool :: Lexer (Located Bool)
+bool :: AmyParser (Located Bool)
 bool = lexeme $
   (string "True" >> pure True)
   <|> (string "False" >> pure False)
 
-symbol :: Text -> Lexer Text
+symbol :: Text -> AmyParser Text
 symbol = L.symbol spaceConsumer
 
-identifier :: Lexer (Located Text)
+identifier :: AmyParser (Located Text)
 identifier = try (p >>= traverse check)
  where
   p = lexeme ((:) <$> lowerChar <*> many (alphaNumChar <|> char '\''))
@@ -102,79 +100,79 @@ reservedWords =
   , "in"
   ]
 
-extern :: Lexer ()
+extern :: AmyParser ()
 extern = void $ symbol "extern"
 
-forall :: Lexer ()
+forall :: AmyParser ()
 forall = void $ symbol "forall"
 
-if' :: Lexer ()
+if' :: AmyParser ()
 if' = void $ symbol "if"
 
-then' :: Lexer ()
+then' :: AmyParser ()
 then' = void $ symbol "then"
 
-else' :: Lexer ()
+else' :: AmyParser ()
 else' = void $ symbol "else"
 
-let' :: Lexer ()
+let' :: AmyParser ()
 let' = void $ symbol "let"
 
-in' :: Lexer ()
+in' :: AmyParser ()
 in' = void $ symbol "in"
 
 -- | Type names are upper-case, like Int and Double
-typeIdentifier :: Lexer (Located Text)
+typeIdentifier :: AmyParser (Located Text)
 typeIdentifier = lexeme $ pack <$> ((:) <$> upperChar <*> many alphaNumChar)
 
-lparen :: Lexer ()
+lparen :: AmyParser ()
 lparen = char '(' >> spaceConsumer
 
-rparen :: Lexer ()
+rparen :: AmyParser ()
 rparen = char ')' >> spaceConsumer
 
-parens :: Lexer a -> Lexer a
+parens :: AmyParser a -> AmyParser a
 parens = between lparen rparen
 
-optionalParens :: Lexer a -> Lexer a
+optionalParens :: AmyParser a -> AmyParser a
 optionalParens p = parens p <|> p
 
-comma :: Lexer ()
+comma :: AmyParser ()
 comma = char ',' >> spaceConsumer
 
-dot :: Lexer ()
+dot :: AmyParser ()
 dot = char '.' >> spaceConsumer
 
-doubleColon :: Lexer ()
+doubleColon :: AmyParser ()
 doubleColon = char ':' >> char ':' >> spaceConsumer
 
-equals :: Lexer ()
+equals :: AmyParser ()
 equals = char '=' >> spaceConsumer
 
-typeSeparatorArrow :: Lexer ()
+typeSeparatorArrow :: AmyParser ()
 typeSeparatorArrow = string "->" >> spaceConsumer
 
-text :: Lexer Text
+text :: AmyParser Text
 text = fmap pack $ char '"' >> manyTill L.charLiteral (char '"')
 
-noIndent :: Lexer a -> Lexer a
+noIndent :: AmyParser a -> AmyParser a
 noIndent = L.nonIndented spaceConsumer
 
 -- | Parse a list of things at the current indentation level, no more no less.
 indentedBlock
-  :: Parsec Void Text a
-  -> Parsec Void Text [a]
+  :: AmyParser a
+  -> AmyParser [a]
 indentedBlock p = do
   blockIndentation <- L.indentLevel
   many $ do
-    currentIndentation <- L.indentLevel
-    if currentIndentation == blockIndentation
+    currentIndentation' <- L.indentLevel
+    if currentIndentation' == blockIndentation
     then p <* spaceConsumerNewlines
-    else L.incorrectIndent EQ blockIndentation currentIndentation
+    else L.incorrectIndent EQ blockIndentation currentIndentation'
 
 -- | Parse something that can bleed over newlines as long as the indentation on
 -- the next lines is strictly greater than the first line.
-lineFold :: Parsec Void Text a -> Parsec Void Text (NonEmpty a)
+lineFold :: AmyParser a -> AmyParser (NonEmpty a)
 lineFold p = do
   startingIndent <- L.indentLevel
   first <- p

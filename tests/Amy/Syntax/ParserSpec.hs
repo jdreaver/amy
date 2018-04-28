@@ -7,20 +7,25 @@ module Amy.Syntax.ParserSpec
   ) where
 
 import Data.Text (Text)
+import Data.Void (Void)
 import Test.Hspec
 import Test.Hspec.Megaparsec
 import Text.Megaparsec
 import Text.Shakespeare.Text (st)
 
 import Amy.Syntax.AST
+import Amy.Syntax.Monad
 import Amy.Syntax.Parser
+
+parse' :: AmyParser a -> Text -> Either (ParseError Char Void) a
+parse' parser = parse (runAmyParser parser) ""
 
 spec :: Spec
 spec = do
 
   describe "parseModule" $ do
     it "parses a small module" $ do
-      parse parseModule "" sampleModule
+      parse' parseModule sampleModule
         `shouldParse`
         Module
         [ DeclBindingType
@@ -76,12 +81,12 @@ spec = do
         ]
 
     it "rejects indented top-level declarations" $ do
-      parse parseModule "" "  f :: Int"
+      parse' parseModule "  f :: Int"
         `shouldFailWith` FancyError [SourcePos "" (mkPos 1) (mkPos 3)] [ErrorIndentation EQ (mkPos 1) (mkPos 3)]
 
   describe "expression" $ do
     it "parses complex expressions" $ do
-      parse expression "" "f (g x) 1" `shouldParse`
+      parse' expression "f (g x) 1" `shouldParse`
         EApp (
           App
           (EVar (Located (SourceSpan "" 1 1 1 1) "f"))
@@ -95,7 +100,7 @@ spec = do
         )
 
     it "parses multi-line expression" $ do
-      parse expression "" "f 1\n 2 3" `shouldParse`
+      parse' expression "f 1\n 2 3" `shouldParse`
         EApp (
           App
           (EVar (Located (SourceSpan "" 1 1 1 1) "f"))
@@ -107,12 +112,12 @@ spec = do
 
   describe "externDecl" $ do
     it "parses extern declaration" $ do
-      parse externDecl "" "extern f :: Int"
+      parse' externDecl "extern f :: Int"
         `shouldParse`
         Extern
           (Located (SourceSpan "" 1 8 1 8) "f")
           (TyCon (Located (SourceSpan "" 1 13 1 15) "Int"))
-      parse externDecl "" "extern f :: Int -> Double"
+      parse' externDecl "extern f :: Int -> Double"
         `shouldParse`
         Extern
           (Located (SourceSpan "" 1 8 1 8) "f")
@@ -123,12 +128,12 @@ spec = do
 
   describe "bindingType" $ do
     it "parses binding types" $ do
-      parse bindingType "" "f :: Int"
+      parse' bindingType "f :: Int"
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
           (Forall [] $ TyCon (Located (SourceSpan "" 1 6 1 8) "Int"))
-      parse bindingType "" "f :: Int -> Double"
+      parse' bindingType "f :: Int -> Double"
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
@@ -139,12 +144,12 @@ spec = do
           )
 
     it "parses polymorphic types" $ do
-      parse bindingType "" "f :: forall a. a"
+      parse' bindingType "f :: forall a. a"
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
           (Forall [Located (SourceSpan "" 1 13 1 13) "a"] $ TyVar (Located (SourceSpan "" 1 16 1 16) "a"))
-      parse bindingType "" "f :: forall a b. a -> b -> a"
+      parse' bindingType "f :: forall a b. a -> b -> a"
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
@@ -160,14 +165,14 @@ spec = do
 
   describe "parseType" $ do
     it "handles simple types" $ do
-      parse parseType "" "A" `shouldParse` TyCon (Located (SourceSpan "" 1 1 1 1) "A")
-      parse parseType "" "A -> B"
+      parse' parseType "A" `shouldParse` TyCon (Located (SourceSpan "" 1 1 1 1) "A")
+      parse' parseType "A -> B"
         `shouldParse` (
           TyCon (Located (SourceSpan "" 1 1 1 1) "A")
           `TyFun`
           TyCon (Located (SourceSpan "" 1 6 1 6) "B")
         )
-      parse parseType "" "A -> B -> C"
+      parse' parseType "A -> B -> C"
         `shouldParse` (
           TyCon (Located (SourceSpan "" 1 1 1 1) "A")
           `TyFun`
@@ -177,15 +182,15 @@ spec = do
         )
 
     it "handles parens" $ do
-      parse parseType "" "(A)" `shouldParse` TyCon (Located (SourceSpan "" 1 2 1 2) "A")
-      parse parseType "" "((X))" `shouldParse` TyCon (Located (SourceSpan "" 1 3 1 3) "X")
-      parse parseType "" "((A)) -> ((B))"
+      parse' parseType "(A)" `shouldParse` TyCon (Located (SourceSpan "" 1 2 1 2) "A")
+      parse' parseType "((X))" `shouldParse` TyCon (Located (SourceSpan "" 1 3 1 3) "X")
+      parse' parseType "((A)) -> ((B))"
         `shouldParse` (
           TyCon (Located (SourceSpan "" 1 3 1 3) "A")
           `TyFun`
           TyCon (Located (SourceSpan "" 1 12 1 12) "B")
         )
-      parse parseType "" "(A -> B) -> C"
+      parse' parseType "(A -> B) -> C"
         `shouldParse` (
           ( TyCon (Located (SourceSpan "" 1 2 1 2) "A")
             `TyFun`
@@ -194,7 +199,7 @@ spec = do
           `TyFun`
           TyCon (Located (SourceSpan "" 1 13 1 13) "C")
         )
-      parse parseType "" "A -> (B -> C) -> D"
+      parse' parseType "A -> (B -> C) -> D"
         `shouldParse` (
           TyCon (Located (SourceSpan "" 1 1 1 1) "A")
           `TyFun`
@@ -207,15 +212,15 @@ spec = do
         )
 
     it "should fail gracefully without infinite loops" $ do
-      parse parseType "" `shouldFailOn` ""
-      parse parseType "" `shouldFailOn` "()"
-      parse parseType "" `shouldFailOn` "(())"
-      parse parseType "" `shouldFailOn` "A ->"
+      parse' parseType `shouldFailOn` ""
+      parse' parseType `shouldFailOn` "()"
+      parse' parseType `shouldFailOn` "(())"
+      parse' parseType `shouldFailOn` "A ->"
 
   describe "expressionParens" $ do
     it "parses expressions in parens" $ do
-      parse expressionParens "" "(x)" `shouldParse` EParens (EVar (Located (SourceSpan "" 1 2 1 2) "x"))
-      parse expressionParens "" "(f x)"
+      parse' expressionParens "(x)" `shouldParse` EParens (EVar (Located (SourceSpan "" 1 2 1 2) "x"))
+      parse' expressionParens "(f x)"
         `shouldParse`
         EParens
           (EApp
@@ -226,13 +231,13 @@ spec = do
 
   describe "ifExpression" $ do
     it "parses if expressions" $ do
-      parse ifExpression "" "if True then 1 else 2"
+      parse' ifExpression "if True then 1 else 2"
         `shouldParse`
         If
           (ELit (Located (SourceSpan "" 1 4 1 7) (LiteralBool True)))
           (ELit (Located (SourceSpan "" 1 14 1 14) (LiteralInt 1)))
           (ELit (Located (SourceSpan "" 1 21 1 21) (LiteralInt 2)))
-      parse ifExpression "" "if f x then f y else g 2"
+      parse' ifExpression "if f x then f y else g 2"
         `shouldParse`
         If
           (EApp $ App (EVar (Located (SourceSpan "" 1 4 1 4) "f")) [EVar (Located (SourceSpan "" 1 6 1 6) "x")])
@@ -241,14 +246,14 @@ spec = do
 
   describe "literal" $ do
     it "can discriminate between integer and double" $ do
-      parse literal "" "1" `shouldParse` Located (SourceSpan "" 1 1 1 1) (LiteralInt 1)
+      parse' literal "1" `shouldParse` Located (SourceSpan "" 1 1 1 1) (LiteralInt 1)
       -- TODO: Trailing decimals?
       -- parse (literal <* eof) "" "2." `shouldParse` Located (SourceSpan "" 1 1 1 2) (LiteralInt 2)
-      parse literal "" "1.5" `shouldParse` Located (SourceSpan "" 1 1 1 3) (LiteralDouble 1.5)
+      parse' literal "1.5" `shouldParse` Located (SourceSpan "" 1 1 1 3) (LiteralDouble 1.5)
 
     it "can parse bools" $ do
-      parse literal "" "True" `shouldParse` Located (SourceSpan "" 1 1 1 4) (LiteralBool True)
-      parse literal "" "False" `shouldParse` Located (SourceSpan "" 1 1 1 5) (LiteralBool False)
+      parse' literal "True" `shouldParse` Located (SourceSpan "" 1 1 1 4) (LiteralBool True)
+      parse' literal "False" `shouldParse` Located (SourceSpan "" 1 1 1 5) (LiteralBool False)
 
 sampleModule :: Text
 sampleModule = [st|

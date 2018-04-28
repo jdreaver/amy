@@ -43,7 +43,7 @@ process inputFile input =
   let
     eModule :: Either [Error] TModule
     eModule = do
-      parsed <- first ((:[]) . ParserError) $ parse parseModule inputFile input
+      parsed <- first ((:[]) . ParserError) $ parse (runAmyParser parseModule) inputFile input
       renamed <- rename parsed
       first (:[]) $ inferModule renamed
   in do
