@@ -45,7 +45,10 @@ parensIf True = parens
 parensIf False = id
 
 vcatHardLines :: [Doc ann] -> Doc ann
-vcatHardLines = concatWith (\x y -> x <> hardline <> hardline <> y)
+vcatHardLines = concatWith (\x y -> x <> hardline <> y)
+
+vcatTwoHardLines :: [Doc ann] -> Doc ann
+vcatTwoHardLines = concatWith (\x y -> x <> hardline <> hardline <> y)
 
 groupOrHang :: Doc ann -> Doc ann
 groupOrHang doc =
@@ -100,7 +103,7 @@ prettyCase :: Doc ann -> [(Doc ann, Doc ann)] -> Doc ann
 prettyCase scrutinee matches =
   "case" <+> scrutinee <+> "of" <>
   line <>
-  indent 2 (vcat matches')
+  indent 2 (vcatHardLines matches')
  where
   prettyMatch pat body = pat <+> "->" <+> body
   matches' = uncurry prettyMatch <$> matches
@@ -109,7 +112,7 @@ prettyLet :: [Doc ann] -> Doc ann -> Doc ann
 prettyLet bindings body =
   "let" <>
   line <>
-  indent 2 (vcat bindings) <>
+  indent 2 (vcatHardLines bindings) <>
   line <>
   indent (-2) "in" <>
   groupOrHang body
@@ -140,7 +143,7 @@ mkPrettyScheme :: Scheme -> PrettyScheme ann
 mkPrettyScheme (Forall vars ty) = PForall (pretty . locatedValue <$> vars) (mkPrettyType ty)
 
 prettyModule :: Module -> Doc ann
-prettyModule (Module decls) = vcatHardLines (prettyDeclaration <$> decls)
+prettyModule (Module decls) = vcatTwoHardLines (prettyDeclaration <$> decls)
 
 prettyDeclaration :: Declaration -> Doc ann
 prettyDeclaration (DeclBinding binding) = prettyBinding binding
@@ -162,7 +165,7 @@ prettyExpr (EVar (Located _ var)) = pretty var
 prettyExpr (EIf (If pred' then' else')) =
   prettyIf (prettyExpr pred') (prettyExpr then') (prettyExpr else')
 prettyExpr (ECase (Case scrutinee matches)) =
-  prettyCase (prettyExpr scrutinee) (mkMatch <$> matches)
+  prettyCase (prettyExpr scrutinee) (toList $ mkMatch <$> matches)
  where
   mkMatch (Match pat body) = (prettyPattern pat, prettyExpr body)
 prettyExpr (ELet (Let bindings body)) =
@@ -191,7 +194,7 @@ mkPrettyTScheme (TForall vars ty) = PForall (pretty . tTypeNameText <$> vars) (m
 
 prettyTModule :: TModule -> Doc ann
 prettyTModule (TModule bindings externs) =
-  vcatHardLines $ (prettyTExtern <$> externs) ++ (prettyTBinding <$> bindings)
+  vcatTwoHardLines $ (prettyTExtern <$> externs) ++ (prettyTBinding <$> bindings)
 
 prettyTExtern :: TExtern -> Doc ann
 prettyTExtern (TExtern name ty) =
@@ -233,7 +236,7 @@ mkPrettyANFScheme (ANFForall vars ty) = PForall (pretty . anfTypeNameText <$> va
 
 prettyANFModule :: ANFModule -> Doc ann
 prettyANFModule (ANFModule bindings externs) =
-  vcatHardLines $ (prettyANFExtern <$> externs) ++ (prettyANFBinding <$> bindings)
+  vcatTwoHardLines $ (prettyANFExtern <$> externs) ++ (prettyANFBinding <$> bindings)
 
 prettyANFExtern :: ANFExtern -> Doc ann
 prettyANFExtern (ANFExtern name ty) =
