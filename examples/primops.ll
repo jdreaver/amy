@@ -10,7 +10,7 @@ entry:
   ret i64 %1
 }
 
-define i64 @f(i64 %x) {
+define private i64 @f(i64 %x) {
 entry:
   %0 = add i64 %x, -1
   %1 = sub i64 3, %0

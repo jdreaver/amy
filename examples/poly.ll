@@ -17,12 +17,12 @@ entry:
   ret i64 %8
 }
 
-define i64* @id(i64* %x) {
+define private i64* @id(i64* %x) {
 entry:
   ret i64* %x
 }
 
-define i64* @const(i64* %x, i64* %y) {
+define private i64* @const(i64* %x, i64* %y) {
 entry:
   ret i64* %x
 }

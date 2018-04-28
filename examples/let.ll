@@ -24,7 +24,7 @@ if.end.0:                                         ; preds = %if.else.0, %if.then
   ret i64 %end.0
 }
 
-define i64 @f(i64 %x) {
+define private i64 @f(i64 %x) {
 entry:
   br i1 true, label %if.then.0, label %if.else.0
 
@@ -41,7 +41,7 @@ if.end.0:                                         ; preds = %if.else.0, %if.then
   ret i64 %end.0
 }
 
-define i64 @threeHundred() {
+define private i64 @threeHundred() {
 entry:
   ret i64 100
 }

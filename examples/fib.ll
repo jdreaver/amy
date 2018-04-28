@@ -9,7 +9,7 @@ entry:
   ret i64 %0
 }
 
-define i64 @fib(i64 %x) {
+define private i64 @fib(i64 %x) {
 entry:
   %0 = icmp eq i64 %x, 0
   %test.1 = icmp eq i1 true, %0

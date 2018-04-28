@@ -22,6 +22,7 @@ import qualified LLVM.AST.Constant as C
 import LLVM.AST.Float as F
 import qualified LLVM.AST.IntegerPredicate as IP
 import LLVM.AST.Global as LLVM
+import qualified LLVM.AST.Linkage as L
 
 import Amy.ANF
 import Amy.Codegen.Monad
@@ -68,6 +69,10 @@ codegenTopLevelBinding topLevelTypes binding =
     , parameters = (params, False)
     , LLVM.returnType = returnType'
     , basicBlocks = blocks
+    , linkage =
+        if anfIdentText (anfBindingName binding) == "main"
+          then L.External
+          else L.Private
     }
 
 argAndReturnTypes :: ANFType -> ([ANFType], ANFType)
