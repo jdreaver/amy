@@ -33,7 +33,7 @@ module Amy.Syntax.Lexer
 import Control.Monad (void)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Scientific (floatingOrInteger)
-import Data.Text (Text, pack)
+import Data.Text (Text, pack, unpack)
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
@@ -79,12 +79,12 @@ bool = lexeme $
   <|> (string "False" >> pure False)
 
 symbol :: Text -> AmyParser Text
-symbol = L.symbol spaceConsumer
+symbol sym = L.symbol spaceConsumer sym <?> unpack sym
 
 identifier :: AmyParser (Located Text)
 identifier = try (p >>= traverse check)
  where
-  p = lexeme ((:) <$> lowerChar <*> many (alphaNumChar <|> char '\''))
+  p = lexeme ((:) <$> lowerChar <*> many (alphaNumChar <|> char '\'')) <?> "identifier"
   check x =
     if x `elem` reservedWords
     then fail $ "keyword " ++ show x ++ " cannot be an identifier"
@@ -123,7 +123,7 @@ in' = void $ symbol "in"
 
 -- | Type names are upper-case, like Int and Double
 typeIdentifier :: AmyParser (Located Text)
-typeIdentifier = lexeme $ pack <$> ((:) <$> upperChar <*> many alphaNumChar)
+typeIdentifier = lexeme (pack <$> ((:) <$> upperChar <*> many alphaNumChar)) <?> "type identifier"
 
 lparen :: AmyParser ()
 lparen = char '(' >> spaceConsumer

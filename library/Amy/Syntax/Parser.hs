@@ -33,16 +33,16 @@ parseModule = Module <$> do
 
 declaration :: AmyParser Declaration
 declaration =
-  (DeclExtern <$> externDecl)
-  <|> try (DeclBindingType <$> bindingType)
-  <|> (DeclBinding <$> binding)
+  (DeclExtern <$> externDecl <?> "extern")
+  <|> try (DeclBindingType <$> bindingType <?> "binding type")
+  <|> (DeclBinding <$> binding <?> "binding")
 
 externDecl :: AmyParser Extern
 externDecl = do
   extern
   name <- identifier
   doubleColon
-  ty <- parseType
+  ty <- parseType <?> "type"
   pure
     Extern
     { externName = name
@@ -53,7 +53,7 @@ bindingType :: AmyParser BindingType
 bindingType = do
   name <- identifier
   doubleColon
-  scheme <- parseScheme
+  scheme <- parseScheme <?> "type scheme"
   pure
     BindingType
     { bindingTypeName = name
@@ -63,7 +63,7 @@ bindingType = do
 parseScheme :: AmyParser Scheme
 parseScheme = do
   vars <- optional parseSchemeVars
-  ty <- parseType
+  ty <- parseType <?> "type"
   pure $ Forall (fromMaybe [] vars) ty
 
 parseSchemeVars :: AmyParser [Located Text]
@@ -85,7 +85,7 @@ binding = do
   name <- identifier <* spaceConsumerNewlines
   args <- many (identifier <* spaceConsumerNewlines)
   equals <* spaceConsumerNewlines
-  body <- expression
+  body <- expression <?> "expression"
   pure
     Binding
     { bindingName = name
@@ -115,11 +115,11 @@ expression = do
 -- instead of (f a) b.
 expression' :: AmyParser Expr
 expression' =
-  expressionParens
-  <|> (ELit <$> literal)
-  <|> (EIf <$> ifExpression)
-  <|> (ELet <$> letExpression')
-  <|> (EVar <$> variable)
+  (expressionParens <?> "parens")
+  <|> (ELit <$> literal <?> "literal")
+  <|> (EIf <$> ifExpression <?> "if expression")
+  <|> (ELet <$> letExpression' <?> "let expression")
+  <|> (EVar <$> variable <?> "variable")
 
 expressionParens :: AmyParser Expr
 expressionParens = EParens <$> parens expression
