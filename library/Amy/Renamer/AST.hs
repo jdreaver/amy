@@ -6,6 +6,9 @@ module Amy.Renamer.AST
   , RExtern(..)
   , RExpr(..)
   , RIf(..)
+  , RCase(..)
+  , RMatch(..)
+  , RPattern(..)
   , RLet(..)
   , RApp(..)
 
@@ -54,6 +57,7 @@ data RExpr
   = RELit !(Located Literal)
   | REVar !(Located RIdent)
   | REIf !RIf
+  | RECase !RCase
   | RELet !RLet
   | REApp !RApp
   | REParens !RExpr
@@ -65,6 +69,23 @@ data RIf
   , rIfThen :: !RExpr
   , rIfElse :: !RExpr
   } deriving (Show, Eq)
+
+data RCase
+  = RCase
+  { rCaseScrutinee :: !RExpr
+  , rCaseAlternatives :: ![RMatch]
+  } deriving (Show, Eq)
+
+data RMatch
+  = RMatch
+  { rMatchPattern :: !RPattern
+  , rMatchBody :: !RExpr
+  } deriving (Show, Eq)
+
+data RPattern
+  = RPatternLit !(Located Literal)
+  | RPatternVar !(Located RIdent)
+  deriving (Show, Eq)
 
 data RLet
   = RLet

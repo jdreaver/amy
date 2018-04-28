@@ -266,6 +266,7 @@ inferExpr (REIf (RIf pred' then' else')) = do
     ( TEIf (TIf pred'' then'' else'')
     , predCon ++ thenCon ++ elseCon ++ newConstraints
     )
+inferExpr (RECase case') = error $ "Can't infer case expressions yet " ++ show case'
 inferExpr (RELet (RLet bindings expression)) = do
   (bindings', bindingsCons) <- unzip <$> inferBindings bindings
   let

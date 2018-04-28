@@ -106,7 +106,14 @@ renameExpression (EIf (If predicate thenExpression elseExpression)) = do
     <$> rIfPredicate
     <*> rIfThen
     <*> rIfElse
-renameExpression (ECase case') = error $ "Can't rename case expressions yet " ++ show case'
+renameExpression (ECase (Case scrutinee matches)) = do
+  scrutinee' <- renameExpression scrutinee
+  matches' <- traverse renameMatch matches
+  pure
+    $ fmap RECase
+    $ RCase
+    <$> scrutinee'
+    <*> sequenceA matches'
 renameExpression (ELet (Let bindings expression)) =
   withNewScope $ do
     let
@@ -129,3 +136,18 @@ renameExpression (EApp app) = do
     <$> rAppFunction
     <*> sequenceA rAppArgs
 renameExpression (EParens expr) = fmap REParens <$> renameExpression expr
+
+renameMatch :: Match -> Renamer (Validation [Error] RMatch)
+renameMatch (Match pat body) =
+  withNewScope $ do
+    pat' <-
+     case pat of
+        PatternLit lit -> pure . pure $ RPatternLit lit
+        PatternVar var -> do
+          var' <- addValueToScope var
+          pure $ RPatternVar <$> var'
+    body' <- renameExpression body
+    pure
+      $ RMatch
+      <$> pat'
+      <*> body'
