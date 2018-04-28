@@ -162,20 +162,16 @@ noIndent = L.nonIndented spaceConsumer
 indentedBlock
   :: AmyParser a
   -> AmyParser [a]
-indentedBlock p = do
-  blockIndentation <- L.indentLevel
-  many $ do
-    currentIndentation' <- L.indentLevel
-    if currentIndentation' == blockIndentation
-    then p <* spaceConsumerNewlines
-    else L.incorrectIndent EQ blockIndentation currentIndentation'
+indentedBlock p =
+  withBlockIndentation $ many $
+    assertSameIndentation *> p <* spaceConsumerNewlines
 
 -- | Parse something that can bleed over newlines as long as the indentation on
 -- the next lines is strictly greater than the first line.
 lineFold :: AmyParser a -> AmyParser (NonEmpty a)
-lineFold p = do
-  startingIndent <- L.indentLevel
-  first <- p
-  spaceConsumerNewlines
-  rest <- many $ L.indentGuard spaceConsumerNewlines GT startingIndent >> p <* spaceConsumerNewlines
-  pure $ first :| rest
+lineFold p =
+  withBlockIndentation $ do
+    first <- p
+    spaceConsumerNewlines
+    rest <- many $ assertIndented *> p <* spaceConsumerNewlines
+    pure $ first :| rest

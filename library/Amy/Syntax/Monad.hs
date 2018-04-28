@@ -1,49 +1,57 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Amy.Syntax.Monad
   ( AmyParser
   , runAmyParser
   , withBlockIndentation
   , currentIndentation
+  , assertIndented
+  , assertSameIndentation
   ) where
 
 import Control.Applicative (Alternative)
 import Control.Monad.State.Strict
-import Data.List.NonEmpty (NonEmpty(..), (<|))
-import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromMaybe)
-import Data.Text (Text)
+import Data.Monoid ((<>))
+import Data.Text (Text, pack, unpack)
 import Data.Void (Void)
 import Text.Megaparsec hiding (State)
 
-newtype AmyParser a = AmyParser (StateT BlockStack (Parsec Void Text) a)
-  deriving (Functor, Applicative, Alternative, MonadPlus, Monad, MonadState BlockStack, MonadParsec Void Text)
+newtype AmyParser a = AmyParser (StateT Pos (Parsec Void Text) a)
+  deriving (Functor, Applicative, Alternative, MonadPlus, Monad, MonadState Pos, MonadParsec Void Text)
 
 runAmyParser :: AmyParser a -> Parsec Void Text a
-runAmyParser (AmyParser action) = evalStateT action blockStack
+runAmyParser (AmyParser action) = evalStateT action (mkPos 1)
 
--- | Stores block indentation columns in a stack.
-newtype BlockStack = BlockStack (NonEmpty Int)
-  deriving (Show, Eq)
-
-blockStack :: BlockStack
-blockStack = BlockStack (0 :| [])
-
-pushBlockStack :: Int -> AmyParser ()
-pushBlockStack x = modify' (\(BlockStack xs) -> BlockStack (x <| xs))
-
-popBlockStack :: AmyParser ()
-popBlockStack =
-  modify' (\(BlockStack xs) -> BlockStack (fromMaybe err . snd . NE.uncons $ xs))
- where
-  err = error "Tried to pop last block indentation off of the stack!"
-
-withBlockIndentation :: Int -> AmyParser a -> AmyParser a
-withBlockIndentation x action = do
-  pushBlockStack x
+withBlockIndentation :: AmyParser a -> AmyParser a
+withBlockIndentation action = do
+  originalIndent <- currentIndentation
+  currentIndent <- sourceColumn <$> getPosition
+  setIndentation currentIndent
   result <- action
-  popBlockStack
+  setIndentation originalIndent
   pure result
 
-currentIndentation :: AmyParser Int
-currentIndentation = gets $ \(BlockStack (x :| _)) -> x
+currentIndentation :: AmyParser Pos
+currentIndentation = get
+
+setIndentation :: Pos -> AmyParser ()
+setIndentation x = modify' (\_ -> x)
+
+-- | Check that the current indentation level is past the stored indentation
+assertIndented :: AmyParser ()
+assertIndented = checkIndentation "indentation past column" (>)
+
+-- | Check that the current indentation level is the same as the stored indentation
+assertSameIndentation :: AmyParser ()
+assertSameIndentation = checkIndentation "indentation at column" (==)
+
+-- | Check that the current identation level matches a predicate
+checkIndentation
+  :: Text
+  -> (Pos -> Pos -> Bool)
+  -> AmyParser ()
+checkIndentation msg rel = do
+  col <- sourceColumn <$> getPosition
+  current <- currentIndentation
+  guard (col `rel` current) <?> unpack (msg <> " " <> pack (show $ unPos current))

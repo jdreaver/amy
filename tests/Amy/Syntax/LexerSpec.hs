@@ -51,8 +51,8 @@ spec = do
     it "rejects things that aren't indented" $ do
       parse' (lineFold integer >> eof) "1\n2"
         `shouldFailWith`
-        err [SourcePos "" (mkPos 2) (mkPos 1)] (utok '2' <> eeof)
+        err [SourcePos "" (mkPos 2) (mkPos 1)] (utok '2' <> eeof <> elabel "indentation past column 1")
 
       parse' (spaceConsumerNewlines >> lineFold integer >> eof) "  1\n  2"
         `shouldFailWith`
-        err [SourcePos "" (mkPos 2) (mkPos 3)] (utok '2' <> eeof)
+        err [SourcePos "" (mkPos 2) (mkPos 3)] (utok '2' <> eeof <> elabel "indentation past column 3")
