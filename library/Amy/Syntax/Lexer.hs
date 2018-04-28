@@ -22,6 +22,7 @@ module Amy.Syntax.Lexer
   , optionalParens
   , comma
   , dot
+  , semiColon
   , doubleColon
   , equals
   , typeSeparatorArrow
@@ -143,6 +144,9 @@ comma = char ',' >> spaceConsumer
 dot :: AmyParser ()
 dot = char '.' >> spaceConsumer
 
+semiColon :: AmyParser ()
+semiColon = char ';' >> spaceConsumer
+
 doubleColon :: AmyParser ()
 doubleColon = char ':' >> char ':' >> spaceConsumer
 
@@ -158,13 +162,16 @@ text = fmap pack $ char '"' >> manyTill L.charLiteral (char '"')
 noIndent :: AmyParser a -> AmyParser a
 noIndent = L.nonIndented spaceConsumer
 
--- | Parse a list of things at the current indentation level, no more no less.
+-- | Parse a block of items into a list.
+--
+-- A block is defined as a group of things that are at the same indentation
+-- level. Block items can also be separated by semicolons.
 indentedBlock
   :: AmyParser a
   -> AmyParser [a]
 indentedBlock p =
-  withBlockIndentation $ many $
-    assertSameIndentation *> p <* spaceConsumerNewlines
+  fmap concat $ withBlockIndentation $ many $
+    assertSameIndentation *> p `sepBy1` semiColon <* spaceConsumerNewlines
 
 -- | Parse something that can bleed over newlines as long as the indentation on
 -- the next lines is strictly greater than the first line.

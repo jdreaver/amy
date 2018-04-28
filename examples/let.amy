@@ -11,7 +11,7 @@ main =
     y :: Int
     y = x
   in
-    let z = iAdd x y in z
+    let z = iAdd x y; a = z in a
 
 # f :: Int -> Int
 f x = if True then abs x else threeHundred

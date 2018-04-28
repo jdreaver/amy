@@ -35,10 +35,18 @@ spec = do
     it "parses strings with nested quotes" $ do
       parse' text "\"Hello \\\"Bob\\\"\"" `shouldParse` "Hello \"Bob\""
 
-  describe "lineFold" $ do
+  let
+    integer = fromRight (error "Not an integer") . locatedValue <$> number
 
-    let
-      integer = fromRight (error "Not an integer") . locatedValue <$> number
+  describe "indentedBlock" $ do
+
+    it "handles single items" $ do
+      parse' (indentedBlock integer) "1" `shouldParse` [1]
+
+    it "handles items with semicolons" $ do
+      parse' (spaceConsumer *> indentedBlock integer <* eof) " 1\n 2; 3; 4\n 5" `shouldParse` [1..5]
+
+  describe "lineFold" $ do
 
     it "works" $ do
       parse' (lineFold integer) "1" `shouldParse` [1]
