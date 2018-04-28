@@ -154,7 +154,7 @@ caseExpression = do
   case' <* spaceConsumerNewlines
   scrutinee <- expression <?> "expression"
   of' <* spaceConsumerNewlines
-  matches <- indentedBlock (caseMatch <?> "case match")
+  matches <- indentedBlockNonEmpty (caseMatch <?> "case match")
   pure
     Case
     { caseScrutinee = scrutinee

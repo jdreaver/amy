@@ -73,7 +73,7 @@ data RIf
 data RCase
   = RCase
   { rCaseScrutinee :: !RExpr
-  , rCaseAlternatives :: ![RMatch]
+  , rCaseAlternatives :: !(NonEmpty RMatch)
   } deriving (Show, Eq)
 
 data RMatch

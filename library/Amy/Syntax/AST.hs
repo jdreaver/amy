@@ -101,7 +101,7 @@ data If
 data Case
   = Case
   { caseScrutinee :: !Expr
-  , caseAlternatives :: ![Match]
+  , caseAlternatives :: !(NonEmpty Match)
   } deriving (Show, Eq)
 
 data Match

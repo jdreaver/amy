@@ -31,10 +31,12 @@ module Amy.Syntax.Lexer
   , typeSeparatorArrow
   , text
   , indentedBlock
+  , indentedBlockNonEmpty
   , lineFold
   ) where
 
-import Control.Monad (void)
+import qualified Control.Applicative.Combinators.NonEmpty as CNE
+import Control.Monad (join, void)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Scientific (floatingOrInteger)
 import Data.Text (Text, pack, unpack)
@@ -186,6 +188,13 @@ indentedBlock
 indentedBlock p =
   fmap concat $ withBlockIndentation $ many $
     assertSameIndentation *> p `sepBy1` semiColon <* spaceConsumerNewlines
+
+indentedBlockNonEmpty
+  :: AmyParser a
+  -> AmyParser (NonEmpty a)
+indentedBlockNonEmpty p =
+  fmap join $ withBlockIndentation $ CNE.some $
+    assertSameIndentation *> p `CNE.sepBy1` semiColon <* spaceConsumerNewlines
 
 -- | Parse something that can bleed over newlines as long as the indentation on
 -- the next lines is strictly greater than the first line.
