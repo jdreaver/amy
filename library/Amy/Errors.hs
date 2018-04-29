@@ -14,7 +14,7 @@ import Text.Megaparsec
 import Amy.ANF.AST
 import Amy.Renamer.AST as R
 import Amy.Syntax.Located
-import Amy.TypeCheck.AST
+import Amy.TypeCheck.AST as T
 
 data Error
   -- Parser
@@ -28,9 +28,9 @@ data Error
 
   -- Type checker
   -- TODO: Add source spans here
-  | UnificationFail !TType !TType
-  | InfiniteType TTypeName !TType
-  | UnboundVariable !TIdent
+  | UnificationFail !T.Type !T.Type
+  | InfiniteType T.TypeName !T.Type
+  | UnboundVariable !T.Ident
 
   -- | BindingLacksTypeSignature !RBinding
   -- | TypeMismatch !(Type PrimitiveType) !(Type PrimitiveType)
@@ -41,7 +41,7 @@ data Error
 
   -- Codegen
   | CodegenMissingSymbol !ANFIdent
-  | NoCurrying !TApp
+  | NoCurrying !T.App
   | UnknownOperandType !Operand
   deriving (Show, Eq)
 

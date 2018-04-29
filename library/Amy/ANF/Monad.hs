@@ -16,7 +16,7 @@ import Data.Text (Text, pack)
 import GHC.Exts (fromList)
 
 import Amy.ANF.AST
-import Amy.TypeCheck.AST
+import Amy.TypeCheck.AST as T
 
 newtype ANFConvert a = ANFConvert (State ANFConvertState a)
   deriving (Functor, Applicative, Monad, MonadState ANFConvertState)
@@ -27,11 +27,11 @@ runANFConvert state' (ANFConvert action) = evalState action state'
 data ANFConvertState
   = ANFConvertState
   { lastId :: Int
-  , topLevelNames :: !(Set TIdent)
+  , topLevelNames :: !(Set T.Ident)
   }
   deriving (Show, Eq)
 
-anfConvertState :: Int -> [TIdent] -> ANFConvertState
+anfConvertState :: Int -> [T.Ident] -> ANFConvertState
 anfConvertState id' names = ANFConvertState id' (fromList names)
 
 freshId :: ANFConvert Int
@@ -44,5 +44,5 @@ freshIdent t = do
   id' <- freshId
   pure $ ANFIdent (t <> pack (show id')) id' Nothing False
 
-isIdentTopLevel :: TIdent -> ANFConvert Bool
+isIdentTopLevel :: T.Ident -> ANFConvert Bool
 isIdentTopLevel ident = Set.member ident <$> gets topLevelNames

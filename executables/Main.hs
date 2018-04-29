@@ -19,7 +19,7 @@ import Amy.Codegen
 import Amy.Errors
 import Amy.Renamer
 import Amy.Syntax
-import Amy.TypeCheck
+import Amy.TypeCheck as T
 
 main :: IO ()
 main = do
@@ -41,7 +41,7 @@ main = do
 process :: FilePath -> Text -> IO ()
 process inputFile input =
   let
-    eModule :: Either [Error] TModule
+    eModule :: Either [Error] T.Module
     eModule = do
       parsed <- first ((:[]) . ParserError) $ parse (runAmyParser parseModule) inputFile input
       renamed <- rename parsed

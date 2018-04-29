@@ -27,7 +27,7 @@ import Amy.Errors
 import Amy.Prim
 import Amy.Renamer.AST as R
 import Amy.Syntax.Located
-import Amy.TypeCheck.AST
+import Amy.TypeCheck.AST as T
 
 --
 -- Type Environment
@@ -35,22 +35,22 @@ import Amy.TypeCheck.AST
 
 -- | A 'TyEnv' is the typing environment. It contains known names with their
 -- type schemes.
-newtype TyEnv = TyEnv { unTyEnv :: Map TIdent TScheme }
+newtype TyEnv = TyEnv { unTyEnv :: Map T.Ident T.Scheme }
   deriving (Show, Eq)
 
 emptyEnv :: TyEnv
 emptyEnv = TyEnv Map.empty
 
-extendEnv :: TyEnv -> (TIdent, TScheme) -> TyEnv
+extendEnv :: TyEnv -> (T.Ident, T.Scheme) -> TyEnv
 extendEnv (TyEnv env) (x, s) = TyEnv (Map.insert x s env)
 
-extendEnvList :: TyEnv -> [(TIdent, TScheme)] -> TyEnv
+extendEnvList :: TyEnv -> [(T.Ident, T.Scheme)] -> TyEnv
 extendEnvList = foldl' extendEnv
 
 -- removeEnv :: TyEnv -> Name -> TyEnv
 -- removeEnv (TyEnv env) var = TyEnv (Map.delete var env)
 
-lookupEnv :: TIdent -> TyEnv -> Maybe TScheme
+lookupEnv :: T.Ident -> TyEnv -> Maybe T.Scheme
 lookupEnv key (TyEnv tys) = Map.lookup key tys
 
 -- mergeEnv :: TyEnv -> TyEnv -> TyEnv
@@ -73,11 +73,11 @@ newtype Inference a = Inference (ReaderT TyEnv (StateT Int (Except Error)) a)
 runInference :: TyEnv -> Inference a -> Either Error a
 runInference env (Inference action) = runExcept $ evalStateT (runReaderT action env) 0
 
-freshTypeVariable :: Inference TType
+freshTypeVariable :: Inference T.Type
 freshTypeVariable = do
   modify' (+ 1)
   id' <- get
-  pure $ TTyVar (TTypeName (letters !! id') id' Nothing) TyVarGenerated
+  pure $ T.TyVar (T.TypeName (letters !! id') id' Nothing) TyVarGenerated
 
 -- TODO: Don't use letters for type variables, just use integers. Then at the
 -- end of inference we can turn all the type variables into letters so the user
@@ -87,11 +87,11 @@ letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
 
 -- | Extends the current typing environment with a list of names and schemes
 -- for those names.
-extendEnvM :: [(TIdent, TScheme)] -> Inference a -> Inference a
+extendEnvM :: [(T.Ident, T.Scheme)] -> Inference a -> Inference a
 extendEnvM tys = local (flip extendEnvList tys)
 
 -- | Lookup type in the environment
-lookupEnvM :: TIdent -> Inference TType
+lookupEnvM :: T.Ident -> Inference T.Type
 lookupEnvM name = do
   mTy <- asks (lookupEnv name)
   maybe (throwError $ UnboundVariable name) instantiate mTy
@@ -99,8 +99,8 @@ lookupEnvM name = do
 -- | Convert a scheme into a type by replacing all the type variables with
 -- fresh names. Types are instantiated when they are looked up so we can make
 -- constraints with the type variables and not worry about name collisions.
-instantiate :: TScheme -> Inference TType
-instantiate (TForall as t) = do
+instantiate :: T.Scheme -> Inference T.Type
+instantiate (T.Forall as t) = do
   as' <- traverse (const freshTypeVariable) as
   let s = Subst $ Map.fromList $ zip as as'
   return $ substituteType s t
@@ -109,62 +109,62 @@ instantiate (TForall as t) = do
 -- free variables of the type minus the free variables in the environment. This
 -- is like finding the type variables that should be "bound" by the
 -- quantification. This is also called finding the "closure" of a type.
-generalize :: TyEnv -> TType -> TScheme
-generalize env t  = TForall as t
+generalize :: TyEnv -> T.Type -> T.Scheme
+generalize env t  = T.Forall as t
  where
   as = Set.toList $ freeTypeVariables t `Set.difference` freeEnvTypeVariables env
 
 -- | Produces a type scheme from a type by finding all the free type variables
 -- in the type, replacing them with sequential letters, and collecting the free
 -- type variables in the Forall quantifier.
-normalize :: TType -> TScheme
-normalize body = TForall (Map.elems letterMap) (normtype body)
+normalize :: T.Type -> T.Scheme
+normalize body = T.Forall (Map.elems letterMap) (normtype body)
  where
   -- TODO: Generated type variables should be explicitly marked as generated,
   -- not given fake IDs.
-  letterMap = Map.fromList $ zip (Set.toList $ freeTypeVariables body) ((\c -> TTypeName c (-1) Nothing) <$> letters)
+  letterMap = Map.fromList $ zip (Set.toList $ freeTypeVariables body) ((\c -> T.TypeName c (-1) Nothing) <$> letters)
 
-  normtype (TTyFun a b) = TTyFun (normtype a) (normtype b)
-  normtype (TTyCon a) = TTyCon a
-  normtype (TTyVar a _) =
+  normtype (T.TyFun a b) = T.TyFun (normtype a) (normtype b)
+  normtype (T.TyCon a) = T.TyCon a
+  normtype (T.TyVar a _) =
     case Map.lookup a letterMap of
-      Just x -> TTyVar x TyVarNotGenerated
+      Just x -> T.TyVar x TyVarNotGenerated
       Nothing -> error "type variable not in signature"
 
-normalizeTBinding :: TBinding -> TBinding
+normalizeTBinding :: T.Binding -> T.Binding
 normalizeTBinding binding =
-  let (TForall _ t) = tBindingType binding
-  in binding { tBindingType = normalize t }
+  let (T.Forall _ t) = T.bindingType binding
+  in binding { T.bindingType = normalize t }
 
 -- | A 'Constraint' is a statement that two types should be equal.
-newtype Constraint = Constraint { unConstraint :: (TType, TType) }
+newtype Constraint = Constraint { unConstraint :: (T.Type, T.Type) }
   deriving (Show, Eq)
 
 --
 -- Inference
 --
 
-inferModule :: R.Module -> Either Error TModule
+inferModule :: R.Module -> Either Error T.Module
 inferModule (R.Module bindings externs) = do
   let
-    externs' = (\(R.Extern (Located _ name) ty) -> TExtern (convertIdent name) (convertType ty)) <$> externs
-    externSchemes = (\(TExtern name ty) -> (name, TForall [] ty)) <$> externs'
+    externs' = (\(R.Extern (Located _ name) ty) -> T.Extern (convertIdent name) (convertType ty)) <$> externs
+    externSchemes = (\(T.Extern name ty) -> (name, T.Forall [] ty)) <$> externs'
     primFuncSchemes = primitiveFunctionScheme <$> allPrimitiveFunctionNamesAndIds
     env = TyEnv $ Map.fromList $ externSchemes ++ primFuncSchemes
   bindings' <- inferTopLevel env bindings
-  pure (TModule bindings' externs')
+  pure (T.Module bindings' externs')
 
-primitiveFunctionScheme :: (Int, PrimitiveFunctionName) -> (TIdent, TScheme)
+primitiveFunctionScheme :: (Int, PrimitiveFunctionName) -> (T.Ident, T.Scheme)
 primitiveFunctionScheme (id', prim) =
-  (TIdent (showPrimitiveFunctionName prim) id' (Just prim), mkPrimFunctionScheme prim)
+  (T.Ident (showPrimitiveFunctionName prim) id' (Just prim), mkPrimFunctionScheme prim)
 
-mkPrimFunctionScheme :: PrimitiveFunctionName -> TScheme
-mkPrimFunctionScheme prim = TForall [] $ foldr1 TTyFun $ primitiveTyCon <$> primitiveFunctionType (primitiveFunction prim)
+mkPrimFunctionScheme :: PrimitiveFunctionName -> T.Scheme
+mkPrimFunctionScheme prim = T.Forall [] $ foldr1 T.TyFun $ primitiveTyCon <$> primitiveFunctionType (primitiveFunction prim)
 
-primitiveTyCon :: PrimitiveType -> TType
-primitiveTyCon prim = TTyCon $ TTypeName (showPrimitiveType prim) (primitiveTypeId prim) (Just prim)
+primitiveTyCon :: PrimitiveType -> T.Type
+primitiveTyCon prim = T.TyCon $ T.TypeName (showPrimitiveType prim) (primitiveTypeId prim) (Just prim)
 
-inferTopLevel :: TyEnv -> [R.Binding] -> Either Error [TBinding]
+inferTopLevel :: TyEnv -> [R.Binding] -> Either Error [T.Binding]
 inferTopLevel env bindings = do
   (bindings', constraints) <- unzip <$> runInference env (inferBindings bindings)
   subst <- runSolve (concat constraints)
@@ -177,7 +177,7 @@ inferTopLevel env bindings = do
 -- types to the environment (either their declared type or a fresh type
 -- variable), then we can gather constraints for each binding one by one. We
 -- then collect all the constraints and solve them together.
-inferBindings :: [R.Binding] -> Inference [(TBinding, [Constraint])]
+inferBindings :: [R.Binding] -> Inference [(T.Binding, [Constraint])]
 inferBindings bindings = do
   -- Generate constraints separately
   bindingsInference <- generateBindingConstraints bindings
@@ -186,7 +186,7 @@ inferBindings bindings = do
   env <- ask
   either throwError pure $ solveBindingConstraints env bindingsInference
 
-generateBindingConstraints :: [R.Binding] -> Inference [(TBinding, [Constraint])]
+generateBindingConstraints :: [R.Binding] -> Inference [(T.Binding, [Constraint])]
 generateBindingConstraints bindings = do
   -- Record schemes for each binding
   bindingsAndSchemes <- traverse (\binding -> (binding,) <$> generateBindingScheme binding) bindings
@@ -199,21 +199,21 @@ generateBindingConstraints bindings = do
     (binding', constraints) <- inferBinding binding
     let
       -- Add the constraint for the binding itself
-      (TForall _ bindingTy) = tBindingType binding'
-      (TForall _ schemeTy) = scheme
+      (T.Forall _ bindingTy) = T.bindingType binding'
+      (T.Forall _ schemeTy) = scheme
       bindingConstraint = Constraint (schemeTy, bindingTy)
     pure (binding', constraints ++ [bindingConstraint])
 
-generateBindingScheme :: R.Binding -> Inference TScheme
+generateBindingScheme :: R.Binding -> Inference T.Scheme
 generateBindingScheme binding =
   maybe
     -- No explicit type annotation, generate a type variable
-    (TForall [] <$> freshTypeVariable)
+    (T.Forall [] <$> freshTypeVariable)
     -- There is an explicit type annotation. Use it.
     (pure . convertScheme)
     (R.bindingType binding)
 
-solveBindingConstraints :: TyEnv -> [(TBinding, [Constraint])] -> Either Error [(TBinding, [Constraint])]
+solveBindingConstraints :: TyEnv -> [(T.Binding, [Constraint])] -> Either Error [(T.Binding, [Constraint])]
 solveBindingConstraints env bindingsInference = do
   -- Solve all constraints together.
   let
@@ -221,39 +221,39 @@ solveBindingConstraints env bindingsInference = do
   subst <- runSolve constraints
   pure $ flip fmap bindingsInference $ \(binding, bodyCons) ->
     let
-      (TForall _ bindingTy) = tBindingType binding
+      (T.Forall _ bindingTy) = T.bindingType binding
       scheme = generalize (substituteEnv subst env) (substituteType subst bindingTy)
-      binding' = binding { tBindingType = scheme }
+      binding' = binding { T.bindingType = scheme }
     in (binding', bodyCons)
 
-inferBinding :: R.Binding -> Inference (TBinding, [Constraint])
+inferBinding :: R.Binding -> Inference (T.Binding, [Constraint])
 inferBinding (R.Binding (Located _ name) _ args body) = do
   argsAndTyVars <- traverse (\(Located _ arg) -> (convertIdent arg,) <$> freshTypeVariable) args
-  let argsAndSchemes = (\(arg, t) -> (arg, TForall [] t)) <$> argsAndTyVars
+  let argsAndSchemes = (\(arg, t) -> (arg, T.Forall [] t)) <$> argsAndTyVars
   (body', bodyCons) <- extendEnvM argsAndSchemes $ inferExpr body
   let
     returnType = expressionType body'
-    bindingTy = foldr1 TTyFun $ (snd <$> argsAndTyVars) ++ [returnType]
+    bindingTy = foldr1 T.TyFun $ (snd <$> argsAndTyVars) ++ [returnType]
     binding' =
-      TBinding
-      { tBindingName = convertIdent name
+      T.Binding
+      { T.bindingName = convertIdent name
         -- Type is placeholder until we can solve all constraints and
         -- generalize to get a scheme. If we were really principled we would
         -- have some new intermediate TCBinding type or something with a Type
         -- instead of a Scheme.
-      , tBindingType = TForall [] bindingTy
-      , tBindingArgs = (\(name', tvar) -> TTyped tvar name') <$> argsAndTyVars
-      , tBindingReturnType = returnType
-      , tBindingBody = body'
+      , T.bindingType = T.Forall [] bindingTy
+      , T.bindingArgs = (\(name', tvar) -> T.Typed tvar name') <$> argsAndTyVars
+      , T.bindingReturnType = returnType
+      , T.bindingBody = body'
       }
   pure (binding', bodyCons)
 
-inferExpr :: R.Expr -> Inference (TExpr, [Constraint])
-inferExpr (R.ELit (Located _ lit)) = pure (TELit lit, [])
+inferExpr :: R.Expr -> Inference (T.Expr, [Constraint])
+inferExpr (R.ELit (Located _ lit)) = pure (T.ELit lit, [])
 inferExpr (R.EVar (Located _ var)) = do
   let var' = convertIdent var
   t <- lookupEnvM var'
-  pure (TEVar (TTyped t var'), [])
+  pure (T.EVar (T.Typed t var'), [])
 inferExpr (R.EIf (R.If pred' then' else')) = do
   (pred'', predCon) <- inferExpr pred'
   (then'', thenCon) <- inferExpr then'
@@ -264,7 +264,7 @@ inferExpr (R.EIf (R.If pred' then' else')) = do
       , Constraint (expressionType then'', expressionType else'')
       ]
   pure
-    ( TEIf (TIf pred'' then'' else'')
+    ( T.EIf (T.If pred'' then'' else'')
     , predCon ++ thenCon ++ elseCon ++ newConstraints
     )
 inferExpr (R.ECase (R.Case scrutinee matches)) = do
@@ -272,24 +272,24 @@ inferExpr (R.ECase (R.Case scrutinee matches)) = do
   (matches', matchesCons) <- NE.unzip <$> traverse inferMatch matches
   let
     -- Constraint: match patterns have same type as scrutinee
-    patternTypes = patternType . tMatchPattern <$> matches'
+    patternTypes = patternType . T.matchPattern <$> matches'
     scrutineeType = expressionType scrutinee'
     patternConstraints = (\patTy -> Constraint (scrutineeType, patTy)) <$> patternTypes
     -- Constraint: match bodies all have same type. Set all of the body types
     -- equal to the type of the first match body.
-    (matchBodyType :| otherMatchBodyTypes) = expressionType . tMatchBody <$> matches'
+    (matchBodyType :| otherMatchBodyTypes) = expressionType . T.matchBody <$> matches'
     bodyConstraints = (\bodyTy -> Constraint (matchBodyType, bodyTy)) <$> otherMatchBodyTypes
   pure
-    ( TECase (TCase scrutinee' matches')
+    ( T.ECase (T.Case scrutinee' matches')
     , scrutineeCons ++ concat matchesCons ++ NE.toList patternConstraints ++ bodyConstraints
     )
 inferExpr (R.ELet (R.Let bindings expression)) = do
   (bindings', bindingsCons) <- unzip <$> inferBindings bindings
   let
-    bindingSchemes = (\binding -> (tBindingName binding, tBindingType binding)) <$> bindings'
+    bindingSchemes = (\binding -> (T.bindingName binding, T.bindingType binding)) <$> bindings'
   (expression', expCons) <- extendEnvM bindingSchemes $ inferExpr expression
   pure
-    ( TELet (TLet bindings' expression')
+    ( T.ELet (T.Let bindings' expression')
     , concat bindingsCons ++ expCons
     )
 inferExpr (R.EApp (R.App func args)) = do
@@ -298,34 +298,34 @@ inferExpr (R.EApp (R.App func args)) = do
   tyVar <- freshTypeVariable
   let
     argTypes = NE.toList $ expressionType <$> args'
-    newConstraint = Constraint (expressionType func', foldr1 TTyFun (argTypes ++ [tyVar]))
+    newConstraint = Constraint (expressionType func', foldr1 T.TyFun (argTypes ++ [tyVar]))
   pure
-    ( TEApp (TApp func' args' tyVar)
+    ( T.EApp (T.App func' args' tyVar)
     , funcConstraints ++ concat argConstraints ++ [newConstraint]
     )
 inferExpr (R.EParens expr) = do
   (expr', constraints) <- inferExpr expr
-  pure (TEParens expr', constraints)
+  pure (T.EParens expr', constraints)
 
-inferMatch :: R.Match -> Inference (TMatch, [Constraint])
+inferMatch :: R.Match -> Inference (T.Match, [Constraint])
 inferMatch (R.Match pat body) = do
   pat' <- inferPattern pat
   let patScheme = patternScheme pat'
   (body', bodyCons) <- extendEnvM patScheme $ inferExpr body
   pure
-    ( TMatch pat' body'
+    ( T.Match pat' body'
     , bodyCons
     )
 
-inferPattern :: R.Pattern -> Inference TPattern
-inferPattern (R.PatternLit (Located _ lit)) = pure $ TPatternLit lit
+inferPattern :: R.Pattern -> Inference T.Pattern
+inferPattern (R.PatternLit (Located _ lit)) = pure $ T.PatternLit lit
 inferPattern (R.PatternVar (Located _ ident)) = do
   tvar <- freshTypeVariable
-  pure $ TPatternVar $ TTyped tvar (convertIdent ident)
+  pure $ T.PatternVar $ T.Typed tvar (convertIdent ident)
 
-patternScheme :: TPattern -> [(TIdent, TScheme)]
-patternScheme (TPatternLit _) = []
-patternScheme (TPatternVar (TTyped ty ident)) = [(ident, TForall [] ty)]
+patternScheme :: T.Pattern -> [(T.Ident, T.Scheme)]
+patternScheme (T.PatternLit _) = []
+patternScheme (T.PatternVar (T.Typed ty ident)) = [(ident, T.Forall [] ty)]
 
 --
 -- Constraint Solver
@@ -348,50 +348,50 @@ solver (su, cs) =
       su1 <- unifies t1 t2
       solver (su1 `composeSubst` su, substituteConstraint su1 <$> cs0)
 
-unifies :: TType -> TType -> Solve Subst
+unifies :: T.Type -> T.Type -> Solve Subst
 unifies t1 t2 | t1 == t2 = return emptySubst
-unifies (TTyVar v TyVarGenerated) t = v `bind` t
-unifies t (TTyVar v TyVarGenerated) = v `bind` t
-unifies (TTyFun t1 t2) (TTyFun t3 t4) = do
+unifies (T.TyVar v TyVarGenerated) t = v `bind` t
+unifies t (T.TyVar v TyVarGenerated) = v `bind` t
+unifies (T.TyFun t1 t2) (T.TyFun t3 t4) = do
   su1 <- unifies t1 t3
   su2 <- unifies (substituteType su1 t2) (substituteType su1 t4)
   pure (su2 `composeSubst` su1)
 unifies t1 t2 = throwError $ UnificationFail t1 t2
 
-bind ::  TTypeName -> TType -> Solve Subst
+bind ::  T.TypeName -> T.Type -> Solve Subst
 bind a t
-  | t == TTyVar a TyVarNotGenerated = return emptySubst
+  | t == T.TyVar a TyVarNotGenerated = return emptySubst
   | occursCheck a t = throwError $ InfiniteType a t
   | otherwise = return (singletonSubst a t)
 
-occursCheck :: TTypeName -> TType -> Bool
+occursCheck :: T.TypeName -> T.Type -> Bool
 occursCheck a t = a `Set.member` freeTypeVariables t
 
 --
 -- Substitutions
 --
 
-newtype Subst = Subst (Map TTypeName TType)
+newtype Subst = Subst (Map T.TypeName T.Type)
   deriving (Eq, Show, Semigroup, Monoid)
 
 emptySubst :: Subst
 emptySubst = Subst Map.empty
 
-singletonSubst :: TTypeName -> TType -> Subst
+singletonSubst :: T.TypeName -> T.Type -> Subst
 singletonSubst a t = Subst $ Map.singleton a t
 
 composeSubst :: Subst -> Subst -> Subst
 (Subst s1) `composeSubst` (Subst s2) = Subst $ Map.map (substituteType (Subst s1)) s2 `Map.union` s1
 
-substituteScheme :: Subst -> TScheme -> TScheme
-substituteScheme (Subst subst) (TForall vars ty) = TForall vars $ substituteType s' ty
+substituteScheme :: Subst -> T.Scheme -> T.Scheme
+substituteScheme (Subst subst) (T.Forall vars ty) = T.Forall vars $ substituteType s' ty
  where
   s' = Subst $ foldr Map.delete subst vars
 
-substituteType :: Subst -> TType -> TType
-substituteType (Subst subst) t@(TTyVar var _) = Map.findWithDefault t var subst
-substituteType _ (TTyCon a) = TTyCon a
-substituteType s (t1 `TTyFun` t2) = substituteType s t1 `TTyFun` substituteType s t2
+substituteType :: Subst -> T.Type -> T.Type
+substituteType (Subst subst) t@(T.TyVar var _) = Map.findWithDefault t var subst
+substituteType _ (T.TyCon a) = T.TyCon a
+substituteType s (t1 `T.TyFun` t2) = substituteType s t1 `T.TyFun` substituteType s t2
 
 substituteConstraint :: Subst -> Constraint -> Constraint
 substituteConstraint subst (Constraint (t1, t2)) = Constraint (substituteType subst t1, substituteType subst t2)
@@ -399,66 +399,66 @@ substituteConstraint subst (Constraint (t1, t2)) = Constraint (substituteType su
 substituteEnv :: Subst -> TyEnv -> TyEnv
 substituteEnv subst (TyEnv env) = TyEnv $ Map.map (substituteScheme subst) env
 
-substituteTBinding :: Subst -> TBinding -> TBinding
+substituteTBinding :: Subst -> T.Binding -> T.Binding
 substituteTBinding subst binding =
   binding
-  { tBindingType = substituteScheme subst (tBindingType binding)
-  , tBindingArgs = (\(TTyped ty arg) -> TTyped (substituteType subst ty) arg) <$> tBindingArgs binding
-  , tBindingReturnType = substituteType subst (tBindingReturnType binding)
-  , tBindingBody = substituteTExpr subst (tBindingBody binding)
+  { T.bindingType = substituteScheme subst (T.bindingType binding)
+  , T.bindingArgs = (\(T.Typed ty arg) -> T.Typed (substituteType subst ty) arg) <$> T.bindingArgs binding
+  , T.bindingReturnType = substituteType subst (T.bindingReturnType binding)
+  , T.bindingBody = substituteTExpr subst (T.bindingBody binding)
   }
 
-substituteTExpr :: Subst -> TExpr -> TExpr
-substituteTExpr _ lit@TELit{} = lit
-substituteTExpr subst (TEVar (TTyped ty name)) = TEVar (TTyped (substituteType subst ty) name)
-substituteTExpr subst (TEIf (TIf pred' then' else')) =
-  TEIf (TIf (substituteTExpr subst pred') (substituteTExpr subst then') (substituteTExpr subst else'))
-substituteTExpr subst (TECase (TCase scrutinee matches)) =
-  TECase (TCase (substituteTExpr subst scrutinee) (substituteTMatch subst <$> matches))
-substituteTExpr subst (TELet (TLet bindings expr)) =
-  TELet (TLet (substituteTBinding subst <$> bindings) (substituteTExpr subst expr))
-substituteTExpr subst (TEApp (TApp func args returnType)) =
-  TEApp (TApp (substituteTExpr subst func) (substituteTExpr subst <$> args) (substituteType subst returnType))
-substituteTExpr subst (TEParens expr) = TEParens (substituteTExpr subst expr)
+substituteTExpr :: Subst -> T.Expr -> T.Expr
+substituteTExpr _ lit@T.ELit{} = lit
+substituteTExpr subst (T.EVar (T.Typed ty name)) = T.EVar (T.Typed (substituteType subst ty) name)
+substituteTExpr subst (T.EIf (T.If pred' then' else')) =
+  T.EIf (T.If (substituteTExpr subst pred') (substituteTExpr subst then') (substituteTExpr subst else'))
+substituteTExpr subst (T.ECase (T.Case scrutinee matches)) =
+  T.ECase (T.Case (substituteTExpr subst scrutinee) (substituteTMatch subst <$> matches))
+substituteTExpr subst (T.ELet (T.Let bindings expr)) =
+  T.ELet (T.Let (substituteTBinding subst <$> bindings) (substituteTExpr subst expr))
+substituteTExpr subst (T.EApp (T.App func args returnType)) =
+  T.EApp (T.App (substituteTExpr subst func) (substituteTExpr subst <$> args) (substituteType subst returnType))
+substituteTExpr subst (T.EParens expr) = T.EParens (substituteTExpr subst expr)
 
-substituteTMatch :: Subst -> TMatch -> TMatch
-substituteTMatch subst (TMatch pat body) =
-  TMatch (substituteTPattern subst pat) (substituteTExpr subst body)
+substituteTMatch :: Subst -> T.Match -> T.Match
+substituteTMatch subst (T.Match pat body) =
+  T.Match (substituteTPattern subst pat) (substituteTExpr subst body)
 
-substituteTPattern :: Subst -> TPattern -> TPattern
-substituteTPattern _ pat@(TPatternLit _) = pat
-substituteTPattern subst (TPatternVar (TTyped ty var)) =
-  TPatternVar (TTyped (substituteType subst ty) var)
+substituteTPattern :: Subst -> T.Pattern -> T.Pattern
+substituteTPattern _ pat@(T.PatternLit _) = pat
+substituteTPattern subst (T.PatternVar (T.Typed ty var)) =
+  T.PatternVar (T.Typed (substituteType subst ty) var)
 
 --
 -- Free and Active type variables
 --
 
-freeTypeVariables :: TType -> Set TTypeName
-freeTypeVariables TTyCon{} = Set.empty
-freeTypeVariables (TTyVar var _) = Set.singleton var
-freeTypeVariables (t1 `TTyFun` t2) = freeTypeVariables t1 `Set.union` freeTypeVariables t2
+freeTypeVariables :: T.Type -> Set T.TypeName
+freeTypeVariables T.TyCon{} = Set.empty
+freeTypeVariables (T.TyVar var _) = Set.singleton var
+freeTypeVariables (t1 `T.TyFun` t2) = freeTypeVariables t1 `Set.union` freeTypeVariables t2
 
-freeSchemeTypeVariables :: TScheme -> Set TTypeName
-freeSchemeTypeVariables (TForall tvs t) = freeTypeVariables t `Set.difference` Set.fromList tvs
+freeSchemeTypeVariables :: T.Scheme -> Set T.TypeName
+freeSchemeTypeVariables (T.Forall tvs t) = freeTypeVariables t `Set.difference` Set.fromList tvs
 
-freeEnvTypeVariables :: TyEnv -> Set TTypeName
+freeEnvTypeVariables :: TyEnv -> Set T.TypeName
 freeEnvTypeVariables (TyEnv env) = foldl' Set.union Set.empty $ freeSchemeTypeVariables <$> Map.elems env
 
 --
 -- Names
 --
 
-convertIdent :: R.Ident -> TIdent
-convertIdent (R.Ident name id' mPrim) = TIdent name id' mPrim
+convertIdent :: R.Ident -> T.Ident
+convertIdent (R.Ident name id' mPrim) = T.Ident name id' mPrim
 
-convertScheme :: R.Scheme -> TScheme
-convertScheme (R.Forall vars ty) = TForall (convertTypeName <$> vars) (convertType ty)
+convertScheme :: R.Scheme -> T.Scheme
+convertScheme (R.Forall vars ty) = T.Forall (convertTypeName <$> vars) (convertType ty)
 
-convertType :: R.Type -> TType
-convertType (R.TyCon name) = TTyCon (convertTypeName name)
-convertType (R.TyVar name) = TTyVar (convertTypeName name) TyVarNotGenerated
-convertType (R.TyFun ty1 ty2) = TTyFun (convertType ty1) (convertType ty2)
+convertType :: R.Type -> T.Type
+convertType (R.TyCon name) = T.TyCon (convertTypeName name)
+convertType (R.TyVar name) = T.TyVar (convertTypeName name) TyVarNotGenerated
+convertType (R.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
 
-convertTypeName :: R.TypeName -> TTypeName
-convertTypeName (R.TypeName name' _ id' mPrim) = TTypeName name' id' mPrim
+convertTypeName :: R.TypeName -> T.TypeName
+convertTypeName (R.TypeName name' _ id' mPrim) = T.TypeName name' id' mPrim

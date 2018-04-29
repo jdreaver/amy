@@ -3,27 +3,27 @@
 -- | Version of a renamer 'RModule' after type checking.
 
 module Amy.TypeCheck.AST
-  ( TModule(..)
-  , TBinding(..)
-  , TExtern(..)
-  , TExpr(..)
-  , TIf(..)
-  , TCase(..)
-  , TMatch(..)
-  , TPattern(..)
-  , TLet(..)
-  , TApp(..)
+  ( Module(..)
+  , Binding(..)
+  , Extern(..)
+  , Expr(..)
+  , If(..)
+  , Case(..)
+  , Match(..)
+  , Pattern(..)
+  , Let(..)
+  , App(..)
   , literalTType
   , expressionType
   , patternType
-  , tModuleNames
+  , moduleNames
 
-  , TIdent(..)
-  , TType(..)
+  , Ident(..)
+  , Type(..)
   , TyVarGenerated(..)
-  , TTypeName(..)
-  , TScheme(..)
-  , TTyped(..)
+  , TypeName(..)
+  , Scheme(..)
+  , Typed(..)
 
     -- Re-export
   , Literal(..)
@@ -36,146 +36,146 @@ import Amy.Literal
 import Amy.Prim
 
 -- | A 'TModule' is an 'RModule' after renaming.
-data TModule
-  = TModule
-  { tModuleBindings :: ![TBinding]
-  , tModuleExterns :: ![TExtern]
+data Module
+  = Module
+  { moduleBindings :: ![Binding]
+  , moduleExterns :: ![Extern]
   } deriving (Show, Eq)
 
 -- | A binding after renaming. This is a combo of a 'Binding' and a
 -- 'BindingType' after they've been paired together.
-data TBinding
-  = TBinding
-  { tBindingName :: !TIdent
-  , tBindingType :: !TScheme
+data Binding
+  = Binding
+  { bindingName :: !Ident
+  , bindingType :: !Scheme
     -- ^ Type for whole function
-  , tBindingArgs :: ![TTyped TIdent]
-    -- ^ Argument names and types split out from 'tBindingType'
-  , tBindingReturnType :: !TType
-    -- ^ Return type split out from 'tBindingType'
-  , tBindingBody :: !TExpr
+  , bindingArgs :: ![Typed Ident]
+    -- ^ Argument names and types split out from 'bindingType'
+  , bindingReturnType :: !Type
+    -- ^ Return type split out from 'bindingType'
+  , bindingBody :: !Expr
   } deriving (Show, Eq)
 
 -- | A renamed extern declaration.
-data TExtern
-  = TExtern
-  { tExternName :: !TIdent
-  , tExternType :: !TType
+data Extern
+  = Extern
+  { externName :: !Ident
+  , externType :: !Type
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'
-data TExpr
-  = TELit !Literal
-  | TEVar !(TTyped TIdent)
-  | TEIf !TIf
-  | TECase !TCase
-  | TELet !TLet
-  | TEApp !TApp
-  | TEParens !TExpr
+data Expr
+  = ELit !Literal
+  | EVar !(Typed Ident)
+  | EIf !If
+  | ECase !Case
+  | ELet !Let
+  | EApp !App
+  | EParens !Expr
   deriving (Show, Eq)
 
-data TIf
-  = TIf
-  { tIfPredicate :: !TExpr
-  , tIfThen :: !TExpr
-  , tIfElse :: !TExpr
+data If
+  = If
+  { ifPredicate :: !Expr
+  , ifThen :: !Expr
+  , ifElse :: !Expr
   } deriving (Show, Eq)
 
-data TCase
-  = TCase
-  { tCaseScrutinee :: !TExpr
-  , tCaseAlternatives :: !(NonEmpty TMatch)
+data Case
+  = Case
+  { caseScrutinee :: !Expr
+  , caseAlternatives :: !(NonEmpty Match)
   } deriving (Show, Eq)
 
-data TMatch
-  = TMatch
-  { tMatchPattern :: !TPattern
-  , tMatchBody :: !TExpr
+data Match
+  = Match
+  { matchPattern :: !Pattern
+  , matchBody :: !Expr
   } deriving (Show, Eq)
 
-data TPattern
-  = TPatternLit !Literal
-  | TPatternVar !(TTyped TIdent)
+data Pattern
+  = PatternLit !Literal
+  | PatternVar !(Typed Ident)
   deriving (Show, Eq)
 
-data TLet
-  = TLet
-  { tLetBindings :: ![TBinding]
-  , tLetExpression :: !TExpr
+data Let
+  = Let
+  { letBindings :: ![Binding]
+  , letExpression :: !Expr
   } deriving (Show, Eq)
 
-data TApp
-  = TApp
-  { tAppFunction :: !TExpr
-  , tAppArgs :: !(NonEmpty TExpr)
-  , tAppReturnType :: !TType
+data App
+  = App
+  { appFunction :: !Expr
+  , appArgs :: !(NonEmpty Expr)
+  , appReturnType :: !Type
   } deriving (Show, Eq)
 
-literalTType :: Literal -> TType
+literalTType :: Literal -> Type
 literalTType lit =
   let primTy = literalType lit
-  in TTyCon $ TTypeName (showPrimitiveType primTy) (primitiveTypeId primTy) (Just primTy)
+  in TyCon $ TypeName (showPrimitiveType primTy) (primitiveTypeId primTy) (Just primTy)
 
-expressionType :: TExpr -> TType
-expressionType (TELit lit) = literalTType lit
-expressionType (TEVar (TTyped ty _)) = ty
-expressionType (TEIf if') = expressionType (tIfThen if') -- Checker ensure "then" and "else" types match
-expressionType (TECase (TCase _ (TMatch _ expr :| _))) = expressionType expr
-expressionType (TELet let') = expressionType (tLetExpression let')
-expressionType (TEApp app) = tAppReturnType app
-expressionType (TEParens expr) = expressionType expr
+expressionType :: Expr -> Type
+expressionType (ELit lit) = literalTType lit
+expressionType (EVar (Typed ty _)) = ty
+expressionType (EIf if') = expressionType (ifThen if') -- Checker ensure "then" and "else" types match
+expressionType (ECase (Case _ (Match _ expr :| _))) = expressionType expr
+expressionType (ELet let') = expressionType (letExpression let')
+expressionType (EApp app) = appReturnType app
+expressionType (EParens expr) = expressionType expr
 
-patternType :: TPattern -> TType
-patternType (TPatternLit lit) = literalTType lit
-patternType (TPatternVar (TTyped ty _)) = ty
+patternType :: Pattern -> Type
+patternType (PatternLit lit) = literalTType lit
+patternType (PatternVar (Typed ty _)) = ty
 
 -- | Get all the 'Name's in a module.
-tModuleNames :: TModule -> [TIdent]
-tModuleNames (TModule bindings externs) =
+moduleNames :: Module -> [Ident]
+moduleNames (Module bindings externs) =
   concatMap bindingNames bindings
-  ++ fmap tExternName externs
+  ++ fmap externName externs
 
-bindingNames :: TBinding -> [TIdent]
+bindingNames :: Binding -> [Ident]
 bindingNames binding =
-  tBindingName binding
-  : (tTypedValue <$> tBindingArgs binding)
-  ++ exprNames (tBindingBody binding)
+  bindingName binding
+  : (typedValue <$> bindingArgs binding)
+  ++ exprNames (bindingBody binding)
 
-exprNames :: TExpr -> [TIdent]
-exprNames (TELit _) = []
-exprNames (TEVar var) = [tTypedValue var] -- TODO: Shouldn't we only need name bindings here?
-exprNames (TEIf (TIf pred' then' else')) =
+exprNames :: Expr -> [Ident]
+exprNames (ELit _) = []
+exprNames (EVar var) = [typedValue var] -- TODO: Shouldn't we only need name bindings here?
+exprNames (EIf (If pred' then' else')) =
   exprNames pred'
   ++ exprNames then'
   ++ exprNames else'
-exprNames (TECase (TCase scrutinee matches)) =
+exprNames (ECase (Case scrutinee matches)) =
   exprNames scrutinee ++ concatMap matchNames matches
-exprNames (TELet (TLet bindings expr)) =
+exprNames (ELet (Let bindings expr)) =
   concatMap bindingNames bindings
   ++ exprNames expr
-exprNames (TEApp (TApp f args _)) =
+exprNames (EApp (App f args _)) =
   exprNames f
   ++ concatMap exprNames args
-exprNames (TEParens expr) = exprNames expr
+exprNames (EParens expr) = exprNames expr
 
-matchNames :: TMatch -> [TIdent]
-matchNames (TMatch pat body) = patternNames pat ++ exprNames body
+matchNames :: Match -> [Ident]
+matchNames (Match pat body) = patternNames pat ++ exprNames body
 
-patternNames :: TPattern -> [TIdent]
-patternNames (TPatternLit _) = []
-patternNames (TPatternVar (TTyped _ var)) = [var]
+patternNames :: Pattern -> [Ident]
+patternNames (PatternLit _) = []
+patternNames (PatternVar (Typed _ var)) = [var]
 
-data TIdent
-  = TIdent
-  { tIdentText :: !Text
-  , tIdentId :: !Int
-  , tIdentPrimitiveName :: !(Maybe PrimitiveFunctionName)
+data Ident
+  = Ident
+  { identText :: !Text
+  , identId :: !Int
+  , identPrimitiveName :: !(Maybe PrimitiveFunctionName)
   } deriving (Show, Eq, Ord)
 
-data TType
-  = TTyCon !TTypeName
-  | TTyVar !TTypeName !TyVarGenerated
-  | TTyFun !TType !TType
+data Type
+  = TyCon !TypeName
+  | TyVar !TypeName !TyVarGenerated
+  | TyFun !Type !Type
   deriving (Show, Eq, Ord)
 
 data TyVarGenerated
@@ -183,21 +183,21 @@ data TyVarGenerated
   | TyVarNotGenerated
   deriving (Show, Eq, Ord)
 
-infixr 0 `TTyFun`
+infixr 0 `TyFun`
 
-data TTypeName
-  = TTypeName
-  { tTypeNameText :: !Text
-  , tTypeNameId :: !Int
-  , tTypeNamePrimitiveType :: !(Maybe PrimitiveType)
+data TypeName
+  = TypeName
+  { typeNameText :: !Text
+  , typeNameId :: !Int
+  , typeNamePrimitiveType :: !(Maybe PrimitiveType)
   } deriving (Show, Eq, Ord)
 
-data TScheme
-  = TForall ![TTypeName] TType
+data Scheme
+  = Forall ![TypeName] Type
   deriving (Show, Eq)
 
-data TTyped a
-  = TTyped
-  { tTypedType :: !TType
-  , tTypedValue :: !a
+data Typed a
+  = Typed
+  { typedType :: !Type
+  , typedValue :: !a
   } deriving (Show, Eq, Ord, Functor)
