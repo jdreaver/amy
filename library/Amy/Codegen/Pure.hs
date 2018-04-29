@@ -145,12 +145,8 @@ codegenExpr' (ANFECase (ANFCase scrutinee matches ty)) = do
     varMatch (ANFMatch (ANFPatternVar ident) body) = Just (ident, body)
     varMatch _ = Nothing
 
-    -- TODO: Have a proper default block if there isn't a natural one,
-    -- hopefully something that prints an error? Having a default should
-    -- probably be handled in Core/ANF.
-    defaultMatch :: (ANFTyped ANFIdent, ANFExpr)
-    defaultMatch =
-      fromMaybe (error "Couldn't find default match") $
+    mDefaultMatch :: Maybe (ANFTyped ANFIdent, ANFExpr)
+    mDefaultMatch =
       (\xs -> if null xs then Nothing else Just (head xs)) $
       mapMaybe varMatch (NE.toList matches)
 
@@ -159,7 +155,16 @@ codegenExpr' (ANFECase (ANFCase scrutinee matches ty)) = do
     matchesAndBlockNames =
       second (mkCaseName . ("case." ++) . show)
       <$> zip literalMatches [(0 :: Int)..]
-    defaultBlockName = mkCaseName "case.default."
+
+    -- TODO: Have a proper default block if there isn't a natural one,
+    -- hopefully something that prints an error? Having a default should
+    -- probably be handled in Core/ANF.
+    firstBlockName = snd . head $ matchesAndBlockNames
+    defaultBlockName =
+      case mDefaultMatch of
+        Just _ -> mkCaseName "case.default."
+        Nothing -> firstBlockName
+
     endBlockName = mkCaseName "case.end."
     endOpName = mkCaseName "end."
     endTy = llvmType ty
@@ -169,29 +174,36 @@ codegenExpr' (ANFECase (ANFCase scrutinee matches ty)) = do
   scrutineeOp <- valOperand scrutinee
   let
     switchNames = (\((lit, _), name') -> (literalConstant lit, name')) <$> matchesAndBlockNames
+  terminateBlock (Do $ Switch scrutineeOp defaultBlockName switchNames []) defaultBlockName
 
   -- Generate default block
-  terminateBlock (Do $ Switch scrutineeOp defaultBlockName switchNames []) defaultBlockName
-  let
-    (ANFTyped _ defaultIdent, defaultExpr) = defaultMatch
-  addSymbolToTable defaultIdent scrutineeOp
-  defaultOp <- codegenExpr' defaultExpr
-  defaultBlock <- currentBlockName
+  mDefaultOpAndBlock <-
+    for mDefaultMatch $ \defaultMatch -> do
+      let
+        (ANFTyped _ defaultIdent, defaultExpr) = defaultMatch
+      addSymbolToTable defaultIdent scrutineeOp
+      defaultOp <- codegenExpr' defaultExpr
+      defaultBlock <- currentBlockName
+      terminateBlock (Do $ Br endBlockName []) firstBlockName
+      pure (defaultOp, defaultBlock)
 
   -- Generate other blocks
+  let
+    allBlockNames = snd <$> matchesAndBlockNames
+    nextBlockNames = drop 1 allBlockNames ++ [endBlockName]
+    matchesAndNextBlockNames = zip (fst <$> matchesAndBlockNames) nextBlockNames
   matchOpsAndBlocks <-
-    for matchesAndBlockNames $ \((_, expr), blockName) -> do
-      terminateBlock (Do $ Br endBlockName []) blockName
+    for matchesAndNextBlockNames $ \((_, expr), nextBlockName) -> do
       exprOp <- codegenExpr' expr
       -- N.B. The block name could have changed while generating the
       -- expression, so we need to get the "actual" block name.
       actualBlockName <- currentBlockName
-      --terminateBlock (Do $ Br endBlockName []) nextBlockName
+      terminateBlock (Do $ Br endBlockName []) nextBlockName
       pure (exprOp, actualBlockName)
 
   -- Generate end block
-  terminateBlock (Do $ Br endBlockName []) endBlockName
-  addInstruction $ endOpName := Phi endTy ((defaultOp, defaultBlock) : matchOpsAndBlocks) []
+  let allOpsAndBlocks = maybe id (:) mDefaultOpAndBlock matchOpsAndBlocks
+  addInstruction $ endOpName := Phi endTy allOpsAndBlocks []
   pure endOpRef
 codegenExpr' (ANFEApp (ANFApp (ANFTyped originalTy ident) args' returnTy)) = do
   ty <- fromMaybe originalTy <$> topLevelType ident
