@@ -40,8 +40,7 @@ data TModule
   = TModule
   { tModuleBindings :: ![TBinding]
   , tModuleExterns :: ![TExtern]
-  }
-  deriving (Show, Eq)
+  } deriving (Show, Eq)
 
 -- | A binding after renaming. This is a combo of a 'Binding' and a
 -- 'BindingType' after they've been paired together.
