@@ -13,7 +13,6 @@ module Amy.TypeCheck.AST
   , Pattern(..)
   , Let(..)
   , App(..)
-  , literalTType
   , expressionType
   , patternType
   , moduleNames
@@ -111,13 +110,13 @@ data App
   , appReturnType :: !Type
   } deriving (Show, Eq)
 
-literalTType :: Literal -> Type
-literalTType lit =
+literalType' :: Literal -> Type
+literalType' lit =
   let primTy = literalType lit
   in TyCon $ TypeName (showPrimitiveType primTy) (primitiveTypeId primTy) (Just primTy)
 
 expressionType :: Expr -> Type
-expressionType (ELit lit) = literalTType lit
+expressionType (ELit lit) = literalType' lit
 expressionType (EVar (Typed ty _)) = ty
 expressionType (EIf if') = expressionType (ifThen if') -- Checker ensure "then" and "else" types match
 expressionType (ECase (Case _ (Match _ expr :| _))) = expressionType expr
@@ -126,7 +125,7 @@ expressionType (EApp app) = appReturnType app
 expressionType (EParens expr) = expressionType expr
 
 patternType :: Pattern -> Type
-patternType (PatternLit lit) = literalTType lit
+patternType (PatternLit lit) = literalType' lit
 patternType (PatternVar (Typed ty _)) = ty
 
 -- | Get all the 'Name's in a module.
