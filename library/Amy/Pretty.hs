@@ -105,7 +105,7 @@ prettyCase scrutinee matches =
   line <>
   indent 2 (vcatHardLines matches')
  where
-  prettyMatch pat body = pat <+> "->" <+> body
+  prettyMatch pat body = pat <+> "->" <> groupOrHang body
   matches' = uncurry prettyMatch <$> matches
 
 prettyLet :: [Doc ann] -> Doc ann -> Doc ann
