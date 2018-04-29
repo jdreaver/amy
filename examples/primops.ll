@@ -15,17 +15,19 @@ entry:
   %0 = add i64 %x, -1
   %1 = sub i64 3, %0
   %2 = icmp slt i64 5, %1
-  %test.4 = icmp eq i1 true, %2
-  br i1 %test.4, label %if.then.4, label %if.else.4
+  switch i1 %2, label %case.04 [
+    i1 true, label %case.04
+    i1 false, label %case.14
+  ]
 
-if.then.4:                                        ; preds = %entry
-  br label %if.end.4
+case.04:                                          ; preds = %entry, %entry
+  br label %case.end.4
 
-if.else.4:                                        ; preds = %entry
-  br label %if.end.4
+case.14:                                          ; preds = %entry
+  br label %case.end.4
 
-if.end.4:                                         ; preds = %if.else.4, %if.then.4
-  %end.4 = phi i64 [ 100, %if.then.4 ], [ 200, %if.else.4 ]
+case.end.4:                                       ; preds = %case.14, %case.04
+  %end.4 = phi i64 [ 100, %case.04 ], [ 200, %case.14 ]
   ret i64 %end.4
 }
 

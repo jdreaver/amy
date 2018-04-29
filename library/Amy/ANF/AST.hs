@@ -8,7 +8,6 @@ module Amy.ANF.AST
   , anfValType
   , ANFExpr(..)
   , ANFLet(..)
-  , ANFIf(..)
   , ANFCase(..)
   , ANFMatch(..)
   , ANFPattern(..)
@@ -62,7 +61,6 @@ anfValType (ANFLit lit) =
 data ANFExpr
   = ANFEVal !ANFVal
   | ANFELet !ANFLet
-  | ANFEIf !ANFIf
   | ANFECase !ANFCase
   | ANFEApp !(ANFApp (ANFTyped ANFIdent))
   | ANFEPrimOp !(ANFApp PrimitiveFunctionName)
@@ -72,14 +70,6 @@ data ANFLet
   = ANFLet
   { anfLetBindings :: ![ANFBinding]
   , anfLetExpression :: !ANFExpr
-  } deriving (Show, Eq)
-
-data ANFIf
-  = ANFIf
-  { anfIfPredicate :: !ANFVal
-  , anfIfThen :: !ANFExpr
-  , anfIfElse :: !ANFExpr
-  , anfIfType :: !ANFType
   } deriving (Show, Eq)
 
 data ANFCase

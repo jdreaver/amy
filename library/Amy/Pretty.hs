@@ -265,8 +265,6 @@ prettyANFVal (ANFLit lit) = pretty $ showLiteral lit
 
 prettyANFExpr :: ANFExpr -> Doc ann
 prettyANFExpr (ANFEVal val) = prettyANFVal val
-prettyANFExpr (ANFEIf (ANFIf pred' then' else' _)) =
-  prettyIf (prettyANFVal pred') (prettyANFExpr then') (prettyANFExpr else')
 prettyANFExpr (ANFECase (ANFCase scrutinee matches _)) =
   prettyCase (prettyANFVal scrutinee) (toList $ mkMatch <$> matches)
  where

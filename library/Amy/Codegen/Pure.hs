@@ -91,44 +91,6 @@ codegenExpr' (ANFELet (ANFLet bindings expr)) = do
     op <- codegenExpr' (anfBindingBody binding)
     addSymbolToTable (anfBindingName binding) op
   codegenExpr' expr
-codegenExpr' (ANFEIf (ANFIf pred' then' else' ty)) = do
-  -- Name blocks and operands
-  ifId <- freshId
-  let
-    mkIfName nameBase = LLVM.Name $ stringToShortBS $ nameBase ++ show ifId
-    testOpName = mkIfName "test."
-    testOpRef = LocalReference (IntegerType 1) testOpName
-    thenBlockName = mkIfName "if.then."
-    elseBlockName = mkIfName "if.else."
-    endBlockName = mkIfName "if.end."
-    endOpName = mkIfName "end."
-    ty' = llvmType ty
-    endOpRef = LocalReference ty' endOpName
-
-  -- Generate predicate operation
-  predOp <- valOperand pred'
-  let
-    true = ConstantOperand $ C.Int 1 1
-  addInstruction (testOpName := ICmp IP.EQ true predOp [])
-  terminateBlock (Do $ CondBr testOpRef thenBlockName elseBlockName []) thenBlockName
-
-  -- Generate then block
-  thenOp <- codegenExpr' then'
-  -- NB: The codegen for the then/else sub-expressions could themselves
-  -- produces new blocks. This happens with nested if expressions, for example.
-  -- We have to know what block we *actually* came from when generating the phi
-  -- function at the end of this if expression.
-  thenBlockFinalName <- currentBlockName
-  terminateBlock (Do $ Br endBlockName []) elseBlockName
-
-  -- Generate else block
-  elseOp <- codegenExpr' else'
-  elseBlockFinalName <- currentBlockName
-  terminateBlock (Do $ Br endBlockName []) endBlockName
-
-  -- Generate end block
-  addInstruction $ endOpName := Phi ty' [(thenOp, thenBlockFinalName), (elseOp, elseBlockFinalName)] []
-  pure endOpRef
 codegenExpr' (ANFECase (ANFCase scrutinee matches ty)) = do
   caseId <- freshId
 

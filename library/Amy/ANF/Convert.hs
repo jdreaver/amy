@@ -5,6 +5,7 @@ module Amy.ANF.Convert
   ) where
 
 import Data.Foldable (toList)
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 
@@ -62,11 +63,15 @@ normalizeExpr
 normalizeExpr _ (TELit lit) c = c $ ANFEVal $ ANFLit lit
 normalizeExpr name var@TEVar{} c = normalizeName name var (c . ANFEVal)
 normalizeExpr name (TEIf (TIf pred' then' else')) c =
-  normalizeName name pred' $ \predVal -> do
-    then'' <- normalizeTerm name then'
-    else'' <- normalizeTerm name else'
-    let ty = expressionType then'
-    c $ ANFEIf $ ANFIf predVal then'' else'' (convertTType ty)
+  -- Desugar "if" into "case"
+  -- TODO: Do this in a real desugarer like AST -> Core
+  let
+    matches =
+      NE.fromList
+      [ TMatch (TPatternLit (LiteralBool True)) then'
+      , TMatch (TPatternLit (LiteralBool False)) else'
+      ]
+  in normalizeExpr name (TECase (TCase pred' matches)) c
 normalizeExpr name expr@(TECase (TCase scrutinee matches)) c =
   normalizeName name scrutinee $ \scrutineeVal -> do
     matches' <- traverse normalizeMatch matches
@@ -124,7 +129,7 @@ normalizeBinding mName (TBinding ident@(TIdent name _ _) ty args retTy body) = d
 normalizeMatch :: TMatch -> ANFConvert ANFMatch
 normalizeMatch (TMatch pat body) = do
   let pat' = convertTPattern pat
-  body' <- normalizeTerm "__TODO_pat" body
+  body' <- normalizeTerm "case" body
   pure $ ANFMatch pat' body'
 
 convertTPattern :: TPattern -> ANFPattern
