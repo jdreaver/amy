@@ -15,19 +15,19 @@ entry:
   %0 = add i64 %x, -1
   %1 = sub i64 3, %0
   %2 = icmp slt i64 5, %1
-  switch i1 %2, label %case.04 [
-    i1 true, label %case.04
-    i1 false, label %case.14
+  switch i1 %2, label %case.0.4 [
+    i1 true, label %case.0.4
+    i1 false, label %case.1.4
   ]
 
-case.04:                                          ; preds = %entry, %entry
+case.0.4:                                         ; preds = %entry, %entry
   br label %case.end.4
 
-case.14:                                          ; preds = %entry
+case.1.4:                                         ; preds = %entry
   br label %case.end.4
 
-case.end.4:                                       ; preds = %case.14, %case.04
-  %end.4 = phi i64 [ 100, %case.04 ], [ 200, %case.14 ]
+case.end.4:                                       ; preds = %case.1.4, %case.0.4
+  %end.4 = phi i64 [ 100, %case.0.4 ], [ 200, %case.1.4 ]
   ret i64 %end.4
 }
 

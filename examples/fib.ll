@@ -12,25 +12,25 @@ entry:
 define private i64 @fib(i64 %x) {
 entry:
   %0 = icmp eq i64 %x, 0
-  switch i1 %0, label %case.01 [
-    i1 true, label %case.01
-    i1 false, label %case.11
+  switch i1 %0, label %case.0.1 [
+    i1 true, label %case.0.1
+    i1 false, label %case.1.1
   ]
 
-case.01:                                          ; preds = %entry, %entry
+case.0.1:                                         ; preds = %entry, %entry
   br label %case.end.1
 
-case.11:                                          ; preds = %entry
+case.1.1:                                         ; preds = %entry
   %1 = icmp eq i64 %x, 1
-  switch i1 %1, label %case.03 [
-    i1 true, label %case.03
-    i1 false, label %case.13
+  switch i1 %1, label %case.0.3 [
+    i1 true, label %case.0.3
+    i1 false, label %case.1.3
   ]
 
-case.03:                                          ; preds = %case.11, %case.11
+case.0.3:                                         ; preds = %case.1.1, %case.1.1
   br label %case.end.3
 
-case.13:                                          ; preds = %case.11
+case.1.3:                                         ; preds = %case.1.1
   %2 = sub i64 %x, 1
   %3 = call i64 @fib(i64 %2)
   %4 = sub i64 %x, 2
@@ -38,12 +38,12 @@ case.13:                                          ; preds = %case.11
   %6 = add i64 %3, %5
   br label %case.end.3
 
-case.end.3:                                       ; preds = %case.13, %case.03
-  %end.3 = phi i64 [ 1, %case.03 ], [ %6, %case.13 ]
+case.end.3:                                       ; preds = %case.1.3, %case.0.3
+  %end.3 = phi i64 [ 1, %case.0.3 ], [ %6, %case.1.3 ]
   br label %case.end.1
 
-case.end.1:                                       ; preds = %case.end.3, %case.01
-  %end.1 = phi i64 [ 0, %case.01 ], [ %end.3, %case.end.3 ]
+case.end.1:                                       ; preds = %case.end.3, %case.0.1
+  %end.1 = phi i64 [ 0, %case.0.1 ], [ %end.3, %case.end.3 ]
   ret i64 %end.1
 }
 

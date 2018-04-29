@@ -115,7 +115,7 @@ codegenExpr' (ANFECase (ANFCase scrutinee matches ty)) = do
     -- Give names to all the blocks
     mkCaseName nameBase = LLVM.Name $ stringToShortBS $ nameBase ++ show caseId
     matchesAndBlockNames =
-      second (mkCaseName . ("case." ++) . show)
+      second (mkCaseName . (\i -> "case." ++ i ++ ".") . show)
       <$> zip literalMatches [(0 :: Int)..]
 
     -- TODO: Have a proper default block if there isn't a natural one,
