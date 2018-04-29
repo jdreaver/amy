@@ -35,8 +35,8 @@ data RenamerState
   = RenamerState
   { renamerStateLastId :: !Int
     -- ^ Last 'NameIntId' generated
-  , renamerStateValuesInScope :: !(Map Text RIdent)
-  , renamerStateTypesInScope :: !(Map Text RTypeName)
+  , renamerStateValuesInScope :: !(Map Text Ident)
+  , renamerStateTypesInScope :: !(Map Text TypeName)
   } deriving (Show, Eq)
 
 emptyRenamerState :: RenamerState
@@ -47,12 +47,12 @@ emptyRenamerState =
   , renamerStateTypesInScope = Map.empty
   }
 
-primitiveFunctionNames :: Map Text RIdent
+primitiveFunctionNames :: Map Text Ident
 primitiveFunctionNames =
   Map.fromList $
     (\(id', prim) ->
        ( showPrimitiveFunctionName prim
-       , RIdent (showPrimitiveFunctionName prim) id' (Just prim)
+       , Ident (showPrimitiveFunctionName prim) id' (Just prim)
        ))
     <$> allPrimitiveFunctionNamesAndIds
 
@@ -62,11 +62,11 @@ freshId = do
   modify' (\s -> s { renamerStateLastId = 1 + renamerStateLastId s })
   gets renamerStateLastId
 
-addValueToScope :: Located Text -> Renamer (Validation [Error] (Located RIdent))
+addValueToScope :: Located Text -> Renamer (Validation [Error] (Located Ident))
 addValueToScope lName@(Located span' name) = do
   nameId <- freshId
   let
-    ident = RIdent name nameId Nothing
+    ident = Ident name nameId Nothing
   mExistingName <- lookupValueInScope name
   case mExistingName of
     Just existingName -> pure $ Failure [VariableShadowed lName existingName]
@@ -74,18 +74,18 @@ addValueToScope lName@(Located span' name) = do
       modify' (\s -> s { renamerStateValuesInScope = Map.insert name ident (renamerStateValuesInScope s) })
       pure $ Success (Located span' ident)
 
-lookupValueInScope :: Text -> Renamer (Maybe RIdent)
+lookupValueInScope :: Text -> Renamer (Maybe Ident)
 lookupValueInScope name = Map.lookup name <$> gets renamerStateValuesInScope
 
-lookupValueInScopeOrError :: Located Text -> Renamer (Validation [Error] (Located RIdent))
+lookupValueInScopeOrError :: Located Text -> Renamer (Validation [Error] (Located Ident))
 lookupValueInScopeOrError name@(Located span' name') =
   maybe (Failure [UnknownVariable name]) (Success . Located span') <$> lookupValueInScope name'
 
-addTypeToScope :: Located Text -> Renamer (Validation [Error] RTypeName)
+addTypeToScope :: Located Text -> Renamer (Validation [Error] TypeName)
 addTypeToScope (Located span' name) = do
   nameId <- freshId
   let
-    tname = RTypeName name span' nameId Nothing
+    tname = TypeName name span' nameId Nothing
   mExistingName <- lookupTypeInScope name
   case mExistingName of
     Just _ -> pure () -- These will be set to equal during inference
@@ -93,10 +93,10 @@ addTypeToScope (Located span' name) = do
       modify' (\s -> s { renamerStateTypesInScope = Map.insert name tname (renamerStateTypesInScope s) })
   pure $ Success tname
 
-lookupTypeInScope :: Text -> Renamer (Maybe RTypeName)
+lookupTypeInScope :: Text -> Renamer (Maybe TypeName)
 lookupTypeInScope name = Map.lookup name <$> gets renamerStateTypesInScope
 
-lookupTypeInScopeOrError :: Located Text -> Renamer (Validation [Error] RTypeName)
+lookupTypeInScopeOrError :: Located Text -> Renamer (Validation [Error] TypeName)
 lookupTypeInScopeOrError name@(Located _ name') =
   maybe (Failure [UnknownTypeName name]) Success <$> lookupTypeInScope name'
 

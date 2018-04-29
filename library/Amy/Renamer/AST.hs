@@ -1,21 +1,21 @@
 -- | Version of a parser 'Module' after renaming.
 
 module Amy.Renamer.AST
-  ( RModule(..)
-  , RBinding(..)
-  , RExtern(..)
-  , RExpr(..)
-  , RIf(..)
-  , RCase(..)
-  , RMatch(..)
-  , RPattern(..)
-  , RLet(..)
-  , RApp(..)
+  ( Module(..)
+  , Binding(..)
+  , Extern(..)
+  , Expr(..)
+  , If(..)
+  , Case(..)
+  , Match(..)
+  , Pattern(..)
+  , Let(..)
+  , App(..)
 
-  , RIdent(..)
-  , RType(..)
-  , RTypeName(..)
-  , RScheme(..)
+  , Ident(..)
+  , Type(..)
+  , TypeName(..)
+  , Scheme(..)
 
     -- Re-export
   , Literal(..)
@@ -29,101 +29,101 @@ import Amy.Syntax.Located
 import Data.Text (Text)
 
 -- | An 'RModule' is a 'Module' after renaming.
-data RModule
-  = RModule
-  { rModuleBindings :: ![RBinding]
-  , rModuleExterns :: ![RExtern]
+data Module
+  = Module
+  { moduleBindings :: ![Binding]
+  , moduleExterns :: ![Extern]
   } deriving (Show, Eq)
 
 -- | A binding after renaming. This is a combo of a 'Binding' and a
 -- 'BindingType' after they've been paired together.
-data RBinding
-  = RBinding
-  { rBindingName :: !(Located RIdent)
-  , rBindingType :: !(Maybe RScheme)
-  , rBindingArgs :: ![Located RIdent]
-  , rBindingBody :: !RExpr
+data Binding
+  = Binding
+  { bindingName :: !(Located Ident)
+  , bindingType :: !(Maybe Scheme)
+  , bindingArgs :: ![Located Ident]
+  , bindingBody :: !Expr
   } deriving (Show, Eq)
 
 -- | A renamed extern declaration.
-data RExtern
-  = RExtern
-  { rExternName :: !(Located RIdent)
-  , rExternType :: !RType
+data Extern
+  = Extern
+  { externName :: !(Located Ident)
+  , externType :: !Type
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'
-data RExpr
-  = RELit !(Located Literal)
-  | REVar !(Located RIdent)
-  | REIf !RIf
-  | RECase !RCase
-  | RELet !RLet
-  | REApp !RApp
-  | REParens !RExpr
+data Expr
+  = ELit !(Located Literal)
+  | EVar !(Located Ident)
+  | EIf !If
+  | ECase !Case
+  | ELet !Let
+  | EApp !App
+  | EParens !Expr
   deriving (Show, Eq)
 
-data RIf
-  = RIf
-  { rIfPredicate :: !RExpr
-  , rIfThen :: !RExpr
-  , rIfElse :: !RExpr
+data If
+  = If
+  { ifPredicate :: !Expr
+  , ifThen :: !Expr
+  , ifElse :: !Expr
   } deriving (Show, Eq)
 
-data RCase
-  = RCase
-  { rCaseScrutinee :: !RExpr
-  , rCaseAlternatives :: !(NonEmpty RMatch)
+data Case
+  = Case
+  { caseScrutinee :: !Expr
+  , caseAlternatives :: !(NonEmpty Match)
   } deriving (Show, Eq)
 
-data RMatch
-  = RMatch
-  { rMatchPattern :: !RPattern
-  , rMatchBody :: !RExpr
+data Match
+  = Match
+  { matchPattern :: !Pattern
+  , matchBody :: !Expr
   } deriving (Show, Eq)
 
-data RPattern
-  = RPatternLit !(Located Literal)
-  | RPatternVar !(Located RIdent)
+data Pattern
+  = PatternLit !(Located Literal)
+  | PatternVar !(Located Ident)
   deriving (Show, Eq)
 
-data RLet
-  = RLet
-  { rLetBindings :: ![RBinding]
-  , rLetExpression :: !RExpr
+data Let
+  = Let
+  { letBindings :: ![Binding]
+  , letExpression :: !Expr
   } deriving (Show, Eq)
 
--- | An 'App' after renaming.
-data RApp
-  = RApp
-  { rAppFunction :: !RExpr
-  , rAppArgs :: !(NonEmpty RExpr)
+-- | An 'App' after enaming.
+data App
+  = App
+  { appFunction :: !Expr
+  , appArgs :: !(NonEmpty Expr)
   } deriving (Show, Eq)
 
 -- | An identifier from source code
-data RIdent
-  = RIdent
-  { rIdentText :: !Text
-  , rIdentId :: !Int
-  , rIdentPrimitiveName :: !(Maybe PrimitiveFunctionName)
+data Ident
+  = Ident
+  { identText :: !Text
+  , identId :: !Int
+  , identPrimitiveName :: !(Maybe PrimitiveFunctionName)
   } deriving (Show, Eq, Ord)
 
-data RType
-  = RTyCon !RTypeName
-  | RTyVar !RTypeName
-  | RTyFun !RType !RType
+data Type
+  = TyCon !TypeName
+  | TyVar !TypeName
+  | TyFun !Type !Type
   deriving (Show, Eq)
 
-infixr 0 `RTyFun`
+infixr 0 `TyFun`
 
-data RTypeName
-  = RTypeName
-  { rTypeNameText :: !Text
-  , rTypeNameLocation :: !SourceSpan
-  , rTypeNameId :: !Int
-  , rTypeNamePrimitiveType :: !(Maybe PrimitiveType)
+data TypeName
+  = TypeName
+  { typeNameText :: !Text
+  , typeNameLocation :: !SourceSpan
+  , typeNameId :: !Int
+  , typeNamePrimitiveType :: !(Maybe PrimitiveType)
   } deriving (Show, Eq)
 
-data RScheme
-  = RForall ![RTypeName] RType
+data Scheme
+  = Forall ![TypeName] Type
   deriving (Show, Eq)

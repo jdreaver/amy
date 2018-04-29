@@ -13,16 +13,16 @@ import Data.Validation
 
 import Amy.Errors
 import Amy.Prim
-import Amy.Renamer.AST
+import Amy.Renamer.AST as R
 import Amy.Renamer.Monad
-import Amy.Syntax.AST
+import Amy.Syntax.AST as S
 
 -- | Gives a unique identity to all names in the AST
-rename :: Module -> Either [Error] RModule
+rename :: S.Module -> Either [Error] R.Module
 rename ast = toEither . runRenamer emptyRenamerState $ rename' ast
 
-rename' :: Module -> Renamer (Validation [Error] RModule)
-rename' (Module declarations) = do
+rename' :: S.Module -> Renamer (Validation [Error] R.Module)
+rename' (S.Module declarations) = do
   -- Rename extern declarations
   rModuleExterns <- traverse renameExtern (mapMaybe declExtern declarations)
 
@@ -32,97 +32,97 @@ rename' (Module declarations) = do
     bindingTypes = mapMaybe declBindingType declarations
   rModuleBindings <- renameBindingGroup bindings bindingTypes
   pure
-    $ RModule
+    $ R.Module
     <$> rModuleBindings
     <*> sequenceA rModuleExterns
 
-renameExtern :: Extern -> Renamer (Validation [Error] RExtern)
+renameExtern :: S.Extern -> Renamer (Validation [Error] R.Extern)
 renameExtern extern = do
-  rExternName <- addValueToScope (externName extern)
-  rExternType <- renameType (externType extern)
+  name' <- addValueToScope (S.externName extern)
+  type' <- renameType (S.externType extern)
   pure $
-    RExtern
-      <$> rExternName
-      <*> rExternType
+    R.Extern
+      <$> name'
+      <*> type'
 
 readPrimitiveTyCon :: Located Text -> Validation [Error] PrimitiveType
 readPrimitiveTyCon name@(Located _ name') = maybe (Failure [UnknownTypeName name]) Success $ readPrimitiveType name'
 
-renameBindingGroup :: [Binding] -> [BindingType] -> Renamer (Validation [Error] [RBinding])
+renameBindingGroup :: [S.Binding] -> [S.BindingType] -> Renamer (Validation [Error] [R.Binding])
 renameBindingGroup bindings bindingTypes = do
   -- Add each binding name to scope since they can be mutually recursive
-  traverse_ addValueToScope (bindingName <$> bindings)
+  traverse_ addValueToScope (S.bindingName <$> bindings)
   -- Rename each individual binding
   bindings' <- traverse (renameBinding $ bindingTypesMap bindingTypes) bindings
   pure $ sequenceA bindings'
 
-bindingTypesMap :: [BindingType] -> Map Text Scheme
+bindingTypesMap :: [BindingType] -> Map Text S.Scheme
 bindingTypesMap = Map.fromList . fmap (\(BindingType (Located _ name) ts) -> (name, ts))
 
-renameBinding :: Map Text Scheme -> Binding -> Renamer (Validation [Error] RBinding)
+renameBinding :: Map Text S.Scheme -> S.Binding -> Renamer (Validation [Error] R.Binding)
 renameBinding typeMap binding = withNewScope $ do -- Begin new scope
   -- N.B. Assumes the binding name was already added to scope in
   -- renameBindingGroup
-  name <- lookupValueInScopeOrError (bindingName binding)
+  name <- lookupValueInScopeOrError (S.bindingName binding)
   let
-    rBindingName =
+    name' =
       case name of
         (Success (Located l ident)) -> pure (Located l ident)
         Failure f -> Failure f
-  rBindingType <- traverse renameScheme $ Map.lookup (locatedValue $ bindingName binding) typeMap
-  rBindingArgs <- traverse addValueToScope (bindingArgs binding)
-  rBindingBody <- renameExpression (bindingBody binding)
+  type' <- traverse renameScheme $ Map.lookup (locatedValue $ S.bindingName binding) typeMap
+  args <- traverse addValueToScope (S.bindingArgs binding)
+  body <- renameExpression (S.bindingBody binding)
   pure $
-    RBinding
-    <$> rBindingName
-    <*> sequenceA rBindingType
-    <*> sequenceA rBindingArgs
-    <*> rBindingBody
+    R.Binding
+    <$> name'
+    <*> sequenceA type'
+    <*> sequenceA args
+    <*> body
 
-renameScheme :: Scheme -> Renamer (Validation [Error] RScheme)
-renameScheme (Forall vars ty) = do
+renameScheme :: S.Scheme -> Renamer (Validation [Error] R.Scheme)
+renameScheme (S.Forall vars ty) = do
   vars' <- traverse addTypeToScope vars
   ty' <- renameType ty
   pure $
-    RForall
+    R.Forall
     <$> sequenceA vars'
     <*> ty'
 
-renameType :: Type -> Renamer (Validation [Error] RType)
-renameType (TyCon name@(Located span' name')) =
+renameType :: S.Type -> Renamer (Validation [Error] R.Type)
+renameType (S.TyCon name@(Located span' name')) =
   let primName = readPrimitiveTyCon name
-  in traverse (\prim -> pure $ RTyCon $ RTypeName name' span' (primitiveTypeId prim) (Just prim)) primName
-renameType (TyVar name) = fmap RTyVar <$> lookupTypeInScopeOrError name
-renameType (TyFun ty1 ty2) = do
+  in traverse (\prim -> pure $ R.TyCon $ R.TypeName name' span' (primitiveTypeId prim) (Just prim)) primName
+renameType (S.TyVar name) = fmap R.TyVar <$> lookupTypeInScopeOrError name
+renameType (S.TyFun ty1 ty2) = do
   ty1' <- renameType ty1
   ty2' <- renameType ty2
   pure $
-    RTyFun
+    R.TyFun
     <$> ty1'
     <*> ty2'
 
-renameExpression :: Expr -> Renamer (Validation [Error] RExpr)
-renameExpression (ELit lit) = pure $ Success $ RELit lit
-renameExpression (EVar var) = fmap REVar <$> lookupValueInScopeOrError var
-renameExpression (EIf (If predicate thenExpression elseExpression)) = do
-  rIfPredicate <- renameExpression predicate
-  rIfThen <- renameExpression thenExpression
-  rIfElse <- renameExpression elseExpression
+renameExpression :: S.Expr -> Renamer (Validation [Error] R.Expr)
+renameExpression (S.ELit lit) = pure $ Success $ R.ELit lit
+renameExpression (S.EVar var) = fmap R.EVar <$> lookupValueInScopeOrError var
+renameExpression (S.EIf (S.If predicate thenExpression elseExpression)) = do
+  pred' <- renameExpression predicate
+  then' <- renameExpression thenExpression
+  else' <- renameExpression elseExpression
   pure
-    $ fmap REIf
-    $ RIf
-    <$> rIfPredicate
-    <*> rIfThen
-    <*> rIfElse
-renameExpression (ECase (Case scrutinee matches)) = do
+    $ fmap R.EIf
+    $ R.If
+    <$> pred'
+    <*> then'
+    <*> else'
+renameExpression (S.ECase (S.Case scrutinee matches)) = do
   scrutinee' <- renameExpression scrutinee
   matches' <- traverse renameMatch matches
   pure
-    $ fmap RECase
-    $ RCase
+    $ fmap R.ECase
+    $ R.Case
     <$> scrutinee'
     <*> sequenceA matches'
-renameExpression (ELet (Let bindings expression)) =
+renameExpression (S.ELet (S.Let bindings expression)) =
   withNewScope $ do
     let
       bindings' = mapMaybe letBinding bindings
@@ -130,31 +130,31 @@ renameExpression (ELet (Let bindings expression)) =
     rLetBindings <- renameBindingGroup bindings' bindingTypes'
     rLetExpression <- renameExpression expression
     pure
-      $ fmap RELet
-      $ RLet
+      $ fmap R.ELet
+      $ R.Let
       <$> rLetBindings
       <*> rLetExpression
-renameExpression (EApp app) = do
-  rAppFunction <- renameExpression (appFunction app)
-  rAppArgs <- traverse renameExpression (appArgs app)
+renameExpression (S.EApp (S.App func args)) = do
+  func' <- renameExpression func
+  args' <- traverse renameExpression args
   pure
-    $ fmap REApp
-    $ RApp
-    <$> rAppFunction
-    <*> sequenceA rAppArgs
-renameExpression (EParens expr) = fmap REParens <$> renameExpression expr
+    $ fmap R.EApp
+    $ R.App
+    <$> func'
+    <*> sequenceA args'
+renameExpression (S.EParens expr) = fmap R.EParens <$> renameExpression expr
 
-renameMatch :: Match -> Renamer (Validation [Error] RMatch)
-renameMatch (Match pat body) =
+renameMatch :: S.Match -> Renamer (Validation [Error] R.Match)
+renameMatch (S.Match pat body) =
   withNewScope $ do
     pat' <-
      case pat of
-        PatternLit lit -> pure . Success $ RPatternLit lit
-        PatternVar var -> do
+        S.PatternLit lit -> pure . Success $ R.PatternLit lit
+        S.PatternVar var -> do
           var' <- addValueToScope var
-          pure $ RPatternVar <$> var'
+          pure $ R.PatternVar <$> var'
     body' <- renameExpression body
     pure
-      $ RMatch
+      $ R.Match
       <$> pat'
       <*> body'

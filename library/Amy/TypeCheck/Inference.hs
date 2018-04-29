@@ -25,7 +25,7 @@ import Data.Traversable (for)
 
 import Amy.Errors
 import Amy.Prim
-import Amy.Renamer.AST
+import Amy.Renamer.AST as R
 import Amy.Syntax.Located
 import Amy.TypeCheck.AST
 
@@ -144,10 +144,10 @@ newtype Constraint = Constraint { unConstraint :: (TType, TType) }
 -- Inference
 --
 
-inferModule :: RModule -> Either Error TModule
-inferModule (RModule bindings externs) = do
+inferModule :: R.Module -> Either Error TModule
+inferModule (R.Module bindings externs) = do
   let
-    externs' = (\(RExtern (Located _ name) ty) -> TExtern (convertRIdent name) (convertRType ty)) <$> externs
+    externs' = (\(R.Extern (Located _ name) ty) -> TExtern (convertIdent name) (convertType ty)) <$> externs
     externSchemes = (\(TExtern name ty) -> (name, TForall [] ty)) <$> externs'
     primFuncSchemes = primitiveFunctionScheme <$> allPrimitiveFunctionNamesAndIds
     env = TyEnv $ Map.fromList $ externSchemes ++ primFuncSchemes
@@ -164,7 +164,7 @@ mkPrimFunctionScheme prim = TForall [] $ foldr1 TTyFun $ primitiveTyCon <$> prim
 primitiveTyCon :: PrimitiveType -> TType
 primitiveTyCon prim = TTyCon $ TTypeName (showPrimitiveType prim) (primitiveTypeId prim) (Just prim)
 
-inferTopLevel :: TyEnv -> [RBinding] -> Either Error [TBinding]
+inferTopLevel :: TyEnv -> [R.Binding] -> Either Error [TBinding]
 inferTopLevel env bindings = do
   (bindings', constraints) <- unzip <$> runInference env (inferBindings bindings)
   subst <- runSolve (concat constraints)
@@ -177,7 +177,7 @@ inferTopLevel env bindings = do
 -- types to the environment (either their declared type or a fresh type
 -- variable), then we can gather constraints for each binding one by one. We
 -- then collect all the constraints and solve them together.
-inferBindings :: [RBinding] -> Inference [(TBinding, [Constraint])]
+inferBindings :: [R.Binding] -> Inference [(TBinding, [Constraint])]
 inferBindings bindings = do
   -- Generate constraints separately
   bindingsInference <- generateBindingConstraints bindings
@@ -186,7 +186,7 @@ inferBindings bindings = do
   env <- ask
   either throwError pure $ solveBindingConstraints env bindingsInference
 
-generateBindingConstraints :: [RBinding] -> Inference [(TBinding, [Constraint])]
+generateBindingConstraints :: [R.Binding] -> Inference [(TBinding, [Constraint])]
 generateBindingConstraints bindings = do
   -- Record schemes for each binding
   bindingsAndSchemes <- traverse (\binding -> (binding,) <$> generateBindingScheme binding) bindings
@@ -194,24 +194,24 @@ generateBindingConstraints bindings = do
   -- Add all the binding type variables to the typing environment and then
   -- collect constraints for all bindings.
   let
-    bindingNameSchemes = first (convertRIdent . locatedValue . rBindingName) <$> bindingsAndSchemes
+    bindingNameSchemes = first (convertIdent . locatedValue . R.bindingName) <$> bindingsAndSchemes
   extendEnvM bindingNameSchemes $ for bindingsAndSchemes $ \(binding, scheme) -> do
     (binding', constraints) <- inferBinding binding
     let
       -- Add the constraint for the binding itself
-      (TForall _ bindingType) = tBindingType binding'
+      (TForall _ bindingTy) = tBindingType binding'
       (TForall _ schemeTy) = scheme
-      bindingConstraint = Constraint (schemeTy, bindingType)
+      bindingConstraint = Constraint (schemeTy, bindingTy)
     pure (binding', constraints ++ [bindingConstraint])
 
-generateBindingScheme :: RBinding -> Inference TScheme
+generateBindingScheme :: R.Binding -> Inference TScheme
 generateBindingScheme binding =
   maybe
     -- No explicit type annotation, generate a type variable
     (TForall [] <$> freshTypeVariable)
     -- There is an explicit type annotation. Use it.
-    (pure . convertRScheme)
-    (rBindingType binding)
+    (pure . convertScheme)
+    (R.bindingType binding)
 
 solveBindingConstraints :: TyEnv -> [(TBinding, [Constraint])] -> Either Error [(TBinding, [Constraint])]
 solveBindingConstraints env bindingsInference = do
@@ -221,40 +221,40 @@ solveBindingConstraints env bindingsInference = do
   subst <- runSolve constraints
   pure $ flip fmap bindingsInference $ \(binding, bodyCons) ->
     let
-      (TForall _ bindingType) = tBindingType binding
-      scheme = generalize (substituteEnv subst env) (substituteType subst bindingType)
+      (TForall _ bindingTy) = tBindingType binding
+      scheme = generalize (substituteEnv subst env) (substituteType subst bindingTy)
       binding' = binding { tBindingType = scheme }
     in (binding', bodyCons)
 
-inferBinding :: RBinding -> Inference (TBinding, [Constraint])
-inferBinding (RBinding (Located _ name) _ args body) = do
-  argsAndTyVars <- traverse (\(Located _ arg) -> (convertRIdent arg,) <$> freshTypeVariable) args
+inferBinding :: R.Binding -> Inference (TBinding, [Constraint])
+inferBinding (R.Binding (Located _ name) _ args body) = do
+  argsAndTyVars <- traverse (\(Located _ arg) -> (convertIdent arg,) <$> freshTypeVariable) args
   let argsAndSchemes = (\(arg, t) -> (arg, TForall [] t)) <$> argsAndTyVars
   (body', bodyCons) <- extendEnvM argsAndSchemes $ inferExpr body
   let
     returnType = expressionType body'
-    bindingType = foldr1 TTyFun $ (snd <$> argsAndTyVars) ++ [returnType]
+    bindingTy = foldr1 TTyFun $ (snd <$> argsAndTyVars) ++ [returnType]
     binding' =
       TBinding
-      { tBindingName = convertRIdent name
+      { tBindingName = convertIdent name
         -- Type is placeholder until we can solve all constraints and
         -- generalize to get a scheme. If we were really principled we would
         -- have some new intermediate TCBinding type or something with a Type
         -- instead of a Scheme.
-      , tBindingType = TForall [] bindingType
+      , tBindingType = TForall [] bindingTy
       , tBindingArgs = (\(name', tvar) -> TTyped tvar name') <$> argsAndTyVars
       , tBindingReturnType = returnType
       , tBindingBody = body'
       }
   pure (binding', bodyCons)
 
-inferExpr :: RExpr -> Inference (TExpr, [Constraint])
-inferExpr (RELit (Located _ lit)) = pure (TELit lit, [])
-inferExpr (REVar (Located _ var)) = do
-  let var' = convertRIdent var
+inferExpr :: R.Expr -> Inference (TExpr, [Constraint])
+inferExpr (R.ELit (Located _ lit)) = pure (TELit lit, [])
+inferExpr (R.EVar (Located _ var)) = do
+  let var' = convertIdent var
   t <- lookupEnvM var'
   pure (TEVar (TTyped t var'), [])
-inferExpr (REIf (RIf pred' then' else')) = do
+inferExpr (R.EIf (R.If pred' then' else')) = do
   (pred'', predCon) <- inferExpr pred'
   (then'', thenCon) <- inferExpr then'
   (else'', elseCon) <- inferExpr else'
@@ -267,7 +267,7 @@ inferExpr (REIf (RIf pred' then' else')) = do
     ( TEIf (TIf pred'' then'' else'')
     , predCon ++ thenCon ++ elseCon ++ newConstraints
     )
-inferExpr (RECase (RCase scrutinee matches)) = do
+inferExpr (R.ECase (R.Case scrutinee matches)) = do
   (scrutinee', scrutineeCons) <- inferExpr scrutinee
   (matches', matchesCons) <- NE.unzip <$> traverse inferMatch matches
   let
@@ -283,7 +283,7 @@ inferExpr (RECase (RCase scrutinee matches)) = do
     ( TECase (TCase scrutinee' matches')
     , scrutineeCons ++ concat matchesCons ++ NE.toList patternConstraints ++ bodyConstraints
     )
-inferExpr (RELet (RLet bindings expression)) = do
+inferExpr (R.ELet (R.Let bindings expression)) = do
   (bindings', bindingsCons) <- unzip <$> inferBindings bindings
   let
     bindingSchemes = (\binding -> (tBindingName binding, tBindingType binding)) <$> bindings'
@@ -292,7 +292,7 @@ inferExpr (RELet (RLet bindings expression)) = do
     ( TELet (TLet bindings' expression')
     , concat bindingsCons ++ expCons
     )
-inferExpr (REApp (RApp func args)) = do
+inferExpr (R.EApp (R.App func args)) = do
   (func', funcConstraints) <- inferExpr func
   (args', argConstraints) <- NE.unzip <$> traverse inferExpr args
   tyVar <- freshTypeVariable
@@ -303,12 +303,12 @@ inferExpr (REApp (RApp func args)) = do
     ( TEApp (TApp func' args' tyVar)
     , funcConstraints ++ concat argConstraints ++ [newConstraint]
     )
-inferExpr (REParens expr) = do
+inferExpr (R.EParens expr) = do
   (expr', constraints) <- inferExpr expr
   pure (TEParens expr', constraints)
 
-inferMatch :: RMatch -> Inference (TMatch, [Constraint])
-inferMatch (RMatch pat body) = do
+inferMatch :: R.Match -> Inference (TMatch, [Constraint])
+inferMatch (R.Match pat body) = do
   pat' <- inferPattern pat
   let patScheme = patternScheme pat'
   (body', bodyCons) <- extendEnvM patScheme $ inferExpr body
@@ -317,11 +317,11 @@ inferMatch (RMatch pat body) = do
     , bodyCons
     )
 
-inferPattern :: RPattern -> Inference TPattern
-inferPattern (RPatternLit (Located _ lit)) = pure $ TPatternLit lit
-inferPattern (RPatternVar (Located _ ident)) = do
+inferPattern :: R.Pattern -> Inference TPattern
+inferPattern (R.PatternLit (Located _ lit)) = pure $ TPatternLit lit
+inferPattern (R.PatternVar (Located _ ident)) = do
   tvar <- freshTypeVariable
-  pure $ TPatternVar $ TTyped tvar (convertRIdent ident)
+  pure $ TPatternVar $ TTyped tvar (convertIdent ident)
 
 patternScheme :: TPattern -> [(TIdent, TScheme)]
 patternScheme (TPatternLit _) = []
@@ -449,16 +449,16 @@ freeEnvTypeVariables (TyEnv env) = foldl' Set.union Set.empty $ freeSchemeTypeVa
 -- Names
 --
 
-convertRIdent :: RIdent -> TIdent
-convertRIdent (RIdent name id' mPrim) = TIdent name id' mPrim
+convertIdent :: R.Ident -> TIdent
+convertIdent (R.Ident name id' mPrim) = TIdent name id' mPrim
 
-convertRScheme :: RScheme -> TScheme
-convertRScheme (RForall vars ty) = TForall (convertRTypeName <$> vars) (convertRType ty)
+convertScheme :: R.Scheme -> TScheme
+convertScheme (R.Forall vars ty) = TForall (convertTypeName <$> vars) (convertType ty)
 
-convertRType :: RType -> TType
-convertRType (RTyCon name) = TTyCon (convertRTypeName name)
-convertRType (RTyVar name) = TTyVar (convertRTypeName name) TyVarNotGenerated
-convertRType (RTyFun ty1 ty2) = TTyFun (convertRType ty1) (convertRType ty2)
+convertType :: R.Type -> TType
+convertType (R.TyCon name) = TTyCon (convertTypeName name)
+convertType (R.TyVar name) = TTyVar (convertTypeName name) TyVarNotGenerated
+convertType (R.TyFun ty1 ty2) = TTyFun (convertType ty1) (convertType ty2)
 
-convertRTypeName :: RTypeName -> TTypeName
-convertRTypeName (RTypeName name' _ id' mPrim) = TTypeName name' id' mPrim
+convertTypeName :: R.TypeName -> TTypeName
+convertTypeName (R.TypeName name' _ id' mPrim) = TTypeName name' id' mPrim

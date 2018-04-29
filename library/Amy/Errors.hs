@@ -12,7 +12,7 @@ import LLVM.AST (Operand)
 import Text.Megaparsec
 
 import Amy.ANF.AST
-import Amy.Renamer.AST
+import Amy.Renamer.AST as R
 import Amy.Syntax.Located
 import Amy.TypeCheck.AST
 
@@ -22,7 +22,7 @@ data Error
 
   -- Renamer
   | UnknownVariable !(Located Text)
-  | VariableShadowed !(Located Text) !RIdent
+  | VariableShadowed !(Located Text) !R.Ident
   | UnknownTypeName !(Located Text)
   | NonIdentifierName !(Located Text)
 
