@@ -34,7 +34,6 @@ import Data.Text (Text)
 import Amy.Literal
 import Amy.Prim
 
--- | A 'TModule' is an 'RModule' after renaming.
 data Module
   = Module
   { moduleBindings :: ![Binding]

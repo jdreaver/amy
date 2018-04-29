@@ -28,7 +28,6 @@ import Amy.Prim
 import Amy.Syntax.Located
 import Data.Text (Text)
 
--- | An 'RModule' is a 'Module' after renaming.
 data Module
   = Module
   { moduleBindings :: ![Binding]
