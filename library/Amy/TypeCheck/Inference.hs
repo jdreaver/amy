@@ -309,7 +309,7 @@ inferExpr (REParens expr) = do
 
 inferMatch :: RMatch -> Inference (TMatch, [Constraint])
 inferMatch (RMatch pat body) = do
-  pat' <- convertPattern pat
+  pat' <- inferPattern pat
   let patScheme = patternScheme pat'
   (body', bodyCons) <- extendEnvM patScheme $ inferExpr body
   pure
@@ -317,9 +317,9 @@ inferMatch (RMatch pat body) = do
     , bodyCons
     )
 
-convertPattern :: RPattern -> Inference TPattern
-convertPattern (RPatternLit (Located _ lit)) = pure $ TPatternLit lit
-convertPattern (RPatternVar (Located _ ident)) = do
+inferPattern :: RPattern -> Inference TPattern
+inferPattern (RPatternLit (Located _ lit)) = pure $ TPatternLit lit
+inferPattern (RPatternVar (Located _ ident)) = do
   tvar <- freshTypeVariable
   pure $ TPatternVar $ TTyped tvar (convertRIdent ident)
 

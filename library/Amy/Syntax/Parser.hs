@@ -152,7 +152,7 @@ ifExpression = do
 caseExpression :: AmyParser Case
 caseExpression = do
   case' <* spaceConsumerNewlines
-  scrutinee <- expression <?> "expression"
+  scrutinee <- expression <?> "case scrutinee expression"
   of' <* spaceConsumerNewlines
   matches <- indentedBlockNonEmpty (caseMatch <?> "case match")
   pure

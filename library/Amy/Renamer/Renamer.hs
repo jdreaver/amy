@@ -149,7 +149,7 @@ renameMatch (Match pat body) =
   withNewScope $ do
     pat' <-
      case pat of
-        PatternLit lit -> pure . pure $ RPatternLit lit
+        PatternLit lit -> pure . Success $ RPatternLit lit
         PatternVar var -> do
           var' <- addValueToScope var
           pure $ RPatternVar <$> var'
