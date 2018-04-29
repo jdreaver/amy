@@ -30,7 +30,7 @@ module Amy.Pretty
 import Data.Foldable (toList)
 import Data.Text.Prettyprint.Doc as X
 
-import Amy.ANF.AST
+import Amy.ANF.AST as ANF
 import Amy.Literal
 import Amy.Prim
 import Amy.Syntax.AST as S
@@ -234,47 +234,47 @@ prettyTPattern (T.PatternVar (T.Typed _ var)) = prettyTIdent var
 -- ANF AST
 --
 
-mkPrettyANFType :: ANFType -> PrettyType ann
-mkPrettyANFType (ANFTyCon name) = PTyDoc $ pretty $ anfTypeNameText name
-mkPrettyANFType (ANFTyVar name) = PTyDoc $ pretty $ anfTypeNameText name
-mkPrettyANFType (ANFTyFun ty1 ty2) = PTyFun (mkPrettyANFType ty1) (mkPrettyANFType ty2)
+mkPrettyANFType :: ANF.Type -> PrettyType ann
+mkPrettyANFType (ANF.TyCon name) = PTyDoc $ pretty $ ANF.typeNameText name
+mkPrettyANFType (ANF.TyVar name) = PTyDoc $ pretty $ ANF.typeNameText name
+mkPrettyANFType (ANF.TyFun ty1 ty2) = PTyFun (mkPrettyANFType ty1) (mkPrettyANFType ty2)
 
-mkPrettyANFScheme :: ANFScheme -> PrettyScheme ann
-mkPrettyANFScheme (ANFForall vars ty) = PForall (pretty . anfTypeNameText <$> vars) (mkPrettyANFType ty)
+mkPrettyANFScheme :: ANF.Scheme -> PrettyScheme ann
+mkPrettyANFScheme (ANF.Forall vars ty) = PForall (pretty . ANF.typeNameText <$> vars) (mkPrettyANFType ty)
 
-prettyANFModule :: ANFModule -> Doc ann
-prettyANFModule (ANFModule bindings externs) =
+prettyANFModule :: ANF.Module -> Doc ann
+prettyANFModule (ANF.Module bindings externs) =
   vcatTwoHardLines $ (prettyANFExtern <$> externs) ++ (prettyANFBinding <$> bindings)
 
-prettyANFExtern :: ANFExtern -> Doc ann
-prettyANFExtern (ANFExtern name ty) =
+prettyANFExtern :: ANF.Extern -> Doc ann
+prettyANFExtern (ANF.Extern name ty) =
   prettyExtern (prettyANFIdent name) (mkPrettyANFType ty)
 
-prettyANFBinding :: ANFBinding -> Doc ann
-prettyANFBinding (ANFBinding ident scheme args _ body) =
+prettyANFBinding :: ANF.Binding -> Doc ann
+prettyANFBinding (ANF.Binding ident scheme args _ body) =
   prettyBindingScheme' (prettyANFIdent ident) (mkPrettyANFScheme scheme) <>
   hardline <>
-  prettyBinding' (prettyANFIdent ident) (prettyANFIdent . anfTypedValue <$> args) (prettyANFExpr body)
+  prettyBinding' (prettyANFIdent ident) (prettyANFIdent . ANF.typedValue <$> args) (prettyANFExpr body)
 
-prettyANFIdent :: ANFIdent -> Doc ann
-prettyANFIdent (ANFIdent name _ _ _) = pretty name
+prettyANFIdent :: ANF.Ident -> Doc ann
+prettyANFIdent (ANF.Ident name _ _ _) = pretty name
 
-prettyANFVal :: ANFVal -> Doc ann
-prettyANFVal (ANFVar (ANFTyped _ var)) = prettyANFIdent var
-prettyANFVal (ANFLit lit) = pretty $ showLiteral lit
+prettyANFVal :: ANF.Val -> Doc ann
+prettyANFVal (ANF.Var (ANF.Typed _ var)) = prettyANFIdent var
+prettyANFVal (ANF.Lit lit) = pretty $ showLiteral lit
 
-prettyANFExpr :: ANFExpr -> Doc ann
-prettyANFExpr (ANFEVal val) = prettyANFVal val
-prettyANFExpr (ANFECase (ANFCase scrutinee matches _)) =
+prettyANFExpr :: ANF.Expr -> Doc ann
+prettyANFExpr (ANF.EVal val) = prettyANFVal val
+prettyANFExpr (ANF.ECase (ANF.Case scrutinee matches _)) =
   prettyCase (prettyANFVal scrutinee) (toList $ mkMatch <$> matches)
  where
-  mkMatch (ANFMatch pat body) = (prettyANFPattern pat, prettyANFExpr body)
-prettyANFExpr (ANFELet (ANFLet bindings body)) =
+  mkMatch (ANF.Match pat body) = (prettyANFPattern pat, prettyANFExpr body)
+prettyANFExpr (ANF.ELet (ANF.Let bindings body)) =
   prettyLet (prettyANFBinding <$> bindings) (prettyANFExpr body)
-prettyANFExpr (ANFEApp (ANFApp f args _)) = sep $ prettyANFIdent (anfTypedValue f) : (prettyANFVal <$> args)
-prettyANFExpr (ANFEPrimOp (ANFApp f args _)) =
+prettyANFExpr (ANF.EApp (ANF.App f args _)) = sep $ prettyANFIdent (ANF.typedValue f) : (prettyANFVal <$> args)
+prettyANFExpr (ANF.EPrimOp (ANF.App f args _)) =
   sep $ pretty (showPrimitiveFunctionName f) : (prettyANFVal <$> args)
 
-prettyANFPattern :: ANFPattern -> Doc ann
-prettyANFPattern (ANFPatternLit lit) = pretty $ showLiteral lit
-prettyANFPattern (ANFPatternVar (ANFTyped _ var)) = prettyANFIdent var
+prettyANFPattern :: ANF.Pattern -> Doc ann
+prettyANFPattern (ANF.PatternLit lit) = pretty $ showLiteral lit
+prettyANFPattern (ANF.PatternVar (ANF.Typed _ var)) = prettyANFIdent var

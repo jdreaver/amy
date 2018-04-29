@@ -11,7 +11,7 @@ import Data.Void (Void)
 import LLVM.AST (Operand)
 import Text.Megaparsec
 
-import Amy.ANF.AST
+import Amy.ANF.AST as ANF
 import Amy.Renamer.AST as R
 import Amy.Syntax.Located
 import Amy.TypeCheck.AST as T
@@ -40,7 +40,7 @@ data Error
   -- | ExpectedFunctionType !(Type PrimitiveType)
 
   -- Codegen
-  | CodegenMissingSymbol !ANFIdent
+  | CodegenMissingSymbol !ANF.Ident
   | NoCurrying !T.App
   | UnknownOperandType !Operand
   deriving (Show, Eq)

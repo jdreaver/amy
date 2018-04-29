@@ -25,89 +25,89 @@ import qualified LLVM.AST.IntegerPredicate as IP
 import LLVM.AST.Global as LLVM
 import qualified LLVM.AST.Linkage as L
 
-import Amy.ANF
+import Amy.ANF as ANF
 import Amy.Codegen.Monad
 import Amy.Literal
 import Amy.Prim
 
-codegenModule :: ANFModule -> Module
-codegenModule (ANFModule bindings externs) =
+codegenModule :: ANF.Module -> LLVM.Module
+codegenModule (ANF.Module bindings externs) =
   let
     topLevelTypes =
-      ((\(ANFBinding name' (ANFForall _ ty) _ _ _) -> (name', ty)) <$> bindings)
-      ++ ((\(ANFExtern name' ty) -> (name', ty)) <$> externs)
+      ((\(ANF.Binding name' (ANF.Forall _ ty) _ _ _) -> (name', ty)) <$> bindings)
+      ++ ((\(ANF.Extern name' ty) -> (name', ty)) <$> externs)
   in
     defaultModule
     { moduleName = "amy-module"
     , moduleDefinitions = (codegenExtern <$> externs) ++ (codegenTopLevelBinding topLevelTypes <$> bindings)
     }
 
-codegenExtern :: ANFExtern -> Definition
+codegenExtern :: ANF.Extern -> Definition
 codegenExtern extern =
   let
-    (paramTypes, returnType') = argAndReturnTypes (anfExternType extern)
+    (paramTypes, returnType') = argAndReturnTypes (ANF.externType extern)
     params =
       (\ty -> Parameter (llvmType ty) (UnName 0) []) <$> paramTypes
   in
     GlobalDefinition
     functionDefaults
-    { name = identToLLVM $ anfExternName extern
+    { name = identToLLVM $ ANF.externName extern
     , parameters = (params, False)
     , LLVM.returnType = llvmType returnType'
     }
 
-codegenTopLevelBinding :: [(ANFIdent, ANFType)] -> ANFBinding -> Definition
+codegenTopLevelBinding :: [(ANF.Ident, ANF.Type)] -> ANF.Binding -> Definition
 codegenTopLevelBinding topLevelTypes binding =
   let
-    argToParam (ANFTyped ty ident) = Parameter (llvmType ty) (identToLLVM ident) []
-    params = argToParam <$> anfBindingArgs binding
-    returnType' = llvmType $ anfBindingReturnType binding
-    blocks = codegenExpr topLevelTypes $ anfBindingBody binding
+    argToParam (ANF.Typed ty ident) = Parameter (llvmType ty) (identToLLVM ident) []
+    params = argToParam <$> ANF.bindingArgs binding
+    returnType' = llvmType $ ANF.bindingReturnType binding
+    blocks = codegenExpr topLevelTypes $ ANF.bindingBody binding
   in
     GlobalDefinition
     functionDefaults
-    { name = identToLLVM $ anfBindingName binding
+    { name = identToLLVM $ ANF.bindingName binding
     , parameters = (params, False)
     , LLVM.returnType = returnType'
     , basicBlocks = blocks
     , linkage =
-        if anfIdentText (anfBindingName binding) == "main"
+        if ANF.identText (ANF.bindingName binding) == "main"
           then L.External
           else L.Private
     }
 
-argAndReturnTypes :: ANFType -> ([ANFType], ANFType)
+argAndReturnTypes :: ANF.Type -> ([ANF.Type], ANF.Type)
 argAndReturnTypes ty = (NE.init tyNE, NE.last tyNE)
  where
   tyNE = typeToNonEmpty ty
 
-codegenExpr :: [(ANFIdent, ANFType)] -> ANFExpr -> [BasicBlock]
+codegenExpr :: [(ANF.Ident, ANF.Type)] -> ANF.Expr -> [BasicBlock]
 codegenExpr topLevelTypes expr = runBlockGen topLevelTypes $ codegenExpr' expr
 
-codegenExpr' :: ANFExpr -> BlockGen Operand
-codegenExpr' (ANFEVal val) = valOperand val
-codegenExpr' (ANFELet (ANFLet bindings expr)) = do
+codegenExpr' :: ANF.Expr -> BlockGen Operand
+codegenExpr' (ANF.EVal val) = valOperand val
+codegenExpr' (ANF.ELet (ANF.Let bindings expr)) = do
   for_ bindings $ \binding -> do
-    op <- codegenExpr' (anfBindingBody binding)
-    addSymbolToTable (anfBindingName binding) op
+    op <- codegenExpr' (ANF.bindingBody binding)
+    addSymbolToTable (ANF.bindingName binding) op
   codegenExpr' expr
-codegenExpr' (ANFECase (ANFCase scrutinee matches ty)) = do
+codegenExpr' (ANF.ECase (ANF.Case scrutinee matches ty)) = do
   caseId <- freshId
 
-  -- TODO: Move a lot of this logic to ANF conversion, like finding the default
+  -- TODO: Move a lot of this logic to ANF. conversion, like finding the default
   -- match and converting match patterns to literals.
   let
     -- Find all matches for literals
-    literalMatch :: ANFMatch -> Maybe (Literal, ANFExpr)
-    literalMatch (ANFMatch (ANFPatternLit lit) body) = Just (lit, body)
+    literalMatch :: ANF.Match -> Maybe (Literal, ANF.Expr)
+    literalMatch (ANF.Match (ANF.PatternLit lit) body) = Just (lit, body)
     literalMatch _ = Nothing
     literalMatches = mapMaybe literalMatch (NE.toList matches)
 
-    varMatch :: ANFMatch -> Maybe (ANFTyped ANFIdent, ANFExpr)
-    varMatch (ANFMatch (ANFPatternVar ident) body) = Just (ident, body)
+    varMatch :: ANF.Match -> Maybe (ANF.Typed ANF.Ident, ANF.Expr)
+    varMatch (ANF.Match (ANF.PatternVar ident) body) = Just (ident, body)
     varMatch _ = Nothing
 
-    mDefaultMatch :: Maybe (ANFTyped ANFIdent, ANFExpr)
+    mDefaultMatch :: Maybe (ANF.Typed ANF.Ident, ANF.Expr)
     mDefaultMatch =
       (\xs -> if null xs then Nothing else Just (head xs)) $
       mapMaybe varMatch (NE.toList matches)
@@ -120,7 +120,7 @@ codegenExpr' (ANFECase (ANFCase scrutinee matches ty)) = do
 
     -- TODO: Have a proper default block if there isn't a natural one,
     -- hopefully something that prints an error? Having a default should
-    -- probably be handled in Core/ANF.
+    -- probably be handled in Core/ANF..
     firstBlockName = snd . head $ matchesAndBlockNames
     defaultBlockName =
       case mDefaultMatch of
@@ -142,7 +142,7 @@ codegenExpr' (ANFECase (ANFCase scrutinee matches ty)) = do
   mDefaultOpAndBlock <-
     for mDefaultMatch $ \defaultMatch -> do
       let
-        (ANFTyped _ defaultIdent, defaultExpr) = defaultMatch
+        (ANF.Typed _ defaultIdent, defaultExpr) = defaultMatch
       addSymbolToTable defaultIdent scrutineeOp
       defaultOp <- codegenExpr' defaultExpr
       defaultBlock <- currentBlockName
@@ -167,9 +167,9 @@ codegenExpr' (ANFECase (ANFCase scrutinee matches ty)) = do
   let allOpsAndBlocks = maybe id (:) mDefaultOpAndBlock matchOpsAndBlocks
   addInstruction $ endOpName := Phi endTy allOpsAndBlocks []
   pure endOpRef
-codegenExpr' (ANFEApp (ANFApp (ANFTyped originalTy ident) args' returnTy)) = do
+codegenExpr' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = do
   ty <- fromMaybe originalTy <$> topLevelType ident
-  funcOperand <- valOperand (ANFVar $ ANFTyped ty ident)
+  funcOperand <- valOperand (ANF.Var $ ANF.Typed ty ident)
   let
     (argTys', returnTy') = argAndReturnTypes ty
   opName <- freshUnName
@@ -183,7 +183,7 @@ codegenExpr' (ANFEApp (ANFApp (ANFTyped originalTy ident) args' returnTy)) = do
 
   -- Return operand, maybe converting it too
   convertLLVMType (LocalReference (llvmType returnTy') opName) (llvmType returnTy)
-codegenExpr' (ANFEPrimOp (ANFApp prim args' returnTy)) = do
+codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   opName <- freshUnName
   argOps <- traverse valOperand args'
   addInstruction $ opName := primitiveFunctionInstruction prim argOps
@@ -259,15 +259,15 @@ floatingPointBits =
     X86_FP80FP -> 80
     PPC_FP128FP -> 128
 
-valOperand :: ANFVal -> BlockGen Operand
-valOperand (ANFVar (ANFTyped ty ident)) =
+valOperand :: ANF.Val -> BlockGen Operand
+valOperand (ANF.Var (ANF.Typed ty ident)) =
   let
     ident' = identToLLVM ident
   in
     case ident of
-      (ANFIdent _ _ _ True) -> pure $ ConstantOperand $ C.GlobalReference (mkFunctionType ty) ident'
+      (ANF.Ident _ _ _ True) -> pure $ ConstantOperand $ C.GlobalReference (mkFunctionType ty) ident'
       _ -> fromMaybe (LocalReference (llvmType ty) ident') <$> lookupSymbol ident
-valOperand (ANFLit lit) = pure $ ConstantOperand $ literalConstant lit
+valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
 
 literalConstant :: Literal -> C.Constant
 literalConstant lit =
@@ -302,24 +302,24 @@ primitiveFunctionInstruction primFuncName argumentOperands =
         PrimDoubleToInt -> FPToUI op (llvmPrimitiveType IntType) []
   in instruction
 
-typeToNonEmpty :: ANFType -> NonEmpty ANFType
-typeToNonEmpty (t1 `ANFTyFun` t2) = NE.cons t1 (typeToNonEmpty t2)
+typeToNonEmpty :: ANF.Type -> NonEmpty ANF.Type
+typeToNonEmpty (t1 `ANF.TyFun` t2) = NE.cons t1 (typeToNonEmpty t2)
 typeToNonEmpty ty = ty :| []
 
 -- TODO: Add tests for this
-llvmType :: ANFType -> LLVM.Type
+llvmType :: ANF.Type -> LLVM.Type
 llvmType ty = go (typeToNonEmpty ty)
  where
   go (ty' :| []) =
     case ty' of
-      ANFTyCon tyName ->
-        let prim = fromMaybe (error $ "Expected primitive TyCon, got " ++ show tyName) (anfTypeNamePrimitiveType tyName)
+      ANF.TyCon tyName ->
+        let prim = fromMaybe (error $ "Expected primitive TyCon, got " ++ show tyName) (ANF.typeNamePrimitiveType tyName)
         in llvmPrimitiveType prim
-      ANFTyVar _ -> PointerType (IntegerType 64) (AddrSpace 0)
-      ANFTyFun{} -> mkFunctionType ty
+      ANF.TyVar _ -> PointerType (IntegerType 64) (AddrSpace 0)
+      ANF.TyFun{} -> mkFunctionType ty
   go _ = mkFunctionType ty
 
-mkFunctionType :: ANFType -> LLVM.Type
+mkFunctionType :: ANF.Type -> LLVM.Type
 mkFunctionType ty =
   PointerType
     FunctionType
@@ -331,8 +331,8 @@ mkFunctionType ty =
  where
   ts = typeToNonEmpty ty
 
-identToLLVM :: ANFIdent -> LLVM.Name
-identToLLVM (ANFIdent name' _ _ _) = LLVM.Name $ textToShortBS name'
+identToLLVM :: ANF.Ident -> LLVM.Name
+identToLLVM (ANF.Ident name' _ _ _) = LLVM.Name $ textToShortBS name'
 
 -- | Convert from a amy primitive type to an LLVM type
 llvmPrimitiveType :: PrimitiveType -> LLVM.Type

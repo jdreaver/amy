@@ -1,23 +1,23 @@
 {-# LANGUAGE DeriveFunctor #-}
 
 module Amy.ANF.AST
-  ( ANFModule(..)
-  , ANFBinding(..)
-  , ANFExtern(..)
-  , ANFVal(..)
-  , anfValType
-  , ANFExpr(..)
-  , ANFLet(..)
-  , ANFCase(..)
-  , ANFMatch(..)
-  , ANFPattern(..)
-  , ANFApp(..)
+  ( Module(..)
+  , Binding(..)
+  , Extern(..)
+  , Val(..)
+  , valType
+  , Expr(..)
+  , Let(..)
+  , Case(..)
+  , Match(..)
+  , Pattern(..)
+  , App(..)
 
-  , ANFIdent(..)
-  , ANFType(..)
-  , ANFTypeName(..)
-  , ANFScheme(..)
-  , ANFTyped(..)
+  , Ident(..)
+  , Type(..)
+  , TypeName(..)
+  , Scheme(..)
+  , Typed(..)
   ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
@@ -26,107 +26,107 @@ import Data.Text (Text)
 import Amy.Literal
 import Amy.Prim
 
-data ANFModule
-  = ANFModule
-  { anfModuleBindings :: ![ANFBinding]
-  , anfModuleExterns :: ![ANFExtern]
+data Module
+  = Module
+  { moduleBindings :: ![Binding]
+  , moduleExterns :: ![Extern]
   } deriving (Show, Eq)
 
-data ANFBinding
-  = ANFBinding
-  { anfBindingName :: !ANFIdent
-  , anfBindingType :: !ANFScheme
-  , anfBindingArgs :: ![ANFTyped ANFIdent]
-  , anfBindingReturnType :: !ANFType
-  , anfBindingBody :: !ANFExpr
+data Binding
+  = Binding
+  { bindingName :: !Ident
+  , bindingType :: !Scheme
+  , bindingArgs :: ![Typed Ident]
+  , bindingReturnType :: !Type
+  , bindingBody :: !Expr
   } deriving (Show, Eq)
 
-data ANFExtern
-  = ANFExtern
-  { anfExternName :: !ANFIdent
-  , anfExternType :: !ANFType
+data Extern
+  = Extern
+  { externName :: !Ident
+  , externType :: !Type
   } deriving (Show, Eq)
 
-data ANFVal
-  = ANFVar !(ANFTyped ANFIdent)
-  | ANFLit !Literal
+data Val
+  = Var !(Typed Ident)
+  | Lit !Literal
   deriving (Show, Eq)
 
-anfValType :: ANFVal -> ANFType
-anfValType (ANFVar (ANFTyped ty _)) = ty
-anfValType (ANFLit lit) =
+valType :: Val -> Type
+valType (Var (Typed ty _)) = ty
+valType (Lit lit) =
   let primTy = literalType lit
-  in ANFTyCon $ ANFTypeName (showPrimitiveType primTy) (primitiveTypeId primTy) (Just primTy)
+  in TyCon $ TypeName (showPrimitiveType primTy) (primitiveTypeId primTy) (Just primTy)
 
-data ANFExpr
-  = ANFEVal !ANFVal
-  | ANFELet !ANFLet
-  | ANFECase !ANFCase
-  | ANFEApp !(ANFApp (ANFTyped ANFIdent))
-  | ANFEPrimOp !(ANFApp PrimitiveFunctionName)
+data Expr
+  = EVal !Val
+  | ELet !Let
+  | ECase !Case
+  | EApp !(App (Typed Ident))
+  | EPrimOp !(App PrimitiveFunctionName)
   deriving (Show, Eq)
 
-data ANFLet
-  = ANFLet
-  { anfLetBindings :: ![ANFBinding]
-  , anfLetExpression :: !ANFExpr
+data Let
+  = Let
+  { letBindings :: ![Binding]
+  , letExpression :: !Expr
   } deriving (Show, Eq)
 
-data ANFCase
-  = ANFCase
-  { anfCaseScrutinee :: !ANFVal
-  , anfCaseAlternatives :: !(NonEmpty ANFMatch)
-  , anfCaseType :: !ANFType
+data Case
+  = Case
+  { caseScrutinee :: !Val
+  , caseAlternatives :: !(NonEmpty Match)
+  , caseType :: !Type
   } deriving (Show, Eq)
 
-data ANFMatch
-  = ANFMatch
-  { anfMatchPattern :: !ANFPattern
-  , anfMatchBody :: !ANFExpr
+data Match
+  = Match
+  { matchPattern :: !Pattern
+  , matchBody :: !Expr
   } deriving (Show, Eq)
 
-data ANFPattern
-  = ANFPatternLit !Literal
-  | ANFPatternVar !(ANFTyped ANFIdent)
+data Pattern
+  = PatternLit !Literal
+  | PatternVar !(Typed Ident)
   deriving (Show, Eq)
 
-data ANFApp f
-  = ANFApp
-  { anfAppFunction :: !f
-  , anfAppArgs :: ![ANFVal]
-  , anfAppReturnType :: !ANFType
+data App f
+  = App
+  { appFunction :: !f
+  , appArgs :: ![Val]
+  , appReturnType :: !Type
   } deriving (Show, Eq)
 
 -- | An identifier from source code
-data ANFIdent
-  = ANFIdent
-  { anfIdentText :: !Text
-  , anfIdentId :: !Int
-  , anfIdentPrimitiveName :: !(Maybe PrimitiveFunctionName)
-  , anfIdentIsTopLevel :: !Bool
+data Ident
+  = Ident
+  { identText :: !Text
+  , identId :: !Int
+  , identPrimitiveName :: !(Maybe PrimitiveFunctionName)
+  , identIsTopLevel :: !Bool
   } deriving (Show, Eq, Ord)
 
-data ANFType
-  = ANFTyCon !ANFTypeName
-  | ANFTyVar !ANFTypeName
-  | ANFTyFun !ANFType !ANFType
+data Type
+  = TyCon !TypeName
+  | TyVar !TypeName
+  | TyFun !Type !Type
   deriving (Show, Eq, Ord)
 
-infixr 0 `ANFTyFun`
+infixr 0 `TyFun`
 
-data ANFTypeName
-  = ANFTypeName
-  { anfTypeNameText :: !Text
-  , anfTypeNameId :: !Int
-  , anfTypeNamePrimitiveType :: !(Maybe PrimitiveType)
+data TypeName
+  = TypeName
+  { typeNameText :: !Text
+  , typeNameId :: !Int
+  , typeNamePrimitiveType :: !(Maybe PrimitiveType)
   } deriving (Show, Eq, Ord)
 
-data ANFScheme
-  = ANFForall ![ANFTypeName] ANFType
+data Scheme
+  = Forall ![TypeName] Type
   deriving (Show, Eq)
 
-data ANFTyped a
-  = ANFTyped
-  { anfTypedType :: !ANFType
-  , anfTypedValue :: !a
+data Typed a
+  = Typed
+  { typedType :: !Type
+  , typedValue :: !a
   } deriving (Show, Eq, Ord, Functor)

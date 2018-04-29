@@ -20,12 +20,12 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import LLVM.AST as LLVM
 
-import Amy.ANF.AST
+import Amy.ANF.AST as ANF
 
-newtype BlockGen a = BlockGen (ReaderT (Map ANFIdent ANFType) (State BlockGenState) a)
-  deriving (Functor, Applicative, Monad, MonadReader (Map ANFIdent ANFType), MonadState BlockGenState)
+newtype BlockGen a = BlockGen (ReaderT (Map ANF.Ident ANF.Type) (State BlockGenState) a)
+  deriving (Functor, Applicative, Monad, MonadReader (Map ANF.Ident ANF.Type), MonadState BlockGenState)
 
-runBlockGen :: [(ANFIdent, ANFType)] -> BlockGen Operand -> [BasicBlock]
+runBlockGen :: [(ANF.Ident, ANF.Type)] -> BlockGen Operand -> [BasicBlock]
 runBlockGen topLevelTypes (BlockGen action) =
   let
     typeMap = Map.fromList topLevelTypes
@@ -37,7 +37,7 @@ data BlockGenState
   = BlockGenState
   { blockGenStateCurrentBlock :: !PartialBlock
   , blockGenStateBlockStack :: ![BasicBlock]
-  , blockGenStateSymbolTable :: !(Map ANFIdent Operand)
+  , blockGenStateSymbolTable :: !(Map ANF.Ident Operand)
   , blockGenStateLastId :: !Word
   } deriving (Show, Eq)
 
@@ -76,10 +76,10 @@ terminateBlock term newName =
 currentBlockName :: BlockGen LLVM.Name
 currentBlockName = gets (partialBlockName . blockGenStateCurrentBlock)
 
-addSymbolToTable :: ANFIdent -> Operand -> BlockGen ()
+addSymbolToTable :: ANF.Ident -> Operand -> BlockGen ()
 addSymbolToTable ident op = modify' (\s -> s { blockGenStateSymbolTable = Map.insert ident op (blockGenStateSymbolTable s) })
 
-lookupSymbol :: ANFIdent -> BlockGen (Maybe Operand)
+lookupSymbol :: ANF.Ident -> BlockGen (Maybe Operand)
 lookupSymbol ident =
   Map.lookup ident <$> gets blockGenStateSymbolTable
 
@@ -92,5 +92,5 @@ freshId = do
 freshUnName :: BlockGen LLVM.Name
 freshUnName = UnName <$> freshId
 
-topLevelType :: ANFIdent -> BlockGen (Maybe ANFType)
+topLevelType :: ANF.Ident -> BlockGen (Maybe ANF.Type)
 topLevelType ident = asks (Map.lookup ident)

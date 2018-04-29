@@ -15,7 +15,7 @@ import qualified Data.Set as Set
 import Data.Text (Text, pack)
 import GHC.Exts (fromList)
 
-import Amy.ANF.AST
+import Amy.ANF.AST as ANF
 import Amy.TypeCheck.AST as T
 
 newtype ANFConvert a = ANFConvert (State ANFConvertState a)
@@ -39,10 +39,10 @@ freshId = do
   modify' (\s -> s { lastId = 1 + lastId s })
   gets lastId
 
-freshIdent :: Text -> ANFConvert ANFIdent
+freshIdent :: Text -> ANFConvert ANF.Ident
 freshIdent t = do
   id' <- freshId
-  pure $ ANFIdent (t <> pack (show id')) id' Nothing False
+  pure $ ANF.Ident (t <> pack (show id')) id' Nothing False
 
 isIdentTopLevel :: T.Ident -> ANFConvert Bool
 isIdentTopLevel ident = Set.member ident <$> gets topLevelNames
