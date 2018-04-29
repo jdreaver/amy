@@ -10,8 +10,12 @@ main =
         else abs (f 200)
     y :: Int
     y = x
+    b =
+      case (iAdd x 2) of
+        1 -> 2
+        t -> iSub t 3
   in
-    let z = iAdd x y; a = z in a
+    let z = iAdd b y; a = z in a
 
 # f :: Int -> Int
 f x = if True then abs x else threeHundred

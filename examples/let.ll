@@ -21,8 +21,22 @@ if.else.0:                                        ; preds = %entry
 
 if.end.0:                                         ; preds = %if.else.0, %if.then.0
   %end.0 = phi i64 [ %1, %if.then.0 ], [ %3, %if.else.0 ]
-  %4 = add i64 %end.0, %end.0
-  ret i64 %4
+  %4 = add i64 %end.0, 2
+  switch i64 %4, label %case.default.6 [
+    i64 1, label %case.06
+  ]
+
+case.default.6:                                   ; preds = %if.end.0
+  %5 = sub i64 %4, 3
+  br label %case.end.6
+
+case.06:                                          ; preds = %if.end.0
+  br label %case.end.6
+
+case.end.6:                                       ; preds = %case.06, %case.default.6
+  %end.6 = phi i64 [ %5, %case.default.6 ], [ 2, %case.06 ]
+  %6 = add i64 %end.6, %end.0
+  ret i64 %6
 }
 
 define private i64 @f(i64 %x) {

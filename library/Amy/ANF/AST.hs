@@ -86,6 +86,7 @@ data ANFCase
   = ANFCase
   { anfCaseScrutinee :: !ANFVal
   , anfCaseAlternatives :: !(NonEmpty ANFMatch)
+  , anfCaseType :: !ANFType
   } deriving (Show, Eq)
 
 data ANFMatch

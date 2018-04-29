@@ -5,13 +5,14 @@ module Amy.Codegen.Pure
   ( codegenModule
   ) where
 
+import Data.Bifunctor (second)
 import qualified Data.ByteString.Char8 as BS8
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
 import Data.Foldable (for_)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Traversable (for)
@@ -128,7 +129,70 @@ codegenExpr' (ANFEIf (ANFIf pred' then' else' ty)) = do
   -- Generate end block
   addInstruction $ endOpName := Phi ty' [(thenOp, thenBlockFinalName), (elseOp, elseBlockFinalName)] []
   pure endOpRef
-codegenExpr' (ANFECase case') = error $ "Can't codegen ANF case expression yet " ++ show case'
+codegenExpr' (ANFECase (ANFCase scrutinee matches ty)) = do
+  caseId <- freshId
+
+  -- TODO: Move a lot of this logic to ANF conversion, like finding the default
+  -- match and converting match patterns to literals.
+  let
+    -- Find all matches for literals
+    literalMatch :: ANFMatch -> Maybe (Literal, ANFExpr)
+    literalMatch (ANFMatch (ANFPatternLit lit) body) = Just (lit, body)
+    literalMatch _ = Nothing
+    literalMatches = mapMaybe literalMatch (NE.toList matches)
+
+    varMatch :: ANFMatch -> Maybe (ANFTyped ANFIdent, ANFExpr)
+    varMatch (ANFMatch (ANFPatternVar ident) body) = Just (ident, body)
+    varMatch _ = Nothing
+
+    -- TODO: Have a proper default block if there isn't a natural one,
+    -- hopefully something that prints an error? Having a default should
+    -- probably be handled in Core/ANF.
+    defaultMatch :: (ANFTyped ANFIdent, ANFExpr)
+    defaultMatch =
+      fromMaybe (error "Couldn't find default match") $
+      (\xs -> if null xs then Nothing else Just (head xs)) $
+      mapMaybe varMatch (NE.toList matches)
+
+    -- Give names to all the blocks
+    mkCaseName nameBase = LLVM.Name $ stringToShortBS $ nameBase ++ show caseId
+    matchesAndBlockNames =
+      second (mkCaseName . ("case." ++) . show)
+      <$> zip literalMatches [(0 :: Int)..]
+    defaultBlockName = mkCaseName "case.default."
+    endBlockName = mkCaseName "case.end."
+    endOpName = mkCaseName "end."
+    endTy = llvmType ty
+    endOpRef = LocalReference endTy endOpName
+
+  -- Generate the switch statement
+  scrutineeOp <- valOperand scrutinee
+  let
+    switchNames = (\((lit, _), name') -> (literalConstant lit, name')) <$> matchesAndBlockNames
+
+  -- Generate default block
+  terminateBlock (Do $ Switch scrutineeOp defaultBlockName switchNames []) defaultBlockName
+  let
+    (ANFTyped _ defaultIdent, defaultExpr) = defaultMatch
+  addSymbolToTable defaultIdent scrutineeOp
+  defaultOp <- codegenExpr' defaultExpr
+  defaultBlock <- currentBlockName
+
+  -- Generate other blocks
+  matchOpsAndBlocks <-
+    for matchesAndBlockNames $ \((_, expr), blockName) -> do
+      terminateBlock (Do $ Br endBlockName []) blockName
+      exprOp <- codegenExpr' expr
+      -- N.B. The block name could have changed while generating the
+      -- expression, so we need to get the "actual" block name.
+      actualBlockName <- currentBlockName
+      --terminateBlock (Do $ Br endBlockName []) nextBlockName
+      pure (exprOp, actualBlockName)
+
+  -- Generate end block
+  terminateBlock (Do $ Br endBlockName []) endBlockName
+  addInstruction $ endOpName := Phi endTy ((defaultOp, defaultBlock) : matchOpsAndBlocks) []
+  pure endOpRef
 codegenExpr' (ANFEApp (ANFApp (ANFTyped originalTy ident) args' returnTy)) = do
   ty <- fromMaybe originalTy <$> topLevelType ident
   funcOperand <- valOperand (ANFVar $ ANFTyped ty ident)
@@ -229,12 +293,14 @@ valOperand (ANFVar (ANFTyped ty ident)) =
     case ident of
       (ANFIdent _ _ _ True) -> pure $ ConstantOperand $ C.GlobalReference (mkFunctionType ty) ident'
       _ -> fromMaybe (LocalReference (llvmType ty) ident') <$> lookupSymbol ident
-valOperand (ANFLit lit) =
-  pure $ ConstantOperand $
-    case lit of
-      LiteralInt i -> C.Int 64 (fromIntegral i)
-      LiteralDouble x -> C.Float (F.Double x)
-      LiteralBool x -> C.Int 1 $ if x then 1 else 0
+valOperand (ANFLit lit) = pure $ ConstantOperand $ literalConstant lit
+
+literalConstant :: Literal -> C.Constant
+literalConstant lit =
+  case lit of
+    LiteralInt i -> C.Int 64 (fromIntegral i)
+    LiteralDouble x -> C.Float (F.Double x)
+    LiteralBool x -> C.Int 1 $ if x then 1 else 0
 
 primitiveFunctionInstruction
   :: PrimitiveFunctionName

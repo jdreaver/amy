@@ -67,10 +67,11 @@ normalizeExpr name (TEIf (TIf pred' then' else')) c =
     else'' <- normalizeTerm name else'
     let ty = expressionType then'
     c $ ANFEIf $ ANFIf predVal then'' else'' (convertTType ty)
-normalizeExpr name (TECase (TCase scrutinee matches)) c =
+normalizeExpr name expr@(TECase (TCase scrutinee matches)) c =
   normalizeName name scrutinee $ \scrutineeVal -> do
     matches' <- traverse normalizeMatch matches
-    c $ ANFECase (ANFCase scrutineeVal matches')
+    let ty = convertTType $ expressionType expr
+    c $ ANFECase (ANFCase scrutineeVal matches' ty)
 normalizeExpr name (TELet (TLet bindings expr)) c = do
   bindings' <- traverse (normalizeBinding Nothing) bindings
   expr' <- normalizeExpr name expr c
