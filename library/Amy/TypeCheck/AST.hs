@@ -15,7 +15,6 @@ module Amy.TypeCheck.AST
   , App(..)
   , expressionType
   , patternType
-  , moduleNames
 
   , Ident(..)
   , Type(..)
@@ -126,42 +125,6 @@ expressionType (EParens expr) = expressionType expr
 patternType :: Pattern -> Type
 patternType (PatternLit lit) = literalType' lit
 patternType (PatternVar (Typed ty _)) = ty
-
--- | Get all the 'Name's in a module.
-moduleNames :: Module -> [Ident]
-moduleNames (Module bindings externs) =
-  concatMap bindingNames bindings
-  ++ fmap externName externs
-
-bindingNames :: Binding -> [Ident]
-bindingNames binding =
-  bindingName binding
-  : (typedValue <$> bindingArgs binding)
-  ++ exprNames (bindingBody binding)
-
-exprNames :: Expr -> [Ident]
-exprNames (ELit _) = []
-exprNames (EVar var) = [typedValue var] -- TODO: Shouldn't we only need name bindings here?
-exprNames (EIf (If pred' then' else')) =
-  exprNames pred'
-  ++ exprNames then'
-  ++ exprNames else'
-exprNames (ECase (Case scrutinee matches)) =
-  exprNames scrutinee ++ concatMap matchNames matches
-exprNames (ELet (Let bindings expr)) =
-  concatMap bindingNames bindings
-  ++ exprNames expr
-exprNames (EApp (App f args _)) =
-  exprNames f
-  ++ concatMap exprNames args
-exprNames (EParens expr) = exprNames expr
-
-matchNames :: Match -> [Ident]
-matchNames (Match pat body) = patternNames pat ++ exprNames body
-
-patternNames :: Pattern -> [Ident]
-patternNames (PatternLit _) = []
-patternNames (PatternVar (Typed _ var)) = [var]
 
 data Ident
   = Ident

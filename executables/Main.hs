@@ -16,6 +16,7 @@ import Text.Megaparsec
 
 import Amy.ANF
 import Amy.Codegen
+import Amy.Core
 import Amy.Errors
 import Amy.Renamer
 import Amy.Syntax
@@ -47,5 +48,5 @@ process inputFile input =
       renamed <- rename parsed
       first (:[]) $ inferModule renamed
   in do
-    eCodegenString <- traverse (generateLLVMIR . codegenModule . normalizeModule) eModule
+    eCodegenString <- traverse (generateLLVMIR . codegenModule . normalizeModule . desugarModule) eModule
     either (hPutStrLn stderr . intercalate "\n" . fmap showError) BS8.putStrLn eCodegenString
