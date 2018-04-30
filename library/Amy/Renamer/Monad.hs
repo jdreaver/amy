@@ -8,9 +8,12 @@ module Amy.Renamer.Monad
   , addValueToScope
   , lookupValueInScope
   , lookupValueInScopeOrError
-  , addTypeToScope
-  , lookupTypeInScope
-  , lookupTypeInScopeOrError
+  , addTypeConstructorToScope
+  , lookupTypeConstructorInScope
+  , lookupTypeConstructorInScopeOrError
+  , addTypeVariableToScope
+  , lookupTypeVariableInScope
+  , lookupTypeVariableInScopeOrError
   , withNewScope
   ) where
 
@@ -36,7 +39,8 @@ data RenamerState
   { renamerStateLastId :: !Int
     -- ^ Last 'NameIntId' generated
   , renamerStateValuesInScope :: !(Map Text Ident)
-  , renamerStateTypesInScope :: !(Map Text TypeName)
+  , renamerStateTypeConstructorsInScope :: !(Map Text TypeName)
+  , renamerStateTypeVariablesInScope :: !(Map Text TypeName)
   } deriving (Show, Eq)
 
 emptyRenamerState :: RenamerState
@@ -44,7 +48,8 @@ emptyRenamerState =
   RenamerState
   { renamerStateLastId = maximum (fst <$> allPrimitiveFunctionNamesAndIds) + 1
   , renamerStateValuesInScope = primitiveFunctionNames
-  , renamerStateTypesInScope = Map.empty
+  , renamerStateTypeConstructorsInScope = primitiveTypeNames
+  , renamerStateTypeVariablesInScope = Map.empty
   }
 
 primitiveFunctionNames :: Map Text Ident
@@ -52,9 +57,19 @@ primitiveFunctionNames =
   Map.fromList $
     (\(id', prim) ->
        ( showPrimitiveFunctionName prim
-       , Ident (showPrimitiveFunctionName prim) id' (Just prim)
+       , Ident (showPrimitiveFunctionName prim) id' ValueName (Just prim)
        ))
     <$> allPrimitiveFunctionNamesAndIds
+
+primitiveTypeNames :: Map Text TypeName
+primitiveTypeNames =
+  Map.fromList $
+    (\(id', prim) ->
+       ( showPrimitiveType prim
+       , TypeName (showPrimitiveType prim) Nothing id' (Just prim)
+       )
+    )
+    <$> allPrimitiveTypesAndIds
 
 -- | Generate a new 'NameIntId'
 freshId :: Renamer Int
@@ -62,11 +77,11 @@ freshId = do
   modify' (\s -> s { renamerStateLastId = 1 + renamerStateLastId s })
   gets renamerStateLastId
 
-addValueToScope :: Located Text -> Renamer (Validation [Error] (Located Ident))
-addValueToScope lName@(Located span' name) = do
+addValueToScope :: Namespace -> Located Text -> Renamer (Validation [Error] (Located Ident))
+addValueToScope namespace lName@(Located span' name) = do
   nameId <- freshId
   let
-    ident = Ident name nameId Nothing
+    ident = Ident name nameId namespace Nothing
   mExistingName <- lookupValueInScope name
   case mExistingName of
     Just existingName -> pure $ Failure [VariableShadowed lName existingName]
@@ -81,24 +96,43 @@ lookupValueInScopeOrError :: Located Text -> Renamer (Validation [Error] (Locate
 lookupValueInScopeOrError name@(Located span' name') =
   maybe (Failure [UnknownVariable name]) (Success . Located span') <$> lookupValueInScope name'
 
-addTypeToScope :: Located Text -> Renamer (Validation [Error] TypeName)
-addTypeToScope (Located span' name) = do
+addTypeConstructorToScope :: Located Text -> Renamer (Validation [Error] TypeName)
+addTypeConstructorToScope lname@(Located span' name) = do
   nameId <- freshId
   let
-    tname = TypeName name span' nameId Nothing
-  mExistingName <- lookupTypeInScope name
+    tname = TypeName name (Just span') nameId Nothing
+  mExistingName <- lookupTypeConstructorInScope name
+  case mExistingName of
+    Just existingName -> pure $ Failure [TypeNameAlreadyExists lname existingName]
+    Nothing -> do
+      modify' (\s -> s { renamerStateTypeConstructorsInScope = Map.insert name tname (renamerStateTypeConstructorsInScope s) })
+      pure $ Success tname
+
+lookupTypeConstructorInScope :: Text -> Renamer (Maybe TypeName)
+lookupTypeConstructorInScope name = Map.lookup name <$> gets renamerStateTypeConstructorsInScope
+
+lookupTypeConstructorInScopeOrError :: Located Text -> Renamer (Validation [Error] TypeName)
+lookupTypeConstructorInScopeOrError name@(Located _ name') =
+  maybe (Failure [UnknownTypeName name]) Success <$> lookupTypeConstructorInScope name'
+
+addTypeVariableToScope :: Located Text -> Renamer (Validation [Error] TypeName)
+addTypeVariableToScope (Located span' name) = do
+  nameId <- freshId
+  let
+    tname = TypeName name (Just span') nameId Nothing
+  mExistingName <- lookupTypeVariableInScope name
   case mExistingName of
     Just _ -> pure () -- These will be set to equal during inference
     Nothing ->
-      modify' (\s -> s { renamerStateTypesInScope = Map.insert name tname (renamerStateTypesInScope s) })
+      modify' (\s -> s { renamerStateTypeVariablesInScope = Map.insert name tname (renamerStateTypeVariablesInScope s) })
   pure $ Success tname
 
-lookupTypeInScope :: Text -> Renamer (Maybe TypeName)
-lookupTypeInScope name = Map.lookup name <$> gets renamerStateTypesInScope
+lookupTypeVariableInScope :: Text -> Renamer (Maybe TypeName)
+lookupTypeVariableInScope name = Map.lookup name <$> gets renamerStateTypeVariablesInScope
 
-lookupTypeInScopeOrError :: Located Text -> Renamer (Validation [Error] TypeName)
-lookupTypeInScopeOrError name@(Located _ name') =
-  maybe (Failure [UnknownTypeName name]) Success <$> lookupTypeInScope name'
+lookupTypeVariableInScopeOrError :: Located Text -> Renamer (Validation [Error] TypeName)
+lookupTypeVariableInScopeOrError name@(Located _ name') =
+  maybe (Failure [UnknownTypeName name]) Success <$> lookupTypeVariableInScope name'
 
 -- | Runs a 'Renamer' action in a fresh scope and restores the original scope
 -- when the action is done.
@@ -109,7 +143,8 @@ withNewScope action = do
   modify'
     (\s -> s
       { renamerStateValuesInScope = renamerStateValuesInScope originalState
-      , renamerStateTypesInScope = renamerStateTypesInScope originalState
+      , renamerStateTypeConstructorsInScope = renamerStateTypeConstructorsInScope originalState
+      , renamerStateTypeVariablesInScope = renamerStateTypeVariablesInScope originalState
       }
     )
   pure result

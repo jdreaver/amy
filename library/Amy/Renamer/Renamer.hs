@@ -12,7 +12,6 @@ import Data.Text (Text)
 import Data.Validation
 
 import Amy.Errors
-import Amy.Prim
 import Amy.Renamer.AST as R
 import Amy.Renamer.Monad
 import Amy.Syntax.AST as S
@@ -24,7 +23,7 @@ rename ast = toEither . runRenamer emptyRenamerState $ rename' ast
 rename' :: S.Module -> Renamer (Validation [Error] R.Module)
 rename' (S.Module declarations) = do
   -- Rename type declarations
-  _ <- traverse_ renameTypeDeclaration (mapMaybe declType declarations)
+  typeDeclarations <- traverse renameTypeDeclaration (mapMaybe declType declarations)
 
   -- Rename extern declarations
   rModuleExterns <- traverse renameExtern (mapMaybe declExtern declarations)
@@ -38,26 +37,34 @@ rename' (S.Module declarations) = do
     $ R.Module
     <$> rModuleBindings
     <*> sequenceA rModuleExterns
+    <*> sequenceA typeDeclarations
 
-renameTypeDeclaration :: TypeDeclaration -> a
-renameTypeDeclaration decl = error $ "Can't rename type declarations yet " ++ show decl
+renameTypeDeclaration :: S.TypeDeclaration -> Renamer (Validation [Error] R.TypeDeclaration)
+renameTypeDeclaration (S.TypeDeclaration tyName dataCon argTy) = do
+  tyName' <- addTypeConstructorToScope tyName
+  -- TODO: Use a different dict entirely for data constructors so we get better
+  -- errors and proper namespacing.
+  dataCon' <- addValueToScope DataConstructorName dataCon
+  argTy' <- lookupTypeConstructorInScopeOrError argTy
+  pure
+    $ R.TypeDeclaration
+    <$> tyName'
+    <*> dataCon'
+    <*> argTy'
 
 renameExtern :: S.Extern -> Renamer (Validation [Error] R.Extern)
 renameExtern extern = do
-  name' <- addValueToScope (S.externName extern)
+  name' <- addValueToScope ValueName (S.externName extern)
   type' <- renameType (S.externType extern)
   pure $
     R.Extern
       <$> name'
       <*> type'
 
-readPrimitiveTyCon :: Located Text -> Validation [Error] PrimitiveType
-readPrimitiveTyCon name@(Located _ name') = maybe (Failure [UnknownTypeName name]) Success $ readPrimitiveType name'
-
 renameBindingGroup :: [S.Binding] -> [S.BindingType] -> Renamer (Validation [Error] [R.Binding])
 renameBindingGroup bindings bindingTypes = do
   -- Add each binding name to scope since they can be mutually recursive
-  traverse_ addValueToScope (S.bindingName <$> bindings)
+  traverse_ (addValueToScope ValueName) (S.bindingName <$> bindings)
   -- Rename each individual binding
   bindings' <- traverse (renameBinding $ bindingTypesMap bindingTypes) bindings
   pure $ sequenceA bindings'
@@ -76,7 +83,7 @@ renameBinding typeMap binding = withNewScope $ do -- Begin new scope
         (Success (Located l ident)) -> pure (Located l ident)
         Failure f -> Failure f
   type' <- traverse renameScheme $ Map.lookup (locatedValue $ S.bindingName binding) typeMap
-  args <- traverse addValueToScope (S.bindingArgs binding)
+  args <- traverse (addValueToScope ValueName) (S.bindingArgs binding)
   body <- renameExpression (S.bindingBody binding)
   pure $
     R.Binding
@@ -87,7 +94,7 @@ renameBinding typeMap binding = withNewScope $ do -- Begin new scope
 
 renameScheme :: S.Scheme -> Renamer (Validation [Error] R.Scheme)
 renameScheme (S.Forall vars ty) = do
-  vars' <- traverse addTypeToScope vars
+  vars' <- traverse addTypeVariableToScope vars
   ty' <- renameType ty
   pure $
     R.Forall
@@ -95,10 +102,8 @@ renameScheme (S.Forall vars ty) = do
     <*> ty'
 
 renameType :: S.Type -> Renamer (Validation [Error] R.Type)
-renameType (S.TyCon name@(Located span' name')) =
-  let primName = readPrimitiveTyCon name
-  in traverse (\prim -> pure $ R.TyCon $ R.TypeName name' span' (primitiveTypeId prim) (Just prim)) primName
-renameType (S.TyVar name) = fmap R.TyVar <$> lookupTypeInScopeOrError name
+renameType (S.TyCon name) = fmap R.TyCon <$> lookupTypeConstructorInScopeOrError name
+renameType (S.TyVar name) = fmap R.TyVar <$> lookupTypeVariableInScopeOrError name
 renameType (S.TyFun ty1 ty2) = do
   ty1' <- renameType ty1
   ty2' <- renameType ty2
@@ -110,9 +115,11 @@ renameType (S.TyFun ty1 ty2) = do
 renameExpression :: S.Expr -> Renamer (Validation [Error] R.Expr)
 renameExpression (S.ELit lit) = pure $ Success $ R.ELit lit
 renameExpression (S.EVar var) =
+  -- TODO: Maybe validate that we actually have the proper namespace here. Or,
+  -- get rid of this distinction in the syntax AST.
   case var of
     Variable name -> fmap R.EVar <$> lookupValueInScopeOrError name
-    DataConstructor name -> error $ "Can't handle data constructors yet " ++ show name
+    DataConstructor name -> fmap R.EVar <$> lookupValueInScopeOrError name
 renameExpression (S.EIf (S.If predicate thenExpression elseExpression)) = do
   pred' <- renameExpression predicate
   then' <- renameExpression thenExpression
@@ -160,7 +167,7 @@ renameMatch (S.Match pat body) =
      case pat of
         S.PatternLit lit -> pure . Success $ R.PatternLit lit
         S.PatternVar var -> do
-          var' <- addValueToScope var
+          var' <- addValueToScope ValueName var
           pure $ R.PatternVar <$> var'
     body' <- renameExpression body
     pure

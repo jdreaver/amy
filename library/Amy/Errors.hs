@@ -23,6 +23,7 @@ data Error
   -- Renamer
   | UnknownVariable !(Located Text)
   | VariableShadowed !(Located Text) !R.Ident
+  | TypeNameAlreadyExists !(Located Text) !R.TypeName
   | UnknownTypeName !(Located Text)
   | NonIdentifierName !(Located Text)
 
@@ -51,6 +52,7 @@ errorLocation e =
     ParserError{} -> Nothing
     UnknownVariable (Located s _) -> Just s
     VariableShadowed (Located s _) _ -> Just s
+    TypeNameAlreadyExists (Located s _) _ -> Just s
     UnknownTypeName (Located s _) -> Just s
     NonIdentifierName (Located s _) -> Just s
 

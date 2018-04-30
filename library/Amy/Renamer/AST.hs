@@ -4,6 +4,7 @@ module Amy.Renamer.AST
   ( Module(..)
   , Binding(..)
   , Extern(..)
+  , TypeDeclaration(..)
   , Expr(..)
   , If(..)
   , Case(..)
@@ -13,6 +14,7 @@ module Amy.Renamer.AST
   , App(..)
 
   , Ident(..)
+  , Namespace(..)
   , Type(..)
   , TypeName(..)
   , Scheme(..)
@@ -32,6 +34,7 @@ data Module
   = Module
   { moduleBindings :: ![Binding]
   , moduleExterns :: ![Extern]
+  , moduleTypeDeclarations :: ![TypeDeclaration]
   } deriving (Show, Eq)
 
 -- | A binding after renaming. This is a combo of a 'Binding' and a
@@ -49,6 +52,13 @@ data Extern
   = Extern
   { externName :: !(Located Ident)
   , externType :: !Type
+  } deriving (Show, Eq)
+
+data TypeDeclaration
+  = TypeDeclaration
+  { typeDeclarationTypeName :: !TypeName
+  , typeDeclarationConstructorName :: !(Located Ident)
+  , typeDeclarationArgument :: !TypeName
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'
@@ -104,8 +114,14 @@ data Ident
   = Ident
   { identText :: !Text
   , identId :: !Int
+  , identNamespace :: !Namespace
   , identPrimitiveName :: !(Maybe PrimitiveFunctionName)
   } deriving (Show, Eq, Ord)
+
+data Namespace
+  = ValueName
+  | DataConstructorName
+  deriving (Show, Eq, Ord)
 
 data Type
   = TyCon !TypeName
@@ -118,7 +134,7 @@ infixr 0 `TyFun`
 data TypeName
   = TypeName
   { typeNameText :: !Text
-  , typeNameLocation :: !SourceSpan
+  , typeNameLocation :: !(Maybe SourceSpan)
   , typeNameId :: !Int
   , typeNamePrimitiveType :: !(Maybe PrimitiveType)
   } deriving (Show, Eq)

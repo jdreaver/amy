@@ -145,7 +145,7 @@ newtype Constraint = Constraint { unConstraint :: (T.Type, T.Type) }
 --
 
 inferModule :: R.Module -> Either Error T.Module
-inferModule (R.Module bindings externs) = do
+inferModule (R.Module bindings externs _) = do
   let
     externs' = (\(R.Extern (Located _ name) ty) -> T.Extern (convertIdent name) (convertType ty)) <$> externs
     externSchemes = (\(T.Extern name ty) -> (name, T.Forall [] ty)) <$> externs'
@@ -450,7 +450,7 @@ freeEnvTypeVariables (TyEnv env) = foldl' Set.union Set.empty $ freeSchemeTypeVa
 --
 
 convertIdent :: R.Ident -> T.Ident
-convertIdent (R.Ident name id' mPrim) = T.Ident name id' mPrim
+convertIdent (R.Ident name id' _ mPrim) = T.Ident name id' mPrim
 
 convertScheme :: R.Scheme -> T.Scheme
 convertScheme (R.Forall vars ty) = T.Forall (convertTypeName <$> vars) (convertType ty)

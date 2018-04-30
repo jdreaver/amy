@@ -12,6 +12,8 @@ module Amy.Prim
   ( PrimitiveType(..)
   , readPrimitiveType
   , showPrimitiveType
+  , allPrimitiveTypes
+  , allPrimitiveTypesAndIds
   , primitiveTypeId
   , PrimitiveFunction(..)
   , PrimitiveFunctionName(..)
@@ -26,6 +28,7 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import Data.Tuple (swap)
 
 data PrimitiveType
   = IntType
@@ -51,8 +54,11 @@ showPrimitiveType t =
 allPrimitiveTypes :: [PrimitiveType]
 allPrimitiveTypes = [minBound..maxBound]
 
+allPrimitiveTypesAndIds :: [(Int, PrimitiveType)]
+allPrimitiveTypesAndIds = zip [0..] allPrimitiveTypes
+
 primitiveTypeIds :: Map PrimitiveType Int
-primitiveTypeIds = Map.fromList $ zip allPrimitiveTypes [0..]
+primitiveTypeIds = Map.fromList . fmap swap $ allPrimitiveTypesAndIds
 
 primitiveTypeId :: PrimitiveType -> Int
 primitiveTypeId = (Map.!) primitiveTypeIds
