@@ -42,9 +42,7 @@ rename' (S.Module declarations) = do
 renameTypeDeclaration :: S.TypeDeclaration -> Renamer (Validation [Error] R.TypeDeclaration)
 renameTypeDeclaration (S.TypeDeclaration tyName dataCon argTy) = do
   tyName' <- addTypeConstructorToScope tyName
-  -- TODO: Use a different dict entirely for data constructors so we get better
-  -- errors and proper namespacing.
-  dataCon' <- addValueToScope DataConstructorName dataCon
+  dataCon' <- addDataConstructorToScope dataCon
   argTy' <- lookupTypeConstructorInScopeOrError argTy
   pure
     $ R.TypeDeclaration
@@ -54,7 +52,7 @@ renameTypeDeclaration (S.TypeDeclaration tyName dataCon argTy) = do
 
 renameExtern :: S.Extern -> Renamer (Validation [Error] R.Extern)
 renameExtern extern = do
-  name' <- addValueToScope ValueName (S.externName extern)
+  name' <- addValueToScope (S.externName extern)
   type' <- renameType (S.externType extern)
   pure $
     R.Extern
@@ -64,7 +62,7 @@ renameExtern extern = do
 renameBindingGroup :: [S.Binding] -> [S.BindingType] -> Renamer (Validation [Error] [R.Binding])
 renameBindingGroup bindings bindingTypes = do
   -- Add each binding name to scope since they can be mutually recursive
-  traverse_ (addValueToScope ValueName) (S.bindingName <$> bindings)
+  traverse_ addValueToScope (S.bindingName <$> bindings)
   -- Rename each individual binding
   bindings' <- traverse (renameBinding $ bindingTypesMap bindingTypes) bindings
   pure $ sequenceA bindings'
@@ -83,7 +81,7 @@ renameBinding typeMap binding = withNewScope $ do -- Begin new scope
         (Success (Located l ident)) -> pure (Located l ident)
         Failure f -> Failure f
   type' <- traverse renameScheme $ Map.lookup (locatedValue $ S.bindingName binding) typeMap
-  args <- traverse (addValueToScope ValueName) (S.bindingArgs binding)
+  args <- traverse addValueToScope (S.bindingArgs binding)
   body <- renameExpression (S.bindingBody binding)
   pure $
     R.Binding
@@ -115,11 +113,9 @@ renameType (S.TyFun ty1 ty2) = do
 renameExpression :: S.Expr -> Renamer (Validation [Error] R.Expr)
 renameExpression (S.ELit lit) = pure $ Success $ R.ELit lit
 renameExpression (S.EVar var) =
-  -- TODO: Maybe validate that we actually have the proper namespace here. Or,
-  -- get rid of this distinction in the syntax AST.
   case var of
     Variable name -> fmap R.EVar <$> lookupValueInScopeOrError name
-    DataConstructor name -> fmap R.EVar <$> lookupValueInScopeOrError name
+    DataConstructor name -> fmap R.EVar <$> lookupDataConstructorInScopeOrError name
 renameExpression (S.EIf (S.If predicate thenExpression elseExpression)) = do
   pred' <- renameExpression predicate
   then' <- renameExpression thenExpression
@@ -167,7 +163,7 @@ renameMatch (S.Match pat body) =
      case pat of
         S.PatternLit lit -> pure . Success $ R.PatternLit lit
         S.PatternVar var -> do
-          var' <- addValueToScope ValueName var
+          var' <- addValueToScope var
           pure $ R.PatternVar <$> var'
     body' <- renameExpression body
     pure
