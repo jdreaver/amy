@@ -24,17 +24,21 @@ normalizeModule module'@(C.Module bindings externs typeDeclarations) =
       else maximum moduleIdentIds
 
     -- Record top-level names
-    topLevelNames = (C.bindingName <$> bindings) ++ (C.externName <$> externs)
+    topLevelNames =
+      (C.bindingName <$> bindings)
+      ++ (C.externName <$> externs)
+      ++ (C.typeDeclarationConstructorName <$> typeDeclarations)
 
     -- Actual conversion
-    convertState = anfConvertState (maxId + 1) topLevelNames
-    bindings' = runANFConvert convertState $ traverse (normalizeBinding (Just "res")) bindings
-    externs' = convertExtern <$> externs
     typeDeclarations' = convertTypeDeclaration <$> typeDeclarations
-  in ANF.Module bindings' externs' typeDeclarations'
+    convertState = anfConvertState (maxId + 1) topLevelNames typeDeclarations'
+  in runANFConvert convertState $ do
+    bindings' <- traverse (normalizeBinding (Just "res")) bindings
+    externs' <- traverse convertExtern externs
+    pure $ ANF.Module bindings' externs' typeDeclarations'
 
-convertExtern :: C.Extern -> ANF.Extern
-convertExtern (C.Extern name ty) = ANF.Extern (convertIdent True name) (convertType ty)
+convertExtern :: C.Extern -> ANFConvert ANF.Extern
+convertExtern (C.Extern name ty) = ANF.Extern (convertIdent True name) <$> convertType ty
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANF.TypeDeclaration
 convertTypeDeclaration (C.TypeDeclaration tyName dataCon tyArg) =
@@ -47,16 +51,22 @@ convertIdent' :: C.Ident -> ANFConvert ANF.Ident
 convertIdent' ident@(C.Ident name id' mPrim) =
   ANF.Ident name id' mPrim <$> isIdentTopLevel ident
 
-convertScheme :: C.Scheme -> ANF.Scheme
-convertScheme (C.Forall vars ty) = ANF.Forall (convertTyVarInfo <$> vars) (convertType ty)
+convertScheme :: C.Scheme -> ANFConvert ANF.Scheme
+convertScheme (C.Forall vars ty) = ANF.Forall (convertTyVarInfo <$> vars) <$> convertType ty
 
-convertType :: C.Type -> ANF.Type
-convertType (C.TyCon name) = ANF.TyCon (convertTyConInfo name)
-convertType (C.TyVar name) = ANF.TyVar (convertTyVarInfo name)
-convertType (C.TyFun ty1 ty2) = ANF.TyFun (convertType ty1) (convertType ty2)
+convertType :: C.Type -> ANFConvert ANF.Type
+convertType (C.TyCon name) = ANF.TyCon <$> convertTyConInfo' name
+convertType (C.TyVar name) = pure $ ANF.TyVar (convertTyVarInfo name)
+convertType (C.TyFun ty1 ty2) = ANF.TyFun <$> convertType ty1 <*> convertType ty2
 
 convertTyConInfo :: C.TyConInfo -> ANF.TyConInfo
 convertTyConInfo (C.TyConInfo name' id' mPrim) = ANF.TyConInfo name' id' mPrim
+
+-- | Convert a TyConInfo, but also unbox it if possible.
+convertTyConInfo' :: C.TyConInfo -> ANFConvert ANF.TyConInfo
+convertTyConInfo' info =
+  let info' = convertTyConInfo info
+  in fromMaybe info' <$> unboxTyCon info'
 
 convertTyVarInfo :: C.TyVarInfo -> ANF.TyVarInfo
 convertTyVarInfo (C.TyVarInfo name' id') = ANF.TyVarInfo name' id'
@@ -71,7 +81,7 @@ normalizeExpr name var@C.EVar{} c = normalizeName name var (c . ANF.EVal)
 normalizeExpr name expr@(C.ECase (C.Case scrutinee matches)) c =
   normalizeName name scrutinee $ \scrutineeVal -> do
     matches' <- traverse normalizeMatch matches
-    let ty = convertType $ expressionType expr
+    ty <- convertType $ expressionType expr
     c $ ANF.ECase (ANF.Case scrutineeVal matches' ty)
 normalizeExpr name (C.ELet (C.Let bindings expr)) c = do
   bindings' <- traverse (normalizeBinding Nothing) bindings
@@ -79,12 +89,33 @@ normalizeExpr name (C.ELet (C.Let bindings expr)) c = do
   pure $ ANF.ELet $ ANF.Let bindings' expr'
 normalizeExpr name (C.EApp (C.App func args retTy)) c =
   normalizeList (normalizeName name) (toList args) $ \argVals ->
-  normalizeName name func $ \funcVal ->
-  case funcVal of
-    (ANF.Lit lit) -> error $ "Encountered lit function application " ++ show lit
-    (ANF.Var (ANF.Typed _ (ANF.Ident _ _ (Just prim) _))) -> c $ ANF.EPrimOp $ ANF.App prim argVals (convertType retTy)
-    (ANF.Var (ANF.Typed ty ident)) -> c $ ANF.EApp $ ANF.App (ANF.Typed ty ident) argVals (convertType retTy)
+  normalizeName name func $ \funcVal -> do
+    retTy' <- convertType retTy
+    case funcVal of
+      (ANF.Lit lit) -> error $ "Encountered lit function application " ++ show lit
+      (ANF.Var ident) -> normalizeApp ident argVals retTy' c
 normalizeExpr name (C.EParens expr) c = normalizeExpr name expr c
+
+normalizeApp
+  :: ANF.Typed ANF.Ident
+  -> [ANF.Val]
+  -> ANF.Type
+  -> (ANF.Expr -> ANFConvert a)
+  -> ANFConvert a
+normalizeApp (ANF.Typed ty ident) argVals retTy c = do
+  -- Try to unbox the application of a type constructor
+  shouldUnbox <- unboxDataConstructor ident
+  if shouldUnbox
+  then
+    case argVals of
+      [arg] -> c (EVal arg)
+      _ -> error $ "Expected only one argument when unboxing, got " ++ show argVals
+  else
+    case ident of
+      -- Primitive operation
+      ANF.Ident _ _ (Just prim) _ -> c $ ANF.EPrimOp $ ANF.App prim argVals retTy
+      -- Default, just a function call
+      _ -> c $ ANF.EApp $ ANF.App (ANF.Typed ty ident) argVals retTy
 
 normalizeTerm :: Text -> C.Expr -> ANFConvert ANF.Expr
 normalizeTerm name expr = normalizeExpr name expr pure
@@ -92,18 +123,18 @@ normalizeTerm name expr = normalizeExpr name expr pure
 normalizeName :: Text -> C.Expr -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 normalizeName _ (C.ELit lit) c = c $ ANF.Lit lit
 normalizeName name (C.EVar (C.Typed ty ident)) c = do
-  let ty' = convertType ty
+  ty' <- convertType ty
   ident' <- convertIdent' ident
   case (ty, ident') of
     -- Top-level values need to be first called as functions
     (C.TyCon _, ANF.Ident _ _ _ True) ->
-      mkNormalizeLet name (ANF.EApp $ ANF.App (ANF.Typed (convertType ty) ident') [] ty') ty' c
+      mkNormalizeLet name (ANF.EApp $ ANF.App (ANF.Typed ty' ident') [] ty') ty' c
     -- Not a top-level value, just return
     _ -> c $ ANF.Var (ANF.Typed ty' ident')
 normalizeName name expr c = do
   expr' <- normalizeTerm name expr
-  let exprType = expressionType expr
-  mkNormalizeLet name expr' (convertType exprType) c
+  exprType <- convertType $ expressionType expr
+  mkNormalizeLet name expr' exprType c
 
 mkNormalizeLet :: Text -> ANF.Expr -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 mkNormalizeLet name expr exprType c = do
@@ -112,26 +143,29 @@ mkNormalizeLet name expr exprType c = do
   pure $ ANF.ELet $ ANF.Let [ANF.Binding newIdent (ANF.Forall [] exprType) [] exprType expr] body
 
 normalizeBinding :: Maybe Text -> C.Binding -> ANFConvert ANF.Binding
-normalizeBinding mName (C.Binding ident@(C.Ident name _ _) ty args retTy body) = do
+normalizeBinding mName (C.Binding ident@(C.Ident name _ _) scheme args retTy body) = do
   -- If we are given a base name, then use iC. Otherwise use the binding name
   -- as the base name for all sub expressions.
   let subName = fromMaybe name mName
   body' <- normalizeTerm subName body
-  let convertArg (C.Typed ty' arg) = ANF.Typed (convertType ty') <$> convertIdent' arg
+  let convertArg (C.Typed ty arg) = ANF.Typed <$> convertType ty <*> convertIdent' arg
   ident' <- convertIdent' ident
+  scheme' <- convertScheme scheme
   args' <- traverse convertArg args
-  pure $ ANF.Binding ident' (convertScheme ty) args' (convertType retTy) body'
+  retTy' <- convertType retTy
+  pure $ ANF.Binding ident' scheme' args' retTy' body'
 
 normalizeMatch :: C.Match -> ANFConvert ANF.Match
 normalizeMatch (C.Match pat body) = do
-  let pat' = convertPattern pat
+  pat' <- convertPattern pat
   body' <- normalizeTerm "case" body
   pure $ ANF.Match pat' body'
 
-convertPattern :: C.Pattern -> ANF.Pattern
-convertPattern (C.PatternLit lit) = ANF.PatternLit lit
-convertPattern (C.PatternVar (C.Typed ty ident)) =
-  ANF.PatternVar $ ANF.Typed (convertType ty) $ convertIdent False ident
+convertPattern :: C.Pattern -> ANFConvert ANF.Pattern
+convertPattern (C.PatternLit lit) = pure $ ANF.PatternLit lit
+convertPattern (C.PatternVar (C.Typed ty ident)) = do
+  ty' <- convertType ty
+  pure $ ANF.PatternVar $ ANF.Typed ty' $ convertIdent False ident
 
 -- | Helper for normalizing lists of things
 normalizeList :: (Monad m) => (a -> (b -> m c) -> m c) -> [a] -> ([b] -> m c) -> m c
