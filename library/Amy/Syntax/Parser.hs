@@ -37,6 +37,7 @@ declaration =
   (DeclExtern <$> externDecl <?> "extern")
   <|> try (DeclBindingType <$> bindingType <?> "binding type")
   <|> (DeclBinding <$> binding <?> "binding")
+  <|> (DeclType <$> typeDeclaration <?> "type declaration")
 
 externDecl :: AmyParser Extern
 externDecl = do
@@ -92,6 +93,19 @@ binding = do
     { bindingName = name
     , bindingArgs = args
     , bindingBody = body
+    }
+
+typeDeclaration :: AmyParser TypeDeclaration
+typeDeclaration = do
+  tyName <- typeIdentifier
+  equals <* spaceConsumerNewlines
+  tyCon <- typeIdentifier
+  arg <- typeIdentifier
+  pure
+    TypeDeclaration
+    { typeDeclarationTypeName = tyName
+    , typeDeclarationConstructorName = tyCon
+    , typeDeclarationArgument = arg
     }
 
 expression :: AmyParser Expr

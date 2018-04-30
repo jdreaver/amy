@@ -23,6 +23,9 @@ rename ast = toEither . runRenamer emptyRenamerState $ rename' ast
 
 rename' :: S.Module -> Renamer (Validation [Error] R.Module)
 rename' (S.Module declarations) = do
+  -- Rename type declarations
+  _ <- traverse_ renameTypeDeclaration (mapMaybe declType declarations)
+
   -- Rename extern declarations
   rModuleExterns <- traverse renameExtern (mapMaybe declExtern declarations)
 
@@ -35,6 +38,9 @@ rename' (S.Module declarations) = do
     $ R.Module
     <$> rModuleBindings
     <*> sequenceA rModuleExterns
+
+renameTypeDeclaration :: TypeDeclaration -> a
+renameTypeDeclaration decl = error $ "Can't rename type declarations yet " ++ show decl
 
 renameExtern :: S.Extern -> Renamer (Validation [Error] R.Extern)
 renameExtern extern = do

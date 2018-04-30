@@ -6,9 +6,11 @@ module Amy.Syntax.AST
   , declBinding
   , declBindingType
   , declExtern
+  , declType
   , Binding(..)
   , BindingType(..)
   , Extern(..)
+  , TypeDeclaration(..)
   , Expr(..)
   , If(..)
   , Case(..)
@@ -42,6 +44,7 @@ data Declaration
   = DeclBinding !Binding
   | DeclBindingType !BindingType
   | DeclExtern !Extern
+  | DeclType !TypeDeclaration
   deriving (Show, Eq)
 
 declBinding :: Declaration -> Maybe Binding
@@ -55,6 +58,10 @@ declBindingType _ = Nothing
 declExtern :: Declaration -> Maybe Extern
 declExtern (DeclExtern x) = Just x
 declExtern _ = Nothing
+
+declType :: Declaration -> Maybe TypeDeclaration
+declType (DeclType x) = Just x
+declType _ = Nothing
 
 -- | A 'Binding' is a top-level definition of a binding, like @x = 1@ or @f x =
 -- x@
@@ -79,6 +86,13 @@ data Extern
   = Extern
   { externName :: !(Located Text)
   , externType :: !Type
+  } deriving (Show, Eq)
+
+data TypeDeclaration
+  = TypeDeclaration
+  { typeDeclarationTypeName :: !(Located Text)
+  , typeDeclarationConstructorName :: !(Located Text)
+  , typeDeclarationArgument :: !(Located Text)
   } deriving (Show, Eq)
 
 data Expr
