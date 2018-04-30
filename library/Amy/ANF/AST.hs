@@ -4,6 +4,7 @@ module Amy.ANF.AST
   ( Module(..)
   , Binding(..)
   , Extern(..)
+  , TypeDeclaration(..)
   , Val(..)
   , valType
   , Expr(..)
@@ -30,6 +31,7 @@ data Module
   = Module
   { moduleBindings :: ![Binding]
   , moduleExterns :: ![Extern]
+  , moduleTypeDeclarations :: ![TypeDeclaration]
   } deriving (Show, Eq)
 
 data Binding
@@ -45,6 +47,13 @@ data Extern
   = Extern
   { externName :: !Ident
   , externType :: !Type
+  } deriving (Show, Eq)
+
+data TypeDeclaration
+  = TypeDeclaration
+  { typeDeclarationTypeName :: !TypeName
+  , typeDeclarationConstructorName :: !Ident
+  , typeDeclarationArgument :: !TypeName
   } deriving (Show, Eq)
 
 data Val

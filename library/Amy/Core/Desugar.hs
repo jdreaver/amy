@@ -8,12 +8,19 @@ import Amy.Core.AST as C
 import Amy.TypeCheck.AST as T
 
 desugarModule :: T.Module -> C.Module
-desugarModule (T.Module bindings externs _) =
-  C.Module (desugarBinding <$> bindings) (desugarExtern <$> externs)
+desugarModule (T.Module bindings externs typeDeclarations) =
+  C.Module
+    (desugarBinding <$> bindings)
+    (desugarExtern <$> externs)
+    (desugarTypeDeclaration <$> typeDeclarations)
 
 desugarExtern :: T.Extern -> C.Extern
 desugarExtern (T.Extern ident ty) =
   C.Extern (desugarIdent ident) (desugarType ty)
+
+desugarTypeDeclaration :: T.TypeDeclaration -> C.TypeDeclaration
+desugarTypeDeclaration (T.TypeDeclaration tyName dataCon tyArg) =
+  C.TypeDeclaration (desugarTypeName tyName) (desugarIdent dataCon) (desugarTypeName tyArg)
 
 desugarBinding :: T.Binding -> C.Binding
 desugarBinding (T.Binding ident scheme args retTy body) =

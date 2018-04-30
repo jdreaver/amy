@@ -4,6 +4,7 @@ module Amy.Core.AST
   ( Module(..)
   , Binding(..)
   , Extern(..)
+  , TypeDeclaration(..)
   , Expr(..)
   , If(..)
   , Case(..)
@@ -35,10 +36,9 @@ data Module
   = Module
   { moduleBindings :: ![Binding]
   , moduleExterns :: ![Extern]
+  , moduleTypeDeclarations :: ![TypeDeclaration]
   } deriving (Show, Eq)
 
--- | A binding after renaming. This is a combo of a 'Binding' and a
--- 'BindingType' after they've been paired together.
 data Binding
   = Binding
   { bindingName :: !Ident
@@ -51,14 +51,19 @@ data Binding
   , bindingBody :: !Expr
   } deriving (Show, Eq)
 
--- | A renamed extern declaration.
 data Extern
   = Extern
   { externName :: !Ident
   , externType :: !Type
   } deriving (Show, Eq)
 
--- | A renamed 'Expr'
+data TypeDeclaration
+  = TypeDeclaration
+  { typeDeclarationTypeName :: !TypeName
+  , typeDeclarationConstructorName :: !Ident
+  , typeDeclarationArgument :: !TypeName
+  } deriving (Show, Eq)
+
 data Expr
   = ELit !Literal
   | EVar !(Typed Ident)
@@ -124,8 +129,9 @@ patternType (PatternVar (Typed ty _)) = ty
 
 -- | Get all the 'Name's in a module.
 moduleNames :: Module -> [Ident]
-moduleNames (Module bindings externs) =
+moduleNames (Module bindings externs typeDeclarations) =
   concatMap bindingNames bindings
+  ++ fmap typeDeclarationConstructorName typeDeclarations
   ++ fmap externName externs
 
 bindingNames :: Binding -> [Ident]

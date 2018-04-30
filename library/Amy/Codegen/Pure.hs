@@ -31,7 +31,7 @@ import Amy.Literal
 import Amy.Prim
 
 codegenModule :: ANF.Module -> LLVM.Module
-codegenModule (ANF.Module bindings externs) =
+codegenModule (ANF.Module bindings externs _) =
   let
     topLevelTypes =
       ((\(ANF.Binding name' (ANF.Forall _ ty) _ _ _) -> (name', ty)) <$> bindings)

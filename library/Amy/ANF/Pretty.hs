@@ -11,20 +11,30 @@ import Amy.Pretty
 import Amy.Prim (showPrimitiveFunctionName)
 
 mkPrettyType :: Type -> PrettyType ann
-mkPrettyType (TyCon name) = PTyDoc $ pretty $ typeNameText name
-mkPrettyType (TyVar name) = PTyDoc $ pretty $ typeNameText name
+mkPrettyType (TyCon name) = PTyDoc $ prettyTypeName name
+mkPrettyType (TyVar name) = PTyDoc $ prettyTypeName name
 mkPrettyType (TyFun ty1 ty2) = PTyFun (mkPrettyType ty1) (mkPrettyType ty2)
+
+prettyTypeName :: TypeName -> Doc ann
+prettyTypeName (TypeName name _ _) = pretty name
 
 mkPrettyScheme :: Scheme -> PrettyScheme ann
 mkPrettyScheme (Forall vars ty) = PForall (pretty . typeNameText <$> vars) (mkPrettyType ty)
 
 prettyModule :: Module -> Doc ann
-prettyModule (Module bindings externs) =
-  vcatTwoHardLines $ (prettyExtern' <$> externs) ++ (prettyBinding' <$> bindings)
+prettyModule (Module bindings externs typeDeclarations) =
+  vcatTwoHardLines
+  $ (prettyExtern' <$> externs)
+  ++ (prettyTypeDeclaration' <$> typeDeclarations)
+  ++ (prettyBinding' <$> bindings)
 
 prettyExtern' :: Extern -> Doc ann
 prettyExtern' (Extern name ty) =
   prettyExtern (prettyIdent name) (mkPrettyType ty)
+
+prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
+prettyTypeDeclaration' (TypeDeclaration tyName dataCon tyArg) =
+  prettyTypeDeclaration (prettyTypeName tyName) (prettyIdent dataCon) (prettyTypeName tyArg)
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding ident scheme args _ body) =
