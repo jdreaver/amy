@@ -24,14 +24,15 @@ data Error
   | UnknownVariable !(Located Text)
   | VariableShadowed !(Located Text) !R.Ident
   | DuplicateDataConstructorName !(Located Text) !R.Ident
-  | TypeNameAlreadyExists !(Located Text) !R.TypeName
-  | UnknownTypeName !(Located Text)
+  | TypeConstructorAlreadyExists !(Located Text) !R.TyConInfo
+  | UnknownTypeConstructor !(Located Text)
+  | UnknownTypeVariable !(Located Text)
   | NonIdentifierName !(Located Text)
 
   -- Type checker
   -- TODO: Add source spans here
   | UnificationFail !T.Type !T.Type
-  | InfiniteType T.TypeName !T.Type
+  | InfiniteType T.TyVarInfo !T.Type
   | UnboundVariable !T.Ident
 
   -- | BindingLacksTypeSignature !RBinding
@@ -54,8 +55,9 @@ errorLocation e =
     UnknownVariable (Located s _) -> Just s
     VariableShadowed (Located s _) _ -> Just s
     DuplicateDataConstructorName (Located s _) _ -> Just s
-    TypeNameAlreadyExists (Located s _) _ -> Just s
-    UnknownTypeName (Located s _) -> Just s
+    TypeConstructorAlreadyExists (Located s _) _ -> Just s
+    UnknownTypeConstructor (Located s _) -> Just s
+    UnknownTypeVariable (Located s _) -> Just s
     NonIdentifierName (Located s _) -> Just s
 
     UnificationFail{} -> Nothing

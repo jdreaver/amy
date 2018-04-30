@@ -313,7 +313,7 @@ llvmType ty = go (typeToNonEmpty ty)
   go (ty' :| []) =
     case ty' of
       ANF.TyCon tyName ->
-        let prim = fromMaybe (error $ "Expected primitive TyCon, got " ++ show tyName) (ANF.typeNamePrimitiveType tyName)
+        let prim = fromMaybe (error $ "Expected primitive TyCon, got " ++ show tyName) (ANF.tyConInfoPrimitiveType tyName)
         in llvmPrimitiveType prim
       ANF.TyVar _ -> PointerType (IntegerType 64) (AddrSpace 0)
       ANF.TyFun{} -> mkFunctionType ty

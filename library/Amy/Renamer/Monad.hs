@@ -53,8 +53,8 @@ data RenamerState
     -- ^ Last 'NameIntId' generated
   , renamerStateValuesInScope :: !(Map Text Ident)
   , renamerStateDataConstructorsInScope :: !(Map Text Ident)
-  , renamerStateTypeConstructorsInScope :: !(Map Text TypeName)
-  , renamerStateTypeVariablesInScope :: !(Map Text TypeName)
+  , renamerStateTypeConstructorsInScope :: !(Map Text TyConInfo)
+  , renamerStateTypeVariablesInScope :: !(Map Text TyVarInfo)
   } deriving (Show, Eq)
 
 emptyRenamerState :: RenamerState
@@ -76,12 +76,12 @@ primitiveFunctionNames =
        ))
     <$> allPrimitiveFunctionNamesAndIds
 
-primitiveTypeNames :: Map Text TypeName
+primitiveTypeNames :: Map Text TyConInfo
 primitiveTypeNames =
   Map.fromList $
     (\(id', prim) ->
        ( showPrimitiveType prim
-       , TypeName (showPrimitiveType prim) Nothing id' (Just prim)
+       , TyConInfo (showPrimitiveType prim) Nothing id' (Just prim)
        )
     )
     <$> allPrimitiveTypesAndIds
@@ -130,43 +130,43 @@ lookupDataConstructorInScopeOrError :: Located Text -> Renamer (Validation [Erro
 lookupDataConstructorInScopeOrError name@(Located span' name') =
   maybe (Failure [UnknownVariable name]) (Success . Located span') <$> lookupDataConstructorInScope name'
 
-addTypeConstructorToScope :: Located Text -> Renamer (Validation [Error] TypeName)
+addTypeConstructorToScope :: Located Text -> Renamer (Validation [Error] TyConInfo)
 addTypeConstructorToScope lname@(Located span' name) = do
   nameId <- freshId
   let
-    tname = TypeName name (Just span') nameId Nothing
+    info = TyConInfo name (Just span') nameId Nothing
   mExistingName <- lookupTypeConstructorInScope name
   case mExistingName of
-    Just existingName -> pure $ Failure [TypeNameAlreadyExists lname existingName]
+    Just existingName -> pure $ Failure [TypeConstructorAlreadyExists lname existingName]
     Nothing -> do
-      modify' (\s -> s { renamerStateTypeConstructorsInScope = Map.insert name tname (renamerStateTypeConstructorsInScope s) })
-      pure $ Success tname
+      modify' (\s -> s { renamerStateTypeConstructorsInScope = Map.insert name info (renamerStateTypeConstructorsInScope s) })
+      pure $ Success info
 
-lookupTypeConstructorInScope :: Text -> Renamer (Maybe TypeName)
+lookupTypeConstructorInScope :: Text -> Renamer (Maybe TyConInfo)
 lookupTypeConstructorInScope name = Map.lookup name <$> gets renamerStateTypeConstructorsInScope
 
-lookupTypeConstructorInScopeOrError :: Located Text -> Renamer (Validation [Error] TypeName)
+lookupTypeConstructorInScopeOrError :: Located Text -> Renamer (Validation [Error] TyConInfo)
 lookupTypeConstructorInScopeOrError name@(Located _ name') =
-  maybe (Failure [UnknownTypeName name]) Success <$> lookupTypeConstructorInScope name'
+  maybe (Failure [UnknownTypeConstructor name]) Success <$> lookupTypeConstructorInScope name'
 
-addTypeVariableToScope :: Located Text -> Renamer (Validation [Error] TypeName)
+addTypeVariableToScope :: Located Text -> Renamer (Validation [Error] TyVarInfo)
 addTypeVariableToScope (Located span' name) = do
   nameId <- freshId
   let
-    tname = TypeName name (Just span') nameId Nothing
+    info = TyVarInfo name nameId span'
   mExistingName <- lookupTypeVariableInScope name
   case mExistingName of
     Just _ -> pure () -- These will be set to equal during inference
     Nothing ->
-      modify' (\s -> s { renamerStateTypeVariablesInScope = Map.insert name tname (renamerStateTypeVariablesInScope s) })
-  pure $ Success tname
+      modify' (\s -> s { renamerStateTypeVariablesInScope = Map.insert name info (renamerStateTypeVariablesInScope s) })
+  pure $ Success info
 
-lookupTypeVariableInScope :: Text -> Renamer (Maybe TypeName)
+lookupTypeVariableInScope :: Text -> Renamer (Maybe TyVarInfo)
 lookupTypeVariableInScope name = Map.lookup name <$> gets renamerStateTypeVariablesInScope
 
-lookupTypeVariableInScopeOrError :: Located Text -> Renamer (Validation [Error] TypeName)
+lookupTypeVariableInScopeOrError :: Located Text -> Renamer (Validation [Error] TyVarInfo)
 lookupTypeVariableInScopeOrError name@(Located _ name') =
-  maybe (Failure [UnknownTypeName name]) Success <$> lookupTypeVariableInScope name'
+  maybe (Failure [UnknownTypeVariable name]) Success <$> lookupTypeVariableInScope name'
 
 -- | Runs a 'Renamer' action in a fresh scope and restores the original scope
 -- when the action is done.

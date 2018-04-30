@@ -10,15 +10,18 @@ import Amy.Pretty
 import Amy.TypeCheck.AST
 
 mkPrettyType :: Type -> PrettyType ann
-mkPrettyType (TyCon name) = PTyDoc $ prettyTypeName name
-mkPrettyType (TyVar name _) = PTyDoc $ prettyTypeName name
+mkPrettyType (TyCon name) = PTyDoc $ prettyTyConInfo name
+mkPrettyType (TyVar name) = PTyDoc $ prettyTyVarInfo name
 mkPrettyType (TyFun ty1 ty2) = PTyFun (mkPrettyType ty1) (mkPrettyType ty2)
 
-prettyTypeName :: TypeName -> Doc ann
-prettyTypeName (TypeName name _ _) = pretty name
+prettyTyConInfo :: TyConInfo -> Doc ann
+prettyTyConInfo (TyConInfo name _ _) = pretty name
+
+prettyTyVarInfo :: TyVarInfo -> Doc ann
+prettyTyVarInfo (TyVarInfo name _ _) = pretty name
 
 mkPrettyScheme :: Scheme -> PrettyScheme ann
-mkPrettyScheme (Forall vars ty) = PForall (pretty . typeNameText <$> vars) (mkPrettyType ty)
+mkPrettyScheme (Forall vars ty) = PForall (prettyTyVarInfo <$> vars) (mkPrettyType ty)
 
 prettyModule :: Module -> Doc ann
 prettyModule (Module bindings externs typeDeclarations) =
@@ -33,7 +36,7 @@ prettyExtern' (Extern name ty) =
 
 prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
 prettyTypeDeclaration' (TypeDeclaration tyName dataCon tyArg) =
-  prettyTypeDeclaration (prettyTypeName tyName) (prettyIdent dataCon) (prettyTypeName tyArg)
+  prettyTypeDeclaration (prettyTyConInfo tyName) (prettyIdent dataCon) (prettyTyConInfo tyArg)
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding ident scheme args _ body) =

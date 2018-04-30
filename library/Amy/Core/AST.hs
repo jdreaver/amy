@@ -18,7 +18,8 @@ module Amy.Core.AST
 
   , Ident(..)
   , Type(..)
-  , TypeName(..)
+  , TyConInfo(..)
+  , TyVarInfo(..)
   , Scheme(..)
   , Typed(..)
 
@@ -59,9 +60,9 @@ data Extern
 
 data TypeDeclaration
   = TypeDeclaration
-  { typeDeclarationTypeName :: !TypeName
+  { typeDeclarationTypeName :: !TyConInfo
   , typeDeclarationConstructorName :: !Ident
-  , typeDeclarationArgument :: !TypeName
+  , typeDeclarationArgument :: !TyConInfo
   } deriving (Show, Eq)
 
 data Expr
@@ -113,7 +114,7 @@ data App
 literalType' :: Literal -> Type
 literalType' lit =
   let primTy = literalType lit
-  in TyCon $ TypeName (showPrimitiveType primTy) (primitiveTypeId primTy) (Just primTy)
+  in TyCon $ TyConInfo (showPrimitiveType primTy) (primitiveTypeId primTy) (Just primTy)
 
 expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType' lit
@@ -168,22 +169,28 @@ data Ident
   } deriving (Show, Eq, Ord)
 
 data Type
-  = TyCon !TypeName
-  | TyVar !TypeName
+  = TyCon !TyConInfo
+  | TyVar !TyVarInfo
   | TyFun !Type !Type
   deriving (Show, Eq, Ord)
 
 infixr 0 `TyFun`
 
-data TypeName
-  = TypeName
-  { typeNameText :: !Text
-  , typeNameId :: !Int
-  , typeNamePrimitiveType :: !(Maybe PrimitiveType)
+data TyConInfo
+  = TyConInfo
+  { tyConInfoText :: !Text
+  , tyConInfoId :: !Int
+  , tyConInfoPrimitiveType :: !(Maybe PrimitiveType)
+  } deriving (Show, Eq, Ord)
+
+data TyVarInfo
+  = TyVarInfo
+  { tyVarInfoName :: !Text
+  , tyVarInfoId :: !Int
   } deriving (Show, Eq, Ord)
 
 data Scheme
-  = Forall ![TypeName] Type
+  = Forall ![TyVarInfo] Type
   deriving (Show, Eq)
 
 data Typed a

@@ -38,7 +38,7 @@ convertExtern (C.Extern name ty) = ANF.Extern (convertIdent True name) (convertT
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANF.TypeDeclaration
 convertTypeDeclaration (C.TypeDeclaration tyName dataCon tyArg) =
-  ANF.TypeDeclaration (convertTypeName tyName) (convertIdent True dataCon) (convertTypeName tyArg)
+  ANF.TypeDeclaration (convertTyConInfo tyName) (convertIdent True dataCon) (convertTyConInfo tyArg)
 
 convertIdent :: Bool -> C.Ident -> ANF.Ident
 convertIdent isTopLevel (C.Ident name id' mPrim) = ANF.Ident name id' mPrim isTopLevel
@@ -48,15 +48,18 @@ convertIdent' ident@(C.Ident name id' mPrim) =
   ANF.Ident name id' mPrim <$> isIdentTopLevel ident
 
 convertScheme :: C.Scheme -> ANF.Scheme
-convertScheme (C.Forall vars ty) = ANF.Forall (convertTypeName <$> vars) (convertType ty)
+convertScheme (C.Forall vars ty) = ANF.Forall (convertTyVarInfo <$> vars) (convertType ty)
 
 convertType :: C.Type -> ANF.Type
-convertType (C.TyCon name) = ANF.TyCon (convertTypeName name)
-convertType (C.TyVar name) = ANF.TyVar (convertTypeName name)
+convertType (C.TyCon name) = ANF.TyCon (convertTyConInfo name)
+convertType (C.TyVar name) = ANF.TyVar (convertTyVarInfo name)
 convertType (C.TyFun ty1 ty2) = ANF.TyFun (convertType ty1) (convertType ty2)
 
-convertTypeName :: C.TypeName -> ANF.TypeName
-convertTypeName (C.TypeName name' id' mPrim) = ANF.TypeName name' id' mPrim
+convertTyConInfo :: C.TyConInfo -> ANF.TyConInfo
+convertTyConInfo (C.TyConInfo name' id' mPrim) = ANF.TyConInfo name' id' mPrim
+
+convertTyVarInfo :: C.TyVarInfo -> ANF.TyVarInfo
+convertTyVarInfo (C.TyVarInfo name' id') = ANF.TyVarInfo name' id'
 
 normalizeExpr
   :: Text -- ^ Base name for generated variables

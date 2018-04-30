@@ -77,7 +77,7 @@ freshTypeVariable :: Inference T.Type
 freshTypeVariable = do
   modify' (+ 1)
   id' <- get
-  pure $ T.TyVar (T.TypeName (letters !! id') id' Nothing) TyVarGenerated
+  pure $ T.TyVar (T.TyVarInfo (letters !! id') id' TyVarGenerated)
 
 -- TODO: Don't use letters for type variables, just use integers. Then at the
 -- end of inference we can turn all the type variables into letters so the user
@@ -122,13 +122,13 @@ normalize body = T.Forall (Map.elems letterMap) (normtype body)
  where
   -- TODO: Generated type variables should be explicitly marked as generated,
   -- not given fake IDs.
-  letterMap = Map.fromList $ zip (Set.toList $ freeTypeVariables body) ((\c -> T.TypeName c (-1) Nothing) <$> letters)
+  letterMap = Map.fromList $ zip (Set.toList $ freeTypeVariables body) ((\c -> T.TyVarInfo c (-1) TyVarNotGenerated) <$> letters)
 
   normtype (T.TyFun a b) = T.TyFun (normtype a) (normtype b)
   normtype (T.TyCon a) = T.TyCon a
-  normtype (T.TyVar a _) =
+  normtype (T.TyVar a) =
     case Map.lookup a letterMap of
-      Just x -> T.TyVar x TyVarNotGenerated
+      Just x -> T.TyVar x
       Nothing -> error "type variable not in signature"
 
 normalizeTBinding :: T.Binding -> T.Binding
@@ -162,7 +162,7 @@ convertExtern (R.Extern (Located _ name) ty) = T.Extern (convertIdent name) (con
 
 convertTypeDeclaration :: R.TypeDeclaration -> T.TypeDeclaration
 convertTypeDeclaration (R.TypeDeclaration tyName (Located _ dataCon) tyArg) =
-  T.TypeDeclaration (convertTypeName tyName) (convertIdent dataCon) (convertTypeName tyArg)
+  T.TypeDeclaration (convertTyConInfo tyName) (convertIdent dataCon) (convertTyConInfo tyArg)
 
 primitiveFunctionScheme :: (Int, PrimitiveFunctionName) -> (T.Ident, T.Scheme)
 primitiveFunctionScheme (id', prim) =
@@ -172,7 +172,7 @@ mkPrimFunctionScheme :: PrimitiveFunctionName -> T.Scheme
 mkPrimFunctionScheme prim = T.Forall [] $ foldr1 T.TyFun $ primitiveTyCon <$> primitiveFunctionType (primitiveFunction prim)
 
 primitiveTyCon :: PrimitiveType -> T.Type
-primitiveTyCon prim = T.TyCon $ T.TypeName (showPrimitiveType prim) (primitiveTypeId prim) (Just prim)
+primitiveTyCon prim = T.TyCon $ T.TyConInfo (showPrimitiveType prim) (primitiveTypeId prim) (Just prim)
 
 inferTopLevel :: TyEnv -> [R.Binding] -> Either Error [T.Binding]
 inferTopLevel env bindings = do
@@ -360,34 +360,34 @@ solver (su, cs) =
 
 unifies :: T.Type -> T.Type -> Solve Subst
 unifies t1 t2 | t1 == t2 = return emptySubst
-unifies (T.TyVar v TyVarGenerated) t = v `bind` t
-unifies t (T.TyVar v TyVarGenerated) = v `bind` t
+unifies (T.TyVar v@(T.TyVarInfo _ _ TyVarGenerated)) t = v `bind` t
+unifies t (T.TyVar v@(T.TyVarInfo _ _ TyVarGenerated)) = v `bind` t
 unifies (T.TyFun t1 t2) (T.TyFun t3 t4) = do
   su1 <- unifies t1 t3
   su2 <- unifies (substituteType su1 t2) (substituteType su1 t4)
   pure (su2 `composeSubst` su1)
 unifies t1 t2 = throwError $ UnificationFail t1 t2
 
-bind ::  T.TypeName -> T.Type -> Solve Subst
+bind ::  T.TyVarInfo -> T.Type -> Solve Subst
 bind a t
-  | t == T.TyVar a TyVarNotGenerated = return emptySubst
+  | t == T.TyVar a = return emptySubst
   | occursCheck a t = throwError $ InfiniteType a t
   | otherwise = return (singletonSubst a t)
 
-occursCheck :: T.TypeName -> T.Type -> Bool
+occursCheck :: T.TyVarInfo -> T.Type -> Bool
 occursCheck a t = a `Set.member` freeTypeVariables t
 
 --
 -- Substitutions
 --
 
-newtype Subst = Subst (Map T.TypeName T.Type)
+newtype Subst = Subst (Map T.TyVarInfo T.Type)
   deriving (Eq, Show, Semigroup, Monoid)
 
 emptySubst :: Subst
 emptySubst = Subst Map.empty
 
-singletonSubst :: T.TypeName -> T.Type -> Subst
+singletonSubst :: T.TyVarInfo -> T.Type -> Subst
 singletonSubst a t = Subst $ Map.singleton a t
 
 composeSubst :: Subst -> Subst -> Subst
@@ -399,7 +399,7 @@ substituteScheme (Subst subst) (T.Forall vars ty) = T.Forall vars $ substituteTy
   s' = Subst $ foldr Map.delete subst vars
 
 substituteType :: Subst -> T.Type -> T.Type
-substituteType (Subst subst) t@(T.TyVar var _) = Map.findWithDefault t var subst
+substituteType (Subst subst) t@(T.TyVar var) = Map.findWithDefault t var subst
 substituteType _ (T.TyCon a) = T.TyCon a
 substituteType s (t1 `T.TyFun` t2) = substituteType s t1 `T.TyFun` substituteType s t2
 
@@ -444,15 +444,15 @@ substituteTPattern subst (T.PatternVar (T.Typed ty var)) =
 -- Free and Active type variables
 --
 
-freeTypeVariables :: T.Type -> Set T.TypeName
+freeTypeVariables :: T.Type -> Set T.TyVarInfo
 freeTypeVariables T.TyCon{} = Set.empty
-freeTypeVariables (T.TyVar var _) = Set.singleton var
+freeTypeVariables (T.TyVar var) = Set.singleton var
 freeTypeVariables (t1 `T.TyFun` t2) = freeTypeVariables t1 `Set.union` freeTypeVariables t2
 
-freeSchemeTypeVariables :: T.Scheme -> Set T.TypeName
+freeSchemeTypeVariables :: T.Scheme -> Set T.TyVarInfo
 freeSchemeTypeVariables (T.Forall tvs t) = freeTypeVariables t `Set.difference` Set.fromList tvs
 
-freeEnvTypeVariables :: TyEnv -> Set T.TypeName
+freeEnvTypeVariables :: TyEnv -> Set T.TyVarInfo
 freeEnvTypeVariables (TyEnv env) = foldl' Set.union Set.empty $ freeSchemeTypeVariables <$> Map.elems env
 
 --
@@ -463,12 +463,15 @@ convertIdent :: R.Ident -> T.Ident
 convertIdent (R.Ident name id' _ mPrim) = T.Ident name id' mPrim
 
 convertScheme :: R.Scheme -> T.Scheme
-convertScheme (R.Forall vars ty) = T.Forall (convertTypeName <$> vars) (convertType ty)
+convertScheme (R.Forall vars ty) = T.Forall (convertTyVarInfo <$> vars) (convertType ty)
 
 convertType :: R.Type -> T.Type
-convertType (R.TyCon name) = T.TyCon (convertTypeName name)
-convertType (R.TyVar name) = T.TyVar (convertTypeName name) TyVarNotGenerated
+convertType (R.TyCon info) = T.TyCon (convertTyConInfo info)
+convertType (R.TyVar info) = T.TyVar (convertTyVarInfo info)
 convertType (R.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
 
-convertTypeName :: R.TypeName -> T.TypeName
-convertTypeName (R.TypeName name' _ id' mPrim) = T.TypeName name' id' mPrim
+convertTyConInfo :: R.TyConInfo -> T.TyConInfo
+convertTyConInfo (R.TyConInfo name' _ id' mPrim) = T.TyConInfo name' id' mPrim
+
+convertTyVarInfo :: R.TyVarInfo -> T.TyVarInfo
+convertTyVarInfo (R.TyVarInfo name' id' _) = T.TyVarInfo name' id' TyVarNotGenerated

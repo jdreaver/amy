@@ -16,7 +16,8 @@ module Amy.Renamer.AST
   , Ident(..)
   , Namespace(..)
   , Type(..)
-  , TypeName(..)
+  , TyConInfo(..)
+  , TyVarInfo(..)
   , Scheme(..)
 
     -- Re-export
@@ -56,9 +57,9 @@ data Extern
 
 data TypeDeclaration
   = TypeDeclaration
-  { typeDeclarationTypeName :: !TypeName
+  { typeDeclarationTypeName :: !TyConInfo
   , typeDeclarationConstructorName :: !(Located Ident)
-  , typeDeclarationArgument :: !TypeName
+  , typeDeclarationArgument :: !TyConInfo
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'
@@ -124,21 +125,28 @@ data Namespace
   deriving (Show, Eq, Ord)
 
 data Type
-  = TyCon !TypeName
-  | TyVar !TypeName
+  = TyCon !TyConInfo
+  | TyVar !TyVarInfo
   | TyFun !Type !Type
   deriving (Show, Eq)
 
 infixr 0 `TyFun`
 
-data TypeName
-  = TypeName
-  { typeNameText :: !Text
-  , typeNameLocation :: !(Maybe SourceSpan)
-  , typeNameId :: !Int
-  , typeNamePrimitiveType :: !(Maybe PrimitiveType)
+data TyConInfo
+  = TyConInfo
+  { tyConInfoText :: !Text
+  , tyConInfoLocation :: !(Maybe SourceSpan)
+  , tyConInfoId :: !Int
+  , tyConInfoPrimitiveType :: !(Maybe PrimitiveType)
+  } deriving (Show, Eq)
+
+data TyVarInfo
+  = TyVarInfo
+  { tyVarInfoName :: !Text
+  , tyVarInfoId :: !Int
+  , tyVarInfoLocation :: !SourceSpan
   } deriving (Show, Eq)
 
 data Scheme
-  = Forall ![TypeName] Type
+  = Forall ![TyVarInfo] Type
   deriving (Show, Eq)

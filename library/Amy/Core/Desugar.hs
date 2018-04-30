@@ -20,7 +20,7 @@ desugarExtern (T.Extern ident ty) =
 
 desugarTypeDeclaration :: T.TypeDeclaration -> C.TypeDeclaration
 desugarTypeDeclaration (T.TypeDeclaration tyName dataCon tyArg) =
-  C.TypeDeclaration (desugarTypeName tyName) (desugarIdent dataCon) (desugarTypeName tyArg)
+  C.TypeDeclaration (desugarTyConInfo tyName) (desugarIdent dataCon) (desugarTyConInfo tyArg)
 
 desugarBinding :: T.Binding -> C.Binding
 desugarBinding (T.Binding ident scheme args retTy body) =
@@ -64,15 +64,18 @@ desugarTypedIdent :: T.Typed T.Ident -> C.Typed C.Ident
 desugarTypedIdent (T.Typed ty ident) = C.Typed (desugarType ty) (desugarIdent ident)
 
 desugarScheme :: T.Scheme -> C.Scheme
-desugarScheme (T.Forall vars ty) = C.Forall (desugarTypeName <$> vars) (desugarType ty)
+desugarScheme (T.Forall vars ty) = C.Forall (desugarTyVarInfo <$> vars) (desugarType ty)
 
 desugarType :: T.Type -> C.Type
-desugarType (T.TyCon name) = C.TyCon (desugarTypeName name)
-desugarType ty@(T.TyVar name gen) =
-  case gen of
-    TyVarGenerated -> error $ "Found generated type name, bad! " ++ show ty
-    TyVarNotGenerated -> C.TyVar (desugarTypeName name)
+desugarType (T.TyCon info) = C.TyCon (desugarTyConInfo info)
+desugarType (T.TyVar info) = C.TyVar (desugarTyVarInfo info)
 desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)
 
-desugarTypeName :: T.TypeName -> C.TypeName
-desugarTypeName (T.TypeName name id' mPrim) = C.TypeName name id' mPrim
+desugarTyConInfo :: T.TyConInfo -> C.TyConInfo
+desugarTyConInfo (T.TyConInfo name id' mPrim) = C.TyConInfo name id' mPrim
+
+desugarTyVarInfo :: T.TyVarInfo -> C.TyVarInfo
+desugarTyVarInfo ty@(T.TyVarInfo name id' gen) =
+  case gen of
+    TyVarGenerated -> error $ "Found generated type name, bad! " ++ show ty
+    TyVarNotGenerated -> C.TyVarInfo name id'
