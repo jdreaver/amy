@@ -13,7 +13,6 @@ module Amy.Core.AST
   , Let(..)
   , App(..)
   , expressionType
-  , patternType
   , moduleNames
 
   , Ident(..)
@@ -123,10 +122,6 @@ expressionType (ECase (Case _ (Match _ expr :| _))) = expressionType expr
 expressionType (ELet let') = expressionType (letExpression let')
 expressionType (EApp app) = appReturnType app
 expressionType (EParens expr) = expressionType expr
-
-patternType :: Pattern -> Type
-patternType (PatternLit lit) = literalType' lit
-patternType (PatternVar (Typed ty _)) = ty
 
 -- | Get all the 'Name's in a module.
 moduleNames :: Module -> [Ident]
