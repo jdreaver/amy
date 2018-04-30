@@ -109,7 +109,10 @@ renameType (S.TyFun ty1 ty2) = do
 
 renameExpression :: S.Expr -> Renamer (Validation [Error] R.Expr)
 renameExpression (S.ELit lit) = pure $ Success $ R.ELit lit
-renameExpression (S.EVar var) = fmap R.EVar <$> lookupValueInScopeOrError var
+renameExpression (S.EVar var) =
+  case var of
+    Variable name -> fmap R.EVar <$> lookupValueInScopeOrError name
+    DataConstructor name -> error $ "Can't handle data constructors yet " ++ show name
 renameExpression (S.EIf (S.If predicate thenExpression elseExpression)) = do
   pred' <- renameExpression predicate
   then' <- renameExpression thenExpression

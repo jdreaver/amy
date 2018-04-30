@@ -99,12 +99,12 @@ typeDeclaration :: AmyParser TypeDeclaration
 typeDeclaration = do
   tyName <- typeIdentifier
   equals <* spaceConsumerNewlines
-  tyCon <- typeIdentifier
+  dataCon <- dataConstructor
   arg <- typeIdentifier
   pure
     TypeDeclaration
     { typeDeclarationTypeName = tyName
-    , typeDeclarationConstructorName = tyCon
+    , typeDeclarationConstructorName = dataCon
     , typeDeclarationArgument = arg
     }
 
@@ -145,8 +145,10 @@ literal =
   (fmap (either LiteralDouble LiteralInt) <$> number)
   <|> (fmap LiteralBool <$> bool)
 
-variable :: AmyParser (Located Text)
-variable = identifier
+variable :: AmyParser Var
+variable =
+  (Variable <$> identifier)
+  <|> (DataConstructor <$> dataConstructor)
 
 ifExpression :: AmyParser If
 ifExpression = do
@@ -189,7 +191,7 @@ caseMatch = do
 parsePattern :: AmyParser Pattern
 parsePattern =
   try (PatternLit <$> literal <?> "pattern literal")
-  <|> (PatternVar <$> variable <?> "pattern variable")
+  <|> (PatternVar <$> identifier <?> "pattern variable")
 
 letExpression' :: AmyParser Let
 letExpression' = do

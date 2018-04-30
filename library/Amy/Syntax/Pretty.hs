@@ -40,7 +40,7 @@ prettyBindingType' (BindingType (Located _ name) ty) =
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
-prettyExpr (EVar (Located _ var)) = pretty var
+prettyExpr (EVar var) = prettyVar var
 prettyExpr (EIf (If pred' then' else')) =
   prettyIf (prettyExpr pred') (prettyExpr then') (prettyExpr else')
 prettyExpr (ECase (Case scrutinee matches)) =
@@ -54,6 +54,10 @@ prettyExpr (ELet (Let bindings body)) =
   prettyLetBinding (LetBindingType bindingTy) = prettyBindingType' bindingTy
 prettyExpr (EApp (App f args)) = sep $ prettyExpr f : (prettyExpr <$> toList args)
 prettyExpr (EParens expr) = parens $ prettyExpr expr
+
+prettyVar :: Var -> Doc ann
+prettyVar (Variable (Located _ var)) = pretty var
+prettyVar (DataConstructor (Located _ var)) = pretty var
 
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PatternLit (Located _ lit)) = pretty $ showLiteral lit

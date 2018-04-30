@@ -12,6 +12,7 @@ module Amy.Syntax.AST
   , Extern(..)
   , TypeDeclaration(..)
   , Expr(..)
+  , Var(..)
   , If(..)
   , Case(..)
   , Match(..)
@@ -97,12 +98,17 @@ data TypeDeclaration
 
 data Expr
   = ELit !(Located Literal)
-  | EVar !(Located Text)
+  | EVar !Var
   | EIf !If
   | ECase !Case
   | ELet !Let
   | EApp !App
   | EParens !Expr
+  deriving (Show, Eq)
+
+data Var
+  = Variable !(Located Text)
+  | DataConstructor !(Located Text)
   deriving (Show, Eq)
 
 data If

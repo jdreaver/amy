@@ -72,8 +72,8 @@ spec = do
               , letExpression =
                 EApp (
                   App
-                  (EVar (Located (SourceSpan "" 11 5 11 5) "f"))
-                  [ EVar (Located (SourceSpan "" 11 7 11 7) "x")
+                  (EVar (Variable $ Located (SourceSpan "" 11 5 11 5) "f"))
+                  [ EVar (Variable $ Located (SourceSpan "" 11 7 11 7) "x")
                   ]
                 )
               }
@@ -89,12 +89,12 @@ spec = do
       parse' expression "f (g x) 1" `shouldParse`
         EApp (
           App
-          (EVar (Located (SourceSpan "" 1 1 1 1) "f"))
+          (EVar (Variable $ Located (SourceSpan "" 1 1 1 1) "f"))
           [ EParens $
               EApp $
                 App
-                (EVar (Located (SourceSpan "" 1 4 1 4) "g"))
-                [EVar (Located (SourceSpan "" 1 6 1 6) "x")]
+                (EVar (Variable $ Located (SourceSpan "" 1 4 1 4) "g"))
+                [EVar (Variable $ Located (SourceSpan "" 1 6 1 6) "x")]
           , ELit (Located (SourceSpan "" 1 9 1 9) (LiteralInt 1))
           ]
         )
@@ -103,7 +103,7 @@ spec = do
       parse' expression "f 1\n 2 3" `shouldParse`
         EApp (
           App
-          (EVar (Located (SourceSpan "" 1 1 1 1) "f"))
+          (EVar (Variable $ Located (SourceSpan "" 1 1 1 1) "f"))
           [ ELit (Located (SourceSpan "" 1 3 1 3) (LiteralInt 1))
           , ELit (Located (SourceSpan "" 2 2 2 2) (LiteralInt 2))
           , ELit (Located (SourceSpan "" 2 4 2 4) (LiteralInt 3))
@@ -219,14 +219,14 @@ spec = do
 
   describe "expressionParens" $ do
     it "parses expressions in parens" $ do
-      parse' expressionParens "(x)" `shouldParse` EParens (EVar (Located (SourceSpan "" 1 2 1 2) "x"))
+      parse' expressionParens "(x)" `shouldParse` EParens (EVar (Variable $ Located (SourceSpan "" 1 2 1 2) "x"))
       parse' expressionParens "(f x)"
         `shouldParse`
         EParens
           (EApp
              (App
-               (EVar (Located (SourceSpan "" 1 2 1 2) "f"))
-               [EVar (Located (SourceSpan "" 1 4 1 4) "x")])
+               (EVar (Variable $ Located (SourceSpan "" 1 2 1 2) "f"))
+               [EVar (Variable $ Located (SourceSpan "" 1 4 1 4) "x")])
           )
 
   describe "ifExpression" $ do
@@ -240,9 +240,9 @@ spec = do
       parse' ifExpression "if f x then f y else g 2"
         `shouldParse`
         If
-          (EApp $ App (EVar (Located (SourceSpan "" 1 4 1 4) "f")) [EVar (Located (SourceSpan "" 1 6 1 6) "x")])
-          (EApp $ App (EVar (Located (SourceSpan "" 1 13 1 13) "f")) [EVar (Located (SourceSpan "" 1 15 1 15) "y")])
-          (EApp $ App (EVar (Located (SourceSpan "" 1 22 1 22) "g")) [ELit (Located (SourceSpan "" 1 24 1 24) (LiteralInt 2))])
+          (EApp $ App (EVar (Variable $ Located (SourceSpan "" 1 4 1 4) "f")) [EVar (Variable $ Located (SourceSpan "" 1 6 1 6) "x")])
+          (EApp $ App (EVar (Variable $ Located (SourceSpan "" 1 13 1 13) "f")) [EVar (Variable $ Located (SourceSpan "" 1 15 1 15) "y")])
+          (EApp $ App (EVar (Variable $ Located (SourceSpan "" 1 22 1 22) "g")) [ELit (Located (SourceSpan "" 1 24 1 24) (LiteralInt 2))])
 
   describe "literal" $ do
     it "can discriminate between integer and double" $ do
