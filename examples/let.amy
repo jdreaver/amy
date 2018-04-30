@@ -1,5 +1,7 @@
 extern abs :: Int -> Int
 
+MyInt = MyInt Int
+
 main :: Int
 main =
   let
@@ -12,13 +14,19 @@ main =
     y = x
     b =
       case (iAdd x 2) of
-        1 -> 2
-        t -> iSub t 3
+        1 -> g
+        t -> MyInt (iSub t 3)
+    b' =
+      case b of
+        MyInt b'' -> b''
   in
-    let z = iAdd b y; a = z in a
+    let z = iAdd b' y; a = z in a
 
 # f :: Int -> Int
 f x = if True then abs x else threeHundred
+
+g :: MyInt
+g = MyInt 1
 
 threeHundred :: Int
 threeHundred = 100

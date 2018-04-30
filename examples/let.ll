@@ -34,12 +34,21 @@ case.default.6:                                   ; preds = %case.end.0
   br label %case.end.6
 
 case.0.6:                                         ; preds = %case.end.0
+  %6 = call i64 @g()
   br label %case.end.6
 
 case.end.6:                                       ; preds = %case.0.6, %case.default.6
-  %end.6 = phi i64 [ %5, %case.default.6 ], [ 2, %case.0.6 ]
-  %6 = add i64 %end.6, %end.0
-  ret i64 %6
+  %end.6 = phi i64 [ %5, %case.default.6 ], [ %6, %case.0.6 ]
+  switch i64 %end.6, label %case.default.9 [
+  ]
+
+case.default.9:                                   ; preds = %case.end.6
+  br label %case.end.9
+
+case.end.9:                                       ; preds = %case.default.9
+  %end.9 = phi i64 [ %end.6, %case.default.9 ]
+  %7 = add i64 %end.9, %end.0
+  ret i64 %7
 }
 
 define private i64 @f(i64 %x) {
@@ -60,6 +69,11 @@ case.1.0:                                         ; preds = %entry
 case.end.0:                                       ; preds = %case.1.0, %case.0.0
   %end.0 = phi i64 [ %0, %case.0.0 ], [ %1, %case.1.0 ]
   ret i64 %end.0
+}
+
+define private i64 @g() {
+entry:
+  ret i64 1
 }
 
 define private i64 @threeHundred() {
