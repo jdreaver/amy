@@ -62,3 +62,5 @@ prettyVar (DataConstructor (Located _ var)) = pretty var
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PatternLit (Located _ lit)) = pretty $ showLiteral lit
 prettyPattern (PatternVar (Located _ var)) = pretty var
+prettyPattern (PatternCons (ConstructorPattern (Located _ var) mArg)) =
+  pretty var <> maybe mempty (\(Located _ arg) -> space <> pretty arg) mArg

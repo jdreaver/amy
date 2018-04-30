@@ -11,6 +11,7 @@ module Amy.ANF.AST
   , Case(..)
   , Match(..)
   , Pattern(..)
+  , ConstructorPattern(..)
   , App(..)
 
   , Ident(..)
@@ -91,7 +92,15 @@ data Match
 data Pattern
   = PatternLit !Literal
   | PatternVar !(Typed Ident)
+  | PatternCons !ConstructorPattern
   deriving (Show, Eq)
+
+data ConstructorPattern
+  = ConstructorPattern
+  { constructorPatternConstructor :: !(Typed Ident)
+  , constructorPatternArg :: !(Maybe (Typed Ident))
+  , constructorPatternReturnType :: !Type
+  } deriving (Show, Eq)
 
 data App f
   = App

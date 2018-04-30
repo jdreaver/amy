@@ -319,23 +319,46 @@ inferExpr (R.EParens expr) = do
 
 inferMatch :: R.Match -> Inference (T.Match, [Constraint])
 inferMatch (R.Match pat body) = do
-  pat' <- inferPattern pat
+  (pat', patCons) <- inferPattern pat
   let patScheme = patternScheme pat'
   (body', bodyCons) <- extendEnvM patScheme $ inferExpr body
   pure
     ( T.Match pat' body'
-    , bodyCons
+    , patCons ++ bodyCons
     )
 
-inferPattern :: R.Pattern -> Inference T.Pattern
-inferPattern (R.PatternLit (Located _ lit)) = pure $ T.PatternLit lit
+inferPattern :: R.Pattern -> Inference (T.Pattern, [Constraint])
+inferPattern (R.PatternLit (Located _ lit)) = pure (T.PatternLit lit, [])
 inferPattern (R.PatternVar (Located _ ident)) = do
   tvar <- freshTypeVariable
-  pure $ T.PatternVar $ T.Typed tvar (convertIdent ident)
+  pure (T.PatternVar $ T.Typed tvar (convertIdent ident), [])
+inferPattern (R.PatternCons (R.ConstructorPattern (Located _ cons) mArg)) = do
+  let cons' = convertIdent cons
+  consTy <- lookupEnvM cons'
+  let typedCons = T.Typed consTy cons'
+  case mArg of
+    -- Convert argument and add a constraint saying the argument
+    Just (Located _ arg) -> do
+      let arg' = convertIdent arg
+      argTy <- freshTypeVariable
+      retTy <- freshTypeVariable
+      let constraint = Constraint (argTy `T.TyFun` retTy, consTy)
+      pure
+        ( T.PatternCons $ T.ConstructorPattern typedCons (Just $ T.Typed argTy arg') retTy
+        , [constraint]
+        )
+    -- No argument. The return type is just the data constructor type.
+    Nothing ->
+      pure
+        ( T.PatternCons $ T.ConstructorPattern typedCons Nothing consTy
+        , []
+        )
 
 patternScheme :: T.Pattern -> [(T.Ident, T.Scheme)]
 patternScheme (T.PatternLit _) = []
 patternScheme (T.PatternVar (T.Typed ty ident)) = [(ident, T.Forall [] ty)]
+patternScheme (T.PatternCons (T.ConstructorPattern _ mArg _)) =
+  maybe [] (\(Typed ty arg) -> [(arg, T.Forall [] ty)]) mArg
 
 --
 -- Constraint Solver
@@ -403,6 +426,9 @@ substituteType (Subst subst) t@(T.TyVar var) = Map.findWithDefault t var subst
 substituteType _ (T.TyCon a) = T.TyCon a
 substituteType s (t1 `T.TyFun` t2) = substituteType s t1 `T.TyFun` substituteType s t2
 
+substituteTyped :: Subst -> T.Typed a -> T.Typed a
+substituteTyped subst (T.Typed ty x) = T.Typed (substituteType subst ty) x
+
 substituteConstraint :: Subst -> Constraint -> Constraint
 substituteConstraint subst (Constraint (t1, t2)) = Constraint (substituteType subst t1, substituteType subst t2)
 
@@ -413,14 +439,14 @@ substituteTBinding :: Subst -> T.Binding -> T.Binding
 substituteTBinding subst binding =
   binding
   { T.bindingType = substituteScheme subst (T.bindingType binding)
-  , T.bindingArgs = (\(T.Typed ty arg) -> T.Typed (substituteType subst ty) arg) <$> T.bindingArgs binding
+  , T.bindingArgs = substituteTyped subst <$> T.bindingArgs binding
   , T.bindingReturnType = substituteType subst (T.bindingReturnType binding)
   , T.bindingBody = substituteTExpr subst (T.bindingBody binding)
   }
 
 substituteTExpr :: Subst -> T.Expr -> T.Expr
 substituteTExpr _ lit@T.ELit{} = lit
-substituteTExpr subst (T.EVar (T.Typed ty name)) = T.EVar (T.Typed (substituteType subst ty) name)
+substituteTExpr subst (T.EVar var) = T.EVar $ substituteTyped subst var
 substituteTExpr subst (T.EIf (T.If pred' then' else')) =
   T.EIf (T.If (substituteTExpr subst pred') (substituteTExpr subst then') (substituteTExpr subst else'))
 substituteTExpr subst (T.ECase (T.Case scrutinee matches)) =
@@ -437,8 +463,13 @@ substituteTMatch subst (T.Match pat body) =
 
 substituteTPattern :: Subst -> T.Pattern -> T.Pattern
 substituteTPattern _ pat@(T.PatternLit _) = pat
-substituteTPattern subst (T.PatternVar (T.Typed ty var)) =
-  T.PatternVar (T.Typed (substituteType subst ty) var)
+substituteTPattern subst (T.PatternVar var) = T.PatternVar $ substituteTyped subst var
+substituteTPattern subst (T.PatternCons (T.ConstructorPattern cons mArg retTy)) =
+  let
+    cons' = substituteTyped subst cons
+    mArg' = substituteTyped subst <$> mArg
+    retTy' = substituteType subst retTy
+  in T.PatternCons (T.ConstructorPattern cons' mArg' retTy')
 
 --
 -- Free and Active type variables

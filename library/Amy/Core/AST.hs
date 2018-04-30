@@ -10,6 +10,7 @@ module Amy.Core.AST
   , Case(..)
   , Match(..)
   , Pattern(..)
+  , ConstructorPattern(..)
   , Let(..)
   , App(..)
   , expressionType
@@ -95,7 +96,15 @@ data Match
 data Pattern
   = PatternLit !Literal
   | PatternVar !(Typed Ident)
+  | PatternCons !ConstructorPattern
   deriving (Show, Eq)
+
+data ConstructorPattern
+  = ConstructorPattern
+  { constructorPatternConstructor :: !(Typed Ident)
+  , constructorPatternArg :: !(Maybe (Typed Ident))
+  , constructorPatternReturnType :: !Type
+  } deriving (Show, Eq)
 
 data Let
   = Let
@@ -155,6 +164,7 @@ matchNames (Match pat body) = patternNames pat ++ exprNames body
 patternNames :: Pattern -> [Ident]
 patternNames (PatternLit _) = []
 patternNames (PatternVar (Typed _ var)) = [var]
+patternNames (PatternCons (ConstructorPattern _ mArg _)) = maybe [] (\(Typed _ var) -> [var]) mArg
 
 data Ident
   = Ident

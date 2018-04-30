@@ -67,3 +67,5 @@ prettyExpr (EParens expr) = parens $ prettyExpr expr
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PatternLit lit) = pretty $ showLiteral lit
 prettyPattern (PatternVar (Typed _ var)) = prettyIdent var
+prettyPattern (PatternCons (ConstructorPattern (Typed _ var) mArg _)) =
+  prettyIdent var <> maybe mempty (\(Typed _ arg) -> space <> prettyIdent arg) mArg

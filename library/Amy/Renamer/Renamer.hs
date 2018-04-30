@@ -165,6 +165,10 @@ renameMatch (S.Match pat body) =
         S.PatternVar var -> do
           var' <- addValueToScope var
           pure $ R.PatternVar <$> var'
+        S.PatternCons (S.ConstructorPattern cons mArg) -> do
+          cons' <- lookupDataConstructorInScopeOrError cons
+          mArg' <- traverse addValueToScope mArg
+          pure $ fmap R.PatternCons $ R.ConstructorPattern <$> cons' <*> sequenceA mArg'
     body' <- renameExpression body
     pure
       $ R.Match

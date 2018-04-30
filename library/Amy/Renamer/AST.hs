@@ -10,6 +10,7 @@ module Amy.Renamer.AST
   , Case(..)
   , Match(..)
   , Pattern(..)
+  , ConstructorPattern(..)
   , Let(..)
   , App(..)
 
@@ -95,7 +96,14 @@ data Match
 data Pattern
   = PatternLit !(Located Literal)
   | PatternVar !(Located Ident)
+  | PatternCons !ConstructorPattern
   deriving (Show, Eq)
+
+data ConstructorPattern
+  = ConstructorPattern
+  { constructorPatternConstructor :: !(Located Ident)
+  , constructorPatternArg :: !(Maybe (Located Ident))
+  } deriving (Show, Eq)
 
 data Let
   = Let

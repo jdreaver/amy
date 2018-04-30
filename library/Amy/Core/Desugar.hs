@@ -56,6 +56,12 @@ desugarMatch (T.Match pat body) = C.Match (desugarPattern pat) (desugarExpr body
 desugarPattern :: T.Pattern -> C.Pattern
 desugarPattern (T.PatternLit lit) = C.PatternLit lit
 desugarPattern (T.PatternVar var) = C.PatternVar (desugarTypedIdent var)
+desugarPattern (T.PatternCons (T.ConstructorPattern cons mArg retTy)) =
+  let
+    cons' = desugarTypedIdent cons
+    mArg' = desugarTypedIdent <$> mArg
+    retTy' = desugarType retTy
+  in C.PatternCons (C.ConstructorPattern cons' mArg' retTy')
 
 desugarIdent :: T.Ident -> C.Ident
 desugarIdent (T.Ident name id' mPrim) = C.Ident name id' mPrim

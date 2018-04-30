@@ -192,6 +192,17 @@ parsePattern :: AmyParser Pattern
 parsePattern =
   try (PatternLit <$> literal <?> "pattern literal")
   <|> (PatternVar <$> identifier <?> "pattern variable")
+  <|> (PatternCons <$> constructorPattern <?> "pattern constructor")
+
+constructorPattern :: AmyParser ConstructorPattern
+constructorPattern = do
+  constructor <- dataConstructor
+  mArg <- optional identifier
+  pure
+    ConstructorPattern
+    { constructorPatternConstructor = constructor
+    , constructorPatternArg = mArg
+    }
 
 letExpression' :: AmyParser Let
 letExpression' = do

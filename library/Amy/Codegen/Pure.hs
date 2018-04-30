@@ -117,11 +117,12 @@ codegenExpr' (ANF.ECase (ANF.Case scrutinee matches ty)) = do
     matchesAndBlockNames =
       second (mkCaseName . (\i -> "case." ++ i ++ ".") . show)
       <$> zip literalMatches [(0 :: Int)..]
+    allBlockNames = snd <$> matchesAndBlockNames
 
     -- TODO: Have a proper default block if there isn't a natural one,
     -- hopefully something that prints an error? Having a default should
     -- probably be handled in Core/ANF..
-    firstBlockName = snd . head $ matchesAndBlockNames
+    firstBlockName = if null allBlockNames then endBlockName else head allBlockNames
     defaultBlockName =
       case mDefaultMatch of
         Just _ -> mkCaseName "case.default."
@@ -151,7 +152,6 @@ codegenExpr' (ANF.ECase (ANF.Case scrutinee matches ty)) = do
 
   -- Generate other blocks
   let
-    allBlockNames = snd <$> matchesAndBlockNames
     nextBlockNames = drop 1 allBlockNames ++ [endBlockName]
     matchesAndNextBlockNames = zip (fst <$> matchesAndBlockNames) nextBlockNames
   matchOpsAndBlocks <-

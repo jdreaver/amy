@@ -62,6 +62,9 @@ convertType (C.TyFun ty1 ty2) = ANF.TyFun <$> convertType ty1 <*> convertType ty
 convertTyConInfo :: C.TyConInfo -> ANF.TyConInfo
 convertTyConInfo (C.TyConInfo name' id' mPrim) = ANF.TyConInfo name' id' mPrim
 
+convertTypedIdent :: C.Typed C.Ident -> ANFConvert (ANF.Typed ANF.Ident)
+convertTypedIdent (C.Typed ty arg) = ANF.Typed <$> convertType ty <*> convertIdent' arg
+
 -- | Convert a TyConInfo, but also unbox it if possible.
 convertTyConInfo' :: C.TyConInfo -> ANFConvert ANF.TyConInfo
 convertTyConInfo' info =
@@ -122,15 +125,14 @@ normalizeTerm name expr = normalizeExpr name expr pure
 
 normalizeName :: Text -> C.Expr -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 normalizeName _ (C.ELit lit) c = c $ ANF.Lit lit
-normalizeName name (C.EVar (C.Typed ty ident)) c = do
-  ty' <- convertType ty
-  ident' <- convertIdent' ident
-  case (ty, ident') of
+normalizeName name (C.EVar var) c = do
+  var' <- convertTypedIdent var
+  case var' of
     -- Top-level values need to be first called as functions
-    (C.TyCon _, ANF.Ident _ _ _ True) ->
-      mkNormalizeLet name (ANF.EApp $ ANF.App (ANF.Typed ty' ident') [] ty') ty' c
+    (ANF.Typed ty@(ANF.TyCon _) (ANF.Ident _ _ _ True)) ->
+      mkNormalizeLet name (ANF.EApp $ ANF.App var' [] ty) ty c
     -- Not a top-level value, just return
-    _ -> c $ ANF.Var (ANF.Typed ty' ident')
+    _ -> c $ ANF.Var var'
 normalizeName name expr c = do
   expr' <- normalizeTerm name expr
   exprType <- convertType $ expressionType expr
@@ -148,10 +150,9 @@ normalizeBinding mName (C.Binding ident@(C.Ident name _ _) scheme args retTy bod
   -- as the base name for all sub expressions.
   let subName = fromMaybe name mName
   body' <- normalizeTerm subName body
-  let convertArg (C.Typed ty arg) = ANF.Typed <$> convertType ty <*> convertIdent' arg
   ident' <- convertIdent' ident
   scheme' <- convertScheme scheme
-  args' <- traverse convertArg args
+  args' <- traverse convertTypedIdent args
   retTy' <- convertType retTy
   pure $ ANF.Binding ident' scheme' args' retTy' body'
 
@@ -163,9 +164,21 @@ normalizeMatch (C.Match pat body) = do
 
 convertPattern :: C.Pattern -> ANFConvert ANF.Pattern
 convertPattern (C.PatternLit lit) = pure $ ANF.PatternLit lit
-convertPattern (C.PatternVar (C.Typed ty ident)) = do
-  ty' <- convertType ty
-  pure $ ANF.PatternVar $ ANF.Typed ty' $ convertIdent False ident
+convertPattern (C.PatternVar var) = ANF.PatternVar <$> convertTypedIdent var
+convertPattern (C.PatternCons pat@(C.ConstructorPattern cons mArg _)) = do
+  (ANF.Typed _ consIdent) <- convertTypedIdent cons
+  mArg' <- traverse convertTypedIdent mArg
+  shouldUnbox <- unboxDataConstructor consIdent
+  pure $
+    if shouldUnbox
+      then
+        case mArg' of
+          Nothing -> error $ "Can't unbox pattern without argument " ++ show pat
+          Just arg -> ANF.PatternVar arg
+      else
+        error $ "Can't handle non-unboxed data constructor patterns yet " ++ show pat
+        -- retTy' <- convertType retTy
+        -- ANF.PatternCons $ ANF.ConstructorPattern cons' mArg' retTy'
 
 -- | Helper for normalizing lists of things
 normalizeList :: (Monad m) => (a -> (b -> m c) -> m c) -> [a] -> ([b] -> m c) -> m c

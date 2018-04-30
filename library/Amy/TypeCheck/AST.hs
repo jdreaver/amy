@@ -12,6 +12,7 @@ module Amy.TypeCheck.AST
   , Case(..)
   , Match(..)
   , Pattern(..)
+  , ConstructorPattern(..)
   , Let(..)
   , App(..)
   , expressionType
@@ -103,7 +104,15 @@ data Match
 data Pattern
   = PatternLit !Literal
   | PatternVar !(Typed Ident)
+  | PatternCons !ConstructorPattern
   deriving (Show, Eq)
+
+data ConstructorPattern
+  = ConstructorPattern
+  { constructorPatternConstructor :: !(Typed Ident)
+  , constructorPatternArg :: !(Maybe (Typed Ident))
+  , constructorPatternReturnType :: !Type
+  } deriving (Show, Eq)
 
 data Let
   = Let
@@ -135,6 +144,7 @@ expressionType (EParens expr) = expressionType expr
 patternType :: Pattern -> Type
 patternType (PatternLit lit) = literalType' lit
 patternType (PatternVar (Typed ty _)) = ty
+patternType (PatternCons (ConstructorPattern _ _ retTy)) = retTy
 
 data Ident
   = Ident
