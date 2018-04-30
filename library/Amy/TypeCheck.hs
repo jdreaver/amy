@@ -4,3 +4,4 @@ module Amy.TypeCheck
 
 import Amy.TypeCheck.AST as X
 import Amy.TypeCheck.Inference as X
+import Amy.TypeCheck.Pretty as X

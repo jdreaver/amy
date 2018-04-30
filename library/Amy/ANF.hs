@@ -4,3 +4,4 @@ module Amy.ANF
 
 import Amy.ANF.AST as X
 import Amy.ANF.Convert as X
+import Amy.ANF.Pretty as X

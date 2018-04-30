@@ -14,12 +14,12 @@ import System.Exit (die)
 import System.IO (hPutStrLn, stderr)
 import Text.Megaparsec
 
-import Amy.ANF
+import Amy.ANF as ANF
 import Amy.Codegen
-import Amy.Core
+import Amy.Core as C
 import Amy.Errors
 import Amy.Renamer
-import Amy.Syntax
+import Amy.Syntax as S
 import Amy.TypeCheck as T
 
 main :: IO ()
