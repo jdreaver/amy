@@ -8,7 +8,7 @@ import Amy.Core.AST as C
 import Amy.TypeCheck.AST as T
 
 desugarModule :: T.Module -> C.Module
-desugarModule (T.Module bindings externs) =
+desugarModule (T.Module bindings externs _) =
   C.Module (desugarBinding <$> bindings) (desugarExtern <$> externs)
 
 desugarExtern :: T.Extern -> C.Extern

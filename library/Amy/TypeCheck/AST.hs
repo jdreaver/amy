@@ -6,6 +6,7 @@ module Amy.TypeCheck.AST
   ( Module(..)
   , Binding(..)
   , Extern(..)
+  , TypeDeclaration(..)
   , Expr(..)
   , If(..)
   , Case(..)
@@ -37,6 +38,7 @@ data Module
   = Module
   { moduleBindings :: ![Binding]
   , moduleExterns :: ![Extern]
+  , moduleTypeDeclarations :: ![TypeDeclaration]
   } deriving (Show, Eq)
 
 -- | A binding after renaming. This is a combo of a 'Binding' and a
@@ -58,6 +60,13 @@ data Extern
   = Extern
   { externName :: !Ident
   , externType :: !Type
+  } deriving (Show, Eq)
+
+data TypeDeclaration
+  = TypeDeclaration
+  { typeDeclarationTypeName :: !TypeName
+  , typeDeclarationConstructorName :: !Ident
+  , typeDeclarationArgument :: !TypeName
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'

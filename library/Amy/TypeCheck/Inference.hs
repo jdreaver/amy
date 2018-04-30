@@ -145,14 +145,24 @@ newtype Constraint = Constraint { unConstraint :: (T.Type, T.Type) }
 --
 
 inferModule :: R.Module -> Either Error T.Module
-inferModule (R.Module bindings externs _) = do
+inferModule (R.Module bindings externs typeDeclarations) = do
   let
-    externs' = (\(R.Extern (Located _ name) ty) -> T.Extern (convertIdent name) (convertType ty)) <$> externs
+    externs' = convertExtern <$> externs
     externSchemes = (\(T.Extern name ty) -> (name, T.Forall [] ty)) <$> externs'
+    typeDeclarations' = convertTypeDeclaration <$> typeDeclarations
+    dataConstructorSchemes =
+      (\(T.TypeDeclaration tyName dataCon tyArg) -> (dataCon, T.Forall [] $ T.TyCon tyArg `T.TyFun` T.TyCon tyName)) <$> typeDeclarations'
     primFuncSchemes = primitiveFunctionScheme <$> allPrimitiveFunctionNamesAndIds
-    env = TyEnv $ Map.fromList $ externSchemes ++ primFuncSchemes
+    env = TyEnv $ Map.fromList $ externSchemes ++ dataConstructorSchemes ++ primFuncSchemes
   bindings' <- inferTopLevel env bindings
-  pure (T.Module bindings' externs')
+  pure (T.Module bindings' externs' typeDeclarations')
+
+convertExtern :: R.Extern -> T.Extern
+convertExtern (R.Extern (Located _ name) ty) = T.Extern (convertIdent name) (convertType ty)
+
+convertTypeDeclaration :: R.TypeDeclaration -> T.TypeDeclaration
+convertTypeDeclaration (R.TypeDeclaration tyName (Located _ dataCon) tyArg) =
+  T.TypeDeclaration (convertTypeName tyName) (convertIdent dataCon) (convertTypeName tyArg)
 
 primitiveFunctionScheme :: (Int, PrimitiveFunctionName) -> (T.Ident, T.Scheme)
 primitiveFunctionScheme (id', prim) =
