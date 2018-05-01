@@ -5,14 +5,13 @@ module Amy.Codegen.Pure
   ( codegenModule
   ) where
 
-import Data.Bifunctor (second)
 import qualified Data.ByteString.Char8 as BS8
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
 import Data.Foldable (for_)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Traversable (for)
@@ -28,7 +27,6 @@ import qualified LLVM.AST.Linkage as L
 import Amy.ANF as ANF
 import Amy.Codegen.CaseBlocks
 import Amy.Codegen.Monad
-import Amy.Literal
 import Amy.Prim
 
 codegenModule :: ANF.Module -> LLVM.Module
@@ -92,77 +90,42 @@ codegenExpr' (ANF.ELet (ANF.Let bindings expr)) = do
     op <- codegenExpr' (ANF.bindingBody binding)
     addSymbolToTable (ANF.bindingName binding) op
   codegenExpr' expr
-codegenExpr' (ANF.ECase (ANF.Case scrutinee matches ty)) = do
+codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee _ _)) = do
   caseId <- freshId
 
   -- TODO: Move a lot of this logic to ANF. conversion, like finding the default
   -- match and converting match patterns to literals.
+  compilationMethods' <- compilationMethods
   let
-    -- Find all matches for literals
-    literalMatch :: ANF.Match -> Maybe (Literal, ANF.Expr)
-    literalMatch (ANF.Match (ANF.PatternLit lit) body) = Just (lit, body)
-    literalMatch _ = Nothing
-    literalMatches = mapMaybe literalMatch (NE.toList matches)
-
-    varMatch :: ANF.Match -> Maybe (ANF.Typed ANF.Ident, ANF.Expr)
-    varMatch (ANF.Match (ANF.PatternVar ident) body) = Just (ident, body)
-    varMatch _ = Nothing
-
-    mDefaultMatch :: Maybe (ANF.Typed ANF.Ident, ANF.Expr)
-    mDefaultMatch =
-      (\xs -> if null xs then Nothing else Just (head xs)) $
-      mapMaybe varMatch (NE.toList matches)
-
-    -- Give names to all the blocks
     mkCaseName nameBase = LLVM.Name $ stringToShortBS $ nameBase ++ show caseId
-    matchesAndBlockNames =
-      second (mkCaseName . (\i -> "case." ++ i ++ ".") . show)
-      <$> zip literalMatches [(0 :: Int)..]
-    allBlockNames = snd <$> matchesAndBlockNames
-
-    -- TODO: Have a proper default block if there isn't a natural one,
-    -- hopefully something that prints an error? Having a default should
-    -- probably be handled in Core/ANF..
-    firstBlockName = if null allBlockNames then endBlockName else head allBlockNames
-    defaultBlockName =
-      case mDefaultMatch of
-        Just _ -> mkCaseName "case.default."
-        Nothing -> firstBlockName
-
-    endBlockName = mkCaseName "case.end."
-    endOpName = mkCaseName "end."
-    endTy = llvmType ty
+    (CaseBlocks switchDefaultBlockName mDefaultBlock literalBlocks endBlock) = caseBlocks mkCaseName compilationMethods' case'
+    (CaseEndBlock endBlockName endOpName endType) = endBlock
+    endTy = llvmType endType
     endOpRef = LocalReference endTy endOpName
 
   -- Generate the switch statement
   scrutineeOp <- valOperand scrutinee
   let
-    switchNames = (\((lit, _), name') -> (literalConstant lit, name')) <$> matchesAndBlockNames
-  terminateBlock (Do $ Switch scrutineeOp defaultBlockName switchNames []) defaultBlockName
+    switchNames = (\(CaseLiteralBlock _ name' _ constant) -> (constant, name')) <$> literalBlocks
+  terminateBlock (Do $ Switch scrutineeOp switchDefaultBlockName switchNames []) switchDefaultBlockName
 
-  -- Generate default block
-  mDefaultOpAndBlock <-
-    for mDefaultMatch $ \defaultMatch -> do
-      let
-        (ANF.Typed _ defaultIdent, defaultExpr) = defaultMatch
-      addSymbolToTable defaultIdent scrutineeOp
-      defaultOp <- codegenExpr' defaultExpr
-      defaultBlock <- currentBlockName
-      terminateBlock (Do $ Br endBlockName []) firstBlockName
-      pure (defaultOp, defaultBlock)
-
-  -- Generate other blocks
+  -- Generate case blocks
   let
-    nextBlockNames = drop 1 allBlockNames ++ [endBlockName]
-    matchesAndNextBlockNames = zip (fst <$> matchesAndBlockNames) nextBlockNames
-  matchOpsAndBlocks <-
-    for matchesAndNextBlockNames $ \((_, expr), nextBlockName) -> do
-      exprOp <- codegenExpr' expr
+    generateBlockExpr expr nextBlockName = do
+      op <- codegenExpr' expr
       -- N.B. The block name could have changed while generating the
       -- expression, so we need to get the "actual" block name.
-      actualBlockName <- currentBlockName
+      finalBlockName <- currentBlockName
       terminateBlock (Do $ Br endBlockName []) nextBlockName
-      pure (exprOp, actualBlockName)
+      pure (op, finalBlockName)
+    generateCaseVarBlock (CaseVarBlock expr _ nextBlockName ident) = do
+      addSymbolToTable ident scrutineeOp
+      generateBlockExpr expr nextBlockName
+    generateCaseLiteralBlock (CaseLiteralBlock expr _ nextBlockName _) =
+      generateBlockExpr expr nextBlockName
+
+  mDefaultOpAndBlock <- traverse generateCaseVarBlock mDefaultBlock
+  matchOpsAndBlocks <- traverse generateCaseLiteralBlock literalBlocks
 
   -- Generate end block
   let allOpsAndBlocks = maybe id (:) mDefaultOpAndBlock matchOpsAndBlocks
@@ -190,31 +153,6 @@ codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   argOps <- traverse valOperand args'
   addInstruction $ opName := primitiveFunctionInstruction prim argOps
   pure $ LocalReference (llvmType returnTy) opName
-
---
--- Case Blocks
---
-
--- codegenLiteralBlock :: Name -> Name -> CaseBlock LiteralPattern -> BlockGen (Operand, Name)
--- codegenLiteralBlock nextBlockName endBlockName (CaseBlock expr _ (LiteralPattern _)) = do
---   op <- codegenExpr' expr
---   -- N.B. The block name could have changed while generating the
---   -- expression, so we need to get the "actual" block name.
---   block <- currentBlockName
---   terminateBlock (Do $ Br endBlockName []) nextBlockName
---   pure (op, block)
-
--- codegenVarBlock :: Name -> Name -> Operand -> CaseBlock VarPattern -> BlockGen (Operand, Name)
--- codegenVarBlock nextBlockName endBlockName scrutineeOp (CaseBlock expr _ (VarPattern var)) = do
---   addSymbolToTable (typedValue var) scrutineeOp
---   op <- codegenExpr' expr
---   block <- currentBlockName
---   terminateBlock (Do $ Br endBlockName []) nextBlockName
---   pure (op, block)
-
---
--- Type Conversions
---
 
 convertLLVMType :: Operand -> LLVM.Type -> BlockGen Operand
 convertLLVMType op targetTy

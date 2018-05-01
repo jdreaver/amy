@@ -3,18 +3,16 @@
 module Amy.Codegen.CaseBlocks
   ( CaseBlocks(..)
   , caseBlocks
-  , CaseBlock(..)
+  , CaseLiteralBlock(..)
+  , CaseVarBlock(..)
+  , CaseEndBlock(..)
   , LiteralPattern(..)
   , VarPattern(..)
-  , ConsPattern(..)
-  , ValPattern(..)
   , literalConstant
   ) where
 
-import Data.Bifunctor (second)
+import Data.Foldable (toList)
 import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe)
 import Data.Maybe (mapMaybe)
 import LLVM.AST as LLVM
 import qualified LLVM.AST.Constant as C
@@ -26,84 +24,131 @@ import Amy.Literal
 
 data CaseBlocks
   = CaseBlocks
-  { caseBlocksDefaultBlock :: !(Maybe (CaseBlock VarPattern))
-  , caseBlocksValueBlocks :: ![CaseBlock ValPattern]
+  { caseBlocksSwitchDefaultBlockName :: !Name
+  , caseBlocksDefaultBlock :: !(Maybe CaseVarBlock)
+  , caseBlocksLiteralBlocks :: ![CaseLiteralBlock]
+  , caseBlocksEndBlock :: !CaseEndBlock
   } deriving (Show, Eq)
 
-data CaseBlock a
-  = CaseBlock
-  { caseBlockExpr :: !ANF.Expr
-  , caseBlockName :: !Name
-  , caseBlockConstant :: !(Maybe C.Constant)
-  , caseBlockPattern :: !a
+data CaseLiteralBlock
+  = CaseLiteralBlock
+  { caseLiteralBlockExpr :: !Expr
+  , caseLiteralBlockName :: !Name
+  , caseLiteralBlockNextName :: !Name
+  , caseLiteralBlockConstant :: !C.Constant
   } deriving (Show, Eq)
 
-newtype LiteralPattern = LiteralPattern Literal
+data CaseVarBlock
+  = CaseVarBlock
+  { caseVarBlockExpr :: !Expr
+  , caseVarBlockName :: !Name
+  , caseVarBlockNextName :: !Name
+  , caseVarBlockIdent :: !Ident
+  } deriving (Show, Eq)
+
+data CaseEndBlock
+  = CaseEndBlock
+  { caseEndBlockName :: !Name
+  , caseEndBlockOperandName :: !Name
+  , caseEndBlockType :: !ANF.Type
+  } deriving (Show, Eq)
+
+data LiteralPattern
+  = LitLiteralPattern !Literal
+  | ConsEnumPattern !(Typed ConstructorName)
+  -- Not implemented yet: ConsLiteralPattern !(Typed ConstructorName, Literal)
   deriving (Show, Eq)
 
-newtype VarPattern = VarPattern (ANF.Typed ANF.Ident)
+literalPattern :: Pattern -> Maybe LiteralPattern
+literalPattern (PatternLit lit) = Just $ LitLiteralPattern lit
+literalPattern (PatternCons (ConstructorPattern consName Nothing _)) = Just $ ConsEnumPattern consName
+literalPattern _ = Nothing
+
+data VarPattern
+  = VarVarPattern !Ident
+  | ConsVarPattern !ConstructorName !Ident
+  -- TODO: Wildcard pattern
   deriving (Show, Eq)
 
-newtype ConsPattern = ConsPattern ANF.ConstructorPattern
-  deriving (Show, Eq)
-
-data ValPattern
-  = LiteralValPattern !LiteralPattern
-  | ConsValPattern !ConsPattern
-  deriving (Show, Eq)
+varPattern :: Pattern -> Maybe VarPattern
+varPattern (PatternVar (Typed _ ident)) = Just $ VarVarPattern ident
+varPattern (PatternCons (ConstructorPattern (Typed _ consName) (Just (Typed _ arg)) _)) = Just $ ConsVarPattern consName arg
+varPattern _ = Nothing
 
 caseBlocks
   :: (String -> Name)
-  -> Map ANF.ConstructorName TypeCompilationMethod
-  -> [ANF.Match]
+  -> Map ConstructorName TypeCompilationMethod
+  -> Case
   -> CaseBlocks
-caseBlocks mkBlockName compilationMethods matches =
+caseBlocks mkBlockName compilationMethods (Case _ matches ty) =
   let
     -- Extract patterns
-    literalPatterns = mapMaybe (blockPattern literalPattern) matches
-    varPatterns = mapMaybe (blockPattern varPattern) matches
-    consPatterns = mapMaybe (blockPattern consPattern) matches
+    blockPattern :: (Pattern -> Maybe a) -> Match -> Maybe (Expr, a)
+    blockPattern maybePat (Match pat expr) = (expr,) <$> maybePat pat
+    literalPatterns = mapMaybe (blockPattern literalPattern) (toList matches)
+    varPatterns = mapMaybe (blockPattern varPattern) (toList matches)
 
-    -- This is the first wildcard match
+    -- Compute names for everything
+    defaultBlockName = mkBlockName "case.default."
+    endBlockName = mkBlockName "case.end."
+    endOpName = mkBlockName "end."
+    literalBlockNames = mkBlockName . (\i -> "case." ++ i ++ ".") . show <$> [0 .. (length literalPatterns - 1)]
+    nextLiteralBlockNames = drop 1 literalBlockNames ++ [endBlockName]
+
+    defaultBlockNextName =
+      case literalBlockNames of
+        [] -> endBlockName
+        firstBlockName:_ -> firstBlockName
+
+    -- Figure out the default block from the variable matches
+    -- TODO: Have a proper default block if we can't find one,
+    -- hopefully something that prints an error? Having a default should
+    -- probably be handled in Core/ANF..
     firstVarPattern = if null varPatterns then Nothing else Just (head varPatterns)
-    defaultBlock = (\(expr, pat) -> CaseBlock expr (mkBlockName "default.") Nothing pat) <$> firstVarPattern
+    varBlock (expr, pat) =
+      CaseVarBlock
+      { caseVarBlockExpr = expr
+      , caseVarBlockName = defaultBlockName
+      , caseVarBlockNextName = defaultBlockNextName
+      , caseVarBlockIdent =
+          case pat of
+            VarVarPattern ident -> ident
+            ConsVarPattern consName ident -> constructorIdent compilationMethods consName ident
+      }
+    defaultBlock = varBlock <$> firstVarPattern
+    switchDefaultBlockName =
+      case defaultBlock of
+        Nothing -> endBlockName
+        Just block -> caseVarBlockName block
 
     -- Combine the cons and lit matches. TODO: Is it bad that they are out of
     -- their original order?
-    mkValBlockName = mkBlockName . (\i -> "case." ++ i ++ ".") . show
-    valuePatterns = (second LiteralValPattern <$> literalPatterns) ++ (second ConsValPattern <$> consPatterns)
-    valueBlock ((expr, pat), i) =
-      CaseBlock
-      { caseBlockExpr = expr
-      , caseBlockName = mkValBlockName i
-      , caseBlockConstant =
-          Just $
-            case pat of
-              LiteralValPattern (LiteralPattern lit) -> literalConstant lit
-              ConsValPattern (ConsPattern cons) -> error "Handle this"
-      , caseBlockPattern = pat
+    literalBlock ((expr, pat), (blockName, nextBlockName)) =
+      CaseLiteralBlock
+      { caseLiteralBlockExpr = expr
+      , caseLiteralBlockName = blockName
+      , caseLiteralBlockNextName = nextBlockName
+      , caseLiteralBlockConstant =
+          case pat of
+            LitLiteralPattern lit -> literalConstant lit
+            ConsEnumPattern (Typed _ consName) -> constructorConstant compilationMethods consName
       }
-    valueBlocks = valueBlock <$> zip valuePatterns [(0 :: Int)..]
+    literalBlocks = literalBlock <$> zip literalPatterns (zip literalBlockNames nextLiteralBlockNames)
+
+    -- Compute end block
+    endBlock =
+      CaseEndBlock
+      { caseEndBlockName = endBlockName
+      , caseEndBlockOperandName = endOpName
+      , caseEndBlockType = ty
+      }
   in
     CaseBlocks
-    { caseBlocksDefaultBlock = defaultBlock
-    , caseBlocksValueBlocks = valueBlocks
+    { caseBlocksSwitchDefaultBlockName = switchDefaultBlockName
+    , caseBlocksDefaultBlock = defaultBlock
+    , caseBlocksLiteralBlocks = literalBlocks
+    , caseBlocksEndBlock = endBlock
     }
-
-blockPattern :: (ANF.Pattern -> Maybe a) -> ANF.Match -> Maybe (ANF.Expr, a)
-blockPattern maybePat (ANF.Match pat expr) = (expr,) <$> maybePat pat
-
-literalPattern :: ANF.Pattern -> Maybe LiteralPattern
-literalPattern (ANF.PatternLit lit) = Just $ LiteralPattern lit
-literalPattern _ = Nothing
-
-varPattern :: ANF.Pattern -> Maybe VarPattern
-varPattern (ANF.PatternVar ident) = Just $ VarPattern ident
-varPattern _ = Nothing
-
-consPattern :: ANF.Pattern -> Maybe ConsPattern
-consPattern (ANF.PatternCons consPat) = Just $ ConsPattern consPat
-consPattern _ = Nothing
 
 literalConstant :: Literal -> C.Constant
 literalConstant lit =
@@ -113,11 +158,22 @@ literalConstant lit =
     LiteralBool x -> C.Int 1 $ if x then 1 else 0
 
 constructorConstant
-  :: Map ANF.ConstructorName TypeCompilationMethod
-  -> ANF.ConstructorPattern
+  :: Map ConstructorName TypeCompilationMethod
+  -> ConstructorName
   -> C.Constant
-constructorConstant compilationMethods (ANF.ConstructorPattern (ANF.Typed _ consName) mArg _) =
-  let method = fromMaybe (error $ "No compilation method for " ++ show consName) $ Map.lookup consName compilationMethods
-  in
-    case (method, mArg) of
-      (CompileUnboxed _, Just arg) -> arg
+constructorConstant compilationMethods consName =
+  case findCompilationMethod compilationMethods consName of
+    CompileUnboxed -> error $ "Cannot unbox, we have an enum! " ++ show consName
+    CompileEnum i -> literalConstant (LiteralInt i)
+    CompileTaggedPairs _ -> error $ "Cannot compile tagged pairs, we have an enum! " ++ show consName
+
+constructorIdent
+  :: Map ConstructorName TypeCompilationMethod
+  -> ConstructorName
+  -> Ident
+  -> Ident
+constructorIdent compilationMethods consName ident =
+  case findCompilationMethod compilationMethods consName of
+    CompileUnboxed -> ident
+    CompileEnum _ -> error $ "Cannot compile enum, we need an ident! " ++ show consName
+    CompileTaggedPairs _ -> error $ "Tagged pairs not implementet yet " ++ show consName

@@ -1,6 +1,7 @@
 module Amy.Codegen.TypeConstructors
   ( TypeCompilationMethod(..)
   , typeCompilationMethod
+  , findCompilationMethod
   ) where
 
 import Data.Map.Strict (Map)
@@ -8,10 +9,9 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 
 import Amy.ANF.AST as ANF
-import Amy.Prim
 
 data TypeCompilationMethod
-  = CompileUnboxed !PrimitiveType
+  = CompileUnboxed
     -- ^ Unbox to the given type
   | CompileEnum !Int
     -- ^ Compile as an integer enum
@@ -24,8 +24,15 @@ typeCompilationMethod :: ANF.TypeDeclaration -> Map ANF.ConstructorName TypeComp
 typeCompilationMethod (ANF.TypeDeclaration _ cons) =
   case cons of
     (ANF.DataConstructor conName Nothing) -> Map.singleton conName (CompileEnum 0)
-    (ANF.DataConstructor conName (Just tyArg)) -> Map.singleton conName (CompileUnboxed $ assertPrimitiveType tyArg)
+    (ANF.DataConstructor conName (Just _)) -> Map.singleton conName CompileUnboxed
 
-assertPrimitiveType :: TyConInfo -> PrimitiveType
-assertPrimitiveType info@(ANF.TyConInfo _ _ mPrim) =
-  fromMaybe (error $ "Cannot unbox, not a primitive type! " ++ show info) mPrim
+findCompilationMethod
+  :: Map ConstructorName TypeCompilationMethod
+  -> ConstructorName
+  -> TypeCompilationMethod
+findCompilationMethod compilationMethods consName =
+  fromMaybe (error $ "No compilation method for " ++ show consName) $ Map.lookup consName compilationMethods
+
+-- assertPrimitiveType :: TyConInfo -> PrimitiveType
+-- assertPrimitiveType info@(ANF.TyConInfo _ _ mPrim) =
+--   fromMaybe (error $ "Cannot unbox, not a primitive type! " ++ show info) mPrim

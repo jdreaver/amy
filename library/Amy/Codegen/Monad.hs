@@ -12,14 +12,13 @@ module Amy.Codegen.Monad
   , freshId
   , freshUnName
   , topLevelType
-  , compilationMethod
+  , compilationMethods
   ) where
 
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe)
 import LLVM.AST as LLVM
 
 import Amy.ANF.AST as ANF
@@ -32,8 +31,8 @@ runBlockGen :: [(ANF.Ident, ANF.Type)] -> [ANF.TypeDeclaration] -> BlockGen Oper
 runBlockGen topLevelTypes typeDeclarations (BlockGen action) =
   let
     typeMap = Map.fromList topLevelTypes
-    compilationMethods = Map.unions $ typeCompilationMethod <$> typeDeclarations
-    readState = BlockGenRead typeMap compilationMethods
+    compilationMethods' = Map.unions $ typeCompilationMethod <$> typeDeclarations
+    readState = BlockGenRead typeMap compilationMethods'
     (operand, BlockGenState lastBlock blockStack _ _) = runState (runReaderT action readState) (blockGenState "entry")
     blocks = reverse $ makeBasicBlock lastBlock (Do $ Ret (Just operand) []) : blockStack
   in blocks
@@ -106,7 +105,5 @@ freshUnName = UnName <$> freshId
 topLevelType :: ANF.Ident -> BlockGen (Maybe ANF.Type)
 topLevelType ident = asks (Map.lookup ident . blockGenReadTopLevelTypes)
 
-compilationMethod :: ANF.ConstructorName -> BlockGen TypeCompilationMethod
-compilationMethod consName = asks (fromMaybe (error err) . Map.lookup consName . blockGenReadCompilationMethods)
- where
-  err = "Couldn't find compilation method for " ++ show consName
+compilationMethods :: BlockGen (Map ANF.ConstructorName TypeCompilationMethod)
+compilationMethods = asks blockGenReadCompilationMethods
