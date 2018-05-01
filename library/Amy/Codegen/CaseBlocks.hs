@@ -117,9 +117,10 @@ caseBlocks mkBlockName compilationMethods (Case _ matches ty) =
       }
     defaultBlock = varBlock <$> firstVarPattern
     switchDefaultBlockName =
-      case defaultBlock of
-        Nothing -> endBlockName
-        Just block -> caseVarBlockName block
+      case (defaultBlock, literalBlockNames) of
+        (Just block, _) -> caseVarBlockName block
+        (Nothing, firstBlockName:_) -> firstBlockName
+        (Nothing, []) -> endBlockName
 
     -- Combine the cons and lit matches. TODO: Is it bad that they are out of
     -- their original order?
