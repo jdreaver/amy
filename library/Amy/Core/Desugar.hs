@@ -20,7 +20,7 @@ desugarExtern (T.Extern ident ty) =
 
 desugarTypeDeclaration :: T.TypeDeclaration -> C.TypeDeclaration
 desugarTypeDeclaration (T.TypeDeclaration tyName cons) =
-  C.TypeDeclaration (desugarTyConInfo tyName) (desugarDataConstructor cons)
+  C.TypeDeclaration (desugarTyConInfo tyName) (desugarDataConstructor <$> cons)
 
 desugarDataConstructor :: T.DataConstructor -> C.DataConstructor
 desugarDataConstructor (T.DataConstructor conName mTyArg) =

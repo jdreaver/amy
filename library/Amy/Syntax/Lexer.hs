@@ -10,6 +10,7 @@ module Amy.Syntax.Lexer
   , identifier
   , typeIdentifier
   , dataConstructorName'
+  , dataConstructorSep
   , extern
   , forall
   , if'
@@ -142,6 +143,9 @@ typeIdentifier = lexeme (pack <$> ((:) <$> upperChar <*> many alphaNumChar)) <?>
 
 dataConstructorName' :: AmyParser (Located Text)
 dataConstructorName' = typeIdentifier
+
+dataConstructorSep :: AmyParser ()
+dataConstructorSep = char '|' >> spaceConsumer
 
 lparen :: AmyParser ()
 lparen = char '(' >> spaceConsumer

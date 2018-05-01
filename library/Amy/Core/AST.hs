@@ -31,6 +31,7 @@ module Amy.Core.AST
   ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 
 import Amy.Literal
@@ -64,7 +65,7 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConInfo
-  , typeDeclarationConstructor :: !DataConstructor
+  , typeDeclarationConstructors :: !(NonEmpty DataConstructor)
   } deriving (Show, Eq)
 
 data DataConstructor
@@ -152,7 +153,7 @@ expressionType (EParens expr) = expressionType expr
 moduleNameIds :: Module -> [Int]
 moduleNameIds (Module bindings externs typeDeclarations) =
   concatMap bindingNameIds bindings
-  ++ fmap (constructorNameId . dataConstructorName . typeDeclarationConstructor) typeDeclarations
+  ++ concatMap (NE.toList . fmap (constructorNameId . dataConstructorName) . typeDeclarationConstructors) typeDeclarations
   ++ fmap (identId . externName) externs
 
 bindingNameIds :: Binding -> [Int]

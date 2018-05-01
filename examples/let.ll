@@ -56,8 +56,22 @@ case.0.10:                                        ; preds = %case.end.9, %case.e
 
 case.end.10:                                      ; preds = %case.0.10
   %end.10 = phi i64 [ %end.9, %case.0.10 ]
+  switch i64 1, label %case.0.11 [
+    i64 0, label %case.0.11
+    i64 1, label %case.1.11
+  ]
+
+case.0.11:                                        ; preds = %case.end.10, %case.end.10
+  br label %case.end.11
+
+case.1.11:                                        ; preds = %case.end.10
+  br label %case.end.11
+
+case.end.11:                                      ; preds = %case.1.11, %case.0.11
+  %end.11 = phi i64 [ 1, %case.0.11 ], [ 2, %case.1.11 ]
   %7 = add i64 %end.10, %end.0
-  ret i64 %7
+  %8 = add i64 %end.11, %7
+  ret i64 %8
 }
 
 define private i64 @f(i64 %x) {

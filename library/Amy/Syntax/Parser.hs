@@ -16,6 +16,7 @@ module Amy.Syntax.Parser
   , literal
   ) where
 
+import qualified Control.Applicative.Combinators.NonEmpty as CNE
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
@@ -99,11 +100,11 @@ typeDeclaration :: AmyParser TypeDeclaration
 typeDeclaration = do
   tyName <- typeIdentifier
   equals <* spaceConsumerNewlines
-  cons <- dataConstructor
+  constructors <- dataConstructor `CNE.sepBy1` dataConstructorSep
   pure
     TypeDeclaration
     { typeDeclarationTypeName = tyName
-    , typeDeclarationConstructor = cons
+    , typeDeclarationConstructors = constructors
     }
 
 dataConstructor :: AmyParser DataConstructor

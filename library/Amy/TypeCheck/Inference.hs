@@ -165,7 +165,7 @@ inferModule (R.Module bindings externs typeDeclarations) = do
     externs' = convertExtern <$> externs
     externSchemes = (\(T.Extern name ty) -> (name, T.Forall [] ty)) <$> externs'
     typeDeclarations' = convertTypeDeclaration <$> typeDeclarations
-    dataConstructorSchemes = typeDeclarationScheme <$> typeDeclarations'
+    dataConstructorSchemes = concatMap typeDeclarationSchemes typeDeclarations'
     primFuncSchemes = primitiveFunctionScheme <$> allPrimitiveFunctionNamesAndIds
     env =
       TyEnv
@@ -180,14 +180,14 @@ convertExtern (R.Extern (Located _ name) ty) = T.Extern (convertIdent name) (con
 
 convertTypeDeclaration :: R.TypeDeclaration -> T.TypeDeclaration
 convertTypeDeclaration (R.TypeDeclaration tyName cons) =
-  T.TypeDeclaration (convertTyConInfo tyName) (convertDataConstructor cons)
+  T.TypeDeclaration (convertTyConInfo tyName) (convertDataConstructor <$> cons)
 
 convertDataConstructor :: R.DataConstructor -> T.DataConstructor
 convertDataConstructor (R.DataConstructor (Located _ conName) mTyArg) =
   T.DataConstructor (convertConstructorName conName) (convertTyConInfo <$> mTyArg)
 
-typeDeclarationScheme :: T.TypeDeclaration -> (T.ConstructorName, T.Scheme)
-typeDeclarationScheme (T.TypeDeclaration tyName cons) = dataConstructorScheme tyName cons
+typeDeclarationSchemes :: T.TypeDeclaration -> [(T.ConstructorName, T.Scheme)]
+typeDeclarationSchemes (T.TypeDeclaration tyName cons) = NE.toList $ dataConstructorScheme tyName <$> cons
 
 dataConstructorScheme :: T.TyConInfo -> T.DataConstructor -> (T.ConstructorName, T.Scheme)
 dataConstructorScheme tyName (T.DataConstructor conName mTyArg) = (conName, T.Forall [] ty)

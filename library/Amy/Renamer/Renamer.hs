@@ -42,11 +42,11 @@ rename' (S.Module declarations) = do
 renameTypeDeclaration :: S.TypeDeclaration -> Renamer (Validation [Error] R.TypeDeclaration)
 renameTypeDeclaration (S.TypeDeclaration tyName cons) = do
   tyName' <- addTypeConstructorToScope tyName
-  cons' <- renameDataConstructor cons
+  cons' <- traverse renameDataConstructor cons
   pure
     $ R.TypeDeclaration
     <$> tyName'
-    <*> cons'
+    <*> sequenceA cons'
 
 renameDataConstructor :: S.DataConstructor -> Renamer (Validation [Error] R.DataConstructor)
 renameDataConstructor (S.DataConstructor conName mArgTy) = do

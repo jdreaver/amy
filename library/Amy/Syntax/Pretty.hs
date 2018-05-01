@@ -28,7 +28,7 @@ prettyDeclaration (DeclBindingType bindingTy) = prettyBindingType' bindingTy
 prettyDeclaration (DeclExtern (Extern (Located _ name) ty)) =
   prettyExtern (pretty name) (mkPrettyType ty)
 prettyDeclaration (DeclType (TypeDeclaration (Located _ tyName) cons)) =
-  prettyTypeDeclaration (pretty tyName) (prettyConstructor cons)
+  prettyTypeDeclaration (pretty tyName) (prettyConstructor <$> cons)
  where
   prettyConstructor (DataConstructor (Located _ conName) mArg) =
     prettyDataConstructor (pretty conName) (pretty . locatedValue <$> mArg)

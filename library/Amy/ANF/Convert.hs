@@ -40,7 +40,7 @@ convertExtern (C.Extern name ty) = ANF.Extern (convertIdent True name) (convertT
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANF.TypeDeclaration
 convertTypeDeclaration (C.TypeDeclaration tyName cons) =
-  ANF.TypeDeclaration (convertTyConInfo tyName) (convertDataConstructor cons)
+  ANF.TypeDeclaration (convertTyConInfo tyName) (convertDataConstructor <$> cons)
 
 convertDataConstructor :: C.DataConstructor -> ANF.DataConstructor
 convertDataConstructor (C.DataConstructor conName mTyArg) =

@@ -4,9 +4,11 @@ module Amy.Codegen.TypeConstructors
   , findCompilationMethod
   ) where
 
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isNothing)
 
 import Amy.ANF.AST as ANF
 import Amy.Prim
@@ -24,12 +26,32 @@ data TypeCompilationMethod
 typeCompilationMethod
   :: ANF.TypeDeclaration
   -> (Map ANF.ConstructorName TypeCompilationMethod, (TyConInfo, Maybe PrimitiveType))
-typeCompilationMethod (ANF.TypeDeclaration tyName cons) =
-  case cons of
-    (ANF.DataConstructor conName Nothing) -> (Map.singleton conName (CompileEnum 0), (tyName, Just IntType))
-    (ANF.DataConstructor conName (Just argTy)) ->
+typeCompilationMethod (ANF.TypeDeclaration tyName constructors) =
+  case constructors of
+    -- Single constructor around another type
+    ANF.DataConstructor conName (Just argTy) :| _ ->
       let argTy' = assertPrimitiveType argTy
       in (Map.singleton conName $ CompileUnboxed argTy', (tyName, Just argTy'))
+
+    _ ->
+      -- Check if we can do an enum. This is when all constructors have no
+      -- arguments.
+      if all (isNothing . dataConstructorArgument) constructors
+      then
+        let
+          mkMethod (ANF.DataConstructor conName _, i) = (conName, CompileEnum i)
+        in
+          ( Map.fromList $ mkMethod <$> zip (NE.toList constructors) [0..]
+          , (tyName, Just IntType)
+          )
+      -- Can't do an enum. We'll have to use tagged pairs.
+      else
+        let
+          mkMethod (ANF.DataConstructor conName _, i) = (conName, CompileTaggedPairs i)
+        in
+          ( Map.fromList $ mkMethod <$> zip (NE.toList constructors) [0..]
+          , (tyName, Nothing)
+          )
 
 findCompilationMethod
   :: ConstructorName
