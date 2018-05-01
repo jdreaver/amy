@@ -9,7 +9,7 @@ module Amy.Syntax.Lexer
   , symbol
   , identifier
   , typeIdentifier
-  , dataConstructor
+  , dataConstructorName'
   , extern
   , forall
   , if'
@@ -140,8 +140,8 @@ in' = void $ symbol "in"
 typeIdentifier :: AmyParser (Located Text)
 typeIdentifier = lexeme (pack <$> ((:) <$> upperChar <*> many alphaNumChar)) <?> "type identifier"
 
-dataConstructor :: AmyParser (Located Text)
-dataConstructor = typeIdentifier
+dataConstructorName' :: AmyParser (Located Text)
+dataConstructorName' = typeIdentifier
 
 lparen :: AmyParser ()
 lparen = char '(' >> spaceConsumer

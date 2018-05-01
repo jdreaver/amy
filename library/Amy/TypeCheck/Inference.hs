@@ -165,7 +165,7 @@ inferModule (R.Module bindings externs typeDeclarations) = do
     externs' = convertExtern <$> externs
     externSchemes = (\(T.Extern name ty) -> (name, T.Forall [] ty)) <$> externs'
     typeDeclarations' = convertTypeDeclaration <$> typeDeclarations
-    dataConstructorSchemes = dataConstructorScheme <$> typeDeclarations'
+    dataConstructorSchemes = typeDeclarationScheme <$> typeDeclarations'
     primFuncSchemes = primitiveFunctionScheme <$> allPrimitiveFunctionNamesAndIds
     env =
       TyEnv
@@ -179,11 +179,18 @@ convertExtern :: R.Extern -> T.Extern
 convertExtern (R.Extern (Located _ name) ty) = T.Extern (convertIdent name) (convertType ty)
 
 convertTypeDeclaration :: R.TypeDeclaration -> T.TypeDeclaration
-convertTypeDeclaration (R.TypeDeclaration tyName (Located _ dataCon) mTyArg) =
-  T.TypeDeclaration (convertTyConInfo tyName) (convertConstructorName dataCon) (convertTyConInfo <$> mTyArg)
+convertTypeDeclaration (R.TypeDeclaration tyName cons) =
+  T.TypeDeclaration (convertTyConInfo tyName) (convertDataConstructor cons)
 
-dataConstructorScheme :: T.TypeDeclaration -> (T.ConstructorName, T.Scheme)
-dataConstructorScheme (T.TypeDeclaration tyName dataCon mTyArg) = (dataCon, T.Forall [] ty)
+convertDataConstructor :: R.DataConstructor -> T.DataConstructor
+convertDataConstructor (R.DataConstructor (Located _ conName) mTyArg) =
+  T.DataConstructor (convertConstructorName conName) (convertTyConInfo <$> mTyArg)
+
+typeDeclarationScheme :: T.TypeDeclaration -> (T.ConstructorName, T.Scheme)
+typeDeclarationScheme (T.TypeDeclaration tyName cons) = dataConstructorScheme tyName cons
+
+dataConstructorScheme :: T.TyConInfo -> T.DataConstructor -> (T.ConstructorName, T.Scheme)
+dataConstructorScheme tyName (T.DataConstructor conName mTyArg) = (conName, T.Forall [] ty)
  where
   ty =
     case mTyArg of

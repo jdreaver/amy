@@ -5,6 +5,7 @@ module Amy.Core.AST
   , Binding(..)
   , Extern(..)
   , TypeDeclaration(..)
+  , DataConstructor(..)
   , Expr(..)
   , Var(..)
   , If(..)
@@ -63,8 +64,13 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConInfo
-  , typeDeclarationConstructorName :: !ConstructorName
-  , typeDeclarationArgument :: !(Maybe TyConInfo)
+  , typeDeclarationConstructor :: !DataConstructor
+  } deriving (Show, Eq)
+
+data DataConstructor
+  = DataConstructor
+  { dataConstructorName :: !ConstructorName
+  , dataConstructorArgument :: !(Maybe TyConInfo)
   } deriving (Show, Eq)
 
 data Expr
@@ -146,7 +152,7 @@ expressionType (EParens expr) = expressionType expr
 moduleNameIds :: Module -> [Int]
 moduleNameIds (Module bindings externs typeDeclarations) =
   concatMap bindingNameIds bindings
-  ++ fmap (constructorNameId . typeDeclarationConstructorName) typeDeclarations
+  ++ fmap (constructorNameId . dataConstructorName . typeDeclarationConstructor) typeDeclarations
   ++ fmap (identId . externName) externs
 
 bindingNameIds :: Binding -> [Int]

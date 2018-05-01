@@ -5,6 +5,7 @@ module Amy.Renamer.AST
   , Binding(..)
   , Extern(..)
   , TypeDeclaration(..)
+  , DataConstructor(..)
   , Expr(..)
   , Var(..)
   , If(..)
@@ -60,8 +61,13 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConInfo
-  , typeDeclarationConstructorName :: !(Located ConstructorName)
-  , typeDeclarationArgument :: !(Maybe TyConInfo)
+  , typeDeclarationConstructor :: !DataConstructor
+  } deriving (Show, Eq)
+
+data DataConstructor
+  = DataConstructor
+  { dataConstructorName :: !(Located ConstructorName)
+  , dataConstructorArgument :: !(Maybe TyConInfo)
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'

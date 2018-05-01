@@ -19,8 +19,12 @@ desugarExtern (T.Extern ident ty) =
   C.Extern (desugarIdent ident) (desugarType ty)
 
 desugarTypeDeclaration :: T.TypeDeclaration -> C.TypeDeclaration
-desugarTypeDeclaration (T.TypeDeclaration tyName dataCon mTyArg) =
-  C.TypeDeclaration (desugarTyConInfo tyName) (desugarConstructorName dataCon) (desugarTyConInfo <$> mTyArg)
+desugarTypeDeclaration (T.TypeDeclaration tyName cons) =
+  C.TypeDeclaration (desugarTyConInfo tyName) (desugarDataConstructor cons)
+
+desugarDataConstructor :: T.DataConstructor -> C.DataConstructor
+desugarDataConstructor (T.DataConstructor conName mTyArg) =
+  C.DataConstructor (desugarConstructorName conName) (desugarTyConInfo <$> mTyArg)
 
 desugarBinding :: T.Binding -> C.Binding
 desugarBinding (T.Binding ident scheme args retTy body) =

@@ -39,8 +39,12 @@ convertExtern :: C.Extern -> ANFConvert ANF.Extern
 convertExtern (C.Extern name ty) = ANF.Extern (convertIdent True name) <$> convertType ty
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANF.TypeDeclaration
-convertTypeDeclaration (C.TypeDeclaration tyName dataCon mTyArg) =
-  ANF.TypeDeclaration (convertTyConInfo tyName) (convertConstructorName dataCon) (convertTyConInfo <$> mTyArg)
+convertTypeDeclaration (C.TypeDeclaration tyName cons) =
+  ANF.TypeDeclaration (convertTyConInfo tyName) (convertDataConstructor cons)
+
+convertDataConstructor :: C.DataConstructor -> ANF.DataConstructor
+convertDataConstructor (C.DataConstructor conName mTyArg) =
+  ANF.DataConstructor (convertConstructorName conName) (convertTyConInfo <$> mTyArg)
 
 convertIdent :: Bool -> C.Ident -> ANF.Ident
 convertIdent isTopLevel (C.Ident name id' mPrim) = ANF.Ident name id' mPrim isTopLevel

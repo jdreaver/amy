@@ -5,6 +5,7 @@ module Amy.ANF.AST
   , Binding(..)
   , Extern(..)
   , TypeDeclaration(..)
+  , DataConstructor(..)
   , Val(..)
   , Var(..)
   , Expr(..)
@@ -55,8 +56,13 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConInfo
-  , typeDeclarationConstructorName :: !ConstructorName
-  , typeDeclarationArgument :: !(Maybe TyConInfo)
+  , typeDeclarationConstructor :: !DataConstructor
+  } deriving (Show, Eq)
+
+data DataConstructor
+  = DataConstructor
+  { dataConstructorName :: !ConstructorName
+  , dataConstructorArgument :: !(Maybe TyConInfo)
   } deriving (Show, Eq)
 
 data Val

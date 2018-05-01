@@ -99,13 +99,21 @@ typeDeclaration :: AmyParser TypeDeclaration
 typeDeclaration = do
   tyName <- typeIdentifier
   equals <* spaceConsumerNewlines
-  dataCon <- dataConstructor
-  mArg <- optional typeIdentifier
+  cons <- dataConstructor
   pure
     TypeDeclaration
     { typeDeclarationTypeName = tyName
-    , typeDeclarationConstructorName = dataCon
-    , typeDeclarationArgument = mArg
+    , typeDeclarationConstructor = cons
+    }
+
+dataConstructor :: AmyParser DataConstructor
+dataConstructor = do
+  dataCon <- dataConstructorName'
+  mArg <- optional typeIdentifier
+  pure
+    DataConstructor
+    { dataConstructorName = dataCon
+    , dataConstructorArgument = mArg
     }
 
 expression :: AmyParser Expr
@@ -148,7 +156,7 @@ literal =
 variable :: AmyParser Var
 variable =
   (VVal <$> identifier)
-  <|> (VCons <$> dataConstructor)
+  <|> (VCons <$> dataConstructorName')
 
 ifExpression :: AmyParser If
 ifExpression = do
@@ -196,7 +204,7 @@ parsePattern =
 
 constructorPattern :: AmyParser ConstructorPattern
 constructorPattern = do
-  constructor <- dataConstructor
+  constructor <- dataConstructorName'
   mArg <- optional identifier
   pure
     ConstructorPattern

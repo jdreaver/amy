@@ -46,11 +46,11 @@ anfConvertState id' names typeDeclarations = ANFConvertState id' (fromList names
     maybe (error $ "Cannot unbox, not a primitive type! " ++ show info) primitiveTyConInfo mPrim
   dataConUnboxMap =
     Map.fromList
-    $ mapMaybe (\(ANF.TypeDeclaration _ dataCon mTyArg) -> (dataCon,) . assertPrimitiveType <$> mTyArg)
+    $ mapMaybe (\(ANF.TypeDeclaration _ (ANF.DataConstructor conName mTyArg)) -> (conName,) . assertPrimitiveType <$> mTyArg)
       typeDeclarations
   tyConUnboxMap =
     Map.fromList
-    $ mapMaybe (\(ANF.TypeDeclaration tyCon _ mTyArg) -> (tyCon,) . assertPrimitiveType <$> mTyArg)
+    $ mapMaybe (\(ANF.TypeDeclaration tyCon (ANF.DataConstructor _ mTyArg)) -> (tyCon,) . assertPrimitiveType <$> mTyArg)
       typeDeclarations
 
 primitiveTyConInfo :: PrimitiveType -> ANF.TyConInfo

@@ -26,6 +26,7 @@ module Amy.Pretty
   , prettyBindingScheme
   , prettyExtern
   , prettyTypeDeclaration
+  , prettyDataConstructor
   ) where
 
 import Data.Text.Prettyprint.Doc as X
@@ -123,5 +124,8 @@ prettyBindingScheme name scheme = name <+> "::" <+> prettyScheme scheme
 prettyExtern :: Doc ann -> PrettyType ann -> Doc ann
 prettyExtern name ty = "extern" <+> prettyBindingType name ty
 
-prettyTypeDeclaration :: Doc ann -> Doc ann -> Maybe (Doc ann) -> Doc ann
-prettyTypeDeclaration tyName tyCon mArg = tyName <+> "=" <+> tyCon <> maybe mempty (space <>) mArg
+prettyTypeDeclaration :: Doc ann -> Doc ann -> Doc ann
+prettyTypeDeclaration tyName tyCon = tyName <+> "=" <+> tyCon
+
+prettyDataConstructor :: Doc ann -> Maybe (Doc ann) -> Doc ann
+prettyDataConstructor tyConName mArg = tyConName <> maybe mempty (space <>) mArg

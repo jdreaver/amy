@@ -27,8 +27,11 @@ prettyDeclaration (DeclBinding binding) = prettyBinding' binding
 prettyDeclaration (DeclBindingType bindingTy) = prettyBindingType' bindingTy
 prettyDeclaration (DeclExtern (Extern (Located _ name) ty)) =
   prettyExtern (pretty name) (mkPrettyType ty)
-prettyDeclaration (DeclType (TypeDeclaration (Located _ tyName) (Located _ tyCon) mArg)) =
-  prettyTypeDeclaration (pretty tyName) (pretty tyCon) (pretty . locatedValue <$> mArg)
+prettyDeclaration (DeclType (TypeDeclaration (Located _ tyName) cons)) =
+  prettyTypeDeclaration (pretty tyName) (prettyConstructor cons)
+ where
+  prettyConstructor (DataConstructor (Located _ conName) mArg) =
+    prettyDataConstructor (pretty conName) (pretty . locatedValue <$> mArg)
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding (Located _ name) args body) =

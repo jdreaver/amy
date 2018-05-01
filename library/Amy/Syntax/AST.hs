@@ -11,6 +11,7 @@ module Amy.Syntax.AST
   , BindingType(..)
   , Extern(..)
   , TypeDeclaration(..)
+  , DataConstructor(..)
   , Expr(..)
   , Var(..)
   , If(..)
@@ -93,8 +94,13 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !(Located Text)
-  , typeDeclarationConstructorName :: !(Located Text)
-  , typeDeclarationArgument :: !(Maybe (Located Text))
+  , typeDeclarationConstructor :: !DataConstructor
+  } deriving (Show, Eq)
+
+data DataConstructor
+  = DataConstructor
+  { dataConstructorName :: !(Located Text)
+  , dataConstructorArgument :: !(Maybe (Located Text))
   } deriving (Show, Eq)
 
 data Expr
