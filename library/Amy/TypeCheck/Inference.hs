@@ -187,7 +187,7 @@ convertDataConstructor (R.DataConstructor (Located _ conName) mTyArg) =
   T.DataConstructor (convertConstructorName conName) (convertTyConInfo <$> mTyArg)
 
 typeDeclarationSchemes :: T.TypeDeclaration -> [(T.ConstructorName, T.Scheme)]
-typeDeclarationSchemes (T.TypeDeclaration tyName cons) = NE.toList $ dataConstructorScheme tyName <$> cons
+typeDeclarationSchemes (T.TypeDeclaration tyName cons) = dataConstructorScheme tyName <$> cons
 
 dataConstructorScheme :: T.TyConInfo -> T.DataConstructor -> (T.ConstructorName, T.Scheme)
 dataConstructorScheme tyName (T.DataConstructor conName mTyArg) = (conName, T.Forall [] ty)

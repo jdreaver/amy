@@ -4,8 +4,6 @@ module Amy.Codegen.TypeConstructors
   , findCompilationMethod
   ) where
 
-import Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe, isNothing)
@@ -29,7 +27,7 @@ typeCompilationMethod
 typeCompilationMethod (ANF.TypeDeclaration tyName constructors) =
   case constructors of
     -- Single constructor around another type
-    ANF.DataConstructor conName (Just argTy) :| _ ->
+    [ANF.DataConstructor conName (Just argTy)] ->
       let argTy' = assertPrimitiveType argTy
       in (Map.singleton conName $ CompileUnboxed argTy', (tyName, Just argTy'))
 
@@ -41,7 +39,7 @@ typeCompilationMethod (ANF.TypeDeclaration tyName constructors) =
         let
           mkMethod (ANF.DataConstructor conName _, i) = (conName, CompileEnum i)
         in
-          ( Map.fromList $ mkMethod <$> zip (NE.toList constructors) [0..]
+          ( Map.fromList $ mkMethod <$> zip constructors [0..]
           , (tyName, Just IntType)
           )
       -- Can't do an enum. We'll have to use tagged pairs.
@@ -49,7 +47,7 @@ typeCompilationMethod (ANF.TypeDeclaration tyName constructors) =
         let
           mkMethod (ANF.DataConstructor conName _, i) = (conName, CompileTaggedPairs i)
         in
-          ( Map.fromList $ mkMethod <$> zip (NE.toList constructors) [0..]
+          ( Map.fromList $ mkMethod <$> zip constructors [0..]
           , (tyName, Nothing)
           )
 

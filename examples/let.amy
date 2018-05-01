@@ -6,6 +6,8 @@ Void = Void
 
 MySum = MySumA | MySumB
 
+EmptyType
+
 main :: Int
 main =
   let

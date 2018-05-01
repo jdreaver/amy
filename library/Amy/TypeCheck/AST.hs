@@ -70,7 +70,7 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConInfo
-  , typeDeclarationConstructors :: !(NonEmpty DataConstructor)
+  , typeDeclarationConstructors :: ![DataConstructor]
   } deriving (Show, Eq)
 
 data DataConstructor

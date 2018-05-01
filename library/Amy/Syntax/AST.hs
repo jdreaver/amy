@@ -94,7 +94,7 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !(Located Text)
-  , typeDeclarationConstructors :: !(NonEmpty DataConstructor)
+  , typeDeclarationConstructors :: ![DataConstructor]
   } deriving (Show, Eq)
 
 data DataConstructor
