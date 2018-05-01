@@ -62,7 +62,7 @@ emptyRenamerState =
   RenamerState
   { renamerStateLastId = maximum (fst <$> allPrimitiveFunctionNamesAndIds) + 1
   , renamerStateValuesInScope = primitiveFunctionNames
-  , renamerStateDataConstructorsInScope = Map.empty
+  , renamerStateDataConstructorsInScope = primitiveDataConNames
   , renamerStateTypeConstructorsInScope = primitiveTypeNames
   , renamerStateTypeVariablesInScope = Map.empty
   }
@@ -78,13 +78,17 @@ primitiveFunctionNames =
 
 primitiveTypeNames :: Map Text TyConInfo
 primitiveTypeNames =
-  Map.fromList $
-    (\(id', prim) ->
-       ( showPrimitiveType prim
-       , TyConInfo (showPrimitiveType prim) Nothing id' (Just prim)
-       )
-    )
-    <$> allPrimitiveTypesAndIds
+  let
+    infos = fromPrimTyCon <$> allPrimTyCons
+    nameTuples = (\tyCon -> (tyConInfoText tyCon, tyCon)) <$> infos
+  in Map.fromList nameTuples
+
+primitiveDataConNames :: Map Text ConstructorName
+primitiveDataConNames =
+  let
+    infos = fromPrimDataCon <$> allPrimDataCons
+    nameTuples = (\dataCon -> (constructorNameText dataCon, dataCon)) <$> infos
+  in Map.fromList nameTuples
 
 -- | Generate a new 'NameIntId'
 freshId :: Renamer Int
@@ -134,7 +138,7 @@ addTypeConstructorToScope :: Located Text -> Renamer (Validation [Error] TyConIn
 addTypeConstructorToScope lname@(Located span' name) = do
   nameId <- freshId
   let
-    info = TyConInfo name (Just span') nameId Nothing
+    info = TyConInfo name (Just span') nameId
   mExistingName <- lookupTypeConstructorInScope name
   case mExistingName of
     Just existingName -> pure $ Failure [TypeConstructorAlreadyExists lname existingName]

@@ -293,8 +293,8 @@ primitiveFunctionInstruction primFuncName argumentOperands =
         PrimDAdd -> FAdd noFastMathFlags op0 op1 []
         PrimDSub -> FSub noFastMathFlags op0 op1 []
 
-        PrimIntToDouble -> UIToFP op (llvmPrimitiveType DoubleType) []
-        PrimDoubleToInt -> FPToUI op (llvmPrimitiveType IntType) []
+        PrimIntToDouble -> UIToFP op (FloatingPointType DoubleFP) []
+        PrimDoubleToInt -> FPToUI op (IntegerType 64) []
   in instruction
 
 typeToNonEmpty :: ANF.Type -> NonEmpty ANF.Type
@@ -309,12 +309,12 @@ llvmType ty = go (typeToNonEmpty ty)
   go (ty' :| []) =
     case ty' of
       ANF.TyCon tyName ->
-        case ANF.tyConInfoPrimitiveType tyName of
-          Just prim -> pure $ llvmPrimitiveType prim
+        case llvmPrimitiveType tyName of
+          Just prim -> pure prim
           Nothing -> do
             unBoxedTy <- isTyConUnboxed tyName
-            case unBoxedTy of
-              Just prim -> pure $ llvmPrimitiveType prim
+            case unBoxedTy >>= llvmPrimitiveType of
+              Just prim -> pure prim
               Nothing -> error $ "Can't compile, expected some sort of unboxing " ++ show tyName
       ANF.TyVar _ -> pure $ PointerType (IntegerType 64) (AddrSpace 0)
       ANF.TyFun{} -> mkFunctionType ty
@@ -339,10 +339,14 @@ identToLLVM :: ANF.Ident -> LLVM.Name
 identToLLVM (ANF.Ident name' _ _ _) = LLVM.Name $ textToShortBS name'
 
 -- | Convert from a amy primitive type to an LLVM type
-llvmPrimitiveType :: PrimitiveType -> LLVM.Type
-llvmPrimitiveType IntType = IntegerType 64
-llvmPrimitiveType DoubleType = FloatingPointType DoubleFP
-llvmPrimitiveType BoolType = IntegerType 1
+llvmPrimitiveType :: TyConInfo -> Maybe LLVM.Type
+llvmPrimitiveType tyCon
+  | tyCon == intTyCon' = Just (IntegerType 64)
+  | tyCon == doubleTyCon' = Just (FloatingPointType DoubleFP)
+  | otherwise = Nothing
+ where
+  intTyCon' = fromPrimTyCon intTyCon
+  doubleTyCon' = fromPrimTyCon doubleTyCon
 
 textToShortBS :: Text -> ShortByteString
 textToShortBS = BSS.toShort . encodeUtf8

@@ -156,7 +156,6 @@ literalConstant lit =
   case lit of
     LiteralInt i -> C.Int 64 (fromIntegral i)
     LiteralDouble x -> C.Float (F.Double x)
-    LiteralBool x -> C.Int 1 $ if x then 1 else 0
 
 constructorConstant
   :: Map ConstructorName TypeCompilationMethod

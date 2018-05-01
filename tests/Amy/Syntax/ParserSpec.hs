@@ -234,7 +234,7 @@ spec = do
       parse' ifExpression "if True then 1 else 2"
         `shouldParse`
         If
-          (ELit (Located (SourceSpan "" 1 4 1 7) (LiteralBool True)))
+          (EVar (VCons $ Located (SourceSpan "" 1 4 1 7) "True"))
           (ELit (Located (SourceSpan "" 1 14 1 14) (LiteralInt 1)))
           (ELit (Located (SourceSpan "" 1 21 1 21) (LiteralInt 2)))
       parse' ifExpression "if f x then f y else g 2"
@@ -250,10 +250,6 @@ spec = do
       -- TODO: Trailing decimals?
       -- parse (literal <* eof) "" "2." `shouldParse` Located (SourceSpan "" 1 1 1 2) (LiteralInt 2)
       parse' literal "1.5" `shouldParse` Located (SourceSpan "" 1 1 1 3) (LiteralDouble 1.5)
-
-    it "can parse bools" $ do
-      parse' literal "True" `shouldParse` Located (SourceSpan "" 1 1 1 4) (LiteralBool True)
-      parse' literal "False" `shouldParse` Located (SourceSpan "" 1 1 1 5) (LiteralBool False)
 
 sampleModule :: Text
 sampleModule = [st|

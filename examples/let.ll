@@ -7,9 +7,9 @@ declare i64 @abs(i64)
 
 define i64 @main() {
 entry:
-  switch i1 true, label %case.0.0 [
-    i1 true, label %case.0.0
-    i1 false, label %case.1.0
+  switch i64 1, label %case.0.0 [
+    i64 1, label %case.0.0
+    i64 0, label %case.1.0
   ]
 
 case.0.0:                                         ; preds = %entry, %entry
@@ -76,9 +76,9 @@ case.end.11:                                      ; preds = %case.1.11, %case.0.
 
 define private i64 @f(i64 %x) {
 entry:
-  switch i1 true, label %case.0.0 [
-    i1 true, label %case.0.0
-    i1 false, label %case.1.0
+  switch i64 1, label %case.0.0 [
+    i64 1, label %case.0.0
+    i64 0, label %case.1.0
   ]
 
 case.0.0:                                         ; preds = %entry, %entry

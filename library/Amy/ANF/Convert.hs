@@ -65,7 +65,7 @@ convertType (C.TyVar name) = ANF.TyVar (convertTyVarInfo name)
 convertType (C.TyFun ty1 ty2) = ANF.TyFun (convertType ty1) (convertType ty2)
 
 convertTyConInfo :: C.TyConInfo -> ANF.TyConInfo
-convertTyConInfo (C.TyConInfo name' id' mPrim) = ANF.TyConInfo name' id' mPrim
+convertTyConInfo (C.TyConInfo name' id') = ANF.TyConInfo name' id'
 
 convertTypedIdent :: C.Typed C.Ident -> ANFConvert (ANF.Typed ANF.Ident)
 convertTypedIdent (C.Typed ty arg) = ANF.Typed (convertType ty) <$> convertIdent' arg

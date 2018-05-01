@@ -164,8 +164,10 @@ inferModule (R.Module bindings externs typeDeclarations) = do
   let
     externs' = convertExtern <$> externs
     externSchemes = (\(T.Extern name ty) -> (name, T.Forall [] ty)) <$> externs'
+    primTypeDeclarations = fromPrimTypeDefinition <$> allPrimTypeDefinitions
     typeDeclarations' = convertTypeDeclaration <$> typeDeclarations
-    dataConstructorSchemes = concatMap typeDeclarationSchemes typeDeclarations'
+    dataConstructorSchemes =
+      concatMap typeDeclarationSchemes (typeDeclarations' ++ primTypeDeclarations)
     primFuncSchemes = primitiveFunctionScheme <$> allPrimitiveFunctionNamesAndIds
     env =
       TyEnv
@@ -202,10 +204,8 @@ primitiveFunctionScheme (id', prim) =
   (T.Ident (showPrimitiveFunctionName prim) id' (Just prim), mkPrimFunctionScheme prim)
 
 mkPrimFunctionScheme :: PrimitiveFunctionName -> T.Scheme
-mkPrimFunctionScheme prim = T.Forall [] $ foldr1 T.TyFun $ primitiveTyCon <$> primitiveFunctionType (primitiveFunction prim)
-
-primitiveTyCon :: PrimitiveType -> T.Type
-primitiveTyCon prim = T.TyCon $ T.TyConInfo (showPrimitiveType prim) (primitiveTypeId prim) (Just prim)
+mkPrimFunctionScheme prim =
+  T.Forall [] $ foldr1 T.TyFun $ T.TyCon . T.fromPrimTyCon <$> primitiveFunctionType (primitiveFunction prim)
 
 inferTopLevel :: TyEnv -> [R.Binding] -> Either Error [T.Binding]
 inferTopLevel env bindings = do
@@ -309,7 +309,7 @@ inferExpr (R.EIf (R.If pred' then' else')) = do
   (else'', elseCon) <- inferExpr else'
   let
     newConstraints =
-      [ Constraint (expressionType pred'', primitiveTyCon BoolType)
+      [ Constraint (expressionType pred'', T.TyCon $ T.fromPrimTyCon boolTyCon)
       , Constraint (expressionType then'', expressionType else'')
       ]
   pure
@@ -552,7 +552,7 @@ convertType (R.TyVar info) = T.TyVar (convertTyVarInfo info)
 convertType (R.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
 
 convertTyConInfo :: R.TyConInfo -> T.TyConInfo
-convertTyConInfo (R.TyConInfo name' _ id' mPrim) = T.TyConInfo name' id' mPrim
+convertTyConInfo (R.TyConInfo name' _ id') = T.TyConInfo name' id'
 
 convertTyVarInfo :: R.TyVarInfo -> T.TyVarInfo
 convertTyVarInfo (R.TyVarInfo name' id' _) = T.TyVarInfo name' id' TyVarNotGenerated

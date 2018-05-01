@@ -5,7 +5,6 @@ module Amy.Syntax.Lexer
   , spaceConsumerNewlines
   , noIndent
   , number
-  , bool
   , symbol
   , identifier
   , typeIdentifier
@@ -80,11 +79,6 @@ blockComment = empty
 -- TODO: Fix this for Doubles with a ".0". Fails on 1.0, thinks it is an Int
 number :: AmyParser (Located (Either Double Int))
 number = fmap floatingOrInteger <$> lexeme L.scientific
-
-bool :: AmyParser (Located Bool)
-bool = lexeme $
-  (string "True" >> pure True)
-  <|> (string "False" >> pure False)
 
 symbol :: Text -> AmyParser Text
 symbol sym = L.symbol spaceConsumer sym <?> unpack sym

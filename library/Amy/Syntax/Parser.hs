@@ -153,8 +153,7 @@ expressionParens = EParens <$> parens expression
 
 literal :: AmyParser (Located Literal)
 literal =
-  (fmap (either LiteralDouble LiteralInt) <$> number)
-  <|> (fmap LiteralBool <$> bool)
+  fmap (either LiteralDouble LiteralInt) <$> number
 
 variable :: AmyParser Var
 variable =

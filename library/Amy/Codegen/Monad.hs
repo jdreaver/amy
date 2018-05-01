@@ -34,12 +34,13 @@ import Amy.Prim
 newtype CodeGen a = CodeGen (Reader CodeGenRead a)
   deriving (Functor, Applicative, Monad, MonadReader CodeGenRead)
 
-runCodeGen :: [(ANF.Ident, ANF.Type)] -> [ANF.TypeDeclaration] -> CodeGen a -> a
+runCodeGen :: [(Ident, ANF.Type)] -> [TypeDeclaration] -> CodeGen a -> a
 runCodeGen topLevelTypes typeDeclarations (CodeGen action) =
   let
     typeMap = Map.fromList topLevelTypes
+    allTypeDeclarations = typeDeclarations ++ (fromPrimTypeDefinition <$> allPrimTypeDefinitions)
     (dataConCompilationMethods, tyConUnboxed) =
-      unzip $ typeCompilationMethod <$> typeDeclarations
+      unzip $ typeCompilationMethod <$> allTypeDeclarations
     dataConCompilationMethods' = Map.unions dataConCompilationMethods
     tyConUnboxedMap = Map.fromList tyConUnboxed
     readState = CodeGenRead typeMap dataConCompilationMethods' tyConUnboxedMap
@@ -47,9 +48,9 @@ runCodeGen topLevelTypes typeDeclarations (CodeGen action) =
 
 data CodeGenRead
   = CodeGenRead
-  { codeGenReadTopLevelTypes :: !(Map ANF.Ident ANF.Type)
-  , codeGenReadDataConCompilationMethods :: !(Map ANF.ConstructorName TypeCompilationMethod)
-  , codeGenReadTyConUnboxed :: !(Map ANF.TyConInfo (Maybe PrimitiveType))
+  { codeGenReadTopLevelTypes :: !(Map Ident ANF.Type)
+  , codeGenReadDataConCompilationMethods :: !(Map ConstructorName TypeCompilationMethod)
+  , codeGenReadTyConUnboxed :: !(Map TyConInfo (Maybe TyConInfo))
   }
 
 newtype BlockGen a = BlockGen (StateT BlockGenState CodeGen a)
@@ -64,7 +65,7 @@ data BlockGenState
   = BlockGenState
   { blockGenStateCurrentBlock :: !PartialBlock
   , blockGenStateBlockStack :: ![BasicBlock]
-  , blockGenStateSymbolTable :: !(Map ANF.Ident Operand)
+  , blockGenStateSymbolTable :: !(Map Ident Operand)
   , blockGenStateLastId :: !Word
   } deriving (Show, Eq)
 
@@ -103,10 +104,10 @@ terminateBlock term newName =
 currentBlockName :: BlockGen LLVM.Name
 currentBlockName = gets (partialBlockName . blockGenStateCurrentBlock)
 
-addSymbolToTable :: ANF.Ident -> Operand -> BlockGen ()
+addSymbolToTable :: Ident -> Operand -> BlockGen ()
 addSymbolToTable ident op = modify' (\s -> s { blockGenStateSymbolTable = Map.insert ident op (blockGenStateSymbolTable s) })
 
-lookupSymbol :: ANF.Ident -> BlockGen (Maybe Operand)
+lookupSymbol :: Ident -> BlockGen (Maybe Operand)
 lookupSymbol ident =
   Map.lookup ident <$> gets blockGenStateSymbolTable
 
@@ -119,13 +120,13 @@ freshId = do
 freshUnName :: BlockGen LLVM.Name
 freshUnName = UnName <$> freshId
 
-topLevelType :: (MonadReader CodeGenRead m) => ANF.Ident -> m (Maybe ANF.Type)
+topLevelType :: (MonadReader CodeGenRead m) => Ident -> m (Maybe ANF.Type)
 topLevelType ident = asks (Map.lookup ident . codeGenReadTopLevelTypes)
 
-compilationMethods :: (MonadReader CodeGenRead m) => m (Map ANF.ConstructorName TypeCompilationMethod)
+compilationMethods :: (MonadReader CodeGenRead m) => m (Map ConstructorName TypeCompilationMethod)
 compilationMethods = asks codeGenReadDataConCompilationMethods
 
-isTyConUnboxed :: (MonadReader CodeGenRead m) => TyConInfo -> m (Maybe PrimitiveType)
+isTyConUnboxed :: (MonadReader CodeGenRead m) => TyConInfo -> m (Maybe TyConInfo)
 isTyConUnboxed tyCon = asks (fromMaybe err . Map.lookup tyCon . codeGenReadTyConUnboxed)
   where
    err = error $ "Couldn't find unboxity of TyConInfo " ++ show tyCon

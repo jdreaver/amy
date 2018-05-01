@@ -18,8 +18,10 @@ module Amy.Renamer.AST
 
   , Ident(..)
   , ConstructorName(..)
+  , fromPrimDataCon
   , Type(..)
   , TyConInfo(..)
+  , fromPrimTyCon
   , TyVarInfo(..)
   , Scheme(..)
 
@@ -143,6 +145,9 @@ data ConstructorName
   , constructorNameId :: !Int
   } deriving (Show, Eq, Ord)
 
+fromPrimDataCon :: PrimDataCon -> ConstructorName
+fromPrimDataCon (PrimDataCon name id') = ConstructorName name id'
+
 data Type
   = TyCon !TyConInfo
   | TyVar !TyVarInfo
@@ -156,8 +161,10 @@ data TyConInfo
   { tyConInfoText :: !Text
   , tyConInfoLocation :: !(Maybe SourceSpan)
   , tyConInfoId :: !Int
-  , tyConInfoPrimitiveType :: !(Maybe PrimitiveType)
   } deriving (Show, Eq)
+
+fromPrimTyCon :: PrimTyCon -> TyConInfo
+fromPrimTyCon (PrimTyCon name id') = TyConInfo name Nothing id'
 
 data TyVarInfo
   = TyVarInfo

@@ -16,8 +16,8 @@ entry:
   %1 = sub i64 3, %0
   %2 = icmp slt i64 5, %1
   switch i1 %2, label %case.0.4 [
-    i1 true, label %case.0.4
-    i1 false, label %case.1.4
+    i64 1, label %case.0.4
+    i64 0, label %case.1.4
   ]
 
 case.0.4:                                         ; preds = %entry, %entry

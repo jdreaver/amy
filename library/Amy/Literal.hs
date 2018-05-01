@@ -13,15 +13,12 @@ import Amy.Prim
 data Literal
   = LiteralInt !Int
   | LiteralDouble !Double
-  | LiteralBool !Bool
   deriving (Show, Eq)
 
 showLiteral :: Literal -> String
 showLiteral (LiteralInt x) = show x
 showLiteral (LiteralDouble x) = show x
-showLiteral (LiteralBool x) = show x
 
-literalType :: Literal -> PrimitiveType
-literalType (LiteralInt _) = IntType
-literalType (LiteralDouble _) = DoubleType
-literalType (LiteralBool _) = BoolType
+literalType :: Literal -> PrimTyCon
+literalType (LiteralInt _) = intTyCon
+literalType (LiteralDouble _) = doubleTyCon

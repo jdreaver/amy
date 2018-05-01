@@ -7,6 +7,7 @@ module Amy.TypeCheck.AST
   , Binding(..)
   , Extern(..)
   , TypeDeclaration(..)
+  , fromPrimTypeDefinition
   , DataConstructor(..)
   , Expr(..)
   , Var(..)
@@ -22,8 +23,10 @@ module Amy.TypeCheck.AST
 
   , Ident(..)
   , ConstructorName(..)
+  , fromPrimDataCon
   , Type(..)
   , TyConInfo(..)
+  , fromPrimTyCon
   , TyVarInfo(..)
   , TyVarGenerated(..)
   , Scheme(..)
@@ -72,6 +75,10 @@ data TypeDeclaration
   { typeDeclarationTypeName :: !TyConInfo
   , typeDeclarationConstructors :: ![DataConstructor]
   } deriving (Show, Eq)
+
+fromPrimTypeDefinition :: PrimTypeDefinition -> TypeDeclaration
+fromPrimTypeDefinition (PrimTypeDefinition tyName cons) =
+  TypeDeclaration (fromPrimTyCon tyName) ((\con -> DataConstructor (fromPrimDataCon con) Nothing) <$> cons)
 
 data DataConstructor
   = DataConstructor
@@ -141,9 +148,7 @@ data App
   } deriving (Show, Eq)
 
 literalType' :: Literal -> Type
-literalType' lit =
-  let primTy = literalType lit
-  in TyCon $ TyConInfo (showPrimitiveType primTy) (primitiveTypeId primTy) (Just primTy)
+literalType' lit = TyCon $ fromPrimTyCon $ literalType lit
 
 expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType' lit
@@ -175,6 +180,9 @@ data ConstructorName
   , constructorNameId :: !Int
   } deriving (Show, Eq, Ord)
 
+fromPrimDataCon :: PrimDataCon -> ConstructorName
+fromPrimDataCon (PrimDataCon name id') = ConstructorName name id'
+
 data Type
   = TyCon !TyConInfo
   | TyVar !TyVarInfo
@@ -187,8 +195,10 @@ data TyConInfo
   = TyConInfo
   { tyConInfoText :: !Text
   , tyConInfoId :: !Int
-  , tyConInfoPrimitiveType :: !(Maybe PrimitiveType)
   } deriving (Show, Eq, Ord)
+
+fromPrimTyCon :: PrimTyCon -> TyConInfo
+fromPrimTyCon (PrimTyCon name id') = TyConInfo name id'
 
 data TyVarInfo
   = TyVarInfo

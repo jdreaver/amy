@@ -133,9 +133,7 @@ data App
   } deriving (Show, Eq)
 
 literalType' :: Literal -> Type
-literalType' lit =
-  let primTy = literalType lit
-  in TyCon $ TyConInfo (showPrimitiveType primTy) (primitiveTypeId primTy) (Just primTy)
+literalType' lit = TyCon $ fromPrimTyCon $ literalType lit
 
 expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType' lit
@@ -207,8 +205,10 @@ data TyConInfo
   = TyConInfo
   { tyConInfoText :: !Text
   , tyConInfoId :: !Int
-  , tyConInfoPrimitiveType :: !(Maybe PrimitiveType)
   } deriving (Show, Eq, Ord)
+
+fromPrimTyCon :: PrimTyCon -> TyConInfo
+fromPrimTyCon (PrimTyCon name id') = TyConInfo name id'
 
 data TyVarInfo
   = TyVarInfo

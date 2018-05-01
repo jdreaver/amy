@@ -5,6 +5,7 @@ module Amy.Core.Desugar
 import qualified Data.List.NonEmpty as NE
 
 import Amy.Core.AST as C
+import Amy.Prim
 import Amy.TypeCheck.AST as T
 
 desugarModule :: T.Module -> C.Module
@@ -42,10 +43,13 @@ desugarExpr (T.ECase (T.Case scrutinee matches)) =
   C.ECase (C.Case (desugarExpr scrutinee) (desugarMatch <$> matches))
 desugarExpr (T.EIf (T.If pred' then' else')) =
   let
+    boolTyCon' = T.TyCon $ T.fromPrimTyCon boolTyCon
+    mkBoolConstructorPattern cons =
+      T.ConstructorPattern (T.Typed boolTyCon' $ T.fromPrimDataCon cons) Nothing boolTyCon'
     matches =
       NE.fromList
-      [ T.Match (T.PatternLit (LiteralBool True)) then'
-      , T.Match (T.PatternLit (LiteralBool False)) else'
+      [ T.Match (T.PatternCons $ mkBoolConstructorPattern trueDataCon) then'
+      , T.Match (T.PatternCons $ mkBoolConstructorPattern falseDataCon) else'
       ]
   in desugarExpr (T.ECase (T.Case pred' matches))
 desugarExpr (T.ELet (T.Let bindings body)) =
@@ -92,7 +96,7 @@ desugarType (T.TyVar info) = C.TyVar (desugarTyVarInfo info)
 desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)
 
 desugarTyConInfo :: T.TyConInfo -> C.TyConInfo
-desugarTyConInfo (T.TyConInfo name id' mPrim) = C.TyConInfo name id' mPrim
+desugarTyConInfo (T.TyConInfo name id') = C.TyConInfo name id'
 
 desugarTyVarInfo :: T.TyVarInfo -> C.TyVarInfo
 desugarTyVarInfo ty@(T.TyVarInfo name id' gen) =
