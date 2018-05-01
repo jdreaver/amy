@@ -100,12 +100,12 @@ typeDeclaration = do
   tyName <- typeIdentifier
   equals <* spaceConsumerNewlines
   dataCon <- dataConstructor
-  arg <- typeIdentifier
+  mArg <- optional typeIdentifier
   pure
     TypeDeclaration
     { typeDeclarationTypeName = tyName
     , typeDeclarationConstructorName = dataCon
-    , typeDeclarationArgument = arg
+    , typeDeclarationArgument = mArg
     }
 
 expression :: AmyParser Expr

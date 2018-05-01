@@ -150,8 +150,7 @@ inferModule (R.Module bindings externs typeDeclarations) = do
     externs' = convertExtern <$> externs
     externSchemes = (\(T.Extern name ty) -> (name, T.Forall [] ty)) <$> externs'
     typeDeclarations' = convertTypeDeclaration <$> typeDeclarations
-    dataConstructorSchemes =
-      (\(T.TypeDeclaration tyName dataCon tyArg) -> (dataCon, T.Forall [] $ T.TyCon tyArg `T.TyFun` T.TyCon tyName)) <$> typeDeclarations'
+    dataConstructorSchemes = dataConstructorScheme <$> typeDeclarations'
     primFuncSchemes = primitiveFunctionScheme <$> allPrimitiveFunctionNamesAndIds
     env = TyEnv $ Map.fromList $ externSchemes ++ dataConstructorSchemes ++ primFuncSchemes
   bindings' <- inferTopLevel env bindings
@@ -161,8 +160,16 @@ convertExtern :: R.Extern -> T.Extern
 convertExtern (R.Extern (Located _ name) ty) = T.Extern (convertIdent name) (convertType ty)
 
 convertTypeDeclaration :: R.TypeDeclaration -> T.TypeDeclaration
-convertTypeDeclaration (R.TypeDeclaration tyName (Located _ dataCon) tyArg) =
-  T.TypeDeclaration (convertTyConInfo tyName) (convertIdent dataCon) (convertTyConInfo tyArg)
+convertTypeDeclaration (R.TypeDeclaration tyName (Located _ dataCon) mTyArg) =
+  T.TypeDeclaration (convertTyConInfo tyName) (convertIdent dataCon) (convertTyConInfo <$> mTyArg)
+
+dataConstructorScheme :: T.TypeDeclaration -> (T.Ident, T.Scheme)
+dataConstructorScheme (T.TypeDeclaration tyName dataCon mTyArg) = (dataCon, T.Forall [] ty)
+ where
+  ty =
+    case mTyArg of
+      Just tyArg -> T.TyCon tyArg `T.TyFun` T.TyCon tyName
+      Nothing -> T.TyCon tyName
 
 primitiveFunctionScheme :: (Int, PrimitiveFunctionName) -> (T.Ident, T.Scheme)
 primitiveFunctionScheme (id', prim) =

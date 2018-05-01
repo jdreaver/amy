@@ -62,7 +62,7 @@ data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConInfo
   , typeDeclarationConstructorName :: !Ident
-  , typeDeclarationArgument :: !TyConInfo
+  , typeDeclarationArgument :: !(Maybe TyConInfo)
   } deriving (Show, Eq)
 
 data Expr

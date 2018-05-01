@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TupleSections #-}
 
 module Amy.ANF.Monad
   ( ANFConvert
@@ -14,7 +15,7 @@ module Amy.ANF.Monad
 import Control.Monad.State.Strict
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, mapMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text, pack)
@@ -46,12 +47,12 @@ anfConvertState id' names typeDeclarations = ANFConvertState id' (fromList names
     maybe (error $ "Cannot unbox, not a primitive type! " ++ show info) primitiveTyConInfo mPrim
   dataConUnboxMap =
     Map.fromList
-    $ (\(ANF.TypeDeclaration _ dataCon tyArg) -> (dataCon, assertPrimitiveType tyArg))
-    <$> typeDeclarations
+    $ mapMaybe (\(ANF.TypeDeclaration _ dataCon mTyArg) -> (dataCon,) . assertPrimitiveType <$> mTyArg)
+      typeDeclarations
   tyConUnboxMap =
     Map.fromList
-    $ (\(ANF.TypeDeclaration tyCon _ tyArg) -> (tyCon, assertPrimitiveType tyArg))
-    <$> typeDeclarations
+    $ mapMaybe (\(ANF.TypeDeclaration tyCon _ mTyArg) -> (tyCon,) . assertPrimitiveType <$> mTyArg)
+      typeDeclarations
 
 primitiveTyConInfo :: PrimitiveType -> ANF.TyConInfo
 primitiveTyConInfo prim = ANF.TyConInfo (showPrimitiveType prim) (primitiveTypeId prim) (Just prim)

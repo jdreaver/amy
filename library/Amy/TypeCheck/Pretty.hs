@@ -35,8 +35,8 @@ prettyExtern' (Extern name ty) =
   prettyExtern (prettyIdent name) (mkPrettyType ty)
 
 prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
-prettyTypeDeclaration' (TypeDeclaration tyName dataCon tyArg) =
-  prettyTypeDeclaration (prettyTyConInfo tyName) (prettyIdent dataCon) (prettyTyConInfo tyArg)
+prettyTypeDeclaration' (TypeDeclaration tyName dataCon mTyArg) =
+  prettyTypeDeclaration (prettyTyConInfo tyName) (prettyIdent dataCon) (prettyTyConInfo <$> mTyArg)
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding ident scheme args _ body) =

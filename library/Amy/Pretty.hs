@@ -124,5 +124,5 @@ prettyBindingScheme name scheme = name <+> "::" <+> prettyScheme scheme
 prettyExtern :: Doc ann -> PrettyType ann -> Doc ann
 prettyExtern name ty = "extern" <+> prettyBindingType name ty
 
-prettyTypeDeclaration :: Doc ann -> Doc ann -> Doc ann -> Doc ann
-prettyTypeDeclaration tyName tyCon arg = tyName <+> "=" <+> tyCon <+> arg
+prettyTypeDeclaration :: Doc ann -> Doc ann -> Maybe (Doc ann) -> Doc ann
+prettyTypeDeclaration tyName tyCon mArg = tyName <+> "=" <+> tyCon <> maybe mempty (space <>) mArg

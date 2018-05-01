@@ -40,15 +40,15 @@ rename' (S.Module declarations) = do
     <*> sequenceA typeDeclarations
 
 renameTypeDeclaration :: S.TypeDeclaration -> Renamer (Validation [Error] R.TypeDeclaration)
-renameTypeDeclaration (S.TypeDeclaration tyName dataCon argTy) = do
+renameTypeDeclaration (S.TypeDeclaration tyName dataCon mArgTy) = do
   tyName' <- addTypeConstructorToScope tyName
   dataCon' <- addDataConstructorToScope dataCon
-  argTy' <- lookupTypeConstructorInScopeOrError argTy
+  mArgTy' <- traverse lookupTypeConstructorInScopeOrError mArgTy
   pure
     $ R.TypeDeclaration
     <$> tyName'
     <*> dataCon'
-    <*> argTy'
+    <*> sequenceA mArgTy'
 
 renameExtern :: S.Extern -> Renamer (Validation [Error] R.Extern)
 renameExtern extern = do

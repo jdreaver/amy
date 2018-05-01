@@ -94,7 +94,7 @@ data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !(Located Text)
   , typeDeclarationConstructorName :: !(Located Text)
-  , typeDeclarationArgument :: !(Located Text)
+  , typeDeclarationArgument :: !(Maybe (Located Text))
   } deriving (Show, Eq)
 
 data Expr
