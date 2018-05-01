@@ -5,6 +5,7 @@
 module Amy.Codegen.Monad
   ( runCodeGen
   , CodeGen
+  , CodeGenRead
   , runBlockGen
   , BlockGen
   , addInstruction
@@ -16,16 +17,19 @@ module Amy.Codegen.Monad
   , freshUnName
   , topLevelType
   , compilationMethods
+  , isTyConUnboxed
   ) where
 
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (fromMaybe)
 import LLVM.AST as LLVM
 
 import Amy.ANF.AST as ANF
 import Amy.Codegen.TypeConstructors
+import Amy.Prim
 
 newtype CodeGen a = CodeGen (Reader CodeGenRead a)
   deriving (Functor, Applicative, Monad, MonadReader CodeGenRead)
@@ -34,14 +38,18 @@ runCodeGen :: [(ANF.Ident, ANF.Type)] -> [ANF.TypeDeclaration] -> CodeGen a -> a
 runCodeGen topLevelTypes typeDeclarations (CodeGen action) =
   let
     typeMap = Map.fromList topLevelTypes
-    compilationMethods' = Map.unions $ typeCompilationMethod <$> typeDeclarations
-    readState = CodeGenRead typeMap compilationMethods'
+    (dataConCompilationMethods, tyConUnboxed) =
+      unzip $ typeCompilationMethod <$> typeDeclarations
+    dataConCompilationMethods' = Map.unions dataConCompilationMethods
+    tyConUnboxedMap = Map.fromList tyConUnboxed
+    readState = CodeGenRead typeMap dataConCompilationMethods' tyConUnboxedMap
   in runReader action readState
 
 data CodeGenRead
   = CodeGenRead
   { codeGenReadTopLevelTypes :: !(Map ANF.Ident ANF.Type)
-  , codeGenReadCompilationMethods :: !(Map ANF.ConstructorName TypeCompilationMethod)
+  , codeGenReadDataConCompilationMethods :: !(Map ANF.ConstructorName TypeCompilationMethod)
+  , codeGenReadTyConUnboxed :: !(Map ANF.TyConInfo (Maybe PrimitiveType))
   }
 
 newtype BlockGen a = BlockGen (StateT BlockGenState CodeGen a)
@@ -115,4 +123,9 @@ topLevelType :: (MonadReader CodeGenRead m) => ANF.Ident -> m (Maybe ANF.Type)
 topLevelType ident = asks (Map.lookup ident . codeGenReadTopLevelTypes)
 
 compilationMethods :: (MonadReader CodeGenRead m) => m (Map ANF.ConstructorName TypeCompilationMethod)
-compilationMethods = asks codeGenReadCompilationMethods
+compilationMethods = asks codeGenReadDataConCompilationMethods
+
+isTyConUnboxed :: (MonadReader CodeGenRead m) => TyConInfo -> m (Maybe PrimitiveType)
+isTyConUnboxed tyCon = asks (fromMaybe err . Map.lookup tyCon . codeGenReadTyConUnboxed)
+  where
+   err = error $ "Couldn't find unboxity of TyConInfo " ++ show tyCon

@@ -163,7 +163,7 @@ constructorConstant
   -> C.Constant
 constructorConstant compilationMethods consName =
   case findCompilationMethod consName compilationMethods of
-    CompileUnboxed -> error $ "Cannot unbox, we have an enum! " ++ show consName
+    CompileUnboxed _ -> error $ "Cannot unbox, we have an enum! " ++ show consName
     CompileEnum i -> literalConstant (LiteralInt i)
     CompileTaggedPairs _ -> error $ "Cannot compile tagged pairs, we have an enum! " ++ show consName
 
@@ -174,6 +174,6 @@ constructorIdent
   -> Ident
 constructorIdent compilationMethods consName ident =
   case findCompilationMethod consName compilationMethods of
-    CompileUnboxed -> ident
+    CompileUnboxed _ -> ident
     CompileEnum _ -> error $ "Cannot compile enum, we need an ident! " ++ show consName
     CompileTaggedPairs _ -> error $ "Tagged pairs not implementet yet " ++ show consName

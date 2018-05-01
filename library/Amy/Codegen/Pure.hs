@@ -1,10 +1,13 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Amy.Codegen.Pure
   ( codegenModule
   ) where
 
+import Control.Monad.Reader
 import qualified Data.ByteString.Char8 as BS8
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
@@ -51,22 +54,27 @@ codegenExtern :: ANF.Extern -> CodeGen Definition
 codegenExtern extern = do
   let
     (paramTypes, returnType') = argAndReturnTypes (ANF.externType extern)
-    params =
-      (\ty -> Parameter (llvmType ty) (UnName 0) []) <$> paramTypes
+    mkParam ty = do
+      ty' <- llvmType ty
+      pure $ Parameter ty' (UnName 0) []
+  params <- traverse mkParam paramTypes
+  retTy <- llvmType returnType'
   pure $
     GlobalDefinition
     functionDefaults
     { name = identToLLVM $ ANF.externName extern
     , parameters = (params, False)
-    , LLVM.returnType = llvmType returnType'
+    , LLVM.returnType = retTy
     }
 
 codegenTopLevelBinding :: ANF.Binding -> CodeGen Definition
 codegenTopLevelBinding binding = do
   let
-    argToParam (ANF.Typed ty ident) = Parameter (llvmType ty) (identToLLVM ident) []
-    params = argToParam <$> ANF.bindingArgs binding
-    returnType' = llvmType $ ANF.bindingReturnType binding
+    argToParam (ANF.Typed ty ident) = do
+      ty' <- llvmType ty
+      pure $ Parameter ty' (identToLLVM ident) []
+  params <- traverse argToParam (ANF.bindingArgs binding)
+  returnType' <- llvmType $ ANF.bindingReturnType binding
   blocks <- codegenExpr $ ANF.bindingBody binding
   pure $
     GlobalDefinition
@@ -106,8 +114,6 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee _ _)) = do
     mkCaseName nameBase = LLVM.Name $ stringToShortBS $ nameBase ++ show caseId
     (CaseBlocks switchDefaultBlockName mDefaultBlock literalBlocks endBlock) = caseBlocks mkCaseName compilationMethods' case'
     (CaseEndBlock endBlockName endOpName endType) = endBlock
-    endTy = llvmType endType
-    endOpRef = LocalReference endTy endOpName
 
   -- Generate the switch statement
   scrutineeOp <- valOperand scrutinee
@@ -134,7 +140,10 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee _ _)) = do
   matchOpsAndBlocks <- traverse generateCaseLiteralBlock literalBlocks
 
   -- Generate end block
-  let allOpsAndBlocks = maybe id (:) mDefaultOpAndBlock matchOpsAndBlocks
+  endTy <- llvmType endType
+  let
+    allOpsAndBlocks = maybe id (:) mDefaultOpAndBlock matchOpsAndBlocks
+    endOpRef = LocalReference endTy endOpName
   addInstruction $ endOpName := Phi endTy allOpsAndBlocks []
   pure endOpRef
 codegenExpr' (ANF.EApp (ANF.App (ANF.VVal (ANF.Typed originalTy ident)) args' returnTy)) = do
@@ -146,17 +155,20 @@ codegenExpr' (ANF.EApp (ANF.App (ANF.VVal (ANF.Typed originalTy ident)) args' re
   -- Convert arguments to pointers if we have to
   argOps <- for (zip args' argTys') $ \(arg, argTy) -> do
     originalOp <- valOperand arg
-    convertLLVMType originalOp (llvmType argTy)
+    argTy' <- llvmType argTy
+    convertLLVMType originalOp argTy'
 
   -- Add call instruction
   addInstruction $ opName := Call Nothing CC.C [] (Right funcOperand) ((\arg -> (arg, [])) <$> argOps) [] []
 
   -- Return operand, maybe converting it too
-  convertLLVMType (LocalReference (llvmType returnTy') opName) (llvmType returnTy)
+  returnTyLLVM <- llvmType returnTy
+  returnTyLLVM' <- llvmType returnTy'
+  convertLLVMType (LocalReference returnTyLLVM' opName) returnTyLLVM
 codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons (ANF.Typed _ consName)) args' _)) = do
   method <- findCompilationMethod consName <$> compilationMethods
   case method of
-    CompileUnboxed ->
+    CompileUnboxed _ ->
       case args' of
         [arg] -> valOperand arg
         _ -> error $ "Can't unbox App because there isn't exactly one argument " ++ show app
@@ -167,7 +179,8 @@ codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   opName <- freshUnName
   argOps <- traverse valOperand args'
   addInstruction $ opName := primitiveFunctionInstruction prim argOps
-  pure $ LocalReference (llvmType returnTy) opName
+  returnTy' <- llvmType returnTy
+  pure $ LocalReference returnTy' opName
 
 convertLLVMType :: Operand -> LLVM.Type -> BlockGen Operand
 convertLLVMType op targetTy
@@ -245,8 +258,12 @@ valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
     ident' = identToLLVM ident
   in
     case ident of
-      (ANF.Ident _ _ _ True) -> pure $ ConstantOperand $ C.GlobalReference (mkFunctionType ty) ident'
-      _ -> fromMaybe (LocalReference (llvmType ty) ident') <$> lookupSymbol ident
+      (ANF.Ident _ _ _ True) -> do
+        funcTy <- mkFunctionType ty
+        pure $ ConstantOperand $ C.GlobalReference funcTy ident'
+      _ -> do
+        ty' <- llvmType ty
+        fromMaybe (LocalReference ty' ident') <$> lookupSymbol ident
 valOperand (ANF.Var var@(ANF.VCons _)) = error $ "Can't valOperand on VCons yet " ++ show var
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
 
@@ -281,24 +298,33 @@ typeToNonEmpty (t1 `ANF.TyFun` t2) = NE.cons t1 (typeToNonEmpty t2)
 typeToNonEmpty ty = ty :| []
 
 -- TODO: Add tests for this
-llvmType :: ANF.Type -> LLVM.Type
+llvmType :: forall m. (MonadReader CodeGenRead m) => ANF.Type -> m LLVM.Type
 llvmType ty = go (typeToNonEmpty ty)
  where
+  go :: NonEmpty ANF.Type -> m LLVM.Type
   go (ty' :| []) =
     case ty' of
       ANF.TyCon tyName ->
-        let prim = fromMaybe (error $ "Expected primitive TyCon, got " ++ show tyName) (ANF.tyConInfoPrimitiveType tyName)
-        in llvmPrimitiveType prim
-      ANF.TyVar _ -> PointerType (IntegerType 64) (AddrSpace 0)
+        case ANF.tyConInfoPrimitiveType tyName of
+          Just prim -> pure $ llvmPrimitiveType prim
+          Nothing -> do
+            unBoxedTy <- isTyConUnboxed tyName
+            case unBoxedTy of
+              Just prim -> pure $ llvmPrimitiveType prim
+              Nothing -> error $ "Can't compile, expected some sort of unboxing " ++ show tyName
+      ANF.TyVar _ -> pure $ PointerType (IntegerType 64) (AddrSpace 0)
       ANF.TyFun{} -> mkFunctionType ty
   go _ = mkFunctionType ty
 
-mkFunctionType :: ANF.Type -> LLVM.Type
-mkFunctionType ty =
-  PointerType
+mkFunctionType :: (MonadReader CodeGenRead m) => ANF.Type -> m LLVM.Type
+mkFunctionType ty = do
+  resType <- llvmType $ NE.last ts
+  argTypes <- traverse llvmType (NE.init ts)
+  pure $
+    PointerType
     FunctionType
-    { resultType = llvmType $ NE.last ts
-    , argumentTypes = llvmType <$> NE.init ts
+    { resultType = resType
+    , argumentTypes = argTypes
     , isVarArg = False
     }
     (AddrSpace 0)
