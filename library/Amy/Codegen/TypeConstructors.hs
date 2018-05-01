@@ -27,10 +27,10 @@ typeCompilationMethod (ANF.TypeDeclaration _ cons) =
     (ANF.DataConstructor conName (Just _)) -> Map.singleton conName CompileUnboxed
 
 findCompilationMethod
-  :: Map ConstructorName TypeCompilationMethod
-  -> ConstructorName
+  :: ConstructorName
+  -> Map ConstructorName TypeCompilationMethod
   -> TypeCompilationMethod
-findCompilationMethod compilationMethods consName =
+findCompilationMethod consName compilationMethods =
   fromMaybe (error $ "No compilation method for " ++ show consName) $ Map.lookup consName compilationMethods
 
 -- assertPrimitiveType :: TyConInfo -> PrimitiveType

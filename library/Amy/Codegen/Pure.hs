@@ -27,6 +27,8 @@ import qualified LLVM.AST.Linkage as L
 import Amy.ANF as ANF
 import Amy.Codegen.CaseBlocks
 import Amy.Codegen.Monad
+import Amy.Codegen.TypeConstructors
+import Amy.Literal
 import Amy.Prim
 
 codegenModule :: ANF.Module -> LLVM.Module
@@ -147,7 +149,16 @@ codegenExpr' (ANF.EApp (ANF.App (ANF.VVal (ANF.Typed originalTy ident)) args' re
 
   -- Return operand, maybe converting it too
   convertLLVMType (LocalReference (llvmType returnTy') opName) (llvmType returnTy)
-codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons _) _ _)) = error $ "Can't codegen App for VCons yet " ++ show app
+codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons (ANF.Typed _ consName)) args' _)) = do
+  method <- findCompilationMethod consName <$> compilationMethods
+  case method of
+    CompileUnboxed ->
+      case args' of
+        [arg] -> valOperand arg
+        _ -> error $ "Can't unbox App because there isn't exactly one argument " ++ show app
+    CompileEnum i -> valOperand $ ANF.Lit (LiteralInt i)
+    CompileTaggedPairs _ -> error $ "Can't compile tagged pairs yet " ++ show app
+
 codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   opName <- freshUnName
   argOps <- traverse valOperand args'
