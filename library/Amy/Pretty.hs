@@ -96,8 +96,7 @@ prettyIf pred' then' else' =
 prettyCase :: Doc ann -> [(Doc ann, Doc ann)] -> Doc ann
 prettyCase scrutinee matches =
   "case" <+> scrutinee <+> "of" <>
-  line <>
-  indent 2 (vcatHardLines matches')
+  groupOrHang (vcatHardLines matches')
  where
   prettyMatch pat body = pat <+> "->" <> groupOrHang body
   matches' = uncurry prettyMatch <$> matches
