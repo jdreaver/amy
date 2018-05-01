@@ -23,7 +23,7 @@ data Error
   -- Renamer
   | UnknownVariable !(Located Text)
   | VariableShadowed !(Located Text) !R.Ident
-  | DuplicateDataConstructorName !(Located Text) !R.Ident
+  | DuplicateDataConstructorName !(Located Text) !R.ConstructorName
   | TypeConstructorAlreadyExists !(Located Text) !R.TyConInfo
   | UnknownTypeConstructor !(Located Text)
   | UnknownTypeVariable !(Located Text)
@@ -34,6 +34,7 @@ data Error
   | UnificationFail !T.Type !T.Type
   | InfiniteType T.TyVarInfo !T.Type
   | UnboundVariable !T.Ident
+  | UnboundConstructor !T.ConstructorName
 
   -- | BindingLacksTypeSignature !RBinding
   -- | TypeMismatch !(Type PrimitiveType) !(Type PrimitiveType)
@@ -63,6 +64,7 @@ errorLocation e =
     UnificationFail{} -> Nothing
     InfiniteType{} -> Nothing
     UnboundVariable{} -> Nothing
+    UnboundConstructor{} -> Nothing
 
     -- BindingLacksTypeSignature bind -> Just $ locatedSpan $ rBindingName bind
     -- TypeMismatch{} -> Nothing

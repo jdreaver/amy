@@ -35,23 +35,33 @@ import Amy.TypeCheck.AST as T
 
 -- | A 'TyEnv' is the typing environment. It contains known names with their
 -- type schemes.
-newtype TyEnv = TyEnv { unTyEnv :: Map T.Ident T.Scheme }
+data TyEnv
+  = TyEnv
+  { identTypes :: Map T.Ident T.Scheme
+  , constructorTypes :: Map T.ConstructorName T.Scheme
+  }
   deriving (Show, Eq)
 
 emptyEnv :: TyEnv
-emptyEnv = TyEnv Map.empty
+emptyEnv = TyEnv Map.empty Map.empty
 
-extendEnv :: TyEnv -> (T.Ident, T.Scheme) -> TyEnv
-extendEnv (TyEnv env) (x, s) = TyEnv (Map.insert x s env)
+extendEnvIdent :: TyEnv -> (T.Ident, T.Scheme) -> TyEnv
+extendEnvIdent env (x, s) =
+  env
+  { identTypes = Map.insert x s (identTypes env)
+  }
 
-extendEnvList :: TyEnv -> [(T.Ident, T.Scheme)] -> TyEnv
-extendEnvList = foldl' extendEnv
+extendEnvIdentList :: TyEnv -> [(T.Ident, T.Scheme)] -> TyEnv
+extendEnvIdentList = foldl' extendEnvIdent
 
 -- removeEnv :: TyEnv -> Name -> TyEnv
 -- removeEnv (TyEnv env) var = TyEnv (Map.delete var env)
 
-lookupEnv :: T.Ident -> TyEnv -> Maybe T.Scheme
-lookupEnv key (TyEnv tys) = Map.lookup key tys
+lookupEnvIdent :: T.Ident -> TyEnv -> Maybe T.Scheme
+lookupEnvIdent key = Map.lookup key . identTypes
+
+lookupEnvConstructor :: T.ConstructorName -> TyEnv -> Maybe T.Scheme
+lookupEnvConstructor key = Map.lookup key . constructorTypes
 
 -- mergeEnv :: TyEnv -> TyEnv -> TyEnv
 -- mergeEnv (TyEnv a) (TyEnv b) = TyEnv (Map.union a b)
@@ -87,14 +97,19 @@ letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
 
 -- | Extends the current typing environment with a list of names and schemes
 -- for those names.
-extendEnvM :: [(T.Ident, T.Scheme)] -> Inference a -> Inference a
-extendEnvM tys = local (flip extendEnvList tys)
+extendEnvIdentM :: [(T.Ident, T.Scheme)] -> Inference a -> Inference a
+extendEnvIdentM tys = local (flip extendEnvIdentList tys)
 
 -- | Lookup type in the environment
-lookupEnvM :: T.Ident -> Inference T.Type
-lookupEnvM name = do
-  mTy <- asks (lookupEnv name)
+lookupEnvIdentM :: T.Ident -> Inference T.Type
+lookupEnvIdentM name = do
+  mTy <- asks (lookupEnvIdent name)
   maybe (throwError $ UnboundVariable name) instantiate mTy
+
+lookupEnvConstructorM :: T.ConstructorName -> Inference T.Type
+lookupEnvConstructorM name = do
+  mTy <- asks (lookupEnvConstructor name)
+  maybe (throwError $ UnboundConstructor name) instantiate mTy
 
 -- | Convert a scheme into a type by replacing all the type variables with
 -- fresh names. Types are instantiated when they are looked up so we can make
@@ -152,7 +167,11 @@ inferModule (R.Module bindings externs typeDeclarations) = do
     typeDeclarations' = convertTypeDeclaration <$> typeDeclarations
     dataConstructorSchemes = dataConstructorScheme <$> typeDeclarations'
     primFuncSchemes = primitiveFunctionScheme <$> allPrimitiveFunctionNamesAndIds
-    env = TyEnv $ Map.fromList $ externSchemes ++ dataConstructorSchemes ++ primFuncSchemes
+    env =
+      TyEnv
+      { identTypes = Map.fromList $ externSchemes ++ primFuncSchemes
+      , constructorTypes = Map.fromList dataConstructorSchemes
+      }
   bindings' <- inferTopLevel env bindings
   pure (T.Module bindings' externs' typeDeclarations')
 
@@ -161,9 +180,9 @@ convertExtern (R.Extern (Located _ name) ty) = T.Extern (convertIdent name) (con
 
 convertTypeDeclaration :: R.TypeDeclaration -> T.TypeDeclaration
 convertTypeDeclaration (R.TypeDeclaration tyName (Located _ dataCon) mTyArg) =
-  T.TypeDeclaration (convertTyConInfo tyName) (convertIdent dataCon) (convertTyConInfo <$> mTyArg)
+  T.TypeDeclaration (convertTyConInfo tyName) (convertConstructorName dataCon) (convertTyConInfo <$> mTyArg)
 
-dataConstructorScheme :: T.TypeDeclaration -> (T.Ident, T.Scheme)
+dataConstructorScheme :: T.TypeDeclaration -> (T.ConstructorName, T.Scheme)
 dataConstructorScheme (T.TypeDeclaration tyName dataCon mTyArg) = (dataCon, T.Forall [] ty)
  where
   ty =
@@ -212,7 +231,7 @@ generateBindingConstraints bindings = do
   -- collect constraints for all bindings.
   let
     bindingNameSchemes = first (convertIdent . locatedValue . R.bindingName) <$> bindingsAndSchemes
-  extendEnvM bindingNameSchemes $ for bindingsAndSchemes $ \(binding, scheme) -> do
+  extendEnvIdentM bindingNameSchemes $ for bindingsAndSchemes $ \(binding, scheme) -> do
     (binding', constraints) <- inferBinding binding
     let
       -- Add the constraint for the binding itself
@@ -247,7 +266,7 @@ inferBinding :: R.Binding -> Inference (T.Binding, [Constraint])
 inferBinding (R.Binding (Located _ name) _ args body) = do
   argsAndTyVars <- traverse (\(Located _ arg) -> (convertIdent arg,) <$> freshTypeVariable) args
   let argsAndSchemes = (\(arg, t) -> (arg, T.Forall [] t)) <$> argsAndTyVars
-  (body', bodyCons) <- extendEnvM argsAndSchemes $ inferExpr body
+  (body', bodyCons) <- extendEnvIdentM argsAndSchemes $ inferExpr body
   let
     returnType = expressionType body'
     bindingTy = foldr1 T.TyFun $ (snd <$> argsAndTyVars) ++ [returnType]
@@ -267,10 +286,16 @@ inferBinding (R.Binding (Located _ name) _ args body) = do
 
 inferExpr :: R.Expr -> Inference (T.Expr, [Constraint])
 inferExpr (R.ELit (Located _ lit)) = pure (T.ELit lit, [])
-inferExpr (R.EVar (Located _ var)) = do
-  let var' = convertIdent var
-  t <- lookupEnvM var'
-  pure (T.EVar (T.Typed t var'), [])
+inferExpr (R.EVar var) =
+  case var of
+    R.VVal (Located _ valVar) -> do
+      let valVar' = convertIdent valVar
+      t <- lookupEnvIdentM valVar'
+      pure (T.EVar $ T.VVal (T.Typed t valVar'), [])
+    R.VCons (Located _ cons) -> do
+      let cons' = convertConstructorName cons
+      t <- lookupEnvConstructorM cons'
+      pure (T.EVar $ T.VCons (T.Typed t cons'), [])
 inferExpr (R.EIf (R.If pred' then' else')) = do
   (pred'', predCon) <- inferExpr pred'
   (then'', thenCon) <- inferExpr then'
@@ -304,7 +329,7 @@ inferExpr (R.ELet (R.Let bindings expression)) = do
   (bindings', bindingsCons) <- unzip <$> inferBindings bindings
   let
     bindingSchemes = (\binding -> (T.bindingName binding, T.bindingType binding)) <$> bindings'
-  (expression', expCons) <- extendEnvM bindingSchemes $ inferExpr expression
+  (expression', expCons) <- extendEnvIdentM bindingSchemes $ inferExpr expression
   pure
     ( T.ELet (T.Let bindings' expression')
     , concat bindingsCons ++ expCons
@@ -328,7 +353,7 @@ inferMatch :: R.Match -> Inference (T.Match, [Constraint])
 inferMatch (R.Match pat body) = do
   (pat', patCons) <- inferPattern pat
   let patScheme = patternScheme pat'
-  (body', bodyCons) <- extendEnvM patScheme $ inferExpr body
+  (body', bodyCons) <- extendEnvIdentM patScheme $ inferExpr body
   pure
     ( T.Match pat' body'
     , patCons ++ bodyCons
@@ -340,8 +365,8 @@ inferPattern (R.PatternVar (Located _ ident)) = do
   tvar <- freshTypeVariable
   pure (T.PatternVar $ T.Typed tvar (convertIdent ident), [])
 inferPattern (R.PatternCons (R.ConstructorPattern (Located _ cons) mArg)) = do
-  let cons' = convertIdent cons
-  consTy <- lookupEnvM cons'
+  let cons' = convertConstructorName cons
+  consTy <- lookupEnvConstructorM cons'
   let typedCons = T.Typed consTy cons'
   case mArg of
     -- Convert argument and add a constraint saying the argument
@@ -440,7 +465,10 @@ substituteConstraint :: Subst -> Constraint -> Constraint
 substituteConstraint subst (Constraint (t1, t2)) = Constraint (substituteType subst t1, substituteType subst t2)
 
 substituteEnv :: Subst -> TyEnv -> TyEnv
-substituteEnv subst (TyEnv env) = TyEnv $ Map.map (substituteScheme subst) env
+substituteEnv subst (TyEnv identTys consTys) =
+  TyEnv
+    (Map.map (substituteScheme subst) identTys)
+    (Map.map (substituteScheme subst) consTys)
 
 substituteTBinding :: Subst -> T.Binding -> T.Binding
 substituteTBinding subst binding =
@@ -453,7 +481,11 @@ substituteTBinding subst binding =
 
 substituteTExpr :: Subst -> T.Expr -> T.Expr
 substituteTExpr _ lit@T.ELit{} = lit
-substituteTExpr subst (T.EVar var) = T.EVar $ substituteTyped subst var
+substituteTExpr subst (T.EVar var) =
+  T.EVar $
+    case var of
+      T.VVal var' -> T.VVal $ substituteTyped subst var'
+      T.VCons var' -> T.VCons $ substituteTyped subst var'
 substituteTExpr subst (T.EIf (T.If pred' then' else')) =
   T.EIf (T.If (substituteTExpr subst pred') (substituteTExpr subst then') (substituteTExpr subst else'))
 substituteTExpr subst (T.ECase (T.Case scrutinee matches)) =
@@ -491,14 +523,18 @@ freeSchemeTypeVariables :: T.Scheme -> Set T.TyVarInfo
 freeSchemeTypeVariables (T.Forall tvs t) = freeTypeVariables t `Set.difference` Set.fromList tvs
 
 freeEnvTypeVariables :: TyEnv -> Set T.TyVarInfo
-freeEnvTypeVariables (TyEnv env) = foldl' Set.union Set.empty $ freeSchemeTypeVariables <$> Map.elems env
+freeEnvTypeVariables (TyEnv identTys consTys) =
+  foldl' Set.union Set.empty $ freeSchemeTypeVariables <$> (Map.elems identTys ++ Map.elems consTys)
 
 --
 -- Names
 --
 
 convertIdent :: R.Ident -> T.Ident
-convertIdent (R.Ident name id' _ mPrim) = T.Ident name id' mPrim
+convertIdent (R.Ident name id' mPrim) = T.Ident name id' mPrim
+
+convertConstructorName :: R.ConstructorName -> T.ConstructorName
+convertConstructorName (R.ConstructorName name id') = T.ConstructorName name id'
 
 convertScheme :: R.Scheme -> T.Scheme
 convertScheme (R.Forall vars ty) = T.Forall (convertTyVarInfo <$> vars) (convertType ty)

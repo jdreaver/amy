@@ -6,6 +6,7 @@ module Amy.Core.AST
   , Extern(..)
   , TypeDeclaration(..)
   , Expr(..)
+  , Var(..)
   , If(..)
   , Case(..)
   , Match(..)
@@ -14,9 +15,10 @@ module Amy.Core.AST
   , Let(..)
   , App(..)
   , expressionType
-  , moduleNames
+  , moduleNameIds
 
   , Ident(..)
+  , ConstructorName(..)
   , Type(..)
   , TyConInfo(..)
   , TyVarInfo(..)
@@ -61,17 +63,22 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConInfo
-  , typeDeclarationConstructorName :: !Ident
+  , typeDeclarationConstructorName :: !ConstructorName
   , typeDeclarationArgument :: !(Maybe TyConInfo)
   } deriving (Show, Eq)
 
 data Expr
   = ELit !Literal
-  | EVar !(Typed Ident)
+  | EVar !Var
   | ECase !Case
   | ELet !Let
   | EApp !App
   | EParens !Expr
+  deriving (Show, Eq)
+
+data Var
+  = VVal !(Typed Ident)
+  | VCons !(Typed ConstructorName)
   deriving (Show, Eq)
 
 data If
@@ -101,7 +108,7 @@ data Pattern
 
 data ConstructorPattern
   = ConstructorPattern
-  { constructorPatternConstructor :: !(Typed Ident)
+  { constructorPatternConstructor :: !(Typed ConstructorName)
   , constructorPatternArg :: !(Maybe (Typed Ident))
   , constructorPatternReturnType :: !Type
   } deriving (Show, Eq)
@@ -126,51 +133,60 @@ literalType' lit =
 
 expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType' lit
-expressionType (EVar (Typed ty _)) = ty
+expressionType (EVar var) =
+  case var of
+    VVal (Typed ty _) -> ty
+    VCons (Typed ty _) -> ty
 expressionType (ECase (Case _ (Match _ expr :| _))) = expressionType expr
 expressionType (ELet let') = expressionType (letExpression let')
 expressionType (EApp app) = appReturnType app
 expressionType (EParens expr) = expressionType expr
 
 -- | Get all the 'Name's in a module.
-moduleNames :: Module -> [Ident]
-moduleNames (Module bindings externs typeDeclarations) =
-  concatMap bindingNames bindings
-  ++ fmap typeDeclarationConstructorName typeDeclarations
-  ++ fmap externName externs
+moduleNameIds :: Module -> [Int]
+moduleNameIds (Module bindings externs typeDeclarations) =
+  concatMap bindingNameIds bindings
+  ++ fmap (constructorNameId . typeDeclarationConstructorName) typeDeclarations
+  ++ fmap (identId . externName) externs
 
-bindingNames :: Binding -> [Ident]
-bindingNames binding =
-  bindingName binding
-  : (typedValue <$> bindingArgs binding)
-  ++ exprNames (bindingBody binding)
+bindingNameIds :: Binding -> [Int]
+bindingNameIds binding =
+  identId (bindingName binding)
+  : (identId . typedValue <$> bindingArgs binding)
+  ++ exprNameIds (bindingBody binding)
 
-exprNames :: Expr -> [Ident]
-exprNames (ELit _) = []
-exprNames (EVar var) = [typedValue var] -- TODO: Shouldn't we only need name bindings here?
-exprNames (ECase (Case scrutinee matches)) =
-  exprNames scrutinee ++ concatMap matchNames matches
-exprNames (ELet (Let bindings expr)) =
-  concatMap bindingNames bindings
-  ++ exprNames expr
-exprNames (EApp (App f args _)) =
-  exprNames f
-  ++ concatMap exprNames args
-exprNames (EParens expr) = exprNames expr
+exprNameIds :: Expr -> [Int]
+exprNameIds (ELit _) = []
+exprNameIds (EVar _) = []
+exprNameIds (ECase (Case scrutinee matches)) =
+  exprNameIds scrutinee ++ concatMap matchNames matches
+exprNameIds (ELet (Let bindings expr)) =
+  concatMap bindingNameIds bindings
+  ++ exprNameIds expr
+exprNameIds (EApp (App f args _)) =
+  exprNameIds f
+  ++ concatMap exprNameIds args
+exprNameIds (EParens expr) = exprNameIds expr
 
-matchNames :: Match -> [Ident]
-matchNames (Match pat body) = patternNames pat ++ exprNames body
+matchNames :: Match -> [Int]
+matchNames (Match pat body) = patternNameIds pat ++ exprNameIds body
 
-patternNames :: Pattern -> [Ident]
-patternNames (PatternLit _) = []
-patternNames (PatternVar (Typed _ var)) = [var]
-patternNames (PatternCons (ConstructorPattern _ mArg _)) = maybe [] (\(Typed _ var) -> [var]) mArg
+patternNameIds :: Pattern -> [Int]
+patternNameIds (PatternLit _) = []
+patternNameIds (PatternVar (Typed _ var)) = [identId var]
+patternNameIds (PatternCons (ConstructorPattern _ mArg _)) = maybe [] (\(Typed _ var) -> [identId var]) mArg
 
 data Ident
   = Ident
   { identText :: !Text
   , identId :: !Int
   , identPrimitiveName :: !(Maybe PrimitiveFunctionName)
+  } deriving (Show, Eq, Ord)
+
+data ConstructorName
+  = ConstructorName
+  { constructorNameText :: !Text
+  , constructorNameId :: !Int
   } deriving (Show, Eq, Ord)
 
 data Type

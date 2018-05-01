@@ -6,6 +6,7 @@ module Amy.ANF.AST
   , Extern(..)
   , TypeDeclaration(..)
   , Val(..)
+  , Var(..)
   , Expr(..)
   , Let(..)
   , Case(..)
@@ -15,6 +16,7 @@ module Amy.ANF.AST
   , App(..)
 
   , Ident(..)
+  , ConstructorName(..)
   , Type(..)
   , TyConInfo(..)
   , TyVarInfo(..)
@@ -53,20 +55,25 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConInfo
-  , typeDeclarationConstructorName :: !Ident
+  , typeDeclarationConstructorName :: !ConstructorName
   , typeDeclarationArgument :: !(Maybe TyConInfo)
   } deriving (Show, Eq)
 
 data Val
-  = Var !(Typed Ident)
+  = Var !Var
   | Lit !Literal
+  deriving (Show, Eq)
+
+data Var
+  = VVal !(Typed Ident)
+  | VCons !(Typed ConstructorName)
   deriving (Show, Eq)
 
 data Expr
   = EVal !Val
   | ELet !Let
   | ECase !Case
-  | EApp !(App (Typed Ident))
+  | EApp !(App Var)
   | EPrimOp !(App PrimitiveFunctionName)
   deriving (Show, Eq)
 
@@ -97,7 +104,7 @@ data Pattern
 
 data ConstructorPattern
   = ConstructorPattern
-  { constructorPatternConstructor :: !(Typed Ident)
+  { constructorPatternConstructor :: !(Typed ConstructorName)
   , constructorPatternArg :: !(Maybe (Typed Ident))
   , constructorPatternReturnType :: !Type
   } deriving (Show, Eq)
@@ -116,6 +123,12 @@ data Ident
   , identId :: !Int
   , identPrimitiveName :: !(Maybe PrimitiveFunctionName)
   , identIsTopLevel :: !Bool
+  } deriving (Show, Eq, Ord)
+
+data ConstructorName
+  = ConstructorName
+  { constructorNameText :: !Text
+  , constructorNameId :: !Int
   } deriving (Show, Eq, Ord)
 
 data Type

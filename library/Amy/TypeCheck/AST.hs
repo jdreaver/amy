@@ -8,6 +8,7 @@ module Amy.TypeCheck.AST
   , Extern(..)
   , TypeDeclaration(..)
   , Expr(..)
+  , Var(..)
   , If(..)
   , Case(..)
   , Match(..)
@@ -19,6 +20,7 @@ module Amy.TypeCheck.AST
   , patternType
 
   , Ident(..)
+  , ConstructorName(..)
   , Type(..)
   , TyConInfo(..)
   , TyVarInfo(..)
@@ -67,19 +69,24 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConInfo
-  , typeDeclarationConstructorName :: !Ident
+  , typeDeclarationConstructorName :: !ConstructorName
   , typeDeclarationArgument :: !(Maybe TyConInfo)
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'
 data Expr
   = ELit !Literal
-  | EVar !(Typed Ident)
+  | EVar !Var
   | EIf !If
   | ECase !Case
   | ELet !Let
   | EApp !App
   | EParens !Expr
+  deriving (Show, Eq)
+
+data Var
+  = VVal !(Typed Ident)
+  | VCons !(Typed ConstructorName)
   deriving (Show, Eq)
 
 data If
@@ -109,7 +116,7 @@ data Pattern
 
 data ConstructorPattern
   = ConstructorPattern
-  { constructorPatternConstructor :: !(Typed Ident)
+  { constructorPatternConstructor :: !(Typed ConstructorName)
   , constructorPatternArg :: !(Maybe (Typed Ident))
   , constructorPatternReturnType :: !Type
   } deriving (Show, Eq)
@@ -134,7 +141,10 @@ literalType' lit =
 
 expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType' lit
-expressionType (EVar (Typed ty _)) = ty
+expressionType (EVar var) =
+  case var of
+    VVal (Typed ty _) -> ty
+    VCons (Typed ty _) -> ty
 expressionType (EIf if') = expressionType (ifThen if') -- Checker ensure "then" and "else" types match
 expressionType (ECase (Case _ (Match _ expr :| _))) = expressionType expr
 expressionType (ELet let') = expressionType (letExpression let')
@@ -151,6 +161,12 @@ data Ident
   { identText :: !Text
   , identId :: !Int
   , identPrimitiveName :: !(Maybe PrimitiveFunctionName)
+  } deriving (Show, Eq, Ord)
+
+data ConstructorName
+  = ConstructorName
+  { constructorNameText :: !Text
+  , constructorNameId :: !Int
   } deriving (Show, Eq, Ord)
 
 data Type

@@ -52,7 +52,7 @@ data RenamerState
   { renamerStateLastId :: !Int
     -- ^ Last 'NameIntId' generated
   , renamerStateValuesInScope :: !(Map Text Ident)
-  , renamerStateDataConstructorsInScope :: !(Map Text Ident)
+  , renamerStateDataConstructorsInScope :: !(Map Text ConstructorName)
   , renamerStateTypeConstructorsInScope :: !(Map Text TyConInfo)
   , renamerStateTypeVariablesInScope :: !(Map Text TyVarInfo)
   } deriving (Show, Eq)
@@ -72,7 +72,7 @@ primitiveFunctionNames =
   Map.fromList $
     (\(id', prim) ->
        ( showPrimitiveFunctionName prim
-       , Ident (showPrimitiveFunctionName prim) id' ValueName (Just prim)
+       , Ident (showPrimitiveFunctionName prim) id' (Just prim)
        ))
     <$> allPrimitiveFunctionNamesAndIds
 
@@ -96,7 +96,7 @@ addValueToScope :: Located Text -> Renamer (Validation [Error] (Located Ident))
 addValueToScope lName@(Located span' name) = do
   nameId <- freshId
   let
-    ident = Ident name nameId ValueName Nothing
+    ident = Ident name nameId Nothing
   mExistingName <- lookupValueInScope name
   case mExistingName of
     Just existingName -> pure $ Failure [VariableShadowed lName existingName]
@@ -111,22 +111,22 @@ lookupValueInScopeOrError :: Located Text -> Renamer (Validation [Error] (Locate
 lookupValueInScopeOrError name@(Located span' name') =
   maybe (Failure [UnknownVariable name]) (Success . Located span') <$> lookupValueInScope name'
 
-addDataConstructorToScope :: Located Text -> Renamer (Validation [Error] (Located Ident))
+addDataConstructorToScope :: Located Text -> Renamer (Validation [Error] (Located ConstructorName))
 addDataConstructorToScope lName@(Located span' name) = do
   nameId <- freshId
   let
-    ident = Ident name nameId DataConstructorName Nothing
+    cons = ConstructorName name nameId
   mExistingName <- lookupDataConstructorInScope name
   case mExistingName of
     Just existingName -> pure $ Failure [DuplicateDataConstructorName lName existingName]
     Nothing -> do
-      modify' (\s -> s { renamerStateDataConstructorsInScope = Map.insert name ident (renamerStateDataConstructorsInScope s) })
-      pure $ Success (Located span' ident)
+      modify' (\s -> s { renamerStateDataConstructorsInScope = Map.insert name cons (renamerStateDataConstructorsInScope s) })
+      pure $ Success (Located span' cons)
 
-lookupDataConstructorInScope :: Text -> Renamer (Maybe Ident)
+lookupDataConstructorInScope :: Text -> Renamer (Maybe ConstructorName)
 lookupDataConstructorInScope name = Map.lookup name <$> gets renamerStateDataConstructorsInScope
 
-lookupDataConstructorInScopeOrError :: Located Text -> Renamer (Validation [Error] (Located Ident))
+lookupDataConstructorInScopeOrError :: Located Text -> Renamer (Validation [Error] (Located ConstructorName))
 lookupDataConstructorInScopeOrError name@(Located span' name') =
   maybe (Failure [UnknownVariable name]) (Success . Located span') <$> lookupDataConstructorInScope name'
 

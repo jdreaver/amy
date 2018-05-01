@@ -147,8 +147,8 @@ literal =
 
 variable :: AmyParser Var
 variable =
-  (Variable <$> identifier)
-  <|> (DataConstructor <$> dataConstructor)
+  (VVal <$> identifier)
+  <|> (VCons <$> dataConstructor)
 
 ifExpression :: AmyParser If
 ifExpression = do

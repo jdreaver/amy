@@ -108,8 +108,8 @@ data Expr
   deriving (Show, Eq)
 
 data Var
-  = Variable !(Located Text)
-  | DataConstructor !(Located Text)
+  = VVal !(Located Text)
+  | VCons !(Located Text)
   deriving (Show, Eq)
 
 data If

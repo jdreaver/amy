@@ -38,7 +38,7 @@ prettyExtern' (Extern name ty) =
 
 prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
 prettyTypeDeclaration' (TypeDeclaration tyName dataCon mTyArg) =
-  prettyTypeDeclaration (prettyTyConInfo tyName) (prettyIdent dataCon) (prettyTyConInfo <$> mTyArg)
+  prettyTypeDeclaration (prettyTyConInfo tyName) (prettyConstructorName dataCon) (prettyTyConInfo <$> mTyArg)
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding ident scheme args _ body) =
@@ -55,9 +55,12 @@ prettyTypedIdent (Typed ty ident) = parens $ prettyIdent ident <+> "::" <+> pret
 prettyIdent :: Ident -> Doc ann
 prettyIdent (Ident name _ _) = pretty name
 
+prettyConstructorName :: ConstructorName -> Doc ann
+prettyConstructorName (ConstructorName name _) = pretty name
+
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit lit) = pretty $ showLiteral lit
-prettyExpr (EVar (Typed _ var)) = prettyIdent var
+prettyExpr (EVar var) = prettyVar var
 prettyExpr (ECase (Case scrutinee matches)) =
   prettyCase (prettyExpr scrutinee) (toList $ mkMatch <$> matches)
  where
@@ -67,8 +70,12 @@ prettyExpr (ELet (Let bindings body)) =
 prettyExpr (EApp (App f args _)) = sep $ prettyExpr f : (prettyExpr <$> toList args)
 prettyExpr (EParens expr) = parens $ prettyExpr expr
 
+prettyVar :: Var -> Doc ann
+prettyVar (VVal (Typed _ var)) = prettyIdent var
+prettyVar (VCons (Typed _ var)) = prettyConstructorName var
+
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PatternLit lit) = pretty $ showLiteral lit
 prettyPattern (PatternVar (Typed _ var)) = prettyIdent var
 prettyPattern (PatternCons (ConstructorPattern (Typed _ var) mArg _)) =
-  prettyIdent var <> maybe mempty (\arg -> space <> prettyTypedIdent arg) mArg
+  prettyConstructorName var <> maybe mempty (\arg -> space <> prettyTypedIdent arg) mArg

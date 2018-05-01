@@ -37,7 +37,7 @@ prettyExtern' (Extern name ty) =
 
 prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
 prettyTypeDeclaration' (TypeDeclaration tyName dataCon mTyArg) =
-  prettyTypeDeclaration (prettyTyConInfo tyName) (prettyIdent dataCon) (prettyTyConInfo <$> mTyArg)
+  prettyTypeDeclaration (prettyTyConInfo tyName) (prettyConstructorName dataCon) (prettyTyConInfo <$> mTyArg)
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding ident scheme args _ body) =
@@ -48,9 +48,16 @@ prettyBinding' (Binding ident scheme args _ body) =
 prettyIdent :: Ident -> Doc ann
 prettyIdent (Ident name _ _ _) = pretty name
 
+prettyConstructorName :: ConstructorName -> Doc ann
+prettyConstructorName (ConstructorName name _) = pretty name
+
 prettyVal :: Val -> Doc ann
-prettyVal (Var (Typed _ var)) = prettyIdent var
+prettyVal (Var var) = prettyVar var
 prettyVal (Lit lit) = pretty $ showLiteral lit
+
+prettyVar :: Var -> Doc ann
+prettyVar (VVal (Typed _ var)) = prettyIdent var
+prettyVar (VCons (Typed _ var)) = prettyConstructorName var
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (EVal val) = prettyVal val
@@ -60,7 +67,7 @@ prettyExpr (ECase (Case scrutinee matches _)) =
   mkMatch (Match pat body) = (prettyPattern pat, prettyExpr body)
 prettyExpr (ELet (Let bindings body)) =
   prettyLet (prettyBinding' <$> bindings) (prettyExpr body)
-prettyExpr (EApp (App f args _)) = sep $ prettyIdent (typedValue f) : (prettyVal <$> args)
+prettyExpr (EApp (App f args _)) = sep $ prettyVar f : (prettyVal <$> args)
 prettyExpr (EPrimOp (App f args _)) =
   sep $ pretty (showPrimitiveFunctionName f) : (prettyVal <$> args)
 
@@ -68,4 +75,4 @@ prettyPattern :: Pattern -> Doc ann
 prettyPattern (PatternLit lit) = pretty $ showLiteral lit
 prettyPattern (PatternVar (Typed _ var)) = prettyIdent var
 prettyPattern (PatternCons (ConstructorPattern (Typed _ var) mArg _)) =
-  prettyIdent var <> maybe mempty (\(Typed _ arg) -> space <> prettyIdent arg) mArg
+  prettyConstructorName var <> maybe mempty (\(Typed _ arg) -> space <> prettyIdent arg) mArg

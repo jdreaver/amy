@@ -16,18 +16,16 @@ normalizeModule :: C.Module -> ANF.Module
 normalizeModule module'@(C.Module bindings externs typeDeclarations) =
   let
     -- Compute max ID from module
-    moduleNames' = C.moduleNames module'
-    moduleIdentIds = C.identId <$> moduleNames'
+    moduleIds = C.moduleNameIds module'
     maxId =
-      if null moduleIdentIds
+      if null moduleIds
       then 0
-      else maximum moduleIdentIds
+      else maximum moduleIds
 
     -- Record top-level names
     topLevelNames =
       (C.bindingName <$> bindings)
       ++ (C.externName <$> externs)
-      ++ (C.typeDeclarationConstructorName <$> typeDeclarations)
 
     -- Actual conversion
     typeDeclarations' = convertTypeDeclaration <$> typeDeclarations
@@ -42,7 +40,7 @@ convertExtern (C.Extern name ty) = ANF.Extern (convertIdent True name) <$> conve
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANF.TypeDeclaration
 convertTypeDeclaration (C.TypeDeclaration tyName dataCon mTyArg) =
-  ANF.TypeDeclaration (convertTyConInfo tyName) (convertIdent True dataCon) (convertTyConInfo <$> mTyArg)
+  ANF.TypeDeclaration (convertTyConInfo tyName) (convertConstructorName dataCon) (convertTyConInfo <$> mTyArg)
 
 convertIdent :: Bool -> C.Ident -> ANF.Ident
 convertIdent isTopLevel (C.Ident name id' mPrim) = ANF.Ident name id' mPrim isTopLevel
@@ -50,6 +48,9 @@ convertIdent isTopLevel (C.Ident name id' mPrim) = ANF.Ident name id' mPrim isTo
 convertIdent' :: C.Ident -> ANFConvert ANF.Ident
 convertIdent' ident@(C.Ident name id' mPrim) =
   ANF.Ident name id' mPrim <$> isIdentTopLevel ident
+
+convertConstructorName :: C.ConstructorName -> ANF.ConstructorName
+convertConstructorName (C.ConstructorName name id') = ANF.ConstructorName name id'
 
 convertScheme :: C.Scheme -> ANFConvert ANF.Scheme
 convertScheme (C.Forall vars ty) = ANF.Forall (convertTyVarInfo <$> vars) <$> convertType ty
@@ -64,6 +65,10 @@ convertTyConInfo (C.TyConInfo name' id' mPrim) = ANF.TyConInfo name' id' mPrim
 
 convertTypedIdent :: C.Typed C.Ident -> ANFConvert (ANF.Typed ANF.Ident)
 convertTypedIdent (C.Typed ty arg) = ANF.Typed <$> convertType ty <*> convertIdent' arg
+
+convertTypedConstructorName :: C.Typed C.ConstructorName -> ANFConvert (ANF.Typed ANF.ConstructorName)
+convertTypedConstructorName (C.Typed ty arg) =
+  ANF.Typed <$> convertType ty <*> pure (convertConstructorName arg)
 
 -- | Convert a TyConInfo, but also unbox it if possible.
 convertTyConInfo' :: C.TyConInfo -> ANFConvert ANF.TyConInfo
@@ -100,39 +105,49 @@ normalizeExpr name (C.EApp (C.App func args retTy)) c =
 normalizeExpr name (C.EParens expr) c = normalizeExpr name expr c
 
 normalizeApp
-  :: ANF.Typed ANF.Ident
+  :: ANF.Var
   -> [ANF.Val]
   -> ANF.Type
   -> (ANF.Expr -> ANFConvert a)
   -> ANFConvert a
-normalizeApp (ANF.Typed ty ident) argVals retTy c = do
-  -- Try to unbox the application of a type constructor
-  shouldUnbox <- unboxDataConstructor ident
-  if shouldUnbox
-  then
-    case argVals of
-      [arg] -> c (EVal arg)
-      _ -> error $ "Expected only one argument when unboxing, got " ++ show argVals
-  else
-    case ident of
-      -- Primitive operation
-      ANF.Ident _ _ (Just prim) _ -> c $ ANF.EPrimOp $ ANF.App prim argVals retTy
-      -- Default, just a function call
-      _ -> c $ ANF.EApp $ ANF.App (ANF.Typed ty ident) argVals retTy
+normalizeApp var argVals retTy c =
+  case var of
+    ANF.VVal (ANF.Typed _ ident) ->
+      case ident of
+        -- Primitive operation
+        ANF.Ident _ _ (Just prim) _ -> c $ ANF.EPrimOp $ ANF.App prim argVals retTy
+        -- Default, just a function call
+        _ -> c $ ANF.EApp $ ANF.App var argVals retTy
+    ANF.VCons (ANF.Typed _ cons) -> do
+      -- Try to unbox the application of a type constructor
+      shouldUnbox <- unboxDataConstructor cons
+      if shouldUnbox
+      then
+        case argVals of
+          [arg] -> c (EVal arg)
+          _ -> error $ "Expected only one argument when unboxing, got " ++ show argVals
+      else
+        -- Default, just a function call
+        c $ ANF.EApp $ ANF.App var argVals retTy
 
 normalizeTerm :: Text -> C.Expr -> ANFConvert ANF.Expr
 normalizeTerm name expr = normalizeExpr name expr pure
 
 normalizeName :: Text -> C.Expr -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 normalizeName _ (C.ELit lit) c = c $ ANF.Lit lit
-normalizeName name (C.EVar var) c = do
-  var' <- convertTypedIdent var
-  case var' of
-    -- Top-level values need to be first called as functions
-    (ANF.Typed ty@(ANF.TyCon _) (ANF.Ident _ _ _ True)) ->
-      mkNormalizeLet name (ANF.EApp $ ANF.App var' [] ty) ty c
-    -- Not a top-level value, just return
-    _ -> c $ ANF.Var var'
+normalizeName name (C.EVar var) c =
+  case var of
+    C.VVal ident -> do
+      ident' <- convertTypedIdent ident
+      case ident' of
+        -- Top-level values need to be first called as functions
+        (ANF.Typed ty@(ANF.TyCon _) (ANF.Ident _ _ _ True)) ->
+          mkNormalizeLet name (ANF.EApp $ ANF.App (ANF.VVal ident') [] ty) ty c
+        -- Not a top-level value, just return
+        _ -> c $ ANF.Var (ANF.VVal ident')
+    C.VCons cons -> do
+      cons' <- convertTypedConstructorName cons
+      c $ ANF.Var (ANF.VCons cons')
 normalizeName name expr c = do
   expr' <- normalizeTerm name expr
   exprType <- convertType $ expressionType expr
@@ -141,7 +156,7 @@ normalizeName name expr c = do
 mkNormalizeLet :: Text -> ANF.Expr -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 mkNormalizeLet name expr exprType c = do
   newIdent <- freshIdent name
-  body <- c $ ANF.Var (ANF.Typed exprType newIdent)
+  body <- c $ ANF.Var (ANF.VVal $ ANF.Typed exprType newIdent)
   pure $ ANF.ELet $ ANF.Let [ANF.Binding newIdent (ANF.Forall [] exprType) [] exprType expr] body
 
 normalizeBinding :: Maybe Text -> C.Binding -> ANFConvert ANF.Binding
@@ -166,7 +181,7 @@ convertPattern :: C.Pattern -> ANFConvert ANF.Pattern
 convertPattern (C.PatternLit lit) = pure $ ANF.PatternLit lit
 convertPattern (C.PatternVar var) = ANF.PatternVar <$> convertTypedIdent var
 convertPattern (C.PatternCons pat@(C.ConstructorPattern cons mArg retTy)) = do
-  cons'@(ANF.Typed _ consIdent) <- convertTypedIdent cons
+  cons'@(ANF.Typed _ consIdent) <- convertTypedConstructorName cons
   mArg' <- traverse convertTypedIdent mArg
   retTy' <- convertType retTy
   shouldUnbox <- unboxDataConstructor consIdent

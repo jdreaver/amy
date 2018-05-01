@@ -6,6 +6,7 @@ module Amy.Renamer.AST
   , Extern(..)
   , TypeDeclaration(..)
   , Expr(..)
+  , Var(..)
   , If(..)
   , Case(..)
   , Match(..)
@@ -15,7 +16,7 @@ module Amy.Renamer.AST
   , App(..)
 
   , Ident(..)
-  , Namespace(..)
+  , ConstructorName(..)
   , Type(..)
   , TyConInfo(..)
   , TyVarInfo(..)
@@ -59,19 +60,24 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConInfo
-  , typeDeclarationConstructorName :: !(Located Ident)
+  , typeDeclarationConstructorName :: !(Located ConstructorName)
   , typeDeclarationArgument :: !(Maybe TyConInfo)
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'
 data Expr
   = ELit !(Located Literal)
-  | EVar !(Located Ident)
+  | EVar !Var
   | EIf !If
   | ECase !Case
   | ELet !Let
   | EApp !App
   | EParens !Expr
+  deriving (Show, Eq)
+
+data Var
+  = VVal !(Located Ident)
+  | VCons !(Located ConstructorName)
   deriving (Show, Eq)
 
 data If
@@ -101,7 +107,7 @@ data Pattern
 
 data ConstructorPattern
   = ConstructorPattern
-  { constructorPatternConstructor :: !(Located Ident)
+  { constructorPatternConstructor :: !(Located ConstructorName)
   , constructorPatternArg :: !(Maybe (Located Ident))
   } deriving (Show, Eq)
 
@@ -118,19 +124,18 @@ data App
   , appArgs :: !(NonEmpty Expr)
   } deriving (Show, Eq)
 
--- | An identifier from source code
 data Ident
   = Ident
   { identText :: !Text
   , identId :: !Int
-  , identNamespace :: !Namespace
   , identPrimitiveName :: !(Maybe PrimitiveFunctionName)
   } deriving (Show, Eq, Ord)
 
-data Namespace
-  = ValueName
-  | DataConstructorName
-  deriving (Show, Eq, Ord)
+data ConstructorName
+  = ConstructorName
+  { constructorNameText :: !Text
+  , constructorNameId :: !Int
+  } deriving (Show, Eq, Ord)
 
 data Type
   = TyCon !TyConInfo

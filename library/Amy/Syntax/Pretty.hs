@@ -56,8 +56,8 @@ prettyExpr (EApp (App f args)) = sep $ prettyExpr f : (prettyExpr <$> toList arg
 prettyExpr (EParens expr) = parens $ prettyExpr expr
 
 prettyVar :: Var -> Doc ann
-prettyVar (Variable (Located _ var)) = pretty var
-prettyVar (DataConstructor (Located _ var)) = pretty var
+prettyVar (VVal (Located _ var)) = pretty var
+prettyVar (VCons (Located _ var)) = pretty var
 
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PatternLit (Located _ lit)) = pretty $ showLiteral lit

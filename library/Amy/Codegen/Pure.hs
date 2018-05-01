@@ -167,9 +167,9 @@ codegenExpr' (ANF.ECase (ANF.Case scrutinee matches ty)) = do
   let allOpsAndBlocks = maybe id (:) mDefaultOpAndBlock matchOpsAndBlocks
   addInstruction $ endOpName := Phi endTy allOpsAndBlocks []
   pure endOpRef
-codegenExpr' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = do
+codegenExpr' (ANF.EApp (ANF.App (ANF.VVal (ANF.Typed originalTy ident)) args' returnTy)) = do
   ty <- fromMaybe originalTy <$> topLevelType ident
-  funcOperand <- valOperand (ANF.Var $ ANF.Typed ty ident)
+  funcOperand <- valOperand (ANF.Var $ ANF.VVal $ ANF.Typed ty ident)
   let
     (argTys', returnTy') = argAndReturnTypes ty
   opName <- freshUnName
@@ -183,6 +183,7 @@ codegenExpr' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = 
 
   -- Return operand, maybe converting it too
   convertLLVMType (LocalReference (llvmType returnTy') opName) (llvmType returnTy)
+codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons _) _ _)) = error $ "Can't codegen App for VCons yet " ++ show app
 codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   opName <- freshUnName
   argOps <- traverse valOperand args'
@@ -260,13 +261,14 @@ floatingPointBits =
     PPC_FP128FP -> 128
 
 valOperand :: ANF.Val -> BlockGen Operand
-valOperand (ANF.Var (ANF.Typed ty ident)) =
+valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
   let
     ident' = identToLLVM ident
   in
     case ident of
       (ANF.Ident _ _ _ True) -> pure $ ConstantOperand $ C.GlobalReference (mkFunctionType ty) ident'
       _ -> fromMaybe (LocalReference (llvmType ty) ident') <$> lookupSymbol ident
+valOperand (ANF.Var var@(ANF.VCons _ )) = error $ "Can't valOperand on VCons yet " ++ show var
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
 
 literalConstant :: Literal -> C.Constant

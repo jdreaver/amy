@@ -35,10 +35,9 @@ data ANFConvertState
   = ANFConvertState
   { lastId :: Int
   , topLevelNames :: !(Set C.Ident)
-  , dataConstructorsToUnbox :: !(Map ANF.Ident ANF.TyConInfo)
+  , dataConstructorsToUnbox :: !(Map ANF.ConstructorName ANF.TyConInfo)
   , typeConstructorsToUnbox :: !(Map ANF.TyConInfo ANF.TyConInfo)
-  }
-  deriving (Show, Eq)
+  } deriving (Show, Eq)
 
 anfConvertState :: Int -> [C.Ident] -> [ANF.TypeDeclaration] -> ANFConvertState
 anfConvertState id' names typeDeclarations = ANFConvertState id' (fromList names) dataConUnboxMap tyConUnboxMap
@@ -70,7 +69,7 @@ freshIdent t = do
 isIdentTopLevel :: C.Ident -> ANFConvert Bool
 isIdentTopLevel ident = Set.member ident <$> gets topLevelNames
 
-unboxDataConstructor :: ANF.Ident -> ANFConvert Bool
+unboxDataConstructor :: ANF.ConstructorName -> ANFConvert Bool
 unboxDataConstructor ident = gets (isJust . Map.lookup ident . dataConstructorsToUnbox)
 
 unboxTyCon :: ANF.TyConInfo -> ANFConvert (Maybe ANF.TyConInfo)
