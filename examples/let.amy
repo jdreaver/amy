@@ -2,6 +2,8 @@ extern abs :: Int -> Int
 
 MyInt = MyInt Int
 
+Void = Void
+
 main :: Int
 main =
   let
@@ -19,8 +21,12 @@ main =
     b' =
       case b of
         MyInt b'' -> b''
+    v = Void
+    u =
+      case v of
+        Void -> b'
   in
-    let z = iAdd b' y; a = z in a
+    let z = iAdd u y; a = z in a
 
 # f :: Int -> Int
 f x = if True then abs x else threeHundred

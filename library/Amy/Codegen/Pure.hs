@@ -174,7 +174,6 @@ codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons (ANF.Typed _ consName)) args' _))
         _ -> error $ "Can't unbox App because there isn't exactly one argument " ++ show app
     CompileEnum i -> valOperand $ ANF.Lit (LiteralInt i)
     CompileTaggedPairs _ -> error $ "Can't compile tagged pairs yet " ++ show app
-
 codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   opName <- freshUnName
   argOps <- traverse valOperand args'
@@ -264,7 +263,12 @@ valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
       _ -> do
         ty' <- llvmType ty
         fromMaybe (LocalReference ty' ident') <$> lookupSymbol ident
-valOperand (ANF.Var var@(ANF.VCons _)) = error $ "Can't valOperand on VCons yet " ++ show var
+valOperand (ANF.Var var@(ANF.VCons (Typed _ consName))) = do
+  method <- findCompilationMethod consName <$> compilationMethods
+  case method of
+    CompileUnboxed _ -> error $ "Attempted to find operand for applied constructor " ++ show var
+    CompileEnum i -> valOperand $ ANF.Lit (LiteralInt i)
+    CompileTaggedPairs _ -> error $ "Can't compile tagged pairs yet " ++ show var
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
 
 primitiveFunctionInstruction

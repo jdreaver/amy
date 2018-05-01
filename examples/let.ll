@@ -47,7 +47,16 @@ case.default.9:                                   ; preds = %case.end.6
 
 case.end.9:                                       ; preds = %case.default.9
   %end.9 = phi i64 [ %end.6, %case.default.9 ]
-  %7 = add i64 %end.9, %end.0
+  switch i64 0, label %case.0.10 [
+    i64 0, label %case.0.10
+  ]
+
+case.0.10:                                        ; preds = %case.end.9, %case.end.9
+  br label %case.end.10
+
+case.end.10:                                      ; preds = %case.0.10
+  %end.10 = phi i64 [ %end.9, %case.0.10 ]
+  %7 = add i64 %end.10, %end.0
   ret i64 %7
 }
 
