@@ -37,10 +37,12 @@ codegenModule (ANF.Module bindings externs typeDeclarations) =
     topLevelTypes =
       ((\(ANF.Binding name' (ANF.Forall _ ty) _ _ _) -> (name', ty)) <$> bindings)
       ++ ((\(ANF.Extern name' ty) -> (name', ty)) <$> externs)
+    externs' = codegenExtern <$> externs
+    bindings' = runCodeGen topLevelTypes typeDeclarations $ traverse codegenTopLevelBinding bindings
   in
     defaultModule
     { moduleName = "amy-module"
-    , moduleDefinitions = (codegenExtern <$> externs) ++ (codegenTopLevelBinding topLevelTypes typeDeclarations <$> bindings)
+    , moduleDefinitions = externs' ++ bindings'
     }
 
 codegenExtern :: ANF.Extern -> Definition
@@ -57,14 +59,14 @@ codegenExtern extern =
     , LLVM.returnType = llvmType returnType'
     }
 
-codegenTopLevelBinding :: [(ANF.Ident, ANF.Type)] -> [ANF.TypeDeclaration] -> ANF.Binding -> Definition
-codegenTopLevelBinding topLevelTypes typeDeclarations binding =
+codegenTopLevelBinding :: ANF.Binding -> CodeGen Definition
+codegenTopLevelBinding binding = do
   let
     argToParam (ANF.Typed ty ident) = Parameter (llvmType ty) (identToLLVM ident) []
     params = argToParam <$> ANF.bindingArgs binding
     returnType' = llvmType $ ANF.bindingReturnType binding
-    blocks = codegenExpr topLevelTypes typeDeclarations $ ANF.bindingBody binding
-  in
+  blocks <- codegenExpr $ ANF.bindingBody binding
+  pure $
     GlobalDefinition
     functionDefaults
     { name = identToLLVM $ ANF.bindingName binding
@@ -82,8 +84,8 @@ argAndReturnTypes ty = (NE.init tyNE, NE.last tyNE)
  where
   tyNE = typeToNonEmpty ty
 
-codegenExpr :: [(ANF.Ident, ANF.Type)] -> [ANF.TypeDeclaration] -> ANF.Expr -> [BasicBlock]
-codegenExpr topLevelTypes typeDeclarations expr = runBlockGen topLevelTypes typeDeclarations $ codegenExpr' expr
+codegenExpr :: ANF.Expr -> CodeGen [BasicBlock]
+codegenExpr expr = runBlockGen $ codegenExpr' expr
 
 codegenExpr' :: ANF.Expr -> BlockGen Operand
 codegenExpr' (ANF.EVal val) = valOperand val

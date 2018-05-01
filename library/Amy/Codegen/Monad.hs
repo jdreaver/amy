@@ -1,8 +1,11 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Amy.Codegen.Monad
-  ( runBlockGen
+  ( runCodeGen
+  , CodeGen
+  , runBlockGen
   , BlockGen
   , addInstruction
   , terminateBlock
@@ -24,18 +27,30 @@ import LLVM.AST as LLVM
 import Amy.ANF.AST as ANF
 import Amy.Codegen.TypeConstructors
 
-newtype BlockGen a = BlockGen (ReaderT BlockGenRead (State BlockGenState) a)
-  deriving (Functor, Applicative, Monad, MonadReader BlockGenRead, MonadState BlockGenState)
+newtype CodeGen a = CodeGen (Reader CodeGenRead a)
+  deriving (Functor, Applicative, Monad, MonadReader CodeGenRead)
 
-runBlockGen :: [(ANF.Ident, ANF.Type)] -> [ANF.TypeDeclaration] -> BlockGen Operand -> [BasicBlock]
-runBlockGen topLevelTypes typeDeclarations (BlockGen action) =
+runCodeGen :: [(ANF.Ident, ANF.Type)] -> [ANF.TypeDeclaration] -> CodeGen a -> a
+runCodeGen topLevelTypes typeDeclarations (CodeGen action) =
   let
     typeMap = Map.fromList topLevelTypes
     compilationMethods' = Map.unions $ typeCompilationMethod <$> typeDeclarations
-    readState = BlockGenRead typeMap compilationMethods'
-    (operand, BlockGenState lastBlock blockStack _ _) = runState (runReaderT action readState) (blockGenState "entry")
-    blocks = reverse $ makeBasicBlock lastBlock (Do $ Ret (Just operand) []) : blockStack
-  in blocks
+    readState = CodeGenRead typeMap compilationMethods'
+  in runReader action readState
+
+data CodeGenRead
+  = CodeGenRead
+  { codeGenReadTopLevelTypes :: !(Map ANF.Ident ANF.Type)
+  , codeGenReadCompilationMethods :: !(Map ANF.ConstructorName TypeCompilationMethod)
+  }
+
+newtype BlockGen a = BlockGen (StateT BlockGenState CodeGen a)
+  deriving (Functor, Applicative, Monad, MonadReader CodeGenRead, MonadState BlockGenState)
+
+runBlockGen :: BlockGen Operand -> CodeGen [BasicBlock]
+runBlockGen (BlockGen action) = do
+  (operand, BlockGenState lastBlock blockStack _ _) <- runStateT action (blockGenState "entry")
+  pure $ reverse $ makeBasicBlock lastBlock (Do $ Ret (Just operand) []) : blockStack
 
 data BlockGenState
   = BlockGenState
@@ -44,12 +59,6 @@ data BlockGenState
   , blockGenStateSymbolTable :: !(Map ANF.Ident Operand)
   , blockGenStateLastId :: !Word
   } deriving (Show, Eq)
-
-data BlockGenRead
-  = BlockGenRead
-  { blockGenReadTopLevelTypes :: !(Map ANF.Ident ANF.Type)
-  , blockGenReadCompilationMethods :: !(Map ANF.ConstructorName TypeCompilationMethod)
-  }
 
 blockGenState :: LLVM.Name -> BlockGenState
 blockGenState name' = BlockGenState (partialBlock name') [] Map.empty 0
@@ -102,8 +111,8 @@ freshId = do
 freshUnName :: BlockGen LLVM.Name
 freshUnName = UnName <$> freshId
 
-topLevelType :: ANF.Ident -> BlockGen (Maybe ANF.Type)
-topLevelType ident = asks (Map.lookup ident . blockGenReadTopLevelTypes)
+topLevelType :: (MonadReader CodeGenRead m) => ANF.Ident -> m (Maybe ANF.Type)
+topLevelType ident = asks (Map.lookup ident . codeGenReadTopLevelTypes)
 
-compilationMethods :: BlockGen (Map ANF.ConstructorName TypeCompilationMethod)
-compilationMethods = asks blockGenReadCompilationMethods
+compilationMethods :: (MonadReader CodeGenRead m) => m (Map ANF.ConstructorName TypeCompilationMethod)
+compilationMethods = asks codeGenReadCompilationMethods
