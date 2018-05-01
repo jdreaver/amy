@@ -37,21 +37,23 @@ codegenModule (ANF.Module bindings externs typeDeclarations) =
     topLevelTypes =
       ((\(ANF.Binding name' (ANF.Forall _ ty) _ _ _) -> (name', ty)) <$> bindings)
       ++ ((\(ANF.Extern name' ty) -> (name', ty)) <$> externs)
-    externs' = codegenExtern <$> externs
-    bindings' = runCodeGen topLevelTypes typeDeclarations $ traverse codegenTopLevelBinding bindings
+    definitions = runCodeGen topLevelTypes typeDeclarations $ do
+      externs' <- traverse codegenExtern externs
+      bindings' <- traverse codegenTopLevelBinding bindings
+      pure $ externs' ++ bindings'
   in
     defaultModule
     { moduleName = "amy-module"
-    , moduleDefinitions = externs' ++ bindings'
+    , moduleDefinitions = definitions
     }
 
-codegenExtern :: ANF.Extern -> Definition
-codegenExtern extern =
+codegenExtern :: ANF.Extern -> CodeGen Definition
+codegenExtern extern = do
   let
     (paramTypes, returnType') = argAndReturnTypes (ANF.externType extern)
     params =
       (\ty -> Parameter (llvmType ty) (UnName 0) []) <$> paramTypes
-  in
+  pure $
     GlobalDefinition
     functionDefaults
     { name = identToLLVM $ ANF.externName extern
