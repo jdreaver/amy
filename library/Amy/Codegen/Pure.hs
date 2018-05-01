@@ -21,17 +21,18 @@ import LLVM.AST.AddrSpace
 import qualified LLVM.AST.CallingConvention as CC
 import qualified LLVM.AST.Constant as C
 import LLVM.AST.Float as F
-import qualified LLVM.AST.IntegerPredicate as IP
 import LLVM.AST.Global as LLVM
+import qualified LLVM.AST.IntegerPredicate as IP
 import qualified LLVM.AST.Linkage as L
 
 import Amy.ANF as ANF
+import Amy.Codegen.CaseBlocks
 import Amy.Codegen.Monad
 import Amy.Literal
 import Amy.Prim
 
 codegenModule :: ANF.Module -> LLVM.Module
-codegenModule (ANF.Module bindings externs _) =
+codegenModule (ANF.Module bindings externs typeDeclarations) =
   let
     topLevelTypes =
       ((\(ANF.Binding name' (ANF.Forall _ ty) _ _ _) -> (name', ty)) <$> bindings)
@@ -39,7 +40,7 @@ codegenModule (ANF.Module bindings externs _) =
   in
     defaultModule
     { moduleName = "amy-module"
-    , moduleDefinitions = (codegenExtern <$> externs) ++ (codegenTopLevelBinding topLevelTypes <$> bindings)
+    , moduleDefinitions = (codegenExtern <$> externs) ++ (codegenTopLevelBinding topLevelTypes typeDeclarations <$> bindings)
     }
 
 codegenExtern :: ANF.Extern -> Definition
@@ -56,13 +57,13 @@ codegenExtern extern =
     , LLVM.returnType = llvmType returnType'
     }
 
-codegenTopLevelBinding :: [(ANF.Ident, ANF.Type)] -> ANF.Binding -> Definition
-codegenTopLevelBinding topLevelTypes binding =
+codegenTopLevelBinding :: [(ANF.Ident, ANF.Type)] -> [ANF.TypeDeclaration] -> ANF.Binding -> Definition
+codegenTopLevelBinding topLevelTypes typeDeclarations binding =
   let
     argToParam (ANF.Typed ty ident) = Parameter (llvmType ty) (identToLLVM ident) []
     params = argToParam <$> ANF.bindingArgs binding
     returnType' = llvmType $ ANF.bindingReturnType binding
-    blocks = codegenExpr topLevelTypes $ ANF.bindingBody binding
+    blocks = codegenExpr topLevelTypes typeDeclarations $ ANF.bindingBody binding
   in
     GlobalDefinition
     functionDefaults
@@ -81,8 +82,8 @@ argAndReturnTypes ty = (NE.init tyNE, NE.last tyNE)
  where
   tyNE = typeToNonEmpty ty
 
-codegenExpr :: [(ANF.Ident, ANF.Type)] -> ANF.Expr -> [BasicBlock]
-codegenExpr topLevelTypes expr = runBlockGen topLevelTypes $ codegenExpr' expr
+codegenExpr :: [(ANF.Ident, ANF.Type)] -> [ANF.TypeDeclaration] -> ANF.Expr -> [BasicBlock]
+codegenExpr topLevelTypes typeDeclarations expr = runBlockGen topLevelTypes typeDeclarations $ codegenExpr' expr
 
 codegenExpr' :: ANF.Expr -> BlockGen Operand
 codegenExpr' (ANF.EVal val) = valOperand val
@@ -190,6 +191,31 @@ codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   addInstruction $ opName := primitiveFunctionInstruction prim argOps
   pure $ LocalReference (llvmType returnTy) opName
 
+--
+-- Case Blocks
+--
+
+-- codegenLiteralBlock :: Name -> Name -> CaseBlock LiteralPattern -> BlockGen (Operand, Name)
+-- codegenLiteralBlock nextBlockName endBlockName (CaseBlock expr _ (LiteralPattern _)) = do
+--   op <- codegenExpr' expr
+--   -- N.B. The block name could have changed while generating the
+--   -- expression, so we need to get the "actual" block name.
+--   block <- currentBlockName
+--   terminateBlock (Do $ Br endBlockName []) nextBlockName
+--   pure (op, block)
+
+-- codegenVarBlock :: Name -> Name -> Operand -> CaseBlock VarPattern -> BlockGen (Operand, Name)
+-- codegenVarBlock nextBlockName endBlockName scrutineeOp (CaseBlock expr _ (VarPattern var)) = do
+--   addSymbolToTable (typedValue var) scrutineeOp
+--   op <- codegenExpr' expr
+--   block <- currentBlockName
+--   terminateBlock (Do $ Br endBlockName []) nextBlockName
+--   pure (op, block)
+
+--
+-- Type Conversions
+--
+
 convertLLVMType :: Operand -> LLVM.Type -> BlockGen Operand
 convertLLVMType op targetTy
  | opType == targetTy = pure op
@@ -268,15 +294,8 @@ valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
     case ident of
       (ANF.Ident _ _ _ True) -> pure $ ConstantOperand $ C.GlobalReference (mkFunctionType ty) ident'
       _ -> fromMaybe (LocalReference (llvmType ty) ident') <$> lookupSymbol ident
-valOperand (ANF.Var var@(ANF.VCons _ )) = error $ "Can't valOperand on VCons yet " ++ show var
+valOperand (ANF.Var var@(ANF.VCons _)) = error $ "Can't valOperand on VCons yet " ++ show var
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
-
-literalConstant :: Literal -> C.Constant
-literalConstant lit =
-  case lit of
-    LiteralInt i -> C.Int 64 (fromIntegral i)
-    LiteralDouble x -> C.Float (F.Double x)
-    LiteralBool x -> C.Int 1 $ if x then 1 else 0
 
 primitiveFunctionInstruction
   :: PrimitiveFunctionName
