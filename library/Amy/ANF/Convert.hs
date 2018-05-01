@@ -165,9 +165,10 @@ normalizeMatch (C.Match pat body) = do
 convertPattern :: C.Pattern -> ANFConvert ANF.Pattern
 convertPattern (C.PatternLit lit) = pure $ ANF.PatternLit lit
 convertPattern (C.PatternVar var) = ANF.PatternVar <$> convertTypedIdent var
-convertPattern (C.PatternCons pat@(C.ConstructorPattern cons mArg _)) = do
-  (ANF.Typed _ consIdent) <- convertTypedIdent cons
+convertPattern (C.PatternCons pat@(C.ConstructorPattern cons mArg retTy)) = do
+  cons'@(ANF.Typed _ consIdent) <- convertTypedIdent cons
   mArg' <- traverse convertTypedIdent mArg
+  retTy' <- convertType retTy
   shouldUnbox <- unboxDataConstructor consIdent
   pure $
     if shouldUnbox
@@ -176,9 +177,7 @@ convertPattern (C.PatternCons pat@(C.ConstructorPattern cons mArg _)) = do
           Nothing -> error $ "Can't unbox pattern without argument " ++ show pat
           Just arg -> ANF.PatternVar arg
       else
-        error $ "Can't handle non-unboxed data constructor patterns yet " ++ show pat
-        -- retTy' <- convertType retTy
-        -- ANF.PatternCons $ ANF.ConstructorPattern cons' mArg' retTy'
+        ANF.PatternCons $ ANF.ConstructorPattern cons' mArg' retTy'
 
 -- | Helper for normalizing lists of things
 normalizeList :: (Monad m) => (a -> (b -> m c) -> m c) -> [a] -> ([b] -> m c) -> m c
