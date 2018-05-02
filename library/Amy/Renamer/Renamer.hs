@@ -4,7 +4,6 @@ module Amy.Renamer.Renamer
   ( rename
   ) where
 
-import Data.Foldable (traverse_)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
@@ -69,19 +68,21 @@ renameExtern extern = do
 renameBindingGroup :: [S.Binding] -> [S.BindingType] -> Renamer (Validation [Error] [R.Binding])
 renameBindingGroup bindings bindingTypes = do
   -- Add each binding name to scope since they can be mutually recursive
-  traverse_ addValueToScope (S.bindingName <$> bindings)
+  bindingNames <- traverse addValueToScope (S.bindingName <$> bindings)
+
   -- Rename each individual binding
-  bindings' <- traverse (renameBinding $ bindingTypesMap bindingTypes) bindings
+  bindings' <- traverse (uncurry $ renameBinding (bindingTypesMap bindingTypes)) (zip bindingNames bindings)
   pure $ sequenceA bindings'
 
 bindingTypesMap :: [BindingType] -> Map Text S.Scheme
 bindingTypesMap = Map.fromList . fmap (\(BindingType (Located _ name) ts) -> (name, ts))
 
-renameBinding :: Map Text S.Scheme -> S.Binding -> Renamer (Validation [Error] R.Binding)
-renameBinding typeMap binding = withNewScope $ do -- Begin new scope
-  -- N.B. Assumes the binding name was already added to scope in
-  -- renameBindingGroup
-  name <- lookupValueInScopeOrError (S.bindingName binding)
+renameBinding
+  :: Map Text S.Scheme
+  -> Validation [Error] (Located R.Ident)
+  -> S.Binding
+  -> Renamer (Validation [Error] R.Binding)
+renameBinding typeMap name binding = withNewScope $ do -- Begin new scope
   let
     name' =
       case name of
