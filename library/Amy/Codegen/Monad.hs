@@ -28,7 +28,7 @@ import Data.Maybe (fromMaybe)
 import LLVM.AST as LLVM
 
 import Amy.ANF.AST as ANF
-import Amy.Codegen.TypeConstructors
+import Amy.Codegen.TypeCompilation
 import Amy.Prim
 
 newtype CodeGen a = CodeGen (Reader CodeGenRead a)

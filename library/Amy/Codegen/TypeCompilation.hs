@@ -1,4 +1,4 @@
-module Amy.Codegen.TypeConstructors
+module Amy.Codegen.TypeCompilation
   ( TypeCompilationMethod(..)
   , typeCompilationMethod
   , findCompilationMethod

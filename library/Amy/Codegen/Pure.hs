@@ -28,7 +28,7 @@ import qualified LLVM.AST.Linkage as L
 import Amy.ANF as ANF
 import Amy.Codegen.CaseBlocks
 import Amy.Codegen.Monad
-import Amy.Codegen.TypeConstructors
+import Amy.Codegen.TypeCompilation
 import Amy.Codegen.TypeConversion
 import Amy.Literal
 import Amy.Prim

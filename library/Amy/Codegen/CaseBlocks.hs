@@ -19,7 +19,7 @@ import qualified LLVM.AST.Constant as C
 import LLVM.AST.Float as F
 
 import Amy.ANF.AST as ANF
-import Amy.Codegen.TypeConstructors
+import Amy.Codegen.TypeCompilation
 import Amy.Literal
 
 data CaseBlocks
