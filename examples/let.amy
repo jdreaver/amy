@@ -19,9 +19,9 @@ main =
     y :: Int
     y = x
     b =
-      case (iAdd x 2) of
+      case (iAdd# x 2) of
         1 -> g
-        o -> MyInt (iSub o 3)
+        o -> MyInt (iSub# o 3)
     b' =
       case b of
         MyInt b'' -> b''
@@ -35,7 +35,7 @@ main =
         MySumA -> 1
         MySumB -> 2
   in
-    let z = iAdd u y; a = iAdd t z in a
+    let z = iAdd# u y; a = iAdd# t z in a
 
 # f :: Int -> Int
 f x = if True then abs x else threeHundred

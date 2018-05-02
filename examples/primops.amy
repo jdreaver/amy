@@ -5,11 +5,10 @@ main =
     x = 2
   in f (f x)
 
-
 # f :: Int -> Int
 f x =
   let
     y :: Int
-    y = iAdd x (iSub 4 5)
+    y = iAdd# x (iSub# 4 5)
   in
-    if iLessThan 5 (iSub 3 y) then 100 else 200
+    if iLessThan# 5 (iSub# 3 y) then 100 else 200

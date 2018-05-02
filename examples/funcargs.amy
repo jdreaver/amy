@@ -7,4 +7,4 @@ apply :: (Int -> Int -> Int) -> Int
 apply f = f 1 2
 
 myAdd :: Int -> Int -> Int
-myAdd x y = iAdd x y
+myAdd x y = iAdd# x y

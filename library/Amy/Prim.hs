@@ -198,30 +198,30 @@ allPrimitiveFunctionNamesAndIds = zip [0..] allPrimitiveFunctionNames
 showPrimitiveFunctionName :: PrimitiveFunctionName -> Text
 showPrimitiveFunctionName name =
   case name of
-    PrimIAdd -> "iAdd"
-    PrimISub -> "iSub"
-    PrimIEquals -> "iEquals"
-    PrimIGreaterThan -> "iGreaterThan"
-    PrimILessThan -> "iLessThan"
-    PrimDAdd -> "dAdd"
-    PrimDSub -> "dSub"
-    PrimIntToDouble -> "intToDouble"
-    PrimDoubleToInt -> "doubleToInt"
+    PrimIAdd -> "iAdd#"
+    PrimISub -> "iSub#"
+    PrimIEquals -> "iEquals#"
+    PrimIGreaterThan -> "iGreaterThan#"
+    PrimILessThan -> "iLessThan#"
+    PrimDAdd -> "dAdd#"
+    PrimDSub -> "dSub#"
+    PrimIntToDouble -> "intToDouble#"
+    PrimDoubleToInt -> "doubleToInt#"
 
 readPrimitiveFunctionName :: Text -> Maybe PrimitiveFunctionName
 readPrimitiveFunctionName name =
   case name of
-    "iAdd" -> Just PrimIAdd
-    "iSub" -> Just PrimISub
-    "iEquals" -> Just PrimIEquals
-    "iGreaterThan" -> Just PrimIGreaterThan
-    "iLessThan" -> Just PrimILessThan
+    "iAdd#" -> Just PrimIAdd
+    "iSub#" -> Just PrimISub
+    "iEquals#" -> Just PrimIEquals
+    "iGreaterThan#" -> Just PrimIGreaterThan
+    "iLessThan#" -> Just PrimILessThan
 
-    "dAdd" -> Just PrimDAdd
-    "dSub" -> Just PrimDSub
+    "dAdd#" -> Just PrimDAdd
+    "dSub#" -> Just PrimDSub
 
-    "intToDouble" -> Just PrimIntToDouble
-    "doubleToInt" -> Just PrimDoubleToInt
+    "intToDouble#" -> Just PrimIntToDouble
+    "doubleToInt#" -> Just PrimDoubleToInt
 
     _ -> Nothing
 

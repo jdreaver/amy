@@ -86,7 +86,7 @@ symbol sym = L.symbol spaceConsumer sym <?> unpack sym
 identifier :: AmyParser (Located Text)
 identifier = try (p >>= traverse check)
  where
-  p = lexeme ((:) <$> lowerChar <*> many (alphaNumChar <|> char '\'')) <?> "identifier"
+  p = lexeme ((:) <$> lowerChar <*> many (alphaNumChar <|> oneOf ['\'', '#'])) <?> "identifier"
   check x =
     if x `elem` reservedWords
     then fail $ "keyword " ++ show x ++ " cannot be an identifier"

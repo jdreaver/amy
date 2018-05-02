@@ -1,5 +1,5 @@
 main :: Int
-main = doubleToInt (const (id 3.1) 5.1)
+main = doubleToInt# (const (id 3.1) 5.1)
 
 id :: forall a. a -> a
 id x = x
