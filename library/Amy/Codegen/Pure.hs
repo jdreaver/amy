@@ -30,7 +30,6 @@ import Amy.Codegen.CaseBlocks
 import Amy.Codegen.Monad
 import Amy.Codegen.TypeCompilation
 import Amy.Codegen.TypeConversion
-import Amy.Literal
 import Amy.Prim
 
 codegenModule :: ANF.Module -> LLVM.Module
@@ -171,8 +170,8 @@ codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons (ANF.Typed _ consName)) args' _))
       case args' of
         [arg] -> valOperand arg
         _ -> error $ "Can't unbox App because there isn't exactly one argument " ++ show app
-    CompileEnum i -> valOperand $ ANF.Lit (LiteralInt i)
-    CompileTaggedPairs _ -> error $ "Can't compile tagged pairs yet " ++ show app
+    CompileEnum i intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral i)
+    CompileTaggedPairs _ _ -> error $ "Can't compile tagged pairs yet " ++ show app
 codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   opName <- freshUnName
   argOps <- traverse valOperand args'
@@ -196,8 +195,8 @@ valOperand (ANF.Var var@(ANF.VCons (Typed _ consName))) = do
   method <- findCompilationMethod consName <$> compilationMethods
   case method of
     CompileUnboxed _ -> error $ "Attempted to find operand for applied constructor " ++ show var
-    CompileEnum i -> valOperand $ ANF.Lit (LiteralInt i)
-    CompileTaggedPairs _ -> error $ "Can't compile tagged pairs yet " ++ show var
+    CompileEnum i intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral i)
+    CompileTaggedPairs _ _ -> error $ "Can't compile tagged pairs yet " ++ show var
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
 
 primitiveFunctionInstruction

@@ -4,7 +4,7 @@ MyInt = MyInt Int
 
 Void = Void
 
-MySum = MySumA | MySumB
+MySum = MySumA | MySumB | MySumC
 
 EmptyType
 

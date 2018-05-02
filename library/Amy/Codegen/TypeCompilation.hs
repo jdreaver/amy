@@ -1,3 +1,5 @@
+{-# LANGUAGE MultiWayIf #-}
+
 module Amy.Codegen.TypeCompilation
   ( TypeCompilationMethod(..)
   , typeCompilationMethod
@@ -7,6 +9,7 @@ module Amy.Codegen.TypeCompilation
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe, isNothing)
+import GHC.Word (Word32)
 
 import Amy.ANF.AST as ANF
 import Amy.Prim
@@ -14,10 +17,12 @@ import Amy.Prim
 data TypeCompilationMethod
   = CompileUnboxed !TyConInfo
     -- ^ Unbox to the given type
-  | CompileEnum !Int
-    -- ^ Compile as an integer enum
-  | CompileTaggedPairs !Int
-    -- ^ Compile as a pair of integer tag and pointer to data
+  | CompileEnum !Int !Word32
+    -- ^ Compile as an integer enum. The 'Word32' is the size of the integer
+    -- type.
+  | CompileTaggedPairs !Int !Word32
+    -- ^ Compile as a pair of integer tag and pointer to data. The 'Word32' is
+    -- the size of the integer type.
   deriving (Show, Eq)
 
 -- | Decide how we are going to compile a type declaration.
@@ -36,7 +41,7 @@ typeCompilationMethod (ANF.TypeDeclaration tyName constructors) =
       if all (isNothing . dataConstructorArgument) constructors
       then
         let
-          mkMethod (ANF.DataConstructor conName _, i) = (conName, CompileEnum i)
+          mkMethod (ANF.DataConstructor conName _, i) = (conName, CompileEnum i wordSize)
         in
           ( Map.fromList $ mkMethod <$> zip constructors [0..]
           , (tyName, Just (fromPrimTyCon intTyCon))
@@ -44,11 +49,18 @@ typeCompilationMethod (ANF.TypeDeclaration tyName constructors) =
       -- Can't do an enum. We'll have to use tagged pairs.
       else
         let
-          mkMethod (ANF.DataConstructor conName _, i) = (conName, CompileTaggedPairs i)
+          mkMethod (ANF.DataConstructor conName _, i) = (conName, CompileTaggedPairs i wordSize)
         in
           ( Map.fromList $ mkMethod <$> zip constructors [0..]
           , (tyName, Nothing)
           )
+ where
+  -- Pick a proper integer size
+  wordSize :: Word32
+  wordSize =
+   if | length constructors <= 2 -> 1
+      | length constructors < (2 :: Int) ^ (8 :: Int) -> 8
+      | otherwise -> 32
 
 findCompilationMethod
   :: ConstructorName
