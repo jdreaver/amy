@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
 
 module Amy.Syntax.ParserSpec
   ( spec
@@ -11,7 +10,6 @@ import Data.Void (Void)
 import Test.Hspec
 import Test.Hspec.Megaparsec
 import Text.Megaparsec
-import Text.Shakespeare.Text (st)
 
 import Amy.Syntax.AST
 import Amy.Syntax.Monad
@@ -22,67 +20,6 @@ parse' parser = parse (runAmyParser parser) ""
 
 spec :: Spec
 spec = do
-
-  describe "parseModule" $ do
-    it "parses a small module" $ do
-      parse' parseModule sampleModule
-        `shouldParse`
-        Module
-        [ DeclBindingType
-          BindingType
-          { bindingTypeName = Located (SourceSpan "" 2 1 2 1) "f"
-          , bindingTypeScheme =
-            Forall [] $
-            TyCon (Located (SourceSpan "" 2 6 2 8) "Int")
-            `TyFun`
-            TyCon (Located (SourceSpan "" 2 13 2 18) "Double")
-          }
-        , DeclBinding
-          Binding
-          { bindingName = Located (SourceSpan "" 3 1 3 1) "f"
-          , bindingArgs = [Located (SourceSpan "" 3 3 3 3) "x"]
-          , bindingBody =
-            ELit (Located (SourceSpan "" 3 7 3 7) (LiteralInt 1))
-          }
-        , DeclBindingType
-          BindingType
-          { bindingTypeName = Located (SourceSpan "" 5 1 5 4) "main"
-          , bindingTypeScheme = Forall [] $ TyCon (Located (SourceSpan "" 5 9 5 11) "Int")
-          }
-        , DeclBinding
-          Binding
-          { bindingName = Located (SourceSpan "" 6 1 6 4) "main"
-          , bindingArgs = []
-          , bindingBody =
-            ELet
-              Let
-              { letBindings =
-                [ LetBindingType
-                  BindingType
-                  { bindingTypeName = Located (SourceSpan "" 8 5 8 5) "x"
-                  , bindingTypeScheme = Forall [] $ TyCon (Located (SourceSpan "" 8 10 8 12) "Int")
-                  }
-                , LetBinding
-                  Binding
-                  { bindingName = Located (SourceSpan "" 9 5 9 5) "x"
-                  , bindingArgs = []
-                  , bindingBody = ELit (Located (SourceSpan "" 9 9 9 9) (LiteralInt 1))
-                  }
-                ]
-              , letExpression =
-                EApp (
-                  App
-                  (EVar (VVal $ Located (SourceSpan "" 11 5 11 5) "f"))
-                  [ EVar (VVal $ Located (SourceSpan "" 11 7 11 7) "x")
-                  ]
-                )
-              }
-          }
-        ]
-
-    it "rejects indented top-level declarations" $ do
-      parse' parseModule "  f :: Int"
-        `shouldFailWith` FancyError [SourcePos "" (mkPos 1) (mkPos 3)] [ErrorIndentation EQ (mkPos 1) (mkPos 3)]
 
   describe "expression" $ do
     it "parses complex expressions" $ do
@@ -250,18 +187,3 @@ spec = do
       -- TODO: Trailing decimals?
       -- parse (literal <* eof) "" "2." `shouldParse` Located (SourceSpan "" 1 1 1 2) (LiteralInt 2)
       parse' literal "1.5" `shouldParse` Located (SourceSpan "" 1 1 1 3) (LiteralDouble 1.5)
-
-sampleModule :: Text
-sampleModule = [st|
-f :: Int -> Double
-f x = 1
-
-main :: Int
-main =
-  let
-    x :: Int
-    x = 1
-  in
-    f x
-
-|]
