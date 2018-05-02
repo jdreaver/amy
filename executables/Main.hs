@@ -7,7 +7,7 @@ import Control.Monad.IO.Class (liftIO)
 import Data.Bifunctor (first)
 import Data.List (intercalate)
 import Data.Text (Text, pack)
-import qualified Data.Text.IO as TIO
+import qualified Data.Text.IO as T
 import System.Console.Haskeline
 import System.Environment (getArgs)
 import System.Exit (die)
@@ -28,7 +28,7 @@ main = do
   case args of
     ["repl"] -> runInputT defaultSettings loop
     ["-"] -> getContents >>= process "<stdin>" . pack
-    [path] -> TIO.readFile path >>= process path
+    [path] -> T.readFile path >>= process path
     _ -> die "Usage: amy [file|repl|-]"
  where
   loop = do
