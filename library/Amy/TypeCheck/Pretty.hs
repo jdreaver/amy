@@ -51,7 +51,7 @@ prettyScheme' :: Ident -> Scheme -> Doc ann
 prettyScheme' ident scheme = prettyBindingScheme (prettyIdent ident) (mkPrettyScheme scheme)
 
 prettyIdent :: Ident -> Doc ann
-prettyIdent (Ident name _ _) = pretty name
+prettyIdent (Ident name _) = pretty name
 
 prettyConstructorName :: ConstructorName -> Doc ann
 prettyConstructorName (ConstructorName name _) = pretty name

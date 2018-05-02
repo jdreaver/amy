@@ -41,7 +41,7 @@ freshId = do
 freshIdent :: Text -> ANFConvert ANF.Ident
 freshIdent t = do
   id' <- freshId
-  pure $ ANF.Ident (t <> pack (show id')) id' Nothing False
+  pure $ ANF.Ident (t <> pack (show id')) id' False
 
 isIdentTopLevel :: C.Ident -> ANFConvert Bool
 isIdentTopLevel ident = Set.member ident <$> gets topLevelNames

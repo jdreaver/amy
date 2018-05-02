@@ -56,7 +56,7 @@ prettyTypedIdent :: Typed Ident -> Doc ann
 prettyTypedIdent (Typed ty ident) = parens $ prettyIdent ident <+> "::" <+> prettyType (mkPrettyType ty)
 
 prettyIdent :: Ident -> Doc ann
-prettyIdent (Ident name _ _) = pretty name
+prettyIdent (Ident name _) = pretty name
 
 prettyConstructorName :: ConstructorName -> Doc ann
 prettyConstructorName (ConstructorName name _) = pretty name

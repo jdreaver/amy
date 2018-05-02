@@ -76,7 +76,7 @@ desugarPattern (T.PatternCons (T.ConstructorPattern cons mArg retTy)) =
   in C.PatternCons (C.ConstructorPattern cons' mArg' retTy')
 
 desugarIdent :: T.Ident -> C.Ident
-desugarIdent (T.Ident name id' mPrim) = C.Ident name id' mPrim
+desugarIdent (T.Ident name id') = C.Ident name id'
 
 desugarConstructorName :: T.ConstructorName -> C.ConstructorName
 desugarConstructorName (T.ConstructorName name id') = C.ConstructorName name id'

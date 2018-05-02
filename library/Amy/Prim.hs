@@ -25,13 +25,10 @@ module Amy.Prim
   , trueDataCon
 
     -- * Functions
-  , PrimitiveFunction(..)
   , PrimitiveFunctionName(..)
-  , allPrimitiveFunctionNames
-  , allPrimitiveFunctionNamesAndIds
-  , showPrimitiveFunctionName
-  , readPrimitiveFunctionName
-  , primitiveFunction
+  , PrimitiveFunction(..)
+  , allPrimitiveFunctions
+  , primitiveFunctionsById
   ) where
 
 import Data.List.NonEmpty (NonEmpty)
@@ -166,12 +163,6 @@ allPrimDataCons = concatMap primTypeDefinitionDataConstructors allPrimTypeDefini
 -- Primitive Functions
 --
 
-data PrimitiveFunction
-  = PrimitiveFunction
-  { primitiveFunctionName :: !PrimitiveFunctionName
-  , primitiveFunctionType :: !(NonEmpty PrimTyCon)
-  } deriving (Show, Eq)
-
 data PrimitiveFunctionName
     -- Int
   = PrimIAdd
@@ -211,32 +202,31 @@ showPrimitiveFunctionName name =
     PrimIntToDouble -> "intToDouble#"
     PrimDoubleToInt -> "doubleToInt#"
 
-readPrimitiveFunctionName :: Text -> Maybe PrimitiveFunctionName
-readPrimitiveFunctionName name =
+primitiveFunctionType' :: PrimitiveFunctionName -> NonEmpty PrimTyCon
+primitiveFunctionType' name =
   case name of
-    "iAdd#" -> Just PrimIAdd
-    "iSub#" -> Just PrimISub
-    "iEquals#" -> Just PrimIEquals
-    "iGreaterThan#" -> Just PrimIGreaterThan
-    "iLessThan#" -> Just PrimILessThan
+    PrimIAdd -> [intTyCon, intTyCon, intTyCon]
+    PrimISub -> [intTyCon, intTyCon, intTyCon]
+    PrimIEquals -> [intTyCon, intTyCon, boolTyCon]
+    PrimIGreaterThan -> [intTyCon, intTyCon, boolTyCon]
+    PrimILessThan -> [intTyCon, intTyCon, boolTyCon]
+    PrimDAdd -> [doubleTyCon, doubleTyCon, doubleTyCon]
+    PrimDSub -> [doubleTyCon, doubleTyCon, doubleTyCon]
+    PrimIntToDouble -> [intTyCon, doubleTyCon]
+    PrimDoubleToInt -> [doubleTyCon, intTyCon]
 
-    "dAdd#" -> Just PrimDAdd
-    "dSub#" -> Just PrimDSub
+data PrimitiveFunction
+  = PrimitiveFunction
+  { primitiveFunctionName :: !PrimitiveFunctionName
+  , primitiveFunctionNameText :: !Text
+  , primitiveFunctionId :: !Int
+  , primitiveFunctionType :: !(NonEmpty PrimTyCon)
+  } deriving (Show, Eq)
 
-    "intToDouble#" -> Just PrimIntToDouble
-    "doubleToInt#" -> Just PrimDoubleToInt
+allPrimitiveFunctions :: [PrimitiveFunction]
+allPrimitiveFunctions =
+  (\(id', prim) -> PrimitiveFunction prim (showPrimitiveFunctionName prim) id' (primitiveFunctionType' prim))
+  <$> allPrimitiveFunctionNamesAndIds
 
-    _ -> Nothing
-
-primitiveFunction :: PrimitiveFunctionName -> PrimitiveFunction
-primitiveFunction name =
-  case name of
-    PrimIAdd -> PrimitiveFunction PrimIAdd [intTyCon, intTyCon, intTyCon]
-    PrimISub -> PrimitiveFunction PrimISub [intTyCon, intTyCon, intTyCon]
-    PrimIEquals -> PrimitiveFunction PrimIEquals [intTyCon, intTyCon, boolTyCon]
-    PrimIGreaterThan -> PrimitiveFunction PrimIGreaterThan [intTyCon, intTyCon, boolTyCon]
-    PrimILessThan -> PrimitiveFunction PrimILessThan [intTyCon, intTyCon, boolTyCon]
-    PrimDAdd -> PrimitiveFunction PrimDAdd [doubleTyCon, doubleTyCon, doubleTyCon]
-    PrimDSub -> PrimitiveFunction PrimDSub [doubleTyCon, doubleTyCon, doubleTyCon]
-    PrimIntToDouble -> PrimitiveFunction PrimIntToDouble [intTyCon, doubleTyCon]
-    PrimDoubleToInt -> PrimitiveFunction PrimDoubleToInt [doubleTyCon, intTyCon]
+primitiveFunctionsById :: Map Int PrimitiveFunction
+primitiveFunctionsById = Map.fromList $ (\prim -> (primitiveFunctionId prim, prim)) <$> allPrimitiveFunctions

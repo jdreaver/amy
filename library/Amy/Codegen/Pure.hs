@@ -257,7 +257,7 @@ valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
     ident' = identToLLVM ident
   in
     case ident of
-      (ANF.Ident _ _ _ True) -> do
+      (ANF.Ident _ _ True) -> do
         funcTy <- mkFunctionType ty
         pure $ ConstantOperand $ C.GlobalReference funcTy ident'
       _ -> do
@@ -272,10 +272,10 @@ valOperand (ANF.Var var@(ANF.VCons (Typed _ consName))) = do
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
 
 primitiveFunctionInstruction
-  :: PrimitiveFunctionName
+  :: PrimitiveFunction
   -> [Operand]
   -> Instruction
-primitiveFunctionInstruction primFuncName argumentOperands =
+primitiveFunctionInstruction (PrimitiveFunction primFuncName _ _ _) argumentOperands =
   let
     -- TODO: Better error checking here if number of operands doesn't match
     -- expected number. However, this should be type checked, so a simple panic
@@ -336,7 +336,7 @@ mkFunctionType ty = do
   ts = typeToNonEmpty ty
 
 identToLLVM :: ANF.Ident -> LLVM.Name
-identToLLVM (ANF.Ident name' _ _ _) = LLVM.Name $ textToShortBS name'
+identToLLVM (ANF.Ident name' _ _) = LLVM.Name $ textToShortBS name'
 
 -- | Convert from a amy primitive type to an LLVM type
 llvmPrimitiveType :: TyConInfo -> Maybe LLVM.Type

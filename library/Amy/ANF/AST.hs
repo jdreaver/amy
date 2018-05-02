@@ -87,7 +87,7 @@ data Expr
   | ELet !Let
   | ECase !Case
   | EApp !(App Var)
-  | EPrimOp !(App PrimitiveFunctionName)
+  | EPrimOp !(App PrimitiveFunction)
   deriving (Show, Eq)
 
 data Let
@@ -134,7 +134,6 @@ data Ident
   = Ident
   { identText :: !Text
   , identId :: !Int
-  , identPrimitiveName :: !(Maybe PrimitiveFunctionName)
   , identIsTopLevel :: !Bool
   } deriving (Show, Eq, Ord)
 

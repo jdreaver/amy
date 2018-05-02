@@ -5,12 +5,14 @@ module Amy.ANF.Convert
   ) where
 
 import Data.Foldable (toList)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 
 import Amy.ANF.AST as ANF
 import Amy.ANF.Monad
 import Amy.Core.AST as C
+import Amy.Prim
 
 normalizeModule :: C.Module -> ANF.Module
 normalizeModule module'@(C.Module bindings externs typeDeclarations) =
@@ -47,11 +49,11 @@ convertDataConstructor (C.DataConstructor conName mTyArg) =
   ANF.DataConstructor (convertConstructorName conName) (convertTyConInfo <$> mTyArg)
 
 convertIdent :: Bool -> C.Ident -> ANF.Ident
-convertIdent isTopLevel (C.Ident name id' mPrim) = ANF.Ident name id' mPrim isTopLevel
+convertIdent isTopLevel (C.Ident name id') = ANF.Ident name id' isTopLevel
 
 convertIdent' :: C.Ident -> ANFConvert ANF.Ident
-convertIdent' ident@(C.Ident name id' mPrim) =
-  ANF.Ident name id' mPrim <$> isIdentTopLevel ident
+convertIdent' ident@(C.Ident name id') =
+  ANF.Ident name id' <$> isIdentTopLevel ident
 
 convertConstructorName :: C.ConstructorName -> ANF.ConstructorName
 convertConstructorName (C.ConstructorName name id') = ANF.ConstructorName name id'
@@ -111,11 +113,11 @@ normalizeApp
 normalizeApp var argVals retTy c =
   case var of
     ANF.VVal (ANF.Typed _ ident) ->
-      case ident of
+      case Map.lookup (ANF.identId ident) primitiveFunctionsById of
         -- Primitive operation
-        ANF.Ident _ _ (Just prim) _ -> c $ ANF.EPrimOp $ ANF.App prim argVals retTy
+        Just prim -> c $ ANF.EPrimOp $ ANF.App prim argVals retTy
         -- Default, just a function call
-        _ -> c $ ANF.EApp $ ANF.App var argVals retTy
+        Nothing -> c $ ANF.EApp $ ANF.App var argVals retTy
     ANF.VCons _ ->
       -- Default, just a function call
       c $ ANF.EApp $ ANF.App var argVals retTy
@@ -131,7 +133,7 @@ normalizeName name (C.EVar var) c =
       ident' <- convertTypedIdent ident
       case ident' of
         -- Top-level values need to be first called as functions
-        (ANF.Typed ty@(ANF.TyCon _) (ANF.Ident _ _ _ True)) ->
+        (ANF.Typed ty@(ANF.TyCon _) (ANF.Ident _ _ True)) ->
           mkNormalizeLet name (ANF.EApp $ ANF.App (ANF.VVal ident') [] ty) ty c
         -- Not a top-level value, just return
         _ -> c $ ANF.Var (ANF.VVal ident')
@@ -150,7 +152,7 @@ mkNormalizeLet name expr exprType c = do
   pure $ ANF.ELet $ ANF.Let [ANF.Binding newIdent (ANF.Forall [] exprType) [] exprType expr] body
 
 normalizeBinding :: Maybe Text -> C.Binding -> ANFConvert ANF.Binding
-normalizeBinding mName (C.Binding ident@(C.Ident name _ _) scheme args retTy body) = do
+normalizeBinding mName (C.Binding ident@(C.Ident name _) scheme args retTy body) = do
   -- If we are given a base name, then use iC. Otherwise use the binding name
   -- as the base name for all sub expressions.
   let subName = fromMaybe name mName

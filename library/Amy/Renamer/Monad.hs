@@ -70,11 +70,11 @@ emptyRenamerState =
 primitiveFunctionNames :: Map Text Ident
 primitiveFunctionNames =
   Map.fromList $
-    (\(id', prim) ->
-       ( showPrimitiveFunctionName prim
-       , Ident (showPrimitiveFunctionName prim) id' (Just prim)
+    (\(PrimitiveFunction _ name id' _) ->
+       ( name
+       , Ident name id'
        ))
-    <$> allPrimitiveFunctionNamesAndIds
+    <$> allPrimitiveFunctions
 
 primitiveTypeNames :: Map Text TyConInfo
 primitiveTypeNames =
@@ -100,7 +100,7 @@ addValueToScope :: Located Text -> Renamer (Validation [Error] (Located Ident))
 addValueToScope lName@(Located span' name) = do
   nameId <- freshId
   let
-    ident = Ident name nameId Nothing
+    ident = Ident name nameId
   mExistingName <- lookupValueInScope name
   case mExistingName of
     Just existingName -> pure $ Failure [VariableShadowed lName existingName]

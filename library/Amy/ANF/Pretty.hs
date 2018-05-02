@@ -8,7 +8,7 @@ import Data.Foldable (toList)
 import Amy.ANF.AST
 import Amy.Literal
 import Amy.Pretty
-import Amy.Prim (showPrimitiveFunctionName)
+import Amy.Prim
 
 mkPrettyType :: Type -> PrettyType ann
 mkPrettyType (TyCon name) = PTyDoc $ prettyTyConInfo name
@@ -49,7 +49,7 @@ prettyBinding' (Binding ident scheme args _ body) =
   prettyBinding (prettyIdent ident) (prettyIdent . typedValue <$> args) (prettyExpr body)
 
 prettyIdent :: Ident -> Doc ann
-prettyIdent (Ident name _ _ _) = pretty name
+prettyIdent (Ident name _ _) = pretty name
 
 prettyConstructorName :: ConstructorName -> Doc ann
 prettyConstructorName (ConstructorName name _) = pretty name
@@ -71,8 +71,8 @@ prettyExpr (ECase (Case scrutinee matches _)) =
 prettyExpr (ELet (Let bindings body)) =
   prettyLet (prettyBinding' <$> bindings) (prettyExpr body)
 prettyExpr (EApp (App f args _)) = sep $ prettyVar f : (prettyVal <$> args)
-prettyExpr (EPrimOp (App f args _)) =
-  sep $ pretty (showPrimitiveFunctionName f) : (prettyVal <$> args)
+prettyExpr (EPrimOp (App (PrimitiveFunction _ name _ _) args _)) =
+  sep $ pretty name : (prettyVal <$> args)
 
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PatternLit lit) = pretty $ showLiteral lit

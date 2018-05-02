@@ -168,7 +168,7 @@ inferModule (R.Module bindings externs typeDeclarations) = do
     typeDeclarations' = convertTypeDeclaration <$> typeDeclarations
     dataConstructorSchemes =
       concatMap typeDeclarationSchemes (typeDeclarations' ++ primTypeDeclarations)
-    primFuncSchemes = primitiveFunctionScheme <$> allPrimitiveFunctionNamesAndIds
+    primFuncSchemes = primitiveFunctionScheme <$> allPrimitiveFunctions
     env =
       TyEnv
       { identTypes = Map.fromList $ externSchemes ++ primFuncSchemes
@@ -199,13 +199,11 @@ dataConstructorScheme tyName (T.DataConstructor conName mTyArg) = (conName, T.Fo
       Just tyArg -> T.TyCon tyArg `T.TyFun` T.TyCon tyName
       Nothing -> T.TyCon tyName
 
-primitiveFunctionScheme :: (Int, PrimitiveFunctionName) -> (T.Ident, T.Scheme)
-primitiveFunctionScheme (id', prim) =
-  (T.Ident (showPrimitiveFunctionName prim) id' (Just prim), mkPrimFunctionScheme prim)
-
-mkPrimFunctionScheme :: PrimitiveFunctionName -> T.Scheme
-mkPrimFunctionScheme prim =
-  T.Forall [] $ foldr1 T.TyFun $ T.TyCon . T.fromPrimTyCon <$> primitiveFunctionType (primitiveFunction prim)
+primitiveFunctionScheme :: PrimitiveFunction -> (T.Ident, T.Scheme)
+primitiveFunctionScheme (PrimitiveFunction _ name id' ty) =
+  ( T.Ident name id'
+  , T.Forall [] $ foldr1 T.TyFun $ T.TyCon . T.fromPrimTyCon <$> ty
+  )
 
 inferTopLevel :: TyEnv -> [R.Binding] -> Either Error [T.Binding]
 inferTopLevel env bindings = do
@@ -538,7 +536,7 @@ freeEnvTypeVariables (TyEnv identTys consTys) =
 --
 
 convertIdent :: R.Ident -> T.Ident
-convertIdent (R.Ident name id' mPrim) = T.Ident name id' mPrim
+convertIdent (R.Ident name id') = T.Ident name id'
 
 convertConstructorName :: R.ConstructorName -> T.ConstructorName
 convertConstructorName (R.ConstructorName name id') = T.ConstructorName name id'

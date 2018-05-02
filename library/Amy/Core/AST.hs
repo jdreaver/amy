@@ -184,7 +184,6 @@ data Ident
   = Ident
   { identText :: !Text
   , identId :: !Int
-  , identPrimitiveName :: !(Maybe PrimitiveFunctionName)
   } deriving (Show, Eq, Ord)
 
 data ConstructorName
