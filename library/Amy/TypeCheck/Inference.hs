@@ -87,13 +87,7 @@ freshTypeVariable :: Inference T.Type
 freshTypeVariable = do
   modify' (+ 1)
   id' <- get
-  pure $ T.TyVar (T.TyVarInfo (letters !! id') id' TyVarGenerated)
-
--- TODO: Don't use letters for type variables, just use integers. Then at the
--- end of inference we can turn all the type variables into letters so the user
--- gets nice letters to see.
-letters :: [Text]
-letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
+  pure $ T.TyVar (T.TyVarInfo ("t" <> pack (show id')) id' TyVarGenerated)
 
 -- | Extends the current typing environment with a list of names and schemes
 -- for those names.
@@ -145,6 +139,9 @@ normalize body = T.Forall (Map.elems letterMap) (normtype body)
     case Map.lookup a letterMap of
       Just x -> T.TyVar x
       Nothing -> error "type variable not in signature"
+
+letters :: [Text]
+letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
 
 normalizeTBinding :: T.Binding -> T.Binding
 normalizeTBinding binding =
