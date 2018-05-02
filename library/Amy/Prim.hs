@@ -91,8 +91,8 @@ primitiveDataConIds = Map.fromList . fmap swap $ allPrimitiveDataConsAndIds
 primitiveDataConId :: PrimitiveDataCon -> Int
 primitiveDataConId = (Map.!) primitiveDataConIds
 
-maxPrimId :: Int
-maxPrimId = maximum . fmap fst $ allPrimitiveDataConsAndIds
+maxPrimitiveDataConId :: Int
+maxPrimitiveDataConId = maximum . fmap fst $ allPrimitiveDataConsAndIds
 
 --
 -- Wired-in Type Definitions
@@ -193,7 +193,10 @@ allPrimitiveFunctionNames :: [PrimitiveFunctionName]
 allPrimitiveFunctionNames = [minBound..maxBound]
 
 allPrimitiveFunctionNamesAndIds :: [(Int, PrimitiveFunctionName)]
-allPrimitiveFunctionNamesAndIds = zip [0..] allPrimitiveFunctionNames
+allPrimitiveFunctionNamesAndIds = zip [maxPrimitiveDataConId + 1..] allPrimitiveFunctionNames
+
+maxPrimId :: Int
+maxPrimId = maximum . fmap fst $ allPrimitiveFunctionNamesAndIds
 
 showPrimitiveFunctionName :: PrimitiveFunctionName -> Text
 showPrimitiveFunctionName name =

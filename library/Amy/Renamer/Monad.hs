@@ -60,7 +60,7 @@ data RenamerState
 emptyRenamerState :: RenamerState
 emptyRenamerState =
   RenamerState
-  { renamerStateLastId = maximum (fst <$> allPrimitiveFunctionNamesAndIds) + 1
+  { renamerStateLastId = maxPrimId + 1
   , renamerStateValuesInScope = primitiveFunctionNames
   , renamerStateDataConstructorsInScope = primitiveDataConNames
   , renamerStateTypeConstructorsInScope = primitiveTypeNames
