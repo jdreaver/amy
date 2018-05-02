@@ -22,4 +22,4 @@ clean:
 examples/%.ll: examples/%.amy build
 	@echo "; Generated from $<" > $@
 	@echo "" >> $@
-	stack exec amy -- $< >> $@
+	stack exec amy -- compile $< >> $@

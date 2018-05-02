@@ -38,3 +38,4 @@ executables:
     dependencies:
       - amy
       - haskeline
+      - optparse-applicative
