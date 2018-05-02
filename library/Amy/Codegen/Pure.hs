@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -22,7 +21,6 @@ import LLVM.AST as LLVM
 import LLVM.AST.AddrSpace
 import qualified LLVM.AST.CallingConvention as CC
 import qualified LLVM.AST.Constant as C
-import LLVM.AST.Float as F
 import LLVM.AST.Global as LLVM
 import qualified LLVM.AST.IntegerPredicate as IP
 import qualified LLVM.AST.Linkage as L
@@ -31,6 +29,7 @@ import Amy.ANF as ANF
 import Amy.Codegen.CaseBlocks
 import Amy.Codegen.Monad
 import Amy.Codegen.TypeConstructors
+import Amy.Codegen.TypeConversion
 import Amy.Literal
 import Amy.Prim
 
@@ -180,76 +179,6 @@ codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   addInstruction $ opName := primitiveFunctionInstruction prim argOps
   returnTy' <- llvmType returnTy
   pure $ LocalReference returnTy' opName
-
-convertLLVMType :: Operand -> LLVM.Type -> BlockGen Operand
-convertLLVMType op targetTy
- | opType == targetTy = pure op
- | otherwise =
-     case (opType, targetTy) of
-       (IntegerType _, PointerType p _) -> convertIntToPointer p op
-       (PointerType _ _, IntegerType _) -> convertPointerToInt targetTy op
-       (FloatingPointType ft, PointerType p _) -> convertFloatToInt ft op >>= convertIntToPointer p
-       (PointerType _ _, FloatingPointType ft) -> convertPointerToInt (IntegerType 64) op >>= convertIntToFloat ft
-       (_, _) -> error $ "Failed to convertLLVMType " ++ show (opType, targetTy)
- where
-  opType = operandType op
-
-convertIntToPointer :: LLVM.Type -> Operand -> BlockGen Operand
-convertIntToPointer pointerType op = do
-  opName <- freshUnName
-  let ptrTy = PointerType pointerType (AddrSpace 0)
-  addInstruction $ opName := IntToPtr op ptrTy []
-  pure $ LocalReference ptrTy opName
-
-convertPointerToInt :: LLVM.Type -> Operand -> BlockGen Operand
-convertPointerToInt ty op = do
-  opName <- freshUnName
-  addInstruction $ opName := PtrToInt op ty []
-  pure $ LocalReference ty opName
-
-convertFloatToInt :: FloatingPointType -> Operand -> BlockGen Operand
-convertFloatToInt ft op = do
-  opName <- freshUnName
-  let ty = IntegerType (fromIntegral $ floatingPointBits ft)
-  addInstruction $ opName := FPToUI op ty []
-  pure $ LocalReference ty opName
-
-convertIntToFloat :: FloatingPointType -> Operand -> BlockGen Operand
-convertIntToFloat ft op = do
-  opName <- freshUnName
-  let ty = FloatingPointType ft
-  addInstruction $ opName := UIToFP op ty []
-  pure $ LocalReference ty opName
-
-operandType :: Operand -> LLVM.Type
-operandType (LocalReference ty _) = ty
-operandType (ConstantOperand c) =
-  case c of
-    C.GlobalReference ty _ -> ty
-    C.Int bits _ -> IntegerType bits
-    C.Float ft -> FloatingPointType (someFloatType ft)
-    _ -> error $ "Unknown type for operandType: " ++ show c
-operandType md@(MetadataOperand _) = error $ "Can't get operandType for MetadataOperand: " ++ show md
-
-someFloatType :: SomeFloat -> FloatingPointType
-someFloatType =
-  \case
-    Half _ -> HalfFP
-    Single _ -> FloatFP
-    Double _ -> DoubleFP
-    Quadruple _ _ -> FP128FP
-    X86_FP80 _ _ -> X86_FP80FP
-    PPC_FP128 _ _ -> PPC_FP128FP
-
-floatingPointBits :: FloatingPointType -> Int
-floatingPointBits =
-  \case
-    HalfFP -> 16
-    FloatFP -> 32
-    DoubleFP -> 64
-    FP128FP -> 128
-    X86_FP80FP -> 80
-    PPC_FP128FP -> 128
 
 valOperand :: ANF.Val -> BlockGen Operand
 valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
