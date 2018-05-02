@@ -131,7 +131,10 @@ normalize body = T.Forall (Map.elems letterMap) (normtype body)
  where
   -- TODO: Generated type variables should be explicitly marked as generated,
   -- not given fake IDs.
-  letterMap = Map.fromList $ zip (Set.toList $ freeTypeVariables body) ((\c -> T.TyVarInfo c (-1) TyVarNotGenerated) <$> letters)
+  letterMap =
+    Map.fromList
+    $ (\(var@(T.TyVarInfo _ id' _), letter) -> (var, T.TyVarInfo letter id' TyVarNotGenerated))
+    <$> zip (Set.toList $ freeTypeVariables body) letters
 
   normtype (T.TyFun a b) = T.TyFun (normtype a) (normtype b)
   normtype (T.TyCon a) = T.TyCon a
