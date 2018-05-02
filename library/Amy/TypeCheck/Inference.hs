@@ -126,11 +126,12 @@ generalize env t  = T.Forall as t
 -- | Produces a type scheme from a type by finding all the free type variables
 -- in the type, replacing them with sequential letters, and collecting the free
 -- type variables in the Forall quantifier.
-normalize :: T.Type -> T.Scheme
-normalize body = T.Forall (Map.elems letterMap) (normtype body)
+normalize :: T.Type -> (T.Scheme, Subst)
+normalize body =
+ ( T.Forall (Map.elems letterMap) (normtype body)
+ , Subst $ T.TyVar <$> letterMap
+ )
  where
-  -- TODO: Generated type variables should be explicitly marked as generated,
-  -- not given fake IDs.
   letterMap =
     Map.fromList
     $ (\(var@(T.TyVarInfo _ id' _), letter) -> (var, T.TyVarInfo letter id' TyVarNotGenerated))
@@ -145,11 +146,6 @@ normalize body = T.Forall (Map.elems letterMap) (normtype body)
 
 letters :: [Text]
 letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
-
-normalizeTBinding :: T.Binding -> T.Binding
-normalizeTBinding binding =
-  let (T.Forall _ t) = T.bindingType binding
-  in binding { T.bindingType = normalize t }
 
 -- | A 'Constraint' is a statement that two types should be equal.
 newtype Constraint = Constraint { unConstraint :: (T.Type, T.Type) }
@@ -209,7 +205,13 @@ inferTopLevel :: TyEnv -> [R.Binding] -> Either Error [T.Binding]
 inferTopLevel env bindings = do
   (bindings', constraints) <- unzip <$> runInference env (inferBindings bindings)
   subst <- runSolve (concat constraints)
-  pure $ normalizeTBinding . substituteTBinding subst <$> bindings'
+  pure $ flip fmap bindings' $ \binding ->
+    let
+      (T.Forall _ ty) = T.bindingType binding
+      (scheme', letterSubst) = normalize ty
+      binding' = binding { T.bindingType = scheme' }
+      subst' = composeSubst subst letterSubst
+    in substituteTBinding subst' binding'
 
 -- | Infer a group of bindings.
 --
