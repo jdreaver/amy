@@ -56,7 +56,7 @@ case.0.10:                                        ; preds = %case.end.9, %case.e
 
 case.end.10:                                      ; preds = %case.0.10
   %end.10 = phi i64 [ %end.9, %case.0.10 ]
-  %7 = call i8 @mySum()
+  %7 = call i8 @myEnum()
   switch i8 %7, label %case.0.12 [
     i8 0, label %case.0.12
     i8 1, label %case.1.12
@@ -100,7 +100,7 @@ entry:
   ret i64 1
 }
 
-define private i8 @mySum() {
+define private i8 @myEnum() {
 entry:
   ret i8 1
 }

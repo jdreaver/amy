@@ -4,7 +4,7 @@ MyInt = MyInt Int
 
 Void = Void
 
-MySum = MySumA | MySumB | MySumC
+MyEnum = MyEnumA | MyEnumB | MyEnumC
 
 EmptyType
 
@@ -29,11 +29,11 @@ main =
     u =
       case v of
         Void -> b'
-    s = mySum
+    s = myEnum
     t =
       case s of
-        MySumA -> 1
-        MySumB -> 2
+        MyEnumA -> 1
+        MyEnumB -> 2
   in
     let z = iAdd# u y; a = iAdd# t z in a
 
@@ -43,8 +43,8 @@ f x = if True then abs x else threeHundred
 g :: MyInt
 g = MyInt 1
 
-mySum :: MySum
-mySum = MySumB
+myEnum :: MyEnum
+myEnum = MyEnumB
 
 threeHundred :: Int
 threeHundred = 100
