@@ -9,8 +9,8 @@ module Main
 import Control.Monad (when)
 import Control.Monad.Except
 import Control.Monad.IO.Class (liftIO)
-import qualified Data.ByteString.Char8 as BS8
 import Data.Bifunctor (first)
+import qualified Data.ByteString.Char8 as BS8
 import Data.List (intercalate)
 import Data.Text (Text, pack)
 import qualified Data.Text.IO as T
