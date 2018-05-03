@@ -56,22 +56,23 @@ case.0.10:                                        ; preds = %case.end.9, %case.e
 
 case.end.10:                                      ; preds = %case.0.10
   %end.10 = phi i64 [ %end.9, %case.0.10 ]
-  switch i8 1, label %case.0.11 [
-    i8 0, label %case.0.11
-    i8 1, label %case.1.11
+  %7 = call i8 @mySum()
+  switch i8 %7, label %case.0.12 [
+    i8 0, label %case.0.12
+    i8 1, label %case.1.12
   ]
 
-case.0.11:                                        ; preds = %case.end.10, %case.end.10
-  br label %case.end.11
+case.0.12:                                        ; preds = %case.end.10, %case.end.10
+  br label %case.end.12
 
-case.1.11:                                        ; preds = %case.end.10
-  br label %case.end.11
+case.1.12:                                        ; preds = %case.end.10
+  br label %case.end.12
 
-case.end.11:                                      ; preds = %case.1.11, %case.0.11
-  %end.11 = phi i64 [ 1, %case.0.11 ], [ 2, %case.1.11 ]
-  %7 = add i64 %end.10, %end.0
-  %8 = add i64 %end.11, %7
-  ret i64 %8
+case.end.12:                                      ; preds = %case.1.12, %case.0.12
+  %end.12 = phi i64 [ 1, %case.0.12 ], [ 2, %case.1.12 ]
+  %8 = add i64 %end.10, %end.0
+  %9 = add i64 %end.12, %8
+  ret i64 %9
 }
 
 define private i64 @f(i64 %x) {
@@ -97,6 +98,11 @@ case.end.0:                                       ; preds = %case.1.0, %case.0.0
 define private i64 @g() {
 entry:
   ret i64 1
+}
+
+define private i8 @mySum() {
+entry:
+  ret i8 1
 }
 
 define private i64 @threeHundred() {

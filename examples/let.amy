@@ -29,7 +29,7 @@ main =
     u =
       case v of
         Void -> b'
-    s = MySumB
+    s = mySum
     t =
       case s of
         MySumA -> 1
@@ -42,6 +42,9 @@ f x = if True then abs x else threeHundred
 
 g :: MyInt
 g = MyInt 1
+
+mySum :: MySum
+mySum = MySumB
 
 threeHundred :: Int
 threeHundred = 100

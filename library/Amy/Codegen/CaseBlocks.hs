@@ -77,7 +77,7 @@ varPattern _ = Nothing
 
 caseBlocks
   :: (String -> Name)
-  -> Map ConstructorName TypeCompilationMethod
+  -> Map ConstructorName DataConRep
   -> Case
   -> CaseBlocks
 caseBlocks mkBlockName compilationMethods (Case _ matches ty) =
@@ -158,17 +158,17 @@ literalConstant lit =
     LiteralDouble x -> C.Float (F.Double x)
 
 constructorConstant
-  :: Map ConstructorName TypeCompilationMethod
+  :: Map ConstructorName DataConRep
   -> ConstructorName
   -> C.Constant
 constructorConstant compilationMethods consName =
   case findCompilationMethod consName compilationMethods of
     CompileUnboxed _ -> error $ "Cannot unbox, we have an enum! " ++ show consName
     CompileEnum i intBits -> C.Int intBits (fromIntegral i)
-    CompileTaggedPairs _ _ -> error $ "Cannot compile tagged pairs, we have an enum! " ++ show consName
+    CompileTaggedUnion _ _ -> error $ "Cannot compile tagged pairs, we have an enum! " ++ show consName
 
 constructorIdent
-  :: Map ConstructorName TypeCompilationMethod
+  :: Map ConstructorName DataConRep
   -> ConstructorName
   -> Ident
   -> Ident
@@ -176,4 +176,4 @@ constructorIdent compilationMethods consName ident =
   case findCompilationMethod consName compilationMethods of
     CompileUnboxed _ -> ident
     CompileEnum _ _ -> error $ "Cannot compile enum, we need an ident! " ++ show consName
-    CompileTaggedPairs _ _ -> error $ "Tagged pairs not implementet yet " ++ show consName
+    CompileTaggedUnion _ _ -> error $ "Tagged pairs not implementet yet " ++ show consName

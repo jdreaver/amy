@@ -17,7 +17,7 @@ module Amy.Codegen.Monad
   , freshUnName
   , topLevelType
   , compilationMethods
-  , isTyConUnboxed
+  , getTyConRep
   ) where
 
 import Control.Monad.Reader
@@ -39,18 +39,18 @@ runCodeGen topLevelTypes typeDeclarations (CodeGen action) =
   let
     typeMap = Map.fromList topLevelTypes
     allTypeDeclarations = typeDeclarations ++ (fromPrimTypeDefinition <$> allPrimTypeDefinitions)
-    (dataConCompilationMethods, tyConUnboxed) =
+    (dataConCompilationMethods, tyConReps) =
       unzip $ typeCompilationMethod <$> allTypeDeclarations
     dataConCompilationMethods' = Map.unions dataConCompilationMethods
-    tyConUnboxedMap = Map.fromList tyConUnboxed
-    readState = CodeGenRead typeMap dataConCompilationMethods' tyConUnboxedMap
+    tyConRepsMap = Map.fromList tyConReps
+    readState = CodeGenRead typeMap dataConCompilationMethods' tyConRepsMap
   in runReader action readState
 
 data CodeGenRead
   = CodeGenRead
   { codeGenReadTopLevelTypes :: !(Map Ident ANF.Type)
-  , codeGenReadDataConCompilationMethods :: !(Map ConstructorName TypeCompilationMethod)
-  , codeGenReadTyConUnboxed :: !(Map TyConInfo (Maybe TyConInfo))
+  , codeGenReadDataConReps :: !(Map ConstructorName DataConRep)
+  , codeGenReadTyConReps :: !(Map TyConInfo TyConRep)
   }
 
 newtype BlockGen a = BlockGen (StateT BlockGenState CodeGen a)
@@ -123,10 +123,10 @@ freshUnName = UnName <$> freshId
 topLevelType :: (MonadReader CodeGenRead m) => Ident -> m (Maybe ANF.Type)
 topLevelType ident = asks (Map.lookup ident . codeGenReadTopLevelTypes)
 
-compilationMethods :: (MonadReader CodeGenRead m) => m (Map ConstructorName TypeCompilationMethod)
-compilationMethods = asks codeGenReadDataConCompilationMethods
+compilationMethods :: (MonadReader CodeGenRead m) => m (Map ConstructorName DataConRep)
+compilationMethods = asks codeGenReadDataConReps
 
-isTyConUnboxed :: (MonadReader CodeGenRead m) => TyConInfo -> m (Maybe TyConInfo)
-isTyConUnboxed tyCon = asks (fromMaybe err . Map.lookup tyCon . codeGenReadTyConUnboxed)
+getTyConRep :: (MonadReader CodeGenRead m) => TyConInfo -> m TyConRep
+getTyConRep tyCon = asks (fromMaybe err . Map.lookup tyCon . codeGenReadTyConReps)
   where
-   err = error $ "Couldn't find unboxity of TyConInfo " ++ show tyCon
+   err = error $ "Couldn't find TyConRep of TyConInfo " ++ show tyCon

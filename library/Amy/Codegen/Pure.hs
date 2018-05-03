@@ -171,7 +171,7 @@ codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons (ANF.Typed _ consName)) args' _))
         [arg] -> valOperand arg
         _ -> error $ "Can't unbox App because there isn't exactly one argument " ++ show app
     CompileEnum i intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral i)
-    CompileTaggedPairs _ _ -> error $ "Can't compile tagged pairs yet " ++ show app
+    CompileTaggedUnion _ _ -> error $ "Can't compile tagged pairs yet " ++ show app
 codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   opName <- freshUnName
   argOps <- traverse valOperand args'
@@ -196,7 +196,7 @@ valOperand (ANF.Var var@(ANF.VCons (Typed _ consName))) = do
   case method of
     CompileUnboxed _ -> error $ "Attempted to find operand for applied constructor " ++ show var
     CompileEnum i intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral i)
-    CompileTaggedPairs _ _ -> error $ "Can't compile tagged pairs yet " ++ show var
+    CompileTaggedUnion _ _ -> error $ "Can't compile tagged pairs yet " ++ show var
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
 
 primitiveFunctionInstruction
@@ -240,10 +240,11 @@ llvmType ty = go (typeToNonEmpty ty)
         case llvmPrimitiveType tyName of
           Just prim -> pure prim
           Nothing -> do
-            unBoxedTy <- isTyConUnboxed tyName
-            case unBoxedTy >>= llvmPrimitiveType of
-              Just prim -> pure prim
-              Nothing -> error $ "Can't compile, expected some sort of unboxing " ++ show tyName
+            rep <- getTyConRep tyName
+            case rep of
+              TyConUnboxed prim -> pure prim
+              TyConEnum intBits -> pure $ IntegerType intBits
+              TyConTaggedUnion _ -> error $ "Can't represent TyCon tagged unions yet " ++ show (tyName, rep)
       ANF.TyVar _ -> pure $ PointerType (IntegerType 64) (AddrSpace 0)
       ANF.TyFun{} -> mkFunctionType ty
   go _ = mkFunctionType ty
@@ -265,16 +266,6 @@ mkFunctionType ty = do
 
 identToLLVM :: ANF.Ident -> LLVM.Name
 identToLLVM (ANF.Ident name' _ _) = LLVM.Name $ textToShortBS name'
-
--- | Convert from a amy primitive type to an LLVM type
-llvmPrimitiveType :: TyConInfo -> Maybe LLVM.Type
-llvmPrimitiveType tyCon
-  | tyCon == intTyCon' = Just (IntegerType 64)
-  | tyCon == doubleTyCon' = Just (FloatingPointType DoubleFP)
-  | otherwise = Nothing
- where
-  intTyCon' = fromPrimTyCon intTyCon
-  doubleTyCon' = fromPrimTyCon doubleTyCon
 
 textToShortBS :: Text -> ShortByteString
 textToShortBS = BSS.toShort . encodeUtf8
