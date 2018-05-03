@@ -176,4 +176,4 @@ constructorIdent compilationMethods consName ident =
   case findCompilationMethod consName compilationMethods of
     CompileUnboxed _ -> ident
     CompileEnum _ _ -> error $ "Cannot compile enum, we need an ident! " ++ show consName
-    CompileTaggedUnion _ _ _ -> error $ "Tagged pairs not implementet yet " ++ show consName
+    CompileTaggedUnion _ _ _ -> error $ "Tagged pairs not implemented yet " ++ show consName
