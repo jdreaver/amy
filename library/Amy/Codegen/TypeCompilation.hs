@@ -15,6 +15,7 @@ import GHC.Word (Word32)
 import LLVM.AST as LLVM
 
 import Amy.ANF.AST as ANF
+import Amy.Codegen.Utils
 import Amy.Prim
 
 -- | Describes how a type constructor is represented in LLVM.
@@ -23,7 +24,7 @@ data TyConRep
     -- ^ Represent a TyCon as an LLVM primitive Type like an int or double
   | TyConEnum !Word32
     -- ^ Compile as an int type with 'Word32' bits.
-  | TyConTaggedUnion !Word32
+  | TyConTaggedUnion !Name !Word32
     -- ^ Represent as a struct with a 'Word32'-sized integer tag and an integer
     -- pointer to data.
   deriving (Show, Eq)
@@ -36,7 +37,7 @@ data DataConRep
   | CompileEnum !Int !Word32
     -- ^ Compile as an integer enum. The 'Word32' is the size of the integer
     -- type.
-  | CompileTaggedUnion !Int !Word32
+  | CompileTaggedUnion !Name !Int !Word32
     -- ^ Compile as a pair of integer tag and pointer to data. The 'Word32' is
     -- the size of the integer type.
   deriving (Show, Eq)
@@ -71,10 +72,11 @@ typeCompilationMethod decl@(ANF.TypeDeclaration tyName constructors) =
       -- Can't do an enum. We'll have to use tagged pairs.
       else
         let
-          mkMethod (ANF.DataConstructor conName _, i) = (conName, CompileTaggedUnion i wordSize)
+          structName = textToName (tyConInfoText tyName)
+          mkMethod (ANF.DataConstructor conName _, i) = (conName, CompileTaggedUnion structName i wordSize)
         in
           ( Map.fromList $ mkMethod <$> zip constructors [0..]
-          , (tyName, TyConTaggedUnion wordSize)
+          , (tyName, TyConTaggedUnion structName wordSize)
           )
  where
   -- Pick a proper integer size

@@ -7,15 +7,10 @@ module Amy.Codegen.Pure
   ) where
 
 import Control.Monad.Reader
-import qualified Data.ByteString.Char8 as BS8
-import Data.ByteString.Short (ShortByteString)
-import qualified Data.ByteString.Short as BSS
 import Data.Foldable (for_)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromMaybe)
-import Data.Text (Text)
-import Data.Text.Encoding (encodeUtf8)
+import Data.Maybe (catMaybes, fromMaybe)
 import Data.Traversable (for)
 import LLVM.AST as LLVM
 import LLVM.AST.AddrSpace
@@ -30,6 +25,7 @@ import Amy.Codegen.CaseBlocks
 import Amy.Codegen.Monad
 import Amy.Codegen.TypeCompilation
 import Amy.Codegen.TypeConversion
+import Amy.Codegen.Utils
 import Amy.Prim
 
 codegenModule :: ANF.Module -> LLVM.Module
@@ -40,8 +36,9 @@ codegenModule (ANF.Module bindings externs typeDeclarations) =
       ++ ((\(ANF.Extern name' ty) -> (name', ty)) <$> externs)
     definitions = runCodeGen topLevelTypes typeDeclarations $ do
       externs' <- traverse codegenExtern externs
+      typeDefs <- catMaybes <$> traverse codegenTypeDeclaration typeDeclarations
       bindings' <- traverse codegenTopLevelBinding bindings
-      pure $ externs' ++ bindings'
+      pure $ externs' ++ typeDefs ++ bindings'
   in
     defaultModule
     { moduleName = "amy-module"
@@ -60,24 +57,43 @@ codegenExtern extern = do
   pure $
     GlobalDefinition
     functionDefaults
-    { name = identToLLVM $ ANF.externName extern
+    { name = identToName $ ANF.externName extern
     , parameters = (params, False)
     , LLVM.returnType = retTy
     }
+
+codegenTypeDeclaration :: ANF.TypeDeclaration -> CodeGen (Maybe Definition)
+codegenTypeDeclaration (ANF.TypeDeclaration tyCon _) = do
+  tyConRep <- getTyConRep tyCon
+  pure $
+    case tyConRep of
+      TyConUnboxed _ -> Nothing
+      TyConEnum _ -> Nothing
+      TyConTaggedUnion name' intBits ->
+        Just $
+          TypeDefinition
+          name'
+          (Just $
+            StructureType
+            False
+            [ IntegerType intBits
+            , PointerType (IntegerType 64) (AddrSpace 0)
+            ]
+          )
 
 codegenTopLevelBinding :: ANF.Binding -> CodeGen Definition
 codegenTopLevelBinding binding = do
   let
     argToParam (ANF.Typed ty ident) = do
       ty' <- llvmType ty
-      pure $ Parameter ty' (identToLLVM ident) []
+      pure $ Parameter ty' (identToName ident) []
   params <- traverse argToParam (ANF.bindingArgs binding)
   returnType' <- llvmType $ ANF.bindingReturnType binding
   blocks <- codegenExpr $ ANF.bindingBody binding
   pure $
     GlobalDefinition
     functionDefaults
-    { name = identToLLVM $ ANF.bindingName binding
+    { name = identToName $ ANF.bindingName binding
     , parameters = (params, False)
     , LLVM.returnType = returnType'
     , basicBlocks = blocks
@@ -109,7 +125,7 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee _ _)) = do
   -- match and converting match patterns to literals.
   compilationMethods' <- compilationMethods
   let
-    mkCaseName nameBase = LLVM.Name $ stringToShortBS $ nameBase ++ show caseId
+    mkCaseName nameBase = stringToName $ nameBase ++ show caseId
     (CaseBlocks switchDefaultBlockName mDefaultBlock literalBlocks endBlock) = caseBlocks mkCaseName compilationMethods' case'
     (CaseEndBlock endBlockName endOpName endType) = endBlock
 
@@ -171,7 +187,7 @@ codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons (ANF.Typed _ consName)) args' _))
         [arg] -> valOperand arg
         _ -> error $ "Can't unbox App because there isn't exactly one argument " ++ show app
     CompileEnum i intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral i)
-    CompileTaggedUnion _ _ -> error $ "Can't compile tagged pairs yet " ++ show app
+    CompileTaggedUnion _ _ _ -> error $ "Can't compile tagged pairs yet " ++ show app
 codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   opName <- freshUnName
   argOps <- traverse valOperand args'
@@ -182,7 +198,7 @@ codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
 valOperand :: ANF.Val -> BlockGen Operand
 valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
   let
-    ident' = identToLLVM ident
+    ident' = identToName ident
   in
     case ident of
       (ANF.Ident _ _ True) -> do
@@ -196,7 +212,7 @@ valOperand (ANF.Var var@(ANF.VCons (Typed _ consName))) = do
   case method of
     CompileUnboxed _ -> error $ "Attempted to find operand for applied constructor " ++ show var
     CompileEnum i intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral i)
-    CompileTaggedUnion _ _ -> error $ "Can't compile tagged pairs yet " ++ show var
+    CompileTaggedUnion _ _ _ -> error $ "Can't compile tagged pairs yet " ++ show var
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
 
 primitiveFunctionInstruction
@@ -244,7 +260,7 @@ llvmType ty = go (typeToNonEmpty ty)
             case rep of
               TyConUnboxed prim -> pure prim
               TyConEnum intBits -> pure $ IntegerType intBits
-              TyConTaggedUnion _ -> error $ "Can't represent TyCon tagged unions yet " ++ show (tyName, rep)
+              TyConTaggedUnion _ _ -> error $ "Can't represent TyCon tagged unions yet " ++ show (tyName, rep)
       ANF.TyVar _ -> pure $ PointerType (IntegerType 64) (AddrSpace 0)
       ANF.TyFun{} -> mkFunctionType ty
   go _ = mkFunctionType ty
@@ -263,12 +279,3 @@ mkFunctionType ty = do
     (AddrSpace 0)
  where
   ts = typeToNonEmpty ty
-
-identToLLVM :: ANF.Ident -> LLVM.Name
-identToLLVM (ANF.Ident name' _ _) = LLVM.Name $ textToShortBS name'
-
-textToShortBS :: Text -> ShortByteString
-textToShortBS = BSS.toShort . encodeUtf8
-
-stringToShortBS :: String -> ShortByteString
-stringToShortBS = BSS.toShort . BS8.pack

@@ -165,7 +165,7 @@ constructorConstant compilationMethods consName =
   case findCompilationMethod consName compilationMethods of
     CompileUnboxed _ -> error $ "Cannot unbox, we have an enum! " ++ show consName
     CompileEnum i intBits -> C.Int intBits (fromIntegral i)
-    CompileTaggedUnion _ _ -> error $ "Cannot compile tagged pairs, we have an enum! " ++ show consName
+    CompileTaggedUnion _ _ _ -> error $ "Cannot compile tagged pairs, we have an enum! " ++ show consName
 
 constructorIdent
   :: Map ConstructorName DataConRep
@@ -176,4 +176,4 @@ constructorIdent compilationMethods consName ident =
   case findCompilationMethod consName compilationMethods of
     CompileUnboxed _ -> ident
     CompileEnum _ _ -> error $ "Cannot compile enum, we need an ident! " ++ show consName
-    CompileTaggedUnion _ _ -> error $ "Tagged pairs not implementet yet " ++ show consName
+    CompileTaggedUnion _ _ _ -> error $ "Tagged pairs not implementet yet " ++ show consName
