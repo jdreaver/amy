@@ -59,6 +59,9 @@ data LiteralPattern
   -- Not implemented yet: ConsLiteralPattern !(Typed ConstructorName, Literal)
   deriving (Show, Eq)
 
+-- TODO: Once we have proper case-in-case desugaring, refactor this logic to
+-- remove all the special cases for constructors.
+
 literalPattern :: Pattern -> Maybe LiteralPattern
 literalPattern (PatternLit lit) = Just $ LitLiteralPattern lit
 literalPattern (PatternCons (ConstructorPattern consName Nothing _)) = Just $ ConsEnumPattern consName
