@@ -81,4 +81,8 @@ prettyPattern :: Pattern -> Doc ann
 prettyPattern (PatternLit lit) = pretty $ showLiteral lit
 prettyPattern (PatternVar (Typed _ var)) = prettyIdent var
 prettyPattern (PatternCons (ConstructorPattern (Typed _ var) mArg _)) =
-  prettyConstructorName var <> maybe mempty (\arg -> space <> prettyTypedIdent arg) mArg
+  prettyConstructorName var <> maybe mempty prettyArg mArg
+ where
+  prettyArg = (space <>) . prettyArg'
+  prettyArg' arg@PatternCons{} = parens (prettyPattern arg)
+  prettyArg' arg = prettyPattern arg

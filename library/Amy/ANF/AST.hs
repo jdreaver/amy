@@ -118,7 +118,7 @@ data Pattern
 data ConstructorPattern
   = ConstructorPattern
   { constructorPatternConstructor :: !(Typed ConstructorName)
-  , constructorPatternArg :: !(Maybe (Typed Ident))
+  , constructorPatternArg :: !(Maybe Pattern)
   , constructorPatternReturnType :: !Type
   } deriving (Show, Eq)
 

@@ -77,5 +77,10 @@ prettyVar (VCons (Typed _ var)) = prettyConstructorName var
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PatternLit lit) = pretty $ showLiteral lit
 prettyPattern (PatternVar (Typed _ var)) = prettyIdent var
+prettyPattern (PatternParens pat) = parens (prettyPattern pat)
 prettyPattern (PatternCons (ConstructorPattern (Typed _ var) mArg _)) =
-  prettyConstructorName var <> maybe mempty (\(Typed _ arg) -> space <> prettyIdent arg) mArg
+  prettyConstructorName var <> maybe mempty prettyArg mArg
+ where
+  prettyArg = (space <>) . prettyArg'
+  prettyArg' arg@PatternCons{} = parens (prettyPattern arg)
+  prettyArg' arg = prettyPattern arg

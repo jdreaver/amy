@@ -376,15 +376,15 @@ inferPattern (R.PatternCons (R.ConstructorPattern (Located _ cons) mArg)) = do
   consTy <- lookupEnvConstructorM cons'
   let typedCons = T.Typed consTy cons'
   case mArg of
-    -- Convert argument and add a constraint saying the argument
-    Just (Located _ arg) -> do
-      let arg' = convertIdent arg
-      argTy <- freshTypeVariable
+    -- Convert argument and add a constraint on argument plus constructor
+    Just arg -> do
+      (arg', argCons) <- inferPattern arg
+      let argTy = patternType arg'
       retTy <- freshTypeVariable
       let constraint = Constraint (argTy `T.TyFun` retTy, consTy)
       pure
-        ( T.PatternCons $ T.ConstructorPattern typedCons (Just $ T.Typed argTy arg') retTy
-        , [constraint]
+        ( T.PatternCons $ T.ConstructorPattern typedCons (Just arg') retTy
+        , argCons ++ [constraint]
         )
     -- No argument. The return type is just the data constructor type.
     Nothing ->
@@ -392,12 +392,18 @@ inferPattern (R.PatternCons (R.ConstructorPattern (Located _ cons) mArg)) = do
         ( T.PatternCons $ T.ConstructorPattern typedCons Nothing consTy
         , []
         )
+inferPattern (R.PatternParens pat) = do
+  (pat', patCons) <- inferPattern pat
+  pure
+    ( T.PatternParens pat'
+    , patCons
+    )
 
 patternScheme :: T.Pattern -> [(T.Ident, T.Scheme)]
 patternScheme (T.PatternLit _) = []
 patternScheme (T.PatternVar (T.Typed ty ident)) = [(ident, T.Forall [] ty)]
-patternScheme (T.PatternCons (T.ConstructorPattern _ mArg _)) =
-  maybe [] (\(Typed ty arg) -> [(arg, T.Forall [] ty)]) mArg
+patternScheme (T.PatternCons (T.ConstructorPattern _ mArg _)) = maybe [] patternScheme mArg
+patternScheme (T.PatternParens pat) = patternScheme pat
 
 --
 -- Constraint Solver
@@ -513,9 +519,10 @@ substituteTPattern subst (T.PatternVar var) = T.PatternVar $ substituteTyped sub
 substituteTPattern subst (T.PatternCons (T.ConstructorPattern cons mArg retTy)) =
   let
     cons' = substituteTyped subst cons
-    mArg' = substituteTyped subst <$> mArg
+    mArg' = substituteTPattern subst <$> mArg
     retTy' = substituteType subst retTy
   in T.PatternCons (T.ConstructorPattern cons' mArg' retTy')
+substituteTPattern subst (T.PatternParens pat) = T.PatternParens (substituteTPattern subst pat)
 
 --
 -- Free and Active type variables

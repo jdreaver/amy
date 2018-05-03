@@ -125,12 +125,13 @@ data Pattern
   = PatternLit !Literal
   | PatternVar !(Typed Ident)
   | PatternCons !ConstructorPattern
+  | PatternParens !Pattern
   deriving (Show, Eq)
 
 data ConstructorPattern
   = ConstructorPattern
   { constructorPatternConstructor :: !(Typed ConstructorName)
-  , constructorPatternArg :: !(Maybe (Typed Ident))
+  , constructorPatternArg :: !(Maybe Pattern)
   , constructorPatternReturnType :: !Type
   } deriving (Show, Eq)
 
@@ -166,6 +167,7 @@ patternType :: Pattern -> Type
 patternType (PatternLit lit) = literalType' lit
 patternType (PatternVar (Typed ty _)) = ty
 patternType (PatternCons (ConstructorPattern _ _ retTy)) = retTy
+patternType (PatternParens pat) = patternType pat
 
 data Ident
   = Ident

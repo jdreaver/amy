@@ -72,7 +72,11 @@ data VarPattern
 
 varPattern :: Pattern -> Maybe VarPattern
 varPattern (PatternVar (Typed _ ident)) = Just $ VarVarPattern ident
-varPattern (PatternCons (ConstructorPattern (Typed _ consName) (Just (Typed _ arg)) _)) = Just $ ConsVarPattern consName arg
+varPattern pat@(PatternCons (ConstructorPattern (Typed _ consName) (Just arg) _)) =
+  case varPattern arg of
+    Just (VarVarPattern ident) -> Just $ ConsVarPattern consName ident
+    Just (ConsVarPattern _ _) -> error $ "Can't handle nested constructor patterns yet, need case-in-case desugar " ++ show pat
+    _ -> Nothing
 varPattern _ = Nothing
 
 caseBlocks
@@ -87,6 +91,9 @@ caseBlocks mkBlockName compilationMethods (Case _ matches ty) =
     blockPattern maybePat (Match pat expr) = (expr,) <$> maybePat pat
     literalPatterns = mapMaybe (blockPattern literalPattern) (toList matches)
     varPatterns = mapMaybe (blockPattern varPattern) (toList matches)
+
+    -- TODO: Ensure that no patterns fell through the cracks. The length of the
+    -- literal plus var patterns should equal the langth of all the matches.
 
     -- Compute names for everything
     defaultBlockName = mkBlockName "case.default."

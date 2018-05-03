@@ -71,9 +71,10 @@ desugarPattern (T.PatternVar var) = C.PatternVar (desugarTypedIdent var)
 desugarPattern (T.PatternCons (T.ConstructorPattern cons mArg retTy)) =
   let
     cons' = desugarTypedConstructorName cons
-    mArg' = desugarTypedIdent <$> mArg
+    mArg' = desugarPattern <$> mArg
     retTy' = desugarType retTy
   in C.PatternCons (C.ConstructorPattern cons' mArg' retTy')
+desugarPattern (T.PatternParens pat) = desugarPattern pat
 
 desugarIdent :: T.Ident -> C.Ident
 desugarIdent (T.Ident name id') = C.Ident name id'

@@ -141,12 +141,13 @@ data Pattern
   = PatternLit !(Located Literal)
   | PatternVar !(Located Text)
   | PatternCons !ConstructorPattern
+  | PatternParens !Pattern
   deriving (Show, Eq)
 
 data ConstructorPattern
   = ConstructorPattern
   { constructorPatternConstructor :: !(Located Text)
-  , constructorPatternArg :: !(Maybe (Located Text))
+  , constructorPatternArg :: !(Maybe Pattern)
   } deriving (Show, Eq)
 
 data Let

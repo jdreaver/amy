@@ -203,11 +203,12 @@ parsePattern =
   try (PatternLit <$> literal <?> "pattern literal")
   <|> (PatternVar <$> identifier <?> "pattern variable")
   <|> (PatternCons <$> constructorPattern <?> "pattern constructor")
+  <|> (PatternParens <$> parens parsePattern <?> "parentheses")
 
 constructorPattern :: AmyParser ConstructorPattern
 constructorPattern = do
   constructor <- dataConstructorName'
-  mArg <- optional identifier
+  mArg <- optional parsePattern
   pure
     ConstructorPattern
     { constructorPatternConstructor = constructor

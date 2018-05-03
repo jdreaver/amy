@@ -174,7 +174,7 @@ convertPattern (C.PatternLit lit) = pure $ ANF.PatternLit lit
 convertPattern (C.PatternVar var) = ANF.PatternVar <$> convertTypedIdent var
 convertPattern (C.PatternCons (C.ConstructorPattern cons mArg retTy)) = do
   cons' <- convertTypedConstructorName cons
-  mArg' <- traverse convertTypedIdent mArg
+  mArg' <- traverse convertPattern mArg
   let retTy' = convertType retTy
   pure $ ANF.PatternCons $ ANF.ConstructorPattern cons' mArg' retTy'
 

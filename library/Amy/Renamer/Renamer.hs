@@ -168,18 +168,20 @@ renameExpression (S.EParens expr) = fmap R.EParens <$> renameExpression expr
 renameMatch :: S.Match -> Renamer (Validation [Error] R.Match)
 renameMatch (S.Match pat body) =
   withNewScope $ do
-    pat' <-
-     case pat of
-        S.PatternLit lit -> pure . Success $ R.PatternLit lit
-        S.PatternVar var -> do
-          var' <- addValueToScope var
-          pure $ R.PatternVar <$> var'
-        S.PatternCons (S.ConstructorPattern cons mArg) -> do
-          cons' <- lookupDataConstructorInScopeOrError cons
-          mArg' <- traverse addValueToScope mArg
-          pure $ fmap R.PatternCons $ R.ConstructorPattern <$> cons' <*> sequenceA mArg'
+    pat' <- renamePattern pat
     body' <- renameExpression body
     pure
       $ R.Match
       <$> pat'
       <*> body'
+
+renamePattern :: S.Pattern -> Renamer (Validation [Error] R.Pattern)
+renamePattern (S.PatternLit lit) = pure . Success $ R.PatternLit lit
+renamePattern (S.PatternVar var) = do
+  var' <- addValueToScope var
+  pure $ R.PatternVar <$> var'
+renamePattern (S.PatternCons (S.ConstructorPattern cons mArg)) = do
+  cons' <- lookupDataConstructorInScopeOrError cons
+  mArg' <- traverse renamePattern mArg
+  pure $ fmap R.PatternCons $ R.ConstructorPattern <$> cons' <*> sequenceA mArg'
+renamePattern (S.PatternParens pat) = fmap R.PatternParens <$> renamePattern pat

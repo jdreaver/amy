@@ -115,7 +115,7 @@ data Pattern
 data ConstructorPattern
   = ConstructorPattern
   { constructorPatternConstructor :: !(Typed ConstructorName)
-  , constructorPatternArg :: !(Maybe (Typed Ident))
+  , constructorPatternArg :: !(Maybe Pattern)
   , constructorPatternReturnType :: !Type
   } deriving (Show, Eq)
 
@@ -178,7 +178,7 @@ matchNames (Match pat body) = patternNameIds pat ++ exprNameIds body
 patternNameIds :: Pattern -> [Int]
 patternNameIds (PatternLit _) = []
 patternNameIds (PatternVar (Typed _ var)) = [identId var]
-patternNameIds (PatternCons (ConstructorPattern _ mArg _)) = maybe [] (\(Typed _ var) -> [identId var]) mArg
+patternNameIds (PatternCons (ConstructorPattern _ mArg _)) = maybe [] patternNameIds mArg
 
 data Ident
   = Ident
