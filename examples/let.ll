@@ -112,8 +112,11 @@ entry:
   %0 = alloca %MySum
   %1 = getelementptr %MySum, %MySum* %0, i32 0, i32 0
   store i1 true, i1* %1
-  %2 = getelementptr %MySum, %MySum* %0, i32 0, i32 1
-  store i64* inttoptr (i64 1 to i64*), i64** %2
+  %2 = alloca double
+  store double 1.100000e+00, double* %2
+  %3 = bitcast double* %2 to i64*
+  %4 = getelementptr %MySum, %MySum* %0, i32 0, i32 1
+  store i64* %3, i64** %4
   ret %MySum* %0
 }
 

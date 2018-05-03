@@ -1,7 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
 
 module Amy.Codegen.TypeConversion
-  ( convertLLVMType
+  ( maybeConvertPointer
+  , loadPointerToType
   ) where
 
 import LLVM.AST
@@ -11,56 +12,58 @@ import LLVM.AST.Float as F
 
 import Amy.Codegen.Monad
 
--- | Emit instructions to convert an 'Operand' to a given 'Type'.
-convertLLVMType :: Operand -> Type -> BlockGen Operand
-convertLLVMType op targetTy
- | opType == targetTy = pure op
- | otherwise =
-     case (opType, targetTy) of
-       (IntegerType _, PointerType p _) -> convertIntToPointer p op
-       (PointerType _ _, IntegerType _) -> convertPointerToInt targetTy op
-       (FloatingPointType ft, PointerType p _) -> convertFloatToInt ft op >>= convertIntToPointer p
-       (PointerType _ _, FloatingPointType ft) -> convertPointerToInt (IntegerType 64) op >>= convertIntToFloat ft
-       (_, _) -> error $ "Failed to convertLLVMType " ++ show (opType, targetTy)
- where
-  opType = operandType op
+maybeConvertPointer :: Operand -> Type -> BlockGen Operand
+maybeConvertPointer op targetTy =
+  if operandType op == targetTy
+  then pure op
+  else
+    case (operandType op, targetTy) of
+      (PointerType _ _, PointerType _ _) -> maybeBitcast targetTy op
+      (_, PointerType _ _) -> allocOp op >>= maybeBitcast targetTy
+      (PointerType _ _, _) -> maybeBitcast (PointerType targetTy (AddrSpace 0)) op >>= loadPointerToType targetTy
+      (_, _) -> error $ "Failed to maybeConvertToPointer " ++ show (op, targetTy)
 
-convertIntToPointer :: Type -> Operand -> BlockGen Operand
-convertIntToPointer pointerType op = do
-  opName <- freshUnName
-  let ptrTy = PointerType pointerType (AddrSpace 0)
-  addInstruction $ opName := IntToPtr op ptrTy []
-  pure $ LocalReference ptrTy opName
+allocOp :: Operand -> BlockGen Operand
+allocOp op = do
+  -- Store operand in a pointer
+  storeName <- freshUnName
+  let
+    opTy = operandType op
+    storeOp = LocalReference (PointerType opTy (AddrSpace 0)) storeName
+  addInstruction $ storeName := Alloca opTy Nothing 0 []
+  addInstruction $ Do $ Store False storeOp op Nothing 0 []
+  pure storeOp
 
-convertPointerToInt :: Type -> Operand -> BlockGen Operand
-convertPointerToInt ty op = do
-  opName <- freshUnName
-  addInstruction $ opName := PtrToInt op ty []
-  pure $ LocalReference ty opName
+loadPointerToType :: Type -> Operand -> BlockGen Operand
+loadPointerToType targetTy op = do
+  resultName <- freshUnName
+  let resultOp = LocalReference targetTy resultName
+  addInstruction $ resultName := Load False op Nothing 0 []
+  pure resultOp
 
-convertFloatToInt :: FloatingPointType -> Operand -> BlockGen Operand
-convertFloatToInt ft op = do
-  opName <- freshUnName
-  let ty = IntegerType (fromIntegral $ floatingPointBits ft)
-  addInstruction $ opName := FPToUI op ty []
-  pure $ LocalReference ty opName
-
-convertIntToFloat :: FloatingPointType -> Operand -> BlockGen Operand
-convertIntToFloat ft op = do
-  opName <- freshUnName
-  let ty = FloatingPointType ft
-  addInstruction $ opName := UIToFP op ty []
-  pure $ LocalReference ty opName
+maybeBitcast :: Type -> Operand -> BlockGen Operand
+maybeBitcast ty op =
+  -- Bitcast if we have to
+  if operandType op == ty
+  then pure op
+  else do
+   ptrName <- freshUnName
+   let ptrOp = LocalReference ty ptrName
+   addInstruction $ ptrName := BitCast op ty []
+   pure ptrOp
 
 operandType :: Operand -> Type
 operandType (LocalReference ty _) = ty
-operandType (ConstantOperand c) =
+operandType (ConstantOperand c) = constantType c
+operandType md@(MetadataOperand _) = error $ "Can't get operandType for MetadataOperand: " ++ show md
+
+constantType :: C.Constant -> Type
+constantType c =
   case c of
     C.GlobalReference ty _ -> ty
     C.Int bits _ -> IntegerType bits
     C.Float ft -> FloatingPointType (someFloatType ft)
-    _ -> error $ "Unknown type for operandType: " ++ show c
-operandType md@(MetadataOperand _) = error $ "Can't get operandType for MetadataOperand: " ++ show md
+    _ -> error $ "Unknown type for constant: " ++ show c
 
 someFloatType :: SomeFloat -> FloatingPointType
 someFloatType =
@@ -72,12 +75,12 @@ someFloatType =
     X86_FP80 _ _ -> X86_FP80FP
     PPC_FP128 _ _ -> PPC_FP128FP
 
-floatingPointBits :: FloatingPointType -> Int
-floatingPointBits =
-  \case
-    HalfFP -> 16
-    FloatFP -> 32
-    DoubleFP -> 64
-    FP128FP -> 128
-    X86_FP80FP -> 80
-    PPC_FP128FP -> 128
+-- floatingPointBits :: FloatingPointType -> Int
+-- floatingPointBits =
+--   \case
+--     HalfFP -> 16
+--     FloatFP -> 32
+--     DoubleFP -> 64
+--     FP128FP -> 128
+--     X86_FP80FP -> 80
+--     PPC_FP128FP -> 128

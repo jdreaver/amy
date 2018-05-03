@@ -165,20 +165,20 @@ codegenExpr' (ANF.EApp (ANF.App (ANF.VVal (ANF.Typed originalTy ident)) args' re
   funcOperand <- valOperand (ANF.Var $ ANF.VVal $ ANF.Typed ty ident)
   let
     (argTys', returnTy') = argAndReturnTypes ty
-  opName <- freshUnName
   -- Convert arguments to pointers if we have to
   argOps <- for (zip args' argTys') $ \(arg, argTy) -> do
     originalOp <- valOperand arg
     argTy' <- llvmType argTy
-    convertLLVMType originalOp argTy'
+    maybeConvertPointer originalOp argTy'
 
   -- Add call instruction
+  opName <- freshUnName
   addInstruction $ opName := Call Nothing CC.C [] (Right funcOperand) ((\arg -> (arg, [])) <$> argOps) [] []
 
   -- Return operand, maybe converting it too
   returnTyLLVM <- llvmType returnTy
   returnTyLLVM' <- llvmType returnTy'
-  convertLLVMType (LocalReference returnTyLLVM' opName) returnTyLLVM
+  maybeConvertPointer (LocalReference returnTyLLVM' opName) returnTyLLVM
 codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons (ANF.Typed _ consName)) args' _)) = do
   method <- findCompilationMethod consName <$> compilationMethods
   case method of
@@ -207,7 +207,7 @@ codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons (ANF.Typed _ consName)) args' _))
         case args' of
           [arg] -> valOperand arg
           _ -> error $ "Can't set tagged union data because there isn't exactly one argument " ++ show app
-      argOp' <- convertLLVMType argOp (PointerType (IntegerType 64) (AddrSpace 0))
+      argOp' <- maybeConvertPointer argOp (PointerType (IntegerType 64) (AddrSpace 0))
       dataPtrName <- freshUnName
       let dataPtrOp = LocalReference (PointerType (IntegerType 64) (AddrSpace 0)) dataPtrName
       addInstruction $ dataPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex 1] []
