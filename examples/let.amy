@@ -48,8 +48,8 @@ g = MyInt 1
 myEnum :: MyEnum
 myEnum = MyEnumB
 
-# mySum :: MySum
-# mySum = MySumB 1.1
+mySum :: MySum
+mySum = MySumB 1.1
 
 threeHundred :: Int
 threeHundred = 100

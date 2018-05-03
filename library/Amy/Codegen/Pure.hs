@@ -187,7 +187,34 @@ codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons (ANF.Typed _ consName)) args' _))
         [arg] -> valOperand arg
         _ -> error $ "Can't unbox App because there isn't exactly one argument " ++ show app
     CompileEnum i intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral i)
-    CompileTaggedUnion _ _ _ -> error $ "Can't compile tagged pairs yet " ++ show app
+    CompileTaggedUnion structName intTag intBits -> do
+      -- Allocate struct
+      allocName <- freshUnName
+      let allocOp = LocalReference (PointerType (NamedTypeReference structName) (AddrSpace 0)) allocName
+      addInstruction $ allocName := Alloca (NamedTypeReference structName) Nothing 0 []
+
+      -- Set the tag
+      tagPtrName <- freshUnName
+      let
+        tagPtrOp = LocalReference (PointerType (IntegerType 32) (AddrSpace 0)) tagPtrName
+        gepIndex i = ConstantOperand $ C.Int 32 i
+        tagOp = ConstantOperand $ C.Int intBits (fromIntegral intTag)
+      addInstruction $ tagPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex 0] []
+      addInstruction $ Do $ Store False tagPtrOp tagOp Nothing 0 []
+
+      -- Set data
+      argOp <-
+        case args' of
+          [arg] -> valOperand arg
+          _ -> error $ "Can't set tagged union data because there isn't exactly one argument " ++ show app
+      argOp' <- convertLLVMType argOp (PointerType (IntegerType 64) (AddrSpace 0))
+      dataPtrName <- freshUnName
+      let dataPtrOp = LocalReference (PointerType (IntegerType 64) (AddrSpace 0)) dataPtrName
+      addInstruction $ dataPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex 1] []
+      addInstruction $ Do $ Store False dataPtrOp argOp' Nothing 0 []
+
+      -- Return pointer
+      pure allocOp
 codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   opName <- freshUnName
   argOps <- traverse valOperand args'
@@ -260,7 +287,7 @@ llvmType ty = go (typeToNonEmpty ty)
             case rep of
               TyConUnboxed prim -> pure prim
               TyConEnum intBits -> pure $ IntegerType intBits
-              TyConTaggedUnion _ _ -> error $ "Can't represent TyCon tagged unions yet " ++ show (tyName, rep)
+              TyConTaggedUnion structName _ -> pure $ PointerType (NamedTypeReference structName) (AddrSpace 0)
       ANF.TyVar _ -> pure $ PointerType (IntegerType 64) (AddrSpace 0)
       ANF.TyFun{} -> mkFunctionType ty
   go _ = mkFunctionType ty

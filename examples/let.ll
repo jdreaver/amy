@@ -3,6 +3,8 @@
 ; ModuleID = 'amy-module'
 source_filename = "<string>"
 
+%MySum = type { i1, i64* }
+
 declare i64 @abs(i64)
 
 define i64 @main() {
@@ -103,6 +105,16 @@ entry:
 define private i8 @myEnum() {
 entry:
   ret i8 1
+}
+
+define private %MySum* @mySum() {
+entry:
+  %0 = alloca %MySum
+  %1 = getelementptr %MySum, %MySum* %0, i32 0, i32 0
+  store i1 true, i1* %1
+  %2 = getelementptr %MySum, %MySum* %0, i32 0, i32 1
+  store i64* inttoptr (i64 1 to i64*), i64** %2
+  ret %MySum* %0
 }
 
 define private i64 @threeHundred() {
