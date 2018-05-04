@@ -5,16 +5,18 @@ module Amy.Core.Desugar
 import qualified Data.List.NonEmpty as NE
 
 import Amy.Core.AST as C
+import Amy.Core.Monad
 import Amy.Prim
 import Amy.TypeCheck.AST as T
 
 desugarModule :: T.Module -> C.Module
 desugarModule (T.Module bindings externs typeDeclarations maxId) =
-  C.Module
-    (desugarBinding <$> bindings)
-    (desugarExtern <$> externs)
-    (desugarTypeDeclaration <$> typeDeclarations)
-    (maxId + 1)
+  runDesugar (maxId + 1) $ do
+    bindings' <- traverse desugarBinding bindings
+    let externs' = desugarExtern <$> externs
+    let typeDeclarations' = desugarTypeDeclaration <$> typeDeclarations
+    maxId' <- freshId
+    pure $ C.Module bindings' externs' typeDeclarations' maxId'
 
 desugarExtern :: T.Extern -> C.Extern
 desugarExtern (T.Extern ident ty) =
@@ -28,20 +30,23 @@ desugarDataConstructor :: T.DataConstructor -> C.DataConstructor
 desugarDataConstructor (T.DataConstructor conName mTyArg) =
   C.DataConstructor (desugarConstructorName conName) (desugarTyConInfo <$> mTyArg)
 
-desugarBinding :: T.Binding -> C.Binding
+desugarBinding :: T.Binding -> Desugar C.Binding
 desugarBinding (T.Binding ident scheme args retTy body) =
   C.Binding
     (desugarIdent ident)
     (desugarScheme scheme)
     (desugarTypedIdent <$> args)
     (desugarType retTy)
-    (desugarExpr body)
+    <$> desugarExpr body
 
-desugarExpr :: T.Expr -> C.Expr
-desugarExpr (T.ELit lit) = C.ELit lit
-desugarExpr (T.EVar var) = C.EVar (desugarVar var)
-desugarExpr (T.ECase (T.Case scrutinee matches)) =
-  C.ECase (C.Case (desugarExpr scrutinee) (desugarMatch <$> matches))
+desugarExpr :: T.Expr -> Desugar C.Expr
+desugarExpr (T.ELit lit) = pure $ C.ELit lit
+desugarExpr (T.EVar var) = pure $ C.EVar (desugarVar var)
+desugarExpr (T.ECase (T.Case scrutinee matches)) = do
+  -- TODO: Desugar case expressions
+  scrutinee' <- desugarExpr scrutinee
+  matches' <- traverse desugarMatch matches
+  pure $ C.ECase (C.Case scrutinee' matches')
 desugarExpr (T.EIf (T.If pred' then' else')) =
   let
     boolTyCon' = T.TyCon $ T.fromPrimTyCon boolTyCon
@@ -53,18 +58,22 @@ desugarExpr (T.EIf (T.If pred' then' else')) =
       , T.Match (T.PCons $ mkBoolPatCons falseDataCon) else'
       ]
   in desugarExpr (T.ECase (T.Case pred' matches))
-desugarExpr (T.ELet (T.Let bindings body)) =
-  C.ELet (C.Let (desugarBinding <$> bindings) (desugarExpr body))
-desugarExpr (T.EApp (T.App func args ty)) =
-  C.EApp (C.App (desugarExpr func) (desugarExpr <$> args) (desugarType ty))
-desugarExpr (T.EParens expr) = C.EParens (desugarExpr expr)
+desugarExpr (T.ELet (T.Let bindings body)) = do
+  bindings' <- traverse desugarBinding bindings
+  body' <- desugarExpr body
+  pure $ C.ELet (C.Let bindings' body')
+desugarExpr (T.EApp (T.App func args ty)) = do
+  func' <- desugarExpr func
+  args' <- traverse desugarExpr args
+  pure $ C.EApp (C.App func' args' (desugarType ty))
+desugarExpr (T.EParens expr) = C.EParens <$> desugarExpr expr
 
 desugarVar :: T.Var -> C.Var
 desugarVar (T.VVal ident) = C.VVal $ desugarTypedIdent ident
 desugarVar (T.VCons cons) = C.VCons $ desugarTypedConstructorName cons
 
-desugarMatch :: T.Match -> C.Match
-desugarMatch (T.Match pat body) = C.Match (desugarPattern pat) (desugarExpr body)
+desugarMatch :: T.Match -> Desugar C.Match
+desugarMatch (T.Match pat body) = C.Match (desugarPattern pat) <$> desugarExpr body
 
 desugarPattern :: T.Pattern -> C.Pattern
 desugarPattern (T.PLit lit) = C.PLit lit
