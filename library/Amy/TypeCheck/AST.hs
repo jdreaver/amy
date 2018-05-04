@@ -47,6 +47,7 @@ data Module
   { moduleBindings :: ![Binding]
   , moduleExterns :: ![Extern]
   , moduleTypeDeclarations :: ![TypeDeclaration]
+  , moduleMaxId :: !Int
   } deriving (Show, Eq)
 
 -- | A binding after renaming. This is a combo of a 'Binding' and a

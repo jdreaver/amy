@@ -66,6 +66,9 @@ data BlockGenState
   { blockGenStateCurrentBlock :: !PartialBlock
   , blockGenStateBlockStack :: ![BasicBlock]
   , blockGenStateSymbolTable :: !(Map Ident Operand)
+    -- TOOD: We need to make sure this last ID is higher than the max ID from
+    -- the ANF AST. We also need to share this last ID across BlockGen
+    -- invocations from different functions.
   , blockGenStateLastId :: !Word
   } deriving (Show, Eq)
 

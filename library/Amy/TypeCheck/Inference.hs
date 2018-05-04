@@ -39,8 +39,7 @@ data TyEnv
   = TyEnv
   { identTypes :: Map T.Ident T.Scheme
   , constructorTypes :: Map T.ConstructorName T.Scheme
-  }
-  deriving (Show, Eq)
+  } deriving (Show, Eq)
 
 emptyEnv :: TyEnv
 emptyEnv = TyEnv Map.empty Map.empty
@@ -80,8 +79,8 @@ newtype Inference a = Inference (ReaderT TyEnv (StateT Int (Except Error)) a)
 
 -- TODO: Don't use Except, use Validation
 
-runInference :: TyEnv -> Inference a -> Either Error a
-runInference env (Inference action) = runExcept $ evalStateT (runReaderT action env) 0
+runInference :: Int -> TyEnv -> Inference a -> Either Error (a, Int)
+runInference maxId env (Inference action) = runExcept $ runStateT (runReaderT action env) (maxId + 1)
 
 freshTypeVariable :: Inference T.Type
 freshTypeVariable = do
@@ -156,7 +155,7 @@ newtype Constraint = Constraint { unConstraint :: (T.Type, T.Type) }
 --
 
 inferModule :: R.Module -> Either Error T.Module
-inferModule (R.Module bindings externs typeDeclarations) = do
+inferModule (R.Module bindings externs typeDeclarations maxId) = do
   let
     externs' = convertExtern <$> externs
     externSchemes = (\(T.Extern name ty) -> (name, T.Forall [] ty)) <$> externs'
@@ -170,8 +169,8 @@ inferModule (R.Module bindings externs typeDeclarations) = do
       { identTypes = Map.fromList $ externSchemes ++ primFuncSchemes
       , constructorTypes = Map.fromList dataConstructorSchemes
       }
-  bindings' <- inferTopLevel env bindings
-  pure (T.Module bindings' externs' typeDeclarations')
+  (bindings', maxId') <- inferTopLevel maxId env bindings
+  pure (T.Module bindings' externs' typeDeclarations' maxId')
 
 convertExtern :: R.Extern -> T.Extern
 convertExtern (R.Extern (Located _ name) ty) = T.Extern (convertIdent name) (convertType ty)
@@ -201,17 +200,21 @@ primitiveFunctionScheme (PrimitiveFunction _ name id' ty) =
   , T.Forall [] $ foldr1 T.TyFun $ T.TyCon . T.fromPrimTyCon <$> ty
   )
 
-inferTopLevel :: TyEnv -> [R.Binding] -> Either Error [T.Binding]
-inferTopLevel env bindings = do
-  (bindings', constraints) <- unzip <$> runInference env (inferBindings bindings)
+inferTopLevel :: Int -> TyEnv -> [R.Binding] -> Either Error ([T.Binding], Int)
+inferTopLevel maxId env bindings = do
+  (bindingsAndConstraints, maxId') <- runInference maxId env (inferBindings bindings)
+  let (bindings', constraints) = unzip bindingsAndConstraints
   subst <- runSolve (concat constraints)
-  pure $ flip fmap bindings' $ \binding ->
-    let
-      (T.Forall _ ty) = T.bindingType binding
-      (scheme', letterSubst) = normalize ty
-      binding' = binding { T.bindingType = scheme' }
-      subst' = composeSubst subst letterSubst
-    in substituteTBinding subst' binding'
+  let
+    bindings'' =
+      flip fmap bindings' $ \binding ->
+        let
+          (T.Forall _ ty) = T.bindingType binding
+          (scheme', letterSubst) = normalize ty
+          binding' = binding { T.bindingType = scheme' }
+          subst' = composeSubst subst letterSubst
+        in substituteTBinding subst' binding'
+  pure (bindings'', maxId')
 
 -- | Infer a group of bindings.
 --

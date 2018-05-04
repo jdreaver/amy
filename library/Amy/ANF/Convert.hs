@@ -15,15 +15,8 @@ import Amy.Core.AST as C
 import Amy.Prim
 
 normalizeModule :: C.Module -> ANF.Module
-normalizeModule module'@(C.Module bindings externs typeDeclarations) =
+normalizeModule (C.Module bindings externs typeDeclarations maxId) =
   let
-    -- Compute max ID from module
-    moduleIds = C.moduleNameIds module'
-    maxId =
-      if null moduleIds
-      then 0
-      else maximum moduleIds
-
     -- Record top-level names
     topLevelNames =
       (C.bindingName <$> bindings)

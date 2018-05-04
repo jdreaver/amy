@@ -26,7 +26,7 @@ mkPrettyScheme :: Scheme -> PrettyScheme ann
 mkPrettyScheme (Forall vars ty) = PForall (prettyTyVarInfo <$> vars) (mkPrettyType ty)
 
 prettyModule :: Module -> Doc ann
-prettyModule (Module bindings externs typeDeclarations) =
+prettyModule (Module bindings externs typeDeclarations _) =
   vcatTwoHardLines
   $ (prettyExtern' <$> externs)
   ++ (prettyTypeDeclaration' <$> typeDeclarations)

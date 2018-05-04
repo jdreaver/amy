@@ -9,11 +9,12 @@ import Amy.Prim
 import Amy.TypeCheck.AST as T
 
 desugarModule :: T.Module -> C.Module
-desugarModule (T.Module bindings externs typeDeclarations) =
+desugarModule (T.Module bindings externs typeDeclarations maxId) =
   C.Module
     (desugarBinding <$> bindings)
     (desugarExtern <$> externs)
     (desugarTypeDeclaration <$> typeDeclarations)
+    (maxId + 1)
 
 desugarExtern :: T.Extern -> C.Extern
 desugarExtern (T.Extern ident ty) =

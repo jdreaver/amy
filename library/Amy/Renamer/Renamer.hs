@@ -32,11 +32,13 @@ rename' (S.Module declarations) = do
     bindings = mapMaybe declBinding declarations
     bindingTypes = mapMaybe declBindingType declarations
   rModuleBindings <- renameBindingGroup bindings bindingTypes
+  maxId <- freshId
   pure
     $ R.Module
     <$> rModuleBindings
     <*> sequenceA rModuleExterns
     <*> sequenceA typeDeclarations
+    <*> pure maxId
 
 renameTypeDeclaration :: S.TypeDeclaration -> Renamer (Validation [Error] R.TypeDeclaration)
 renameTypeDeclaration (S.TypeDeclaration tyName cons) = do

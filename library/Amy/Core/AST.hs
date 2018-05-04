@@ -16,7 +16,6 @@ module Amy.Core.AST
   , Let(..)
   , App(..)
   , expressionType
-  , moduleNameIds
 
   , Ident(..)
   , ConstructorName(..)
@@ -41,6 +40,7 @@ data Module
   { moduleBindings :: ![Binding]
   , moduleExterns :: ![Extern]
   , moduleTypeDeclarations :: ![TypeDeclaration]
+  , moduleMaxId :: !Int
   } deriving (Show, Eq)
 
 data Binding
@@ -145,40 +145,6 @@ expressionType (ECase (Case _ (Match _ expr :| _))) = expressionType expr
 expressionType (ELet let') = expressionType (letExpression let')
 expressionType (EApp app) = appReturnType app
 expressionType (EParens expr) = expressionType expr
-
--- | Get all the 'Name's in a module.
-moduleNameIds :: Module -> [Int]
-moduleNameIds (Module bindings externs typeDeclarations) =
-  concatMap bindingNameIds bindings
-  ++ concatMap (fmap (constructorNameId . dataConstructorName) . typeDeclarationConstructors) typeDeclarations
-  ++ fmap (identId . externName) externs
-
-bindingNameIds :: Binding -> [Int]
-bindingNameIds binding =
-  identId (bindingName binding)
-  : (identId . typedValue <$> bindingArgs binding)
-  ++ exprNameIds (bindingBody binding)
-
-exprNameIds :: Expr -> [Int]
-exprNameIds (ELit _) = []
-exprNameIds (EVar _) = []
-exprNameIds (ECase (Case scrutinee matches)) =
-  exprNameIds scrutinee ++ concatMap matchNames matches
-exprNameIds (ELet (Let bindings expr)) =
-  concatMap bindingNameIds bindings
-  ++ exprNameIds expr
-exprNameIds (EApp (App f args _)) =
-  exprNameIds f
-  ++ concatMap exprNameIds args
-exprNameIds (EParens expr) = exprNameIds expr
-
-matchNames :: Match -> [Int]
-matchNames (Match pat body) = patternNameIds pat ++ exprNameIds body
-
-patternNameIds :: Pattern -> [Int]
-patternNameIds (PLit _) = []
-patternNameIds (PVar (Typed _ var)) = [identId var]
-patternNameIds (PCons (PatCons _ mArg _)) = maybe [] patternNameIds mArg
 
 data Ident
   = Ident
