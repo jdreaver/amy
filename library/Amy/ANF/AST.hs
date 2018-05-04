@@ -119,7 +119,7 @@ data PatCons
   = PatCons
   { patConsConstructor :: !(Typed ConstructorName)
   , patConsArg :: !(Maybe Pattern)
-  , patConsReturnType :: !Type
+  , patConsType :: !Type
   } deriving (Show, Eq)
 
 data App f

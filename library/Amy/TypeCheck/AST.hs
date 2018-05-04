@@ -133,7 +133,7 @@ data PatCons
   = PatCons
   { patConsConstructor :: !(Typed ConstructorName)
   , patConsArg :: !(Maybe Pattern)
-  , patConsReturnType :: !Type
+  , patConsType :: !Type
   } deriving (Show, Eq)
 
 data Let
@@ -167,7 +167,7 @@ expressionType (EParens expr) = expressionType expr
 patternType :: Pattern -> Type
 patternType (PLit lit) = literalType' lit
 patternType (PVar (Typed ty _)) = ty
-patternType (PCons (PatCons _ _ retTy)) = retTy
+patternType (PCons (PatCons _ _ ty)) = ty
 patternType (PParens pat) = patternType pat
 
 data Ident
