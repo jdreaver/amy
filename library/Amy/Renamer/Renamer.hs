@@ -176,12 +176,12 @@ renameMatch (S.Match pat body) =
       <*> body'
 
 renamePattern :: S.Pattern -> Renamer (Validation [Error] R.Pattern)
-renamePattern (S.PatternLit lit) = pure . Success $ R.PatternLit lit
-renamePattern (S.PatternVar var) = do
+renamePattern (S.PLit lit) = pure . Success $ R.PLit lit
+renamePattern (S.PVar var) = do
   var' <- addValueToScope var
-  pure $ R.PatternVar <$> var'
-renamePattern (S.PatternCons (S.ConstructorPattern cons mArg)) = do
+  pure $ R.PVar <$> var'
+renamePattern (S.PCons (S.PatCons cons mArg)) = do
   cons' <- lookupDataConstructorInScopeOrError cons
   mArg' <- traverse renamePattern mArg
-  pure $ fmap R.PatternCons $ R.ConstructorPattern <$> cons' <*> sequenceA mArg'
-renamePattern (S.PatternParens pat) = fmap R.PatternParens <$> renamePattern pat
+  pure $ fmap R.PCons $ R.PatCons <$> cons' <*> sequenceA mArg'
+renamePattern (S.PParens pat) = fmap R.PParens <$> renamePattern pat

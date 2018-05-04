@@ -44,12 +44,12 @@ desugarExpr (T.ECase (T.Case scrutinee matches)) =
 desugarExpr (T.EIf (T.If pred' then' else')) =
   let
     boolTyCon' = T.TyCon $ T.fromPrimTyCon boolTyCon
-    mkBoolConstructorPattern cons =
-      T.ConstructorPattern (T.Typed boolTyCon' $ T.fromPrimDataCon cons) Nothing boolTyCon'
+    mkBoolPatCons cons =
+      T.PatCons (T.Typed boolTyCon' $ T.fromPrimDataCon cons) Nothing boolTyCon'
     matches =
       NE.fromList
-      [ T.Match (T.PatternCons $ mkBoolConstructorPattern trueDataCon) then'
-      , T.Match (T.PatternCons $ mkBoolConstructorPattern falseDataCon) else'
+      [ T.Match (T.PCons $ mkBoolPatCons trueDataCon) then'
+      , T.Match (T.PCons $ mkBoolPatCons falseDataCon) else'
       ]
   in desugarExpr (T.ECase (T.Case pred' matches))
 desugarExpr (T.ELet (T.Let bindings body)) =
@@ -66,15 +66,15 @@ desugarMatch :: T.Match -> C.Match
 desugarMatch (T.Match pat body) = C.Match (desugarPattern pat) (desugarExpr body)
 
 desugarPattern :: T.Pattern -> C.Pattern
-desugarPattern (T.PatternLit lit) = C.PatternLit lit
-desugarPattern (T.PatternVar var) = C.PatternVar (desugarTypedIdent var)
-desugarPattern (T.PatternCons (T.ConstructorPattern cons mArg retTy)) =
+desugarPattern (T.PLit lit) = C.PLit lit
+desugarPattern (T.PVar var) = C.PVar (desugarTypedIdent var)
+desugarPattern (T.PCons (T.PatCons cons mArg retTy)) =
   let
     cons' = desugarTypedConstructorName cons
     mArg' = desugarPattern <$> mArg
     retTy' = desugarType retTy
-  in C.PatternCons (C.ConstructorPattern cons' mArg' retTy')
-desugarPattern (T.PatternParens pat) = desugarPattern pat
+  in C.PCons (C.PatCons cons' mArg' retTy')
+desugarPattern (T.PParens pat) = desugarPattern pat
 
 desugarIdent :: T.Ident -> C.Ident
 desugarIdent (T.Ident name id') = C.Ident name id'

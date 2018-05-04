@@ -12,7 +12,7 @@ module Amy.Core.AST
   , Case(..)
   , Match(..)
   , Pattern(..)
-  , ConstructorPattern(..)
+  , PatCons(..)
   , Let(..)
   , App(..)
   , expressionType
@@ -107,16 +107,16 @@ data Match
   } deriving (Show, Eq)
 
 data Pattern
-  = PatternLit !Literal
-  | PatternVar !(Typed Ident)
-  | PatternCons !ConstructorPattern
+  = PLit !Literal
+  | PVar !(Typed Ident)
+  | PCons !PatCons
   deriving (Show, Eq)
 
-data ConstructorPattern
-  = ConstructorPattern
-  { constructorPatternConstructor :: !(Typed ConstructorName)
-  , constructorPatternArg :: !(Maybe Pattern)
-  , constructorPatternReturnType :: !Type
+data PatCons
+  = PatCons
+  { patConsConstructor :: !(Typed ConstructorName)
+  , patConsArg :: !(Maybe Pattern)
+  , patConsReturnType :: !Type
   } deriving (Show, Eq)
 
 data Let
@@ -176,9 +176,9 @@ matchNames :: Match -> [Int]
 matchNames (Match pat body) = patternNameIds pat ++ exprNameIds body
 
 patternNameIds :: Pattern -> [Int]
-patternNameIds (PatternLit _) = []
-patternNameIds (PatternVar (Typed _ var)) = [identId var]
-patternNameIds (PatternCons (ConstructorPattern _ mArg _)) = maybe [] patternNameIds mArg
+patternNameIds (PLit _) = []
+patternNameIds (PVar (Typed _ var)) = [identId var]
+patternNameIds (PCons (PatCons _ mArg _)) = maybe [] patternNameIds mArg
 
 data Ident
   = Ident

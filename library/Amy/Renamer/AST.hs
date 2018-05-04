@@ -12,7 +12,7 @@ module Amy.Renamer.AST
   , Case(..)
   , Match(..)
   , Pattern(..)
-  , ConstructorPattern(..)
+  , PatCons(..)
   , Let(..)
   , App(..)
 
@@ -108,16 +108,16 @@ data Match
   } deriving (Show, Eq)
 
 data Pattern
-  = PatternLit !(Located Literal)
-  | PatternVar !(Located Ident)
-  | PatternCons !ConstructorPattern
-  | PatternParens !Pattern
+  = PLit !(Located Literal)
+  | PVar !(Located Ident)
+  | PCons !PatCons
+  | PParens !Pattern
   deriving (Show, Eq)
 
-data ConstructorPattern
-  = ConstructorPattern
-  { constructorPatternConstructor :: !(Located ConstructorName)
-  , constructorPatternArg :: !(Maybe Pattern)
+data PatCons
+  = PatCons
+  { patConsConstructor :: !(Located ConstructorName)
+  , patConsArg :: !(Maybe Pattern)
   } deriving (Show, Eq)
 
 data Let

@@ -63,12 +63,12 @@ prettyVar (VVal (Located _ var)) = pretty var
 prettyVar (VCons (Located _ var)) = pretty var
 
 prettyPattern :: Pattern -> Doc ann
-prettyPattern (PatternLit (Located _ lit)) = pretty $ showLiteral lit
-prettyPattern (PatternVar (Located _ var)) = pretty var
-prettyPattern (PatternParens pat) = parens (prettyPattern pat)
-prettyPattern (PatternCons (ConstructorPattern (Located _ var) mArg)) =
+prettyPattern (PLit (Located _ lit)) = pretty $ showLiteral lit
+prettyPattern (PVar (Located _ var)) = pretty var
+prettyPattern (PParens pat) = parens (prettyPattern pat)
+prettyPattern (PCons (PatCons (Located _ var) mArg)) =
   pretty var <> maybe mempty prettyArg mArg
  where
   prettyArg = (space <>) . prettyArg'
-  prettyArg' arg@PatternCons{} = parens (prettyPattern arg)
+  prettyArg' arg@PCons{} = parens (prettyPattern arg)
   prettyArg' arg = prettyPattern arg

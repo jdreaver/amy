@@ -170,13 +170,13 @@ normalizeMatch (C.Match pat body) = do
   pure $ ANF.Match pat' body'
 
 convertPattern :: C.Pattern -> ANFConvert ANF.Pattern
-convertPattern (C.PatternLit lit) = pure $ ANF.PatternLit lit
-convertPattern (C.PatternVar var) = ANF.PatternVar <$> convertTypedIdent var
-convertPattern (C.PatternCons (C.ConstructorPattern cons mArg retTy)) = do
+convertPattern (C.PLit lit) = pure $ ANF.PLit lit
+convertPattern (C.PVar var) = ANF.PVar <$> convertTypedIdent var
+convertPattern (C.PCons (C.PatCons cons mArg retTy)) = do
   cons' <- convertTypedConstructorName cons
   mArg' <- traverse convertPattern mArg
   let retTy' = convertType retTy
-  pure $ ANF.PatternCons $ ANF.ConstructorPattern cons' mArg' retTy'
+  pure $ ANF.PCons $ ANF.PatCons cons' mArg' retTy'
 
 -- | Helper for normalizing lists of things
 normalizeList :: (Monad m) => (a -> (b -> m c) -> m c) -> [a] -> ([b] -> m c) -> m c

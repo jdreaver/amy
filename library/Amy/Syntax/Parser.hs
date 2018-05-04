@@ -200,19 +200,19 @@ caseMatch = do
 
 parsePattern :: AmyParser Pattern
 parsePattern =
-  try (PatternLit <$> literal <?> "pattern literal")
-  <|> (PatternVar <$> identifier <?> "pattern variable")
-  <|> (PatternCons <$> constructorPattern <?> "pattern constructor")
-  <|> (PatternParens <$> parens parsePattern <?> "parentheses")
+  try (PLit <$> literal <?> "pattern literal")
+  <|> (PVar <$> identifier <?> "pattern variable")
+  <|> (PCons <$> patCons <?> "pattern constructor")
+  <|> (PParens <$> parens parsePattern <?> "parentheses")
 
-constructorPattern :: AmyParser ConstructorPattern
-constructorPattern = do
+patCons :: AmyParser PatCons
+patCons = do
   constructor <- dataConstructorName'
   mArg <- optional parsePattern
   pure
-    ConstructorPattern
-    { constructorPatternConstructor = constructor
-    , constructorPatternArg = mArg
+    PatCons
+    { patConsConstructor = constructor
+    , patConsArg = mArg
     }
 
 letExpression' :: AmyParser Let

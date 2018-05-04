@@ -18,7 +18,7 @@ module Amy.Syntax.AST
   , Case(..)
   , Match(..)
   , Pattern(..)
-  , ConstructorPattern(..)
+  , PatCons(..)
   , Let(..)
   , letBinding
   , letBindingType
@@ -138,16 +138,16 @@ data Match
   } deriving (Show, Eq)
 
 data Pattern
-  = PatternLit !(Located Literal)
-  | PatternVar !(Located Text)
-  | PatternCons !ConstructorPattern
-  | PatternParens !Pattern
+  = PLit !(Located Literal)
+  | PVar !(Located Text)
+  | PCons !PatCons
+  | PParens !Pattern
   deriving (Show, Eq)
 
-data ConstructorPattern
-  = ConstructorPattern
-  { constructorPatternConstructor :: !(Located Text)
-  , constructorPatternArg :: !(Maybe Pattern)
+data PatCons
+  = PatCons
+  { patConsConstructor :: !(Located Text)
+  , patConsArg :: !(Maybe Pattern)
   } deriving (Show, Eq)
 
 data Let

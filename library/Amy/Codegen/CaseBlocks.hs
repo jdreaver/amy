@@ -63,8 +63,8 @@ data LiteralPattern
 -- remove all the special cases for constructors.
 
 literalPattern :: Pattern -> Maybe LiteralPattern
-literalPattern (PatternLit lit) = Just $ LitLiteralPattern lit
-literalPattern (PatternCons (ConstructorPattern consName Nothing _)) = Just $ ConsEnumPattern consName
+literalPattern (PLit lit) = Just $ LitLiteralPattern lit
+literalPattern (PCons (PatCons consName Nothing _)) = Just $ ConsEnumPattern consName
 literalPattern _ = Nothing
 
 data VarPattern
@@ -74,8 +74,8 @@ data VarPattern
   deriving (Show, Eq)
 
 varPattern :: Pattern -> Maybe VarPattern
-varPattern (PatternVar (Typed _ ident)) = Just $ VarVarPattern ident
-varPattern pat@(PatternCons (ConstructorPattern (Typed _ consName) (Just arg) _)) =
+varPattern (PVar (Typed _ ident)) = Just $ VarVarPattern ident
+varPattern pat@(PCons (PatCons (Typed _ consName) (Just arg) _)) =
   case varPattern arg of
     Just (VarVarPattern ident) -> Just $ ConsVarPattern consName ident
     Just (ConsVarPattern _ _) -> error $ "Can't handle nested constructor patterns yet, need case-in-case desugar " ++ show pat

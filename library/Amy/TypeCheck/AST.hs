@@ -15,7 +15,7 @@ module Amy.TypeCheck.AST
   , Case(..)
   , Match(..)
   , Pattern(..)
-  , ConstructorPattern(..)
+  , PatCons(..)
   , Let(..)
   , App(..)
   , expressionType
@@ -122,17 +122,17 @@ data Match
   } deriving (Show, Eq)
 
 data Pattern
-  = PatternLit !Literal
-  | PatternVar !(Typed Ident)
-  | PatternCons !ConstructorPattern
-  | PatternParens !Pattern
+  = PLit !Literal
+  | PVar !(Typed Ident)
+  | PCons !PatCons
+  | PParens !Pattern
   deriving (Show, Eq)
 
-data ConstructorPattern
-  = ConstructorPattern
-  { constructorPatternConstructor :: !(Typed ConstructorName)
-  , constructorPatternArg :: !(Maybe Pattern)
-  , constructorPatternReturnType :: !Type
+data PatCons
+  = PatCons
+  { patConsConstructor :: !(Typed ConstructorName)
+  , patConsArg :: !(Maybe Pattern)
+  , patConsReturnType :: !Type
   } deriving (Show, Eq)
 
 data Let
@@ -164,10 +164,10 @@ expressionType (EApp app) = appReturnType app
 expressionType (EParens expr) = expressionType expr
 
 patternType :: Pattern -> Type
-patternType (PatternLit lit) = literalType' lit
-patternType (PatternVar (Typed ty _)) = ty
-patternType (PatternCons (ConstructorPattern _ _ retTy)) = retTy
-patternType (PatternParens pat) = patternType pat
+patternType (PLit lit) = literalType' lit
+patternType (PVar (Typed ty _)) = ty
+patternType (PCons (PatCons _ _ retTy)) = retTy
+patternType (PParens pat) = patternType pat
 
 data Ident
   = Ident

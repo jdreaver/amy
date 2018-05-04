@@ -14,7 +14,7 @@ module Amy.ANF.AST
   , Case(..)
   , Match(..)
   , Pattern(..)
-  , ConstructorPattern(..)
+  , PatCons(..)
   , App(..)
 
   , Ident(..)
@@ -110,16 +110,16 @@ data Match
   } deriving (Show, Eq)
 
 data Pattern
-  = PatternLit !Literal
-  | PatternVar !(Typed Ident)
-  | PatternCons !ConstructorPattern
+  = PLit !Literal
+  | PVar !(Typed Ident)
+  | PCons !PatCons
   deriving (Show, Eq)
 
-data ConstructorPattern
-  = ConstructorPattern
-  { constructorPatternConstructor :: !(Typed ConstructorName)
-  , constructorPatternArg :: !(Maybe Pattern)
-  , constructorPatternReturnType :: !Type
+data PatCons
+  = PatCons
+  { patConsConstructor :: !(Typed ConstructorName)
+  , patConsArg :: !(Maybe Pattern)
+  , patConsReturnType :: !Type
   } deriving (Show, Eq)
 
 data App f

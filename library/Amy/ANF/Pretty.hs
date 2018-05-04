@@ -75,11 +75,11 @@ prettyExpr (EPrimOp (App (PrimitiveFunction _ name _ _) args _)) =
   sep $ pretty name : (prettyVal <$> args)
 
 prettyPattern :: Pattern -> Doc ann
-prettyPattern (PatternLit lit) = pretty $ showLiteral lit
-prettyPattern (PatternVar (Typed _ var)) = prettyIdent var
-prettyPattern (PatternCons (ConstructorPattern (Typed _ var) mArg _)) =
+prettyPattern (PLit lit) = pretty $ showLiteral lit
+prettyPattern (PVar (Typed _ var)) = prettyIdent var
+prettyPattern (PCons (PatCons (Typed _ var) mArg _)) =
   prettyConstructorName var <> maybe mempty prettyArg mArg
  where
   prettyArg = (space <>) . prettyArg'
-  prettyArg' arg@PatternCons{} = parens (prettyPattern arg)
+  prettyArg' arg@PCons{} = parens (prettyPattern arg)
   prettyArg' arg = prettyPattern arg

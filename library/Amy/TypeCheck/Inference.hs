@@ -367,11 +367,11 @@ inferMatch (R.Match pat body) = do
     )
 
 inferPattern :: R.Pattern -> Inference (T.Pattern, [Constraint])
-inferPattern (R.PatternLit (Located _ lit)) = pure (T.PatternLit lit, [])
-inferPattern (R.PatternVar (Located _ ident)) = do
+inferPattern (R.PLit (Located _ lit)) = pure (T.PLit lit, [])
+inferPattern (R.PVar (Located _ ident)) = do
   tvar <- freshTypeVariable
-  pure (T.PatternVar $ T.Typed tvar (convertIdent ident), [])
-inferPattern (R.PatternCons (R.ConstructorPattern (Located _ cons) mArg)) = do
+  pure (T.PVar $ T.Typed tvar (convertIdent ident), [])
+inferPattern (R.PCons (R.PatCons (Located _ cons) mArg)) = do
   let cons' = convertConstructorName cons
   consTy <- lookupEnvConstructorM cons'
   let typedCons = T.Typed consTy cons'
@@ -383,27 +383,27 @@ inferPattern (R.PatternCons (R.ConstructorPattern (Located _ cons) mArg)) = do
       retTy <- freshTypeVariable
       let constraint = Constraint (argTy `T.TyFun` retTy, consTy)
       pure
-        ( T.PatternCons $ T.ConstructorPattern typedCons (Just arg') retTy
+        ( T.PCons $ T.PatCons typedCons (Just arg') retTy
         , argCons ++ [constraint]
         )
     -- No argument. The return type is just the data constructor type.
     Nothing ->
       pure
-        ( T.PatternCons $ T.ConstructorPattern typedCons Nothing consTy
+        ( T.PCons $ T.PatCons typedCons Nothing consTy
         , []
         )
-inferPattern (R.PatternParens pat) = do
+inferPattern (R.PParens pat) = do
   (pat', patCons) <- inferPattern pat
   pure
-    ( T.PatternParens pat'
+    ( T.PParens pat'
     , patCons
     )
 
 patternScheme :: T.Pattern -> [(T.Ident, T.Scheme)]
-patternScheme (T.PatternLit _) = []
-patternScheme (T.PatternVar (T.Typed ty ident)) = [(ident, T.Forall [] ty)]
-patternScheme (T.PatternCons (T.ConstructorPattern _ mArg _)) = maybe [] patternScheme mArg
-patternScheme (T.PatternParens pat) = patternScheme pat
+patternScheme (T.PLit _) = []
+patternScheme (T.PVar (T.Typed ty ident)) = [(ident, T.Forall [] ty)]
+patternScheme (T.PCons (T.PatCons _ mArg _)) = maybe [] patternScheme mArg
+patternScheme (T.PParens pat) = patternScheme pat
 
 --
 -- Constraint Solver
@@ -514,15 +514,15 @@ substituteTMatch subst (T.Match pat body) =
   T.Match (substituteTPattern subst pat) (substituteTExpr subst body)
 
 substituteTPattern :: Subst -> T.Pattern -> T.Pattern
-substituteTPattern _ pat@(T.PatternLit _) = pat
-substituteTPattern subst (T.PatternVar var) = T.PatternVar $ substituteTyped subst var
-substituteTPattern subst (T.PatternCons (T.ConstructorPattern cons mArg retTy)) =
+substituteTPattern _ pat@(T.PLit _) = pat
+substituteTPattern subst (T.PVar var) = T.PVar $ substituteTyped subst var
+substituteTPattern subst (T.PCons (T.PatCons cons mArg retTy)) =
   let
     cons' = substituteTyped subst cons
     mArg' = substituteTPattern subst <$> mArg
     retTy' = substituteType subst retTy
-  in T.PatternCons (T.ConstructorPattern cons' mArg' retTy')
-substituteTPattern subst (T.PatternParens pat) = T.PatternParens (substituteTPattern subst pat)
+  in T.PCons (T.PatCons cons' mArg' retTy')
+substituteTPattern subst (T.PParens pat) = T.PParens (substituteTPattern subst pat)
 
 --
 -- Free and Active type variables
