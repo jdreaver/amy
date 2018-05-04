@@ -123,7 +123,7 @@ caseBlocks mkBlockName compilationMethods (Case _ matches ty) =
       , caseVarBlockIdent =
           case pat of
             VarVarPattern ident -> ident
-            ConsVarPattern consName ident -> constructorIdent compilationMethods consName ident
+            ConsVarPattern _ ident -> ident
       }
     defaultBlock = varBlock <$> firstVarPattern
     switchDefaultBlockName =
@@ -176,14 +176,3 @@ constructorConstant compilationMethods consName =
     CompileUnboxed _ -> error $ "Cannot unbox, we have an enum! " ++ show consName
     CompileEnum i intBits -> C.Int intBits (fromIntegral i)
     CompileTaggedUnion _ _ _ -> error $ "Cannot compile tagged pairs, we have an enum! " ++ show consName
-
-constructorIdent
-  :: Map ConstructorName DataConRep
-  -> ConstructorName
-  -> Ident
-  -> Ident
-constructorIdent compilationMethods consName ident =
-  case findCompilationMethod consName compilationMethods of
-    CompileUnboxed _ -> ident
-    CompileEnum _ _ -> error $ "Cannot compile enum, we need an ident! " ++ show consName
-    CompileTaggedUnion _ _ _ -> error $ "Tagged pairs not implemented yet " ++ show consName
