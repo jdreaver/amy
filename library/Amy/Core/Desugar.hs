@@ -73,17 +73,22 @@ desugarVar (T.VVal ident) = C.VVal $ desugarTypedIdent ident
 desugarVar (T.VCons cons) = C.VCons $ desugarTypedConstructorName cons
 
 desugarMatch :: T.Match -> Desugar C.Match
-desugarMatch (T.Match pat body) = C.Match (desugarPattern pat) <$> desugarExpr body
+desugarMatch (T.Match pat body) = do
+  pat' <- desugarPattern pat
+  expr' <- desugarExpr body
+  pure $ C.Match pat' expr'
 
-desugarPattern :: T.Pattern -> C.Pattern
-desugarPattern (T.PLit lit) = C.PLit lit
-desugarPattern (T.PVar var) = C.PVar (desugarTypedIdent var)
-desugarPattern (T.PCons (T.PatCons cons mArg retTy)) =
-  let
-    cons' = desugarTypedConstructorName cons
-    mArg' = desugarPattern <$> mArg
-    retTy' = desugarType retTy
-  in C.PCons (C.PatCons cons' mArg' retTy')
+desugarPattern :: T.Pattern -> Desugar C.Pattern
+desugarPattern (T.PLit lit) = pure $ C.PLit lit
+desugarPattern (T.PVar var) = pure $ C.PVar (desugarTypedIdent var)
+desugarPattern pat@(T.PCons (T.PatCons cons mArg retTy)) = do
+  let cons' = desugarTypedConstructorName cons
+  mArg' <- traverse desugarPattern mArg
+  let retTy' = desugarType retTy
+  case mArg' of
+    Nothing -> pure $ C.PCons (C.PatCons cons' Nothing retTy')
+    Just (C.PVar ident) -> pure $ C.PCons (C.PatCons cons' (Just ident) retTy')
+    _ -> error $ "Cant convert nested patterns yet " ++ show pat
 desugarPattern (T.PParens pat) = desugarPattern pat
 
 desugarIdent :: T.Ident -> C.Ident

@@ -118,7 +118,7 @@ data Pattern
 data PatCons
   = PatCons
   { patConsConstructor :: !(Typed ConstructorName)
-  , patConsArg :: !(Maybe Pattern)
+  , patConsArg :: !(Maybe (Typed Ident))
   , patConsType :: !Type
   } deriving (Show, Eq)
 

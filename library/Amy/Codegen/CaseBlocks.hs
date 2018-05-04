@@ -75,11 +75,7 @@ data VarPattern
 
 varPattern :: Pattern -> Maybe VarPattern
 varPattern (PVar (Typed _ ident)) = Just $ VarVarPattern ident
-varPattern pat@(PCons (PatCons (Typed _ consName) (Just arg) _)) =
-  case varPattern arg of
-    Just (VarVarPattern ident) -> Just $ ConsVarPattern consName ident
-    Just (ConsVarPattern _ _) -> error $ "Can't handle nested constructor patterns yet, need case-in-case desugar " ++ show pat
-    _ -> Nothing
+varPattern (PCons (PatCons (Typed _ consName) (Just (Typed _ arg)) _)) = Just $ ConsVarPattern consName arg
 varPattern _ = Nothing
 
 caseBlocks

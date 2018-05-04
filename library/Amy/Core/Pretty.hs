@@ -81,8 +81,4 @@ prettyPattern :: Pattern -> Doc ann
 prettyPattern (PLit lit) = pretty $ showLiteral lit
 prettyPattern (PVar (Typed _ var)) = prettyIdent var
 prettyPattern (PCons (PatCons (Typed _ var) mArg _)) =
-  prettyConstructorName var <> maybe mempty prettyArg mArg
- where
-  prettyArg = (space <>) . prettyArg'
-  prettyArg' arg@PCons{} = parens (prettyPattern arg)
-  prettyArg' arg = prettyPattern arg
+  prettyConstructorName var <> maybe mempty (\(Typed _ arg) -> space <> prettyIdent arg) mArg
