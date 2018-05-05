@@ -111,6 +111,7 @@ spec = do
           [ (litP (LiteralInt 1), 'a')
           , (litP (LiteralInt 2), 'b')
           , (PVar "x", 'c')
+          , (litP (LiteralInt 4), 'd') -- Redundant
           ]
         expected =
           Switch Obj
