@@ -12,6 +12,10 @@ module Amy.Core.MatchCompiler
   , Decision(..)
   , Access(..)
   , compileMatch
+
+    -- Exported for testing
+  , compileMatch'
+  , PrelimDecision(..)
   ) where
 
 import Data.Text (Text)
@@ -138,7 +142,7 @@ match :: Pat -> Access -> TermDesc -> [(Con, [TermDesc])] -> [([Pat], [Access], 
 match (PVar _) _ dsc ctx work rhs rules = compileSucceed (augment ctx dsc) work rhs rules
 match (PCon pcon pargs) obj dsc ctx work rhs rules =
   let
-    args f = tabulate (conArity pcon) f
+    args f = f <$> [0..(conArity pcon -1)]
 
     getdargs (Neg _) = args (const $ Neg [])
     getdargs (Pos _ dargs) = dargs
@@ -154,14 +158,21 @@ match (PCon pcon pargs) obj dsc ctx work rhs rules =
       No -> compileFail' dsc
       Maybe' negcons -> IfEq obj pcon succeed' $ compileFail' $ Neg negcons
 
+-- | When matching a term succeeds, we augment the context by filling in the
+-- hold of the last argument of the local-most constructor with the term
+-- description.
 augment :: [(Con, [TermDesc])] -> TermDesc -> [(Con, [TermDesc])]
 augment [] _ = []
 augment ((con, args):rest) dsc = (con, dsc:args):rest
 
+-- | When all arguments for a constructor have been found, a positive term
+-- description is constructed and added to the context.
 norm :: [(Con, [TermDesc])] -> [(Con, [TermDesc])]
 norm [] = error "Unexpected empty list in norm"
 norm ((con, args):rest) = augment rest (Pos con (reverse args))
 
+-- TODO: Document and understand this better. I just know it is used when
+-- matching a sub-term fails.
 builddsc :: [(Con, [TermDesc])] -> TermDesc -> [([Pat], [Access], [TermDesc])] -> TermDesc
 builddsc [] dsc [] = dsc
 builddsc ((con, args):rest) dsc ((_, _, dargs):work) =
@@ -176,9 +187,6 @@ data Access
   | Sel !Int !Access
     -- ^ Select the i-th subterm of the given 'Access' path.
   deriving (Show, Eq)
-
-tabulate :: Int -> (Int -> a) -> [a]
-tabulate i f = f <$> [0..(i-1)]
 
 data StaticMatchResult
   = Yes
@@ -200,10 +208,11 @@ staticmatch pcon (Neg negcons)
   -- We know that the object constructor is not one of @negcons@, but the given
   -- constructor is one of those constructors.
   | pcon `elem` negcons = No
-  -- We know that the given constructor is not one of @negcons@ and there are
-  -- no possibilities left because of the span. Note this never applies to
-  -- constructors with infinite span like number literals.
-  | pcon `notElem` negcons && conSpan pcon == Just (length negcons + 1) = Yes
+  -- We know that the given constructor is not one of @negcons@ (from the
+  -- previous guard) and there are no possibilities left because of the span.
+  -- Note this never applies to constructors with infinite span like number
+  -- literals.
+  | conSpan pcon == Just (length negcons + 1) = Yes
   -- We know
   | otherwise = Maybe' (pcon:negcons)
 
