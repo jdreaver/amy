@@ -123,7 +123,7 @@ compileMatch' :: Match a -> PrelimDecision a
 compileMatch' = compileFail (Neg [])
 
 -- | A 'WordStack' is a stack of hypothesis to still be checked.
-type WorkStack = [([Pat], [Access], [TermDesc])] -- Make this a data type?
+type WorkStack = [[(Pat, Access, TermDesc)]] -- Make this a data type?
 
 -- | The 'Context' is a path of constructors from the current sub-term up to
 -- the root, along with term descriptions of the arguments to those
@@ -142,26 +142,27 @@ compileFail dsc ((pat1, rhs1):rulesrest) = match pat1 Obj dsc [] [] rhs1 rulesre
 -- TODO: Document this
 compileSucceed :: Context -> WorkStack -> a -> Match a -> PrelimDecision a
 compileSucceed _ [] rhs _ = Success' rhs
-compileSucceed ctx (work1:workr) rhs rules =
+compileSucceed ctx (work1:workrest) rhs rules =
   case work1 of
-    ([], [], []) -> compileSucceed (normContext ctx) workr rhs rules
-    (pat1:patr, obj1:objr, dsc1:dscr) ->
-      match pat1 obj1 dsc1 ctx ((patr, objr, dscr):workr) rhs rules
-    (x, y, z) -> error $ "succeed found work args of different length " ++ show (x, y, z)
+    [] -> compileSucceed (normContext ctx) workrest rhs rules
+    ((pat, obj, dsc):workr) ->
+      match pat obj dsc ctx (workr:workrest) rhs rules
 
 -- TODO: Document this
 match :: Pat -> Access -> TermDesc -> Context -> WorkStack -> a -> Match a -> PrelimDecision a
 match (PVar _) _ dsc ctx work rhs rules = compileSucceed (augmentContext ctx dsc) work rhs rules
 match (PCon pcon pargs) obj dsc ctx work rhs rules =
   let
-    args f = f <$> [0..(conArity pcon - 1)]
+    mapArity f = f <$> [0..(conArity pcon - 1)]
 
-    getdargs (Neg _) = args (const $ Neg [])
-    getdargs (Pos _ dargs) = dargs
+    getdargs =
+      case dsc of
+        (Neg _) -> mapArity (const $ Neg [])
+        (Pos _ dargs) -> dargs
 
-    getoargs = args (\i -> Sel (i+1) obj)
+    getoargs = mapArity (\i -> Sel (i+1) obj)
 
-    succeed' = compileSucceed ((pcon, []):ctx) ((pargs, getoargs, getdargs dsc):work) rhs rules
+    succeed' = compileSucceed ((pcon, []):ctx) (zip3Error pargs getoargs getdargs:work) rhs rules
 
     compileFail' newdsc = compileFail (builddsc ctx newdsc work) rules
   in
@@ -187,8 +188,15 @@ normContext ((con, args):rest) = augmentContext rest (Pos con (reverse args))
 -- matching a sub-term fails.
 builddsc :: Context -> TermDesc -> WorkStack -> TermDesc
 builddsc [] dsc [] = dsc
-builddsc ((con, args):rest) dsc ((_, _, dargs):work) =
-  builddsc rest (Pos con (reverse args ++ (dsc : dargs))) work
+builddsc ((con, args):rest) dsc (work1:work) =
+  let
+    dargs = (\(_, _, z) -> z) <$> work1
+    conArgs = reverse args ++ (dsc : dargs)
+    newDesc =
+      if length conArgs /= conArity con
+      then error ("Assertion failed in builddsc. Arity/argument mismatch " ++ show (con, conArgs))
+      else Pos con conArgs
+  in builddsc rest newDesc work
 builddsc a b c = error $ "Encountered problem in builddsc " ++ show (a, b, c)
 
 -- | An 'Access' path is either the full object or a path to select sub-terms
@@ -248,3 +256,13 @@ collectSwitch acc failDec otherDecs =
         then collectSwitch acc failDec' (otherDecs ++ [(con', switchify successDec')])
         else (otherDecs, switchify failDec)
     _ -> (otherDecs, switchify failDec)
+
+--
+-- Utils
+--
+
+zip3Error :: (Show a, Show b, Show c) => [a] -> [b] -> [c] -> [(a, b, c)]
+zip3Error [] [] [] = []
+zip3Error (x:xs) (y:ys) (z:zs) = (x, y, z) : zip3Error xs ys zs
+zip3Error xs ys zs =
+  error $ "Assertion failed in zip3Error. Lists have different length. Leftovers: " ++ show (xs, ys, zs)
