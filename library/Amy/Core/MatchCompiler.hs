@@ -122,27 +122,39 @@ compileMatch = switchify . compileMatch'
 compileMatch' :: Match a -> PrelimDecision a
 compileMatch' = compileFail (Neg [])
 
+-- | A 'WordStack' is a stack of hypothesis to still be checked.
+type WorkStack = [([Pat], [Access], [TermDesc])] -- Make this a data type?
+
+-- | The 'Context' is a path of constructors from the current sub-term up to
+-- the root, along with term descriptions of the arguments to those
+-- constructors.
+--
+-- The argument term descriptions are stored in reverse order (like a stack),
+-- and the constructor can be partially applied. When the constructor is fully
+-- applied, we convert it to a 'Pos'.
+type Context = [(Con, [TermDesc])]
+
 -- TODO: Document this
 compileFail :: TermDesc -> Match a -> PrelimDecision a
 compileFail _ [] = Failure'
 compileFail dsc ((pat1, rhs1):rulesrest) = match pat1 Obj dsc [] [] rhs1 rulesrest
 
 -- TODO: Document this
-compileSucceed :: [(Con, [TermDesc])] -> [([Pat], [Access], [TermDesc])] -> a -> Match a -> PrelimDecision a
+compileSucceed :: Context -> WorkStack -> a -> Match a -> PrelimDecision a
 compileSucceed _ [] rhs _ = Success' rhs
 compileSucceed ctx (work1:workr) rhs rules =
   case work1 of
-    ([], [], []) -> compileSucceed (norm ctx) workr rhs rules
+    ([], [], []) -> compileSucceed (normContext ctx) workr rhs rules
     (pat1:patr, obj1:objr, dsc1:dscr) ->
       match pat1 obj1 dsc1 ctx ((patr, objr, dscr):workr) rhs rules
     (x, y, z) -> error $ "succeed found work args of different length " ++ show (x, y, z)
 
 -- TODO: Document this
-match :: Pat -> Access -> TermDesc -> [(Con, [TermDesc])] -> [([Pat], [Access], [TermDesc])] -> a -> Match a -> PrelimDecision a
-match (PVar _) _ dsc ctx work rhs rules = compileSucceed (augment ctx dsc) work rhs rules
+match :: Pat -> Access -> TermDesc -> Context -> WorkStack -> a -> Match a -> PrelimDecision a
+match (PVar _) _ dsc ctx work rhs rules = compileSucceed (augmentContext ctx dsc) work rhs rules
 match (PCon pcon pargs) obj dsc ctx work rhs rules =
   let
-    args f = f <$> [0..(conArity pcon -1)]
+    args f = f <$> [0..(conArity pcon - 1)]
 
     getdargs (Neg _) = args (const $ Neg [])
     getdargs (Pos _ dargs) = dargs
@@ -161,19 +173,19 @@ match (PCon pcon pargs) obj dsc ctx work rhs rules =
 -- | When matching a term succeeds, we augment the context by filling in the
 -- hold of the last argument of the local-most constructor with the term
 -- description.
-augment :: [(Con, [TermDesc])] -> TermDesc -> [(Con, [TermDesc])]
-augment [] _ = []
-augment ((con, args):rest) dsc = (con, dsc:args):rest
+augmentContext :: Context -> TermDesc -> Context
+augmentContext [] _ = []
+augmentContext ((con, args):rest) dsc = (con, dsc:args):rest
 
 -- | When all arguments for a constructor have been found, a positive term
 -- description is constructed and added to the context.
-norm :: [(Con, [TermDesc])] -> [(Con, [TermDesc])]
-norm [] = error "Unexpected empty list in norm"
-norm ((con, args):rest) = augment rest (Pos con (reverse args))
+normContext :: Context -> Context
+normContext [] = error "Unexpected empty list in normContext"
+normContext ((con, args):rest) = augmentContext rest (Pos con (reverse args))
 
 -- TODO: Document and understand this better. I just know it is used when
 -- matching a sub-term fails.
-builddsc :: [(Con, [TermDesc])] -> TermDesc -> [([Pat], [Access], [TermDesc])] -> TermDesc
+builddsc :: Context -> TermDesc -> WorkStack -> TermDesc
 builddsc [] dsc [] = dsc
 builddsc ((con, args):rest) dsc ((_, _, dargs):work) =
   builddsc rest (Pos con (reverse args ++ (dsc : dargs))) work
