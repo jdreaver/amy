@@ -6,6 +6,8 @@
 
 module Amy.Core.MatchCompiler
   ( Con(..)
+  , Arity
+  , Span
   , Pat(..)
   , Match
   , Decision'(..)
@@ -16,12 +18,23 @@ module Amy.Core.MatchCompiler
 
 import Data.Text (Text)
 
+import Amy.Literal
+
+type Arity = Int
+type Span = Int
+
 data Con
-  = Con
-  { conName :: !Text
-  , conArity :: !Int
-  , conSpan :: !Int
-  } deriving (Show, Eq)
+  = Con !Text !Span !Arity
+  | ConLit !Literal
+  deriving (Show, Eq)
+
+conArity :: Con -> Arity
+conArity (Con _ arity _) = arity
+conArity (ConLit _) = 0
+
+conSpan :: Con -> Maybe Span
+conSpan (Con _ _ span') = Just span'
+conSpan (ConLit _) = Nothing
 
 data Pat
   = PVar !Text
@@ -116,7 +129,7 @@ staticmatch pcon (Pos con _) =
   if con == pcon then Yes else No
 staticmatch pcon (Neg negcons)
   | pcon `elem` negcons = No
-  | pcon `notElem` negcons && conSpan pcon == (length negcons + 1) = Yes
+  | pcon `notElem` negcons && conSpan pcon == Just (length negcons + 1) = Yes
   | otherwise = Maybe'
 
 data Decision' a

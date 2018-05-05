@@ -7,21 +7,11 @@ module Amy.Core.MatchCompilerSpec
 import Test.Hspec
 
 import Amy.Core.MatchCompiler
+import Amy.Literal
 
--- nullC :: Con
--- nullC = Con { conName = "Null", conArity = 0, conSpan = 3 }
-
--- leafC :: Con
--- leafC = Con { conName = "Leaf", conArity = 1, conSpan = 3 }
-
--- nodeC :: Con
--- nodeC = Con { conName = "Node", conArity = 3, conSpan = 3 }
-
-trueC :: Con
-trueC = Con { conName = "True", conArity = 0, conSpan = 2}
-
-falseC :: Con
-falseC = Con { conName = "False", conArity = 0, conSpan = 2}
+trueC, falseC :: Con
+trueC = Con "True" 0 2
+falseC = Con "False" 0 2
 
 trueP :: Pat
 trueP = PCon trueC []
@@ -30,7 +20,10 @@ falseP :: Pat
 falseP = PCon falseC []
 
 -- tupP :: [Pat] -> Pat
--- tupP args = PCon Con { conName = "", conArity = length args, conSpan = 1 } args
+-- tupP args = PCon (Con "" (length args) 1) args
+
+litP :: Literal -> Pat
+litP lit = PCon (ConLit lit) []
 
 -- data Color = Red | Blue | Green
 
@@ -110,6 +103,21 @@ spec = do
           Switch Obj
           [(trueC, Success' 'a')]
           (Success' 'b')
+      switchify (compileMatch match) `shouldBe` expected
+
+    it "handles literals" $ do
+      let
+        match =
+          [ (litP (LiteralInt 1), 'a')
+          , (litP (LiteralInt 2), 'b')
+          , (PVar "x", 'c')
+          ]
+        expected =
+          Switch Obj
+          [ (ConLit (LiteralInt 1), Success' 'a')
+          , (ConLit (LiteralInt 2), Success' 'b')
+          ]
+          (Success' 'c')
       switchify (compileMatch match) `shouldBe` expected
 
     it "handles the example from the Sestoft paper" $ do
