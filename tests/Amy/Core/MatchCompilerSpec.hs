@@ -19,8 +19,8 @@ trueP = PCon trueC []
 falseP :: Pat
 falseP = PCon falseC []
 
--- tupP :: [Pat] -> Pat
--- tupP args = PCon (Con "" (length args) 1) args
+tupP :: [Pat] -> Pat
+tupP args = PCon (Con "" (length args) 1) args
 
 litP :: Literal -> Pat
 litP lit = PCon (ConLit lit) []
@@ -103,6 +103,30 @@ spec = do
           Switch Obj
           [(trueC, Success 'a')]
           (Success 'b')
+      compileMatch match `shouldBe` expected
+
+    it "handles a tuple true/false case" $ do
+      let
+        match =
+          [ (tupP [trueP, trueP], '1')
+          , (tupP [falseP, falseP], '2')
+          , (tupP [trueP, falseP] , '3')
+          , (tupP [falseP, trueP], '4')
+          ]
+        expected =
+          Switch (Sel 1 Obj)
+          [ ( trueC
+            , Switch (Sel 2 Obj)
+              [ (trueC, Success '1')
+              ]
+              (Success '3')
+            )
+          ]
+          ( Switch (Sel 2 Obj)
+            [ (falseC, Success '2')
+            ]
+            (Success '4')
+          )
       compileMatch match `shouldBe` expected
 
     it "handles literals" $ do
