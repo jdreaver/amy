@@ -17,17 +17,17 @@ import Amy.Core.MatchCompiler
 -- nodeC :: Con
 -- nodeC = Con { conName = "Node", conArity = 3, conSpan = 3 }
 
--- true :: Con
--- true = Con { conName = "True", conArity = 0, conSpan = 2}
+trueC :: Con
+trueC = Con { conName = "True", conArity = 0, conSpan = 2}
 
--- false :: Con
--- false = Con { conName = "False", conArity = 0, conSpan = 2}
+falseC :: Con
+falseC = Con { conName = "False", conArity = 0, conSpan = 2}
 
--- trueP :: Pat
--- trueP = PCon true []
+trueP :: Pat
+trueP = PCon trueC []
 
--- falseP :: Pat
--- falseP = PCon false []
+falseP :: Pat
+falseP = PCon falseC []
 
 -- tupP :: [Pat] -> Pat
 -- tupP args = PCon Con { conName = "", conArity = length args, conSpan = 1 } args
@@ -90,5 +90,18 @@ spec :: Spec
 spec = do
 
   describe "compileMatch" $ do
+
+    it "handles a simple true/false case" $ do
+      let
+        match =
+          [ (trueP, 'a')
+          , (falseP, 'b')
+          ]
+        expected =
+          Switch Obj
+          [(trueC, Success' 'a')]
+          (Success' 'b')
+      switchify (compileMatch match) `shouldBe` expected
+
     it "handles the example from the Sestoft paper" $ do
       switchify (compileMatch lamMatch) `shouldBe` expectedLamCompile
