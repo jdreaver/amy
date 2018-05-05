@@ -58,33 +58,33 @@ lamMatch =
   , (PCon appC [PCon appC [PCon lamC [PVar "x", PCon lamC [PVar "y", PVar "z"]], PVar "v"], PVar "w"], 1010)
   ]
 
-expectedLamCompile :: Decision' Int
+expectedLamCompile :: Decision Int
 expectedLamCompile =
   Switch Obj
-  [ (varC, Success' 111)
+  [ (varC, Success 111)
   , ( lamC
     , Switch (Sel 2 Obj)
-      [ (varC, Success' 222)
-      , (lamC, Success' 333)
-      , (appC, Success' 444)
+      [ (varC, Success 222)
+      , (lamC, Success 333)
+      , (appC, Success 444)
       ]
-      (Success' 888)
+      (Success 888)
     )
   , ( appC
     , Switch (Sel 1 Obj)
-      [ (lamC, Success' 555)
-      , (appC, Success' 666)
+      [ (lamC, Success 555)
+      , (appC, Success 666)
       ]
-      Failure'
+      Failure
     )
   ]
   (Switch (Sel 2 Obj)
-     [ (letC, Success' 777)
+     [ (letC, Success 777)
      ]
      (Switch (Sel 3 Obj)
-        [ (appC, Success' 999)
+        [ (appC, Success 999)
         ]
-        Failure'
+        Failure
      )
   )
 
@@ -101,9 +101,9 @@ spec = do
           ]
         expected =
           Switch Obj
-          [(trueC, Success' 'a')]
-          (Success' 'b')
-      switchify (compileMatch match) `shouldBe` expected
+          [(trueC, Success 'a')]
+          (Success 'b')
+      compileMatch match `shouldBe` expected
 
     it "handles literals" $ do
       let
@@ -114,11 +114,11 @@ spec = do
           ]
         expected =
           Switch Obj
-          [ (ConLit (LiteralInt 1), Success' 'a')
-          , (ConLit (LiteralInt 2), Success' 'b')
+          [ (ConLit (LiteralInt 1), Success 'a')
+          , (ConLit (LiteralInt 2), Success 'b')
           ]
-          (Success' 'c')
-      switchify (compileMatch match) `shouldBe` expected
+          (Success 'c')
+      compileMatch match `shouldBe` expected
 
     it "handles the example from the Sestoft paper" $ do
-      switchify (compileMatch lamMatch) `shouldBe` expectedLamCompile
+      compileMatch lamMatch `shouldBe` expectedLamCompile
