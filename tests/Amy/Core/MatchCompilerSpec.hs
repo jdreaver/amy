@@ -68,23 +68,32 @@ lamMatch =
 expectedLamCompile :: Decision' Int
 expectedLamCompile =
   Switch Obj
-  [(Con{conName = "Var", conArity = 1, conSpan = 4}, Success' 111),
-   (Con{conName = "Lam", conArity = 2, conSpan = 4},
-    Switch (Sel 2 Obj)
-      [(Con{conName = "Var", conArity = 1, conSpan = 4}, Success' 222),
-       (Con{conName = "Lam", conArity = 2, conSpan = 4}, Success' 333),
-       (Con{conName = "App", conArity = 2, conSpan = 4}, Success' 444)]
-      (Success' 888)),
-   (Con{conName = "App", conArity = 2, conSpan = 4},
-    Switch (Sel 1 Obj)
-      [(Con{conName = "Lam", conArity = 2, conSpan = 4}, Success' 555),
-       (Con{conName = "App", conArity = 2, conSpan = 4}, Success' 666)]
-      Failure')]
+  [ (varC, Success' 111)
+  , ( lamC
+    , Switch (Sel 2 Obj)
+      [ (varC, Success' 222)
+      , (lamC, Success' 333)
+      , (appC, Success' 444)
+      ]
+      (Success' 888)
+    )
+  , ( appC
+    , Switch (Sel 1 Obj)
+      [ (lamC, Success' 555)
+      , (appC, Success' 666)
+      ]
+      Failure'
+    )
+  ]
   (Switch (Sel 2 Obj)
-     [(Con{conName = "Let", conArity = 3, conSpan = 4}, Success' 777)]
+     [ (letC, Success' 777)
+     ]
      (Switch (Sel 3 Obj)
-        [(Con{conName = "App", conArity = 2, conSpan = 4}, Success' 999)]
-        Failure'))
+        [ (appC, Success' 999)
+        ]
+        Failure'
+     )
+  )
 
 spec :: Spec
 spec = do
