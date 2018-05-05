@@ -3,6 +3,7 @@
 - ignore: {name: "Use list comprehension"}
 - ignore: {name: "Use section"}
 - ignore: {name: "Use lambda-case"}
+- ignore: {name: "Eta reduce"}
 
 # Custom Warnings
 - warn: {lhs: mapM, rhs: traverse}
