@@ -29,7 +29,7 @@ import Amy.Literal
 
 -- | A 'Con' represents a generic pattern constructor.
 data Con con
-  = Con !con !Span !Arity
+  = Con !con !Arity !Span
     -- ^ A non-literal constructor with a name, span, and arity.
   | ConLit !Literal
     -- ^ A constructor made from a literal. This case is separate because
