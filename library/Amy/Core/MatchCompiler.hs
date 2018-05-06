@@ -316,11 +316,14 @@ data NestedCase con a
   | NestedCase (Access con) [NestedCase con a] (NestedCase con a)
   deriving (Show, Eq)
 
-compileToNestedCase' :: (Show con) => Access con -> Decision con (Pat con, a) -> NestedCase con a
+compileToNestedCase' :: Access con -> Decision con (Pat con, a) -> NestedCase con a
 compileToNestedCase' access decision =
   case decision of
     Failure -> FailureLeaf
-    Success (pat, result) -> Leaf (extractPattern pat access, result)
+    Success (pat, result) ->
+      case extractPattern pat access of
+        Nothing -> Leaf (PVar "_", result)
+        Just pat' -> Leaf (pat', result)
     Switch access' matches defaultMatch ->
       let
         matches' = compileToNestedCase' access' . snd <$> matches
@@ -338,9 +341,9 @@ compileToNestedCase' access decision =
         defaultMatch' = compileToNestedCase' access' defaultMatch
       in NestedCase access' matches' defaultMatch'
 
-extractPattern :: (Show con) => Pat con -> Access con -> Pat con
-extractPattern pat Root = pat
-extractPattern pat sel@(Sel i access' _) =
+extractPattern :: Pat con -> Access con -> Maybe (Pat con)
+extractPattern pat Root = Just pat
+extractPattern pat (Sel i access' _) =
   case extractPattern pat access' of
-    PCon _ args -> args !! i
-    pat' -> error $ "Can't extract from non-constructor " ++ show (pat, sel, pat')
+    Just (PCon _ args) -> Just $ args !! i
+    _ -> Nothing
