@@ -23,7 +23,7 @@ data Error
   -- Renamer
   | UnknownVariable !(Located Text)
   | VariableShadowed !(Located Text) !R.Ident
-  | DuplicateDataConstructorName !(Located Text) !R.ConstructorName
+  | DuplicateDataConstructorName !(Located Text) !R.DataConstructor
   | TypeConstructorAlreadyExists !(Located Text) !R.TyConInfo
   | UnknownTypeConstructor !(Located Text)
   | UnknownTypeVariable !(Located Text)
@@ -34,7 +34,7 @@ data Error
   | UnificationFail !T.Type !T.Type
   | InfiniteType T.TyVarInfo !T.Type
   | UnboundVariable !T.Ident
-  | UnboundConstructor !T.ConstructorName
+  | UnboundConstructor !T.DataConstructor
 
   -- | BindingLacksTypeSignature !RBinding
   -- | TypeMismatch !(Type PrimitiveType) !(Type PrimitiveType)

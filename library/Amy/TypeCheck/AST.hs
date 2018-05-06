@@ -7,8 +7,8 @@ module Amy.TypeCheck.AST
   , Binding(..)
   , Extern(..)
   , TypeDeclaration(..)
-  , fromPrimTypeDefinition
   , DataConstructor(..)
+  , fromPrimDataCon
   , Expr(..)
   , Var(..)
   , If(..)
@@ -22,8 +22,6 @@ module Amy.TypeCheck.AST
   , patternType
 
   , Ident(..)
-  , ConstructorName(..)
-  , fromPrimDataCon
   , Type(..)
   , TyConInfo(..)
   , fromPrimTyCon
@@ -34,11 +32,13 @@ module Amy.TypeCheck.AST
 
     -- Re-export
   , Literal(..)
+  , module Amy.ASTCommon
   ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 
+import Amy.ASTCommon
 import Amy.Literal
 import Amy.Prim
 
@@ -77,15 +77,19 @@ data TypeDeclaration
   , typeDeclarationConstructors :: ![DataConstructor]
   } deriving (Show, Eq)
 
-fromPrimTypeDefinition :: PrimTypeDefinition -> TypeDeclaration
-fromPrimTypeDefinition (PrimTypeDefinition tyName cons) =
-  TypeDeclaration (fromPrimTyCon tyName) ((\con -> DataConstructor (fromPrimDataCon con) Nothing) <$> cons)
-
 data DataConstructor
   = DataConstructor
-  { dataConstructorName :: !ConstructorName
+  { dataConstructorName :: !Text
+  , dataConstructorId :: !Int
   , dataConstructorArgument :: !(Maybe TyConInfo)
+  , dataConstructorType :: !TyConInfo
+  , dataConstructorSpan :: !ConstructorSpan
+  , dataConstructorIndex :: !ConstructorIndex
   } deriving (Show, Eq)
+
+fromPrimDataCon :: PrimDataCon -> DataConstructor
+fromPrimDataCon (PrimDataCon name id' ty span' index) =
+  DataConstructor name id' Nothing (fromPrimTyCon ty) span' index
 
 -- | A renamed 'Expr'
 data Expr
@@ -100,7 +104,7 @@ data Expr
 
 data Var
   = VVal !(Typed Ident)
-  | VCons !(Typed ConstructorName)
+  | VCons !(Typed DataConstructor)
   deriving (Show, Eq)
 
 data If
@@ -131,7 +135,7 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !(Typed ConstructorName)
+  { patConsConstructor :: !DataConstructor
   , patConsArg :: !(Maybe Pattern)
   , patConsType :: !Type
   } deriving (Show, Eq)
@@ -175,15 +179,6 @@ data Ident
   { identText :: !Text
   , identId :: !Int
   } deriving (Show, Eq, Ord)
-
-data ConstructorName
-  = ConstructorName
-  { constructorNameText :: !Text
-  , constructorNameId :: !Int
-  } deriving (Show, Eq, Ord)
-
-fromPrimDataCon :: PrimDataCon -> ConstructorName
-fromPrimDataCon (PrimDataCon name id') = ConstructorName name id'
 
 data Type
   = TyCon !TyConInfo

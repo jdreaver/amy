@@ -49,7 +49,7 @@ runCodeGen topLevelTypes typeDeclarations (CodeGen action) =
 data CodeGenRead
   = CodeGenRead
   { codeGenReadTopLevelTypes :: !(Map Ident ANF.Type)
-  , codeGenReadDataConReps :: !(Map ConstructorName DataConRep)
+  , codeGenReadDataConReps :: !(Map DataConstructor DataConRep)
   , codeGenReadTyConReps :: !(Map TyConInfo TyConRep)
   }
 
@@ -126,7 +126,7 @@ freshUnName = UnName <$> freshId
 topLevelType :: (MonadReader CodeGenRead m) => Ident -> m (Maybe ANF.Type)
 topLevelType ident = asks (Map.lookup ident . codeGenReadTopLevelTypes)
 
-compilationMethods :: (MonadReader CodeGenRead m) => m (Map ConstructorName DataConRep)
+compilationMethods :: (MonadReader CodeGenRead m) => m (Map DataConstructor DataConRep)
 compilationMethods = asks codeGenReadDataConReps
 
 getTyConRep :: (MonadReader CodeGenRead m) => TyConInfo -> m TyConRep

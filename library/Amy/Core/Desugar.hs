@@ -27,8 +27,15 @@ desugarTypeDeclaration (T.TypeDeclaration tyName cons) =
   C.TypeDeclaration (desugarTyConInfo tyName) (desugarDataConstructor <$> cons)
 
 desugarDataConstructor :: T.DataConstructor -> C.DataConstructor
-desugarDataConstructor (T.DataConstructor conName mTyArg) =
-  C.DataConstructor (desugarConstructorName conName) (desugarTyConInfo <$> mTyArg)
+desugarDataConstructor (T.DataConstructor conName id' mTyArg tyCon span' index) =
+  C.DataConstructor
+  { C.dataConstructorName = conName
+  , C.dataConstructorId = id'
+  , C.dataConstructorArgument = desugarTyConInfo <$> mTyArg
+  , C.dataConstructorType = desugarTyConInfo tyCon
+  , C.dataConstructorSpan = span'
+  , C.dataConstructorIndex = index
+  }
 
 desugarBinding :: T.Binding -> Desugar C.Binding
 desugarBinding (T.Binding ident scheme args retTy body) =
@@ -51,7 +58,7 @@ desugarExpr (T.EIf (T.If pred' then' else')) =
   let
     boolTyCon' = T.TyCon $ T.fromPrimTyCon boolTyCon
     mkBoolPatCons cons =
-      T.PatCons (T.Typed boolTyCon' $ T.fromPrimDataCon cons) Nothing boolTyCon'
+      T.PatCons (T.fromPrimDataCon cons) Nothing boolTyCon'
     matches =
       NE.fromList
       [ T.Match (T.PCons $ mkBoolPatCons trueDataCon) then'
@@ -70,7 +77,7 @@ desugarExpr (T.EParens expr) = C.EParens <$> desugarExpr expr
 
 desugarVar :: T.Var -> C.Var
 desugarVar (T.VVal ident) = C.VVal $ desugarTypedIdent ident
-desugarVar (T.VCons cons) = C.VCons $ desugarTypedConstructorName cons
+desugarVar (T.VCons (T.Typed ty cons)) = C.VCons $ C.Typed (desugarType ty) (desugarDataConstructor cons)
 
 desugarMatch :: T.Match -> Desugar C.Match
 desugarMatch (T.Match pat body) = do
@@ -82,7 +89,7 @@ desugarPattern :: T.Pattern -> Desugar C.Pattern
 desugarPattern (T.PLit lit) = pure $ C.PLit lit
 desugarPattern (T.PVar var) = pure $ C.PVar (desugarTypedIdent var)
 desugarPattern pat@(T.PCons (T.PatCons cons mArg retTy)) = do
-  let cons' = desugarTypedConstructorName cons
+  let cons' = desugarDataConstructor cons
   mArg' <- traverse desugarPattern mArg
   let retTy' = desugarType retTy
   case mArg' of
@@ -94,14 +101,8 @@ desugarPattern (T.PParens pat) = desugarPattern pat
 desugarIdent :: T.Ident -> C.Ident
 desugarIdent (T.Ident name id') = C.Ident name id'
 
-desugarConstructorName :: T.ConstructorName -> C.ConstructorName
-desugarConstructorName (T.ConstructorName name id') = C.ConstructorName name id'
-
 desugarTypedIdent :: T.Typed T.Ident -> C.Typed C.Ident
 desugarTypedIdent (T.Typed ty ident) = C.Typed (desugarType ty) (desugarIdent ident)
-
-desugarTypedConstructorName :: T.Typed T.ConstructorName -> C.Typed C.ConstructorName
-desugarTypedConstructorName (T.Typed ty constructorName) = C.Typed (desugarType ty) (desugarConstructorName constructorName)
 
 desugarScheme :: T.Scheme -> C.Scheme
 desugarScheme (T.Forall vars ty) = C.Forall (desugarTyVarInfo <$> vars) (desugarType ty)

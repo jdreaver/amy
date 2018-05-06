@@ -52,7 +52,7 @@ data RenamerState
   { renamerStateLastId :: !Int
     -- ^ Last 'NameIntId' generated
   , renamerStateValuesInScope :: !(Map Text Ident)
-  , renamerStateDataConstructorsInScope :: !(Map Text ConstructorName)
+  , renamerStateDataConstructorsInScope :: !(Map Text DataConstructor)
   , renamerStateTypeConstructorsInScope :: !(Map Text TyConInfo)
   , renamerStateTypeVariablesInScope :: !(Map Text TyVarInfo)
   } deriving (Show, Eq)
@@ -83,11 +83,11 @@ primitiveTypeNames =
     nameTuples = (\tyCon -> (tyConInfoText tyCon, tyCon)) <$> infos
   in Map.fromList nameTuples
 
-primitiveDataConNames :: Map Text ConstructorName
+primitiveDataConNames :: Map Text DataConstructor
 primitiveDataConNames =
   let
     infos = fromPrimDataCon <$> allPrimDataCons
-    nameTuples = (\dataCon -> (constructorNameText dataCon, dataCon)) <$> infos
+    nameTuples = (\dataCon -> (locatedValue (dataConstructorName dataCon), dataCon)) <$> infos
   in Map.fromList nameTuples
 
 -- | Generate a new 'NameIntId'
@@ -115,24 +115,41 @@ lookupValueInScopeOrError :: Located Text -> Renamer (Validation [Error] (Locate
 lookupValueInScopeOrError name@(Located span' name') =
   maybe (Failure [UnknownVariable name]) (Success . Located span') <$> lookupValueInScope name'
 
-addDataConstructorToScope :: Located Text -> Renamer (Validation [Error] (Located ConstructorName))
-addDataConstructorToScope lName@(Located span' name) = do
+addDataConstructorToScope
+  :: Located Text
+  -> Maybe (Located Text)
+  -> Validation [Error] TyConInfo
+  -> ConstructorSpan
+  -> ConstructorIndex
+  -> Renamer (Validation [Error] DataConstructor)
+addDataConstructorToScope lname@(Located _ name) mArgTy tyCon span' index = do
   nameId <- freshId
-  let
-    cons = ConstructorName name nameId
   mExistingName <- lookupDataConstructorInScope name
   case mExistingName of
-    Just existingName -> pure $ Failure [DuplicateDataConstructorName lName existingName]
+    Just existingName -> pure $ Failure [DuplicateDataConstructorName lname existingName]
     Nothing -> do
-      modify' (\s -> s { renamerStateDataConstructorsInScope = Map.insert name cons (renamerStateDataConstructorsInScope s) })
-      pure $ Success (Located span' cons)
+      mArgTy' <- traverse lookupTypeConstructorInScopeOrError mArgTy
+      let
+        cons =
+          DataConstructor
+          <$> pure lname
+          <*> pure nameId
+          <*> sequenceA mArgTy'
+          <*> tyCon
+          <*> pure span'
+          <*> pure index
+      case cons of
+        Failure e -> pure $ Failure e
+        Success cons' -> do
+          modify' (\s -> s { renamerStateDataConstructorsInScope = Map.insert name cons' (renamerStateDataConstructorsInScope s) })
+          pure $ Success cons'
 
-lookupDataConstructorInScope :: Text -> Renamer (Maybe ConstructorName)
+lookupDataConstructorInScope :: Text -> Renamer (Maybe DataConstructor)
 lookupDataConstructorInScope name = Map.lookup name <$> gets renamerStateDataConstructorsInScope
 
-lookupDataConstructorInScopeOrError :: Located Text -> Renamer (Validation [Error] (Located ConstructorName))
-lookupDataConstructorInScopeOrError name@(Located span' name') =
-  maybe (Failure [UnknownVariable name]) (Success . Located span') <$> lookupDataConstructorInScope name'
+lookupDataConstructorInScopeOrError :: Located Text -> Renamer (Validation [Error] DataConstructor)
+lookupDataConstructorInScopeOrError name@(Located _ name') =
+  maybe (Failure [UnknownVariable name]) Success <$> lookupDataConstructorInScope name'
 
 addTypeConstructorToScope :: Located Text -> Renamer (Validation [Error] TyConInfo)
 addTypeConstructorToScope lname@(Located span' name) = do

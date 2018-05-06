@@ -6,6 +6,7 @@ module Amy.Renamer.AST
   , Extern(..)
   , TypeDeclaration(..)
   , DataConstructor(..)
+  , fromPrimDataCon
   , Expr(..)
   , Var(..)
   , If(..)
@@ -17,8 +18,6 @@ module Amy.Renamer.AST
   , App(..)
 
   , Ident(..)
-  , ConstructorName(..)
-  , fromPrimDataCon
   , Type(..)
   , TyConInfo(..)
   , fromPrimTyCon
@@ -27,10 +26,12 @@ module Amy.Renamer.AST
 
     -- Re-export
   , Literal(..)
+  , module Amy.ASTCommon
   ) where
 
 import Data.List.NonEmpty (NonEmpty)
 
+import Amy.ASTCommon
 import Amy.Literal (Literal(..))
 import Amy.Prim
 import Amy.Syntax.Located
@@ -73,9 +74,17 @@ data TypeDeclaration
 
 data DataConstructor
   = DataConstructor
-  { dataConstructorName :: !(Located ConstructorName)
+  { dataConstructorName :: !(Located Text)
+  , dataConstructorId :: !Int
   , dataConstructorArgument :: !(Maybe TyConInfo)
+  , dataConstructorType :: !TyConInfo
+  , dataConstructorSpan :: !ConstructorSpan
+  , dataConstructorIndex :: !ConstructorIndex
   } deriving (Show, Eq)
+
+fromPrimDataCon :: PrimDataCon -> DataConstructor
+fromPrimDataCon (PrimDataCon name id' ty span' index) =
+  DataConstructor (Located (SourceSpan "" 1 1 1 1) name) id' Nothing (fromPrimTyCon ty) span' index
 
 -- | A renamed 'Expr'
 data Expr
@@ -90,7 +99,7 @@ data Expr
 
 data Var
   = VVal !(Located Ident)
-  | VCons !(Located ConstructorName)
+  | VCons !DataConstructor
   deriving (Show, Eq)
 
 data If
@@ -121,7 +130,7 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !(Located ConstructorName)
+  { patConsConstructor :: !DataConstructor
   , patConsArg :: !(Maybe Pattern)
   } deriving (Show, Eq)
 
@@ -143,15 +152,6 @@ data Ident
   { identText :: !Text
   , identId :: !Int
   } deriving (Show, Eq, Ord)
-
-data ConstructorName
-  = ConstructorName
-  { constructorNameText :: !Text
-  , constructorNameId :: !Int
-  } deriving (Show, Eq, Ord)
-
-fromPrimDataCon :: PrimDataCon -> ConstructorName
-fromPrimDataCon (PrimDataCon name id') = ConstructorName name id'
 
 data Type
   = TyCon !TyConInfo

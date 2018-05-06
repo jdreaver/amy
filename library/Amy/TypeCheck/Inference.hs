@@ -38,11 +38,10 @@ import Amy.TypeCheck.AST as T
 data TyEnv
   = TyEnv
   { identTypes :: Map T.Ident T.Scheme
-  , constructorTypes :: Map T.ConstructorName T.Scheme
   } deriving (Show, Eq)
 
 emptyEnv :: TyEnv
-emptyEnv = TyEnv Map.empty Map.empty
+emptyEnv = TyEnv Map.empty
 
 extendEnvIdent :: TyEnv -> (T.Ident, T.Scheme) -> TyEnv
 extendEnvIdent env (x, s) =
@@ -58,9 +57,6 @@ extendEnvIdentList = foldl' extendEnvIdent
 
 lookupEnvIdent :: T.Ident -> TyEnv -> Maybe T.Scheme
 lookupEnvIdent key = Map.lookup key . identTypes
-
-lookupEnvConstructor :: T.ConstructorName -> TyEnv -> Maybe T.Scheme
-lookupEnvConstructor key = Map.lookup key . constructorTypes
 
 -- mergeEnv :: TyEnv -> TyEnv -> TyEnv
 -- mergeEnv (TyEnv a) (TyEnv b) = TyEnv (Map.union a b)
@@ -98,11 +94,6 @@ lookupEnvIdentM :: T.Ident -> Inference T.Type
 lookupEnvIdentM name = do
   mTy <- asks (lookupEnvIdent name)
   maybe (throwError $ UnboundVariable name) instantiate mTy
-
-lookupEnvConstructorM :: T.ConstructorName -> Inference T.Type
-lookupEnvConstructorM name = do
-  mTy <- asks (lookupEnvConstructor name)
-  maybe (throwError $ UnboundConstructor name) instantiate mTy
 
 -- | Convert a scheme into a type by replacing all the type variables with
 -- fresh names. Types are instantiated when they are looked up so we can make
@@ -159,15 +150,11 @@ inferModule (R.Module bindings externs typeDeclarations maxId) = do
   let
     externs' = convertExtern <$> externs
     externSchemes = (\(T.Extern name ty) -> (name, T.Forall [] ty)) <$> externs'
-    primTypeDeclarations = fromPrimTypeDefinition <$> allPrimTypeDefinitions
     typeDeclarations' = convertTypeDeclaration <$> typeDeclarations
-    dataConstructorSchemes =
-      concatMap typeDeclarationSchemes (typeDeclarations' ++ primTypeDeclarations)
     primFuncSchemes = primitiveFunctionScheme <$> allPrimitiveFunctions
     env =
       TyEnv
       { identTypes = Map.fromList $ externSchemes ++ primFuncSchemes
-      , constructorTypes = Map.fromList dataConstructorSchemes
       }
   (bindings', maxId') <- inferTopLevel maxId env bindings
   pure (T.Module bindings' externs' typeDeclarations' maxId')
@@ -180,14 +167,18 @@ convertTypeDeclaration (R.TypeDeclaration tyName cons) =
   T.TypeDeclaration (convertTyConInfo tyName) (convertDataConstructor <$> cons)
 
 convertDataConstructor :: R.DataConstructor -> T.DataConstructor
-convertDataConstructor (R.DataConstructor (Located _ conName) mTyArg) =
-  T.DataConstructor (convertConstructorName conName) (convertTyConInfo <$> mTyArg)
+convertDataConstructor (R.DataConstructor (Located _ conName) id' mTyArg tyName span' index) =
+  T.DataConstructor
+  { T.dataConstructorName = conName
+  , T.dataConstructorId = id'
+  , T.dataConstructorArgument = convertTyConInfo <$> mTyArg
+  , T.dataConstructorType = convertTyConInfo tyName
+  , T.dataConstructorSpan = span'
+  , T.dataConstructorIndex = index
+  }
 
-typeDeclarationSchemes :: T.TypeDeclaration -> [(T.ConstructorName, T.Scheme)]
-typeDeclarationSchemes (T.TypeDeclaration tyName cons) = dataConstructorScheme tyName <$> cons
-
-dataConstructorScheme :: T.TyConInfo -> T.DataConstructor -> (T.ConstructorName, T.Scheme)
-dataConstructorScheme tyName (T.DataConstructor conName mTyArg) = (conName, T.Forall [] ty)
+dataConstructorScheme :: T.DataConstructor -> T.Scheme
+dataConstructorScheme (T.DataConstructor _ _ mTyArg tyName _ _) = T.Forall [] ty
  where
   ty =
     case mTyArg of
@@ -302,9 +293,9 @@ inferExpr (R.EVar var) =
       let valVar' = convertIdent valVar
       t <- lookupEnvIdentM valVar'
       pure (T.EVar $ T.VVal (T.Typed t valVar'), [])
-    R.VCons (Located _ cons) -> do
-      let cons' = convertConstructorName cons
-      t <- lookupEnvConstructorM cons'
+    R.VCons cons -> do
+      let cons' = convertDataConstructor cons
+      t <- instantiate $ dataConstructorScheme cons'
       pure (T.EVar $ T.VCons (T.Typed t cons'), [])
 inferExpr (R.EIf (R.If pred' then' else')) = do
   (pred'', predCon) <- inferExpr pred'
@@ -374,10 +365,9 @@ inferPattern (R.PLit (Located _ lit)) = pure (T.PLit lit, [])
 inferPattern (R.PVar (Located _ ident)) = do
   tvar <- freshTypeVariable
   pure (T.PVar $ T.Typed tvar (convertIdent ident), [])
-inferPattern (R.PCons (R.PatCons (Located _ cons) mArg)) = do
-  let cons' = convertConstructorName cons
-  consTy <- lookupEnvConstructorM cons'
-  let typedCons = T.Typed consTy cons'
+inferPattern (R.PCons (R.PatCons cons mArg)) = do
+  let cons' = convertDataConstructor cons
+  consTy <- instantiate $ dataConstructorScheme cons'
   case mArg of
     -- Convert argument and add a constraint on argument plus constructor
     Just arg -> do
@@ -386,13 +376,13 @@ inferPattern (R.PCons (R.PatCons (Located _ cons) mArg)) = do
       retTy <- freshTypeVariable
       let constraint = Constraint (argTy `T.TyFun` retTy, consTy)
       pure
-        ( T.PCons $ T.PatCons typedCons (Just arg') retTy
+        ( T.PCons $ T.PatCons cons' (Just arg') retTy
         , argCons ++ [constraint]
         )
     -- No argument. The return type is just the data constructor type.
     Nothing ->
       pure
-        ( T.PCons $ T.PatCons typedCons Nothing consTy
+        ( T.PCons $ T.PatCons cons' Nothing consTy
         , []
         )
 inferPattern (R.PParens pat) = do
@@ -481,10 +471,9 @@ substituteConstraint :: Subst -> Constraint -> Constraint
 substituteConstraint subst (Constraint (t1, t2)) = Constraint (substituteType subst t1, substituteType subst t2)
 
 substituteEnv :: Subst -> TyEnv -> TyEnv
-substituteEnv subst (TyEnv identTys consTys) =
+substituteEnv subst (TyEnv identTys) =
   TyEnv
     (Map.map (substituteScheme subst) identTys)
-    (Map.map (substituteScheme subst) consTys)
 
 substituteTBinding :: Subst -> T.Binding -> T.Binding
 substituteTBinding subst binding =
@@ -501,7 +490,7 @@ substituteTExpr subst (T.EVar var) =
   T.EVar $
     case var of
       T.VVal var' -> T.VVal $ substituteTyped subst var'
-      T.VCons var' -> T.VCons $ substituteTyped subst var'
+      T.VCons (T.Typed ty cons) -> T.VCons (T.Typed (substituteType subst ty) cons)
 substituteTExpr subst (T.EIf (T.If pred' then' else')) =
   T.EIf (T.If (substituteTExpr subst pred') (substituteTExpr subst then') (substituteTExpr subst else'))
 substituteTExpr subst (T.ECase (T.Case scrutinee matches)) =
@@ -521,10 +510,9 @@ substituteTPattern _ pat@(T.PLit _) = pat
 substituteTPattern subst (T.PVar var) = T.PVar $ substituteTyped subst var
 substituteTPattern subst (T.PCons (T.PatCons cons mArg retTy)) =
   let
-    cons' = substituteTyped subst cons
     mArg' = substituteTPattern subst <$> mArg
     retTy' = substituteType subst retTy
-  in T.PCons (T.PatCons cons' mArg' retTy')
+  in T.PCons (T.PatCons cons mArg' retTy')
 substituteTPattern subst (T.PParens pat) = T.PParens (substituteTPattern subst pat)
 
 --
@@ -540,8 +528,8 @@ freeSchemeTypeVariables :: T.Scheme -> Set T.TyVarInfo
 freeSchemeTypeVariables (T.Forall tvs t) = freeTypeVariables t `Set.difference` Set.fromList tvs
 
 freeEnvTypeVariables :: TyEnv -> Set T.TyVarInfo
-freeEnvTypeVariables (TyEnv identTys consTys) =
-  foldl' Set.union Set.empty $ freeSchemeTypeVariables <$> (Map.elems identTys ++ Map.elems consTys)
+freeEnvTypeVariables (TyEnv identTys) =
+  foldl' Set.union Set.empty $ freeSchemeTypeVariables <$> Map.elems identTys
 
 --
 -- Names
@@ -549,9 +537,6 @@ freeEnvTypeVariables (TyEnv identTys consTys) =
 
 convertIdent :: R.Ident -> T.Ident
 convertIdent (R.Ident name id') = T.Ident name id'
-
-convertConstructorName :: R.ConstructorName -> T.ConstructorName
-convertConstructorName (R.ConstructorName name id') = T.ConstructorName name id'
 
 convertScheme :: R.Scheme -> T.Scheme
 convertScheme (R.Forall vars ty) = T.Forall (convertTyVarInfo <$> vars) (convertType ty)

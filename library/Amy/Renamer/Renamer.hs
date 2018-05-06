@@ -41,22 +41,19 @@ rename' (S.Module declarations) = do
     <*> pure maxId
 
 renameTypeDeclaration :: S.TypeDeclaration -> Renamer (Validation [Error] R.TypeDeclaration)
-renameTypeDeclaration (S.TypeDeclaration tyName cons) = do
+renameTypeDeclaration (S.TypeDeclaration tyName constructors) = do
   tyName' <- addTypeConstructorToScope tyName
-  cons' <- traverse renameDataConstructor cons
+  let
+    span' = ConstructorSpan $ length constructors
+    indexes = ConstructorIndex <$> [0..]
+  constructors' <-
+    traverse
+    (\(i, S.DataConstructor name mArgTy) -> addDataConstructorToScope name mArgTy tyName' span' i)
+    $ zip indexes constructors
   pure
     $ R.TypeDeclaration
     <$> tyName'
-    <*> sequenceA cons'
-
-renameDataConstructor :: S.DataConstructor -> Renamer (Validation [Error] R.DataConstructor)
-renameDataConstructor (S.DataConstructor conName mArgTy) = do
-  conName' <- addDataConstructorToScope conName
-  mArgTy' <- traverse lookupTypeConstructorInScopeOrError mArgTy
-  pure
-    $ R.DataConstructor
-    <$> conName'
-    <*> sequenceA mArgTy'
+    <*> sequenceA constructors'
 
 renameExtern :: S.Extern -> Renamer (Validation [Error] R.Extern)
 renameExtern extern = do

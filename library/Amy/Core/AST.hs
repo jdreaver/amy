@@ -18,7 +18,6 @@ module Amy.Core.AST
   , expressionType
 
   , Ident(..)
-  , ConstructorName(..)
   , Type(..)
   , TyConInfo(..)
   , TyVarInfo(..)
@@ -27,11 +26,13 @@ module Amy.Core.AST
 
     -- Re-export
   , Literal(..)
+  , module Amy.ASTCommon
   ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 
+import Amy.ASTCommon
 import Amy.Literal
 import Amy.Prim
 
@@ -69,8 +70,12 @@ data TypeDeclaration
 
 data DataConstructor
   = DataConstructor
-  { dataConstructorName :: !ConstructorName
+  { dataConstructorName :: !Text
+  , dataConstructorId :: !Int
   , dataConstructorArgument :: !(Maybe TyConInfo)
+  , dataConstructorType :: !TyConInfo
+  , dataConstructorSpan :: !ConstructorSpan
+  , dataConstructorIndex :: !ConstructorIndex
   } deriving (Show, Eq)
 
 data Expr
@@ -84,7 +89,7 @@ data Expr
 
 data Var
   = VVal !(Typed Ident)
-  | VCons !(Typed ConstructorName)
+  | VCons !(Typed DataConstructor)
   deriving (Show, Eq)
 
 data If
@@ -114,7 +119,7 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !(Typed ConstructorName)
+  { patConsConstructor :: !DataConstructor
   , patConsArg :: !(Maybe (Typed Ident))
   , patConsType :: !Type
   } deriving (Show, Eq)

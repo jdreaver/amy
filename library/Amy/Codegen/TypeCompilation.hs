@@ -14,9 +14,14 @@ import Data.Maybe (fromMaybe, isNothing)
 import GHC.Word (Word32)
 import LLVM.AST as LLVM
 
-import Amy.ANF.AST as ANF
+import Amy.ANF.AST
 import Amy.Codegen.Utils
 import Amy.Prim
+
+-- TODO: Ever since we store much more information in DataConstructor, I don't
+-- think we need a map from DataConstructor to DataConRep. If we know the
+-- TyConRep for the data constructor's Type, we can surmise what to do with
+-- each constructor.
 
 -- | Describes how a type constructor is represented in LLVM.
 data TyConRep
@@ -28,7 +33,6 @@ data TyConRep
     -- ^ Represent as a struct with a 'Word32'-sized integer tag and an integer
     -- pointer to data.
   deriving (Show, Eq)
-
 
 -- | Describes how a data constructor is represented in LLVM.
 data DataConRep
@@ -44,18 +48,18 @@ data DataConRep
 
 -- | Decide how we are going to compile a type declaration.
 typeCompilationMethod
-  :: ANF.TypeDeclaration
-  -> (Map ANF.ConstructorName DataConRep, (TyConInfo, TyConRep))
-typeCompilationMethod decl@(ANF.TypeDeclaration tyName constructors) =
+  :: TypeDeclaration
+  -> (Map DataConstructor DataConRep, (TyConInfo, TyConRep))
+typeCompilationMethod decl@(TypeDeclaration tyName constructors) =
   case constructors of
     -- Single constructor around another type
-    [ANF.DataConstructor conName (Just argTy)] ->
+    [con@(DataConstructor _ _ (Just argTy) _ _ _)] ->
       let
         primArgTy =
           fromMaybe (error $ "Cannot unbox constructor to primitive type " ++ show decl)
           $ llvmPrimitiveType argTy
       in
-        ( Map.singleton conName $ CompileUnboxed argTy
+        ( Map.singleton con $ CompileUnboxed argTy
         , (tyName, TyConUnboxed primArgTy)
         )
     _ ->
@@ -64,18 +68,18 @@ typeCompilationMethod decl@(ANF.TypeDeclaration tyName constructors) =
       if all (isNothing . dataConstructorArgument) constructors
       then
         let
-          mkMethod (ANF.DataConstructor conName _, i) = (conName, CompileEnum i wordSize)
+          mkMethod con = (con, CompileEnum (fromIntegral . unConstructorIndex $ dataConstructorIndex con) wordSize)
         in
-          ( Map.fromList $ mkMethod <$> zip constructors [0..]
+          ( Map.fromList $ mkMethod <$> constructors
           , (tyName, TyConEnum wordSize)
           )
       -- Can't do an enum. We'll have to use tagged pairs.
       else
         let
           structName = textToName (tyConInfoText tyName)
-          mkMethod (ANF.DataConstructor conName _, i) = (conName, CompileTaggedUnion structName i wordSize)
+          mkMethod con = (con, CompileTaggedUnion structName (fromIntegral . unConstructorIndex $ dataConstructorIndex con) wordSize)
         in
-          ( Map.fromList $ mkMethod <$> zip constructors [0..]
+          ( Map.fromList $ mkMethod <$> constructors
           , (tyName, TyConTaggedUnion structName wordSize)
           )
  where
@@ -87,13 +91,13 @@ typeCompilationMethod decl@(ANF.TypeDeclaration tyName constructors) =
       | otherwise -> 32
 
 findCompilationMethod
-  :: ConstructorName
-  -> Map ConstructorName DataConRep
+  :: DataConstructor
+  -> Map DataConstructor DataConRep
   -> DataConRep
-findCompilationMethod consName compilationMethods =
-  fromMaybe (error $ "No compilation method for " ++ show consName) $ Map.lookup consName compilationMethods
+findCompilationMethod cons compilationMethods =
+  fromMaybe (error $ "No compilation method for " ++ show cons) $ Map.lookup cons compilationMethods
 
--- | Convert from a amy primitive type to an LLVM type
+-- | Convert from an Amy primitive type to an LLVM type
 llvmPrimitiveType :: TyConInfo -> Maybe LLVM.Type
 llvmPrimitiveType tyCon
   | tyCon == intTyCon' = Just (IntegerType 64)

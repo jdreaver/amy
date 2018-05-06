@@ -38,8 +38,8 @@ prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
 prettyTypeDeclaration' (TypeDeclaration tyName cons) =
    prettyTypeDeclaration (prettyTyConInfo tyName) (prettyConstructor <$> cons)
  where
-   prettyConstructor (DataConstructor conName mArg) =
-     prettyDataConstructor (prettyConstructorName conName) (prettyTyConInfo <$> mArg)
+  prettyConstructor (DataConstructor conName _ mArg _ _ _) =
+    prettyDataConstructor (pretty conName) (prettyTyConInfo <$> mArg)
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding ident scheme args _ body) =
@@ -52,9 +52,6 @@ prettyScheme' ident scheme = prettyBindingScheme (prettyIdent ident) (mkPrettySc
 
 prettyIdent :: Ident -> Doc ann
 prettyIdent (Ident name _) = pretty name
-
-prettyConstructorName :: ConstructorName -> Doc ann
-prettyConstructorName (ConstructorName name _) = pretty name
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit lit) = pretty $ showLiteral lit
@@ -72,14 +69,14 @@ prettyExpr (EParens expr) = parens $ prettyExpr expr
 
 prettyVar :: Var -> Doc ann
 prettyVar (VVal (Typed _ var)) = prettyIdent var
-prettyVar (VCons (Typed _ var)) = prettyConstructorName var
+prettyVar (VCons (Typed _ cons)) = pretty . dataConstructorName $ cons
 
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PLit lit) = pretty $ showLiteral lit
 prettyPattern (PVar (Typed _ var)) = prettyIdent var
 prettyPattern (PParens pat) = parens (prettyPattern pat)
-prettyPattern (PCons (PatCons (Typed _ var) mArg _)) =
-  prettyConstructorName var <> maybe mempty prettyArg mArg
+prettyPattern (PCons (PatCons cons mArg _)) =
+  pretty (dataConstructorName cons) <> maybe mempty prettyArg mArg
  where
   prettyArg = (space <>) . prettyArg'
   prettyArg' arg@PCons{} = parens (prettyPattern arg)

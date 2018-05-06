@@ -37,6 +37,8 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Data.Tuple (swap)
 
+import Amy.ASTCommon
+
 --
 -- Primitive Type ID Generation
 --
@@ -111,40 +113,52 @@ data PrimDataCon
   = PrimDataCon
   { primDataConName :: !Text
   , primDataConId :: !Int
+  , primDataConType :: !PrimTyCon
+  , primDataConSpan :: !ConstructorSpan
+  , primDataConIndex :: !ConstructorIndex
   } deriving (Show, Eq)
 
-mkPrimTyCon :: PrimitiveType -> PrimTyCon
-mkPrimTyCon prim = PrimTyCon (showPrimType prim) (primitiveTypeId prim)
-
-mkPrimDataCon :: PrimitiveDataCon -> PrimDataCon
-mkPrimDataCon prim = PrimDataCon (showPrimDataCon prim) (primitiveDataConId prim)
+mkPrimTypeDef :: PrimitiveType -> [PrimitiveDataCon] -> PrimTypeDefinition
+mkPrimTypeDef tyCon dataCons =
+  let
+    tyCon' = PrimTyCon (showPrimType tyCon) (primitiveTypeId tyCon)
+    span' = ConstructorSpan $ length dataCons
+    indexes = ConstructorIndex <$> [0..]
+    mkDataCon (i, prim) =
+      PrimDataCon
+      { primDataConName = showPrimDataCon prim
+      , primDataConId = primitiveDataConId prim
+      , primDataConType = tyCon'
+      , primDataConSpan = span'
+      , primDataConIndex = i
+      }
+    dataCons' = mkDataCon <$> zip indexes dataCons
+  in PrimTypeDefinition tyCon' dataCons'
 
 -- Int
-intTyCon :: PrimTyCon
-intTyCon = mkPrimTyCon IntType
-
 intTypeDefinition :: PrimTypeDefinition
-intTypeDefinition = PrimTypeDefinition intTyCon []
+intTypeDefinition = mkPrimTypeDef IntType []
+
+intTyCon :: PrimTyCon
+intTyCon = primTypeDefinitionTypeName intTypeDefinition
 
 -- Double
-doubleTyCon :: PrimTyCon
-doubleTyCon = mkPrimTyCon DoubleType
-
 doubleTypeDefinition :: PrimTypeDefinition
-doubleTypeDefinition = PrimTypeDefinition doubleTyCon []
+doubleTypeDefinition = mkPrimTypeDef DoubleType []
+
+doubleTyCon :: PrimTyCon
+doubleTyCon = primTypeDefinitionTypeName doubleTypeDefinition
 
 -- Bool
-boolTyCon :: PrimTyCon
-boolTyCon = mkPrimTyCon BoolType
-
-falseDataCon :: PrimDataCon
-falseDataCon = mkPrimDataCon FalseDataCon
-
-trueDataCon :: PrimDataCon
-trueDataCon = mkPrimDataCon TrueDataCon
 
 boolTypeDefinition :: PrimTypeDefinition
-boolTypeDefinition = PrimTypeDefinition boolTyCon [falseDataCon, trueDataCon]
+boolTypeDefinition = mkPrimTypeDef BoolType [FalseDataCon, TrueDataCon]
+
+boolTyCon :: PrimTyCon
+boolTyCon = primTypeDefinitionTypeName boolTypeDefinition
+
+falseDataCon, trueDataCon :: PrimDataCon
+[falseDataCon, trueDataCon] = primTypeDefinitionDataConstructors boolTypeDefinition
 
 allPrimTypeDefinitions :: [PrimTypeDefinition]
 allPrimTypeDefinitions =

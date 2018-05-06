@@ -18,19 +18,20 @@ module Amy.ANF.AST
   , App(..)
 
   , Ident(..)
-  , ConstructorName(..)
-  , fromPrimDataCon
   , Type(..)
   , TyConInfo(..)
   , fromPrimTyCon
   , TyVarInfo(..)
   , Scheme(..)
   , Typed(..)
+
+  , module Amy.ASTCommon
   ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 
+import Amy.ASTCommon
 import Amy.Literal
 import Amy.Prim
 
@@ -64,13 +65,21 @@ data TypeDeclaration
 
 fromPrimTypeDefinition :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDefinition (PrimTypeDefinition tyName cons) =
-  TypeDeclaration (fromPrimTyCon tyName) ((\con -> DataConstructor (fromPrimDataCon con) Nothing) <$> cons)
+  TypeDeclaration (fromPrimTyCon tyName) (fromPrimDataCon <$> cons)
 
 data DataConstructor
   = DataConstructor
-  { dataConstructorName :: !ConstructorName
+  { dataConstructorName :: !Text
+  , dataConstructorId :: !Int
   , dataConstructorArgument :: !(Maybe TyConInfo)
-  } deriving (Show, Eq)
+  , dataConstructorType :: !TyConInfo
+  , dataConstructorSpan :: !ConstructorSpan
+  , dataConstructorIndex :: !ConstructorIndex
+  } deriving (Show, Eq, Ord)
+
+fromPrimDataCon :: PrimDataCon -> DataConstructor
+fromPrimDataCon (PrimDataCon name id' ty span' index) =
+  DataConstructor name id' Nothing (fromPrimTyCon ty) span' index
 
 data Val
   = Var !Var
@@ -79,7 +88,7 @@ data Val
 
 data Var
   = VVal !(Typed Ident)
-  | VCons !(Typed ConstructorName)
+  | VCons !(Typed DataConstructor)
   deriving (Show, Eq)
 
 data Expr
@@ -117,7 +126,7 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !(Typed ConstructorName)
+  { patConsConstructor :: !DataConstructor
   , patConsArg :: !(Maybe (Typed Ident))
   , patConsType :: !Type
   } deriving (Show, Eq)
@@ -136,15 +145,6 @@ data Ident
   , identId :: !Int
   , identIsTopLevel :: !Bool
   } deriving (Show, Eq, Ord)
-
-data ConstructorName
-  = ConstructorName
-  { constructorNameText :: !Text
-  , constructorNameId :: !Int
-  } deriving (Show, Eq, Ord)
-
-fromPrimDataCon :: PrimDataCon -> ConstructorName
-fromPrimDataCon (PrimDataCon name id') = ConstructorName name id'
 
 data Type
   = TyCon !TyConInfo

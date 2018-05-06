@@ -55,7 +55,7 @@ data CaseEndBlock
 
 data LiteralPattern
   = LitLiteralPattern !Literal
-  | ConsEnumPattern !(Typed ConstructorName)
+  | ConsEnumPattern !DataConstructor
   -- Not implemented yet: ConsLiteralPattern !(Typed ConstructorName, Literal)
   deriving (Show, Eq)
 
@@ -69,18 +69,18 @@ literalPattern _ = Nothing
 
 data VarPattern
   = VarVarPattern !Ident
-  | ConsVarPattern !ConstructorName !Ident
+  | ConsVarPattern !DataConstructor !Ident
   -- TODO: Wildcard pattern
   deriving (Show, Eq)
 
 varPattern :: Pattern -> Maybe VarPattern
 varPattern (PVar (Typed _ ident)) = Just $ VarVarPattern ident
-varPattern (PCons (PatCons (Typed _ consName) (Just (Typed _ arg)) _)) = Just $ ConsVarPattern consName arg
+varPattern (PCons (PatCons cons (Just (Typed _ arg)) _)) = Just $ ConsVarPattern cons arg
 varPattern _ = Nothing
 
 caseBlocks
   :: (String -> Name)
-  -> Map ConstructorName DataConRep
+  -> Map DataConstructor DataConRep
   -> Case
   -> CaseBlocks
 caseBlocks mkBlockName compilationMethods (Case _ matches ty) =
@@ -138,7 +138,7 @@ caseBlocks mkBlockName compilationMethods (Case _ matches ty) =
       , caseLiteralBlockConstant =
           case pat of
             LitLiteralPattern lit -> literalConstant lit
-            ConsEnumPattern (Typed _ consName) -> constructorConstant compilationMethods consName
+            ConsEnumPattern cons -> constructorConstant compilationMethods cons
       }
     literalBlocks = literalBlock <$> zip literalPatterns (zip literalBlockNames nextLiteralBlockNames)
 
@@ -164,11 +164,11 @@ literalConstant lit =
     LiteralDouble x -> C.Float (F.Double x)
 
 constructorConstant
-  :: Map ConstructorName DataConRep
-  -> ConstructorName
+  :: Map DataConstructor DataConRep
+  -> DataConstructor
   -> C.Constant
-constructorConstant compilationMethods consName =
-  case findCompilationMethod consName compilationMethods of
-    CompileUnboxed _ -> error $ "Cannot unbox, we have an enum! " ++ show consName
+constructorConstant compilationMethods cons =
+  case findCompilationMethod cons compilationMethods of
+    CompileUnboxed _ -> error $ "Cannot unbox, we have an enum! " ++ show cons
     CompileEnum i intBits -> C.Int intBits (fromIntegral i)
-    CompileTaggedUnion _ _ _ -> error $ "Cannot compile tagged pairs, we have an enum! " ++ show consName
+    CompileTaggedUnion _ _ _ -> error $ "Cannot compile tagged pairs, we have an enum! " ++ show cons

@@ -38,8 +38,15 @@ convertTypeDeclaration (C.TypeDeclaration tyName cons) =
   ANF.TypeDeclaration (convertTyConInfo tyName) (convertDataConstructor <$> cons)
 
 convertDataConstructor :: C.DataConstructor -> ANF.DataConstructor
-convertDataConstructor (C.DataConstructor conName mTyArg) =
-  ANF.DataConstructor (convertConstructorName conName) (convertTyConInfo <$> mTyArg)
+convertDataConstructor (C.DataConstructor conName id' mTyArg tyCon span' index) =
+  ANF.DataConstructor
+  { ANF.dataConstructorName = conName
+  , ANF.dataConstructorId = id'
+  , ANF.dataConstructorArgument = convertTyConInfo <$> mTyArg
+  , ANF.dataConstructorType = convertTyConInfo tyCon
+  , ANF.dataConstructorSpan = span'
+  , ANF.dataConstructorIndex = index
+  }
 
 convertIdent :: Bool -> C.Ident -> ANF.Ident
 convertIdent isTopLevel (C.Ident name id') = ANF.Ident name id' isTopLevel
@@ -47,9 +54,6 @@ convertIdent isTopLevel (C.Ident name id') = ANF.Ident name id' isTopLevel
 convertIdent' :: C.Ident -> ANFConvert ANF.Ident
 convertIdent' ident@(C.Ident name id') =
   ANF.Ident name id' <$> isIdentTopLevel ident
-
-convertConstructorName :: C.ConstructorName -> ANF.ConstructorName
-convertConstructorName (C.ConstructorName name id') = ANF.ConstructorName name id'
 
 convertScheme :: C.Scheme -> ANF.Scheme
 convertScheme (C.Forall vars ty) = ANF.Forall (convertTyVarInfo <$> vars) (convertType ty)
@@ -64,10 +68,6 @@ convertTyConInfo (C.TyConInfo name' id') = ANF.TyConInfo name' id'
 
 convertTypedIdent :: C.Typed C.Ident -> ANFConvert (ANF.Typed ANF.Ident)
 convertTypedIdent (C.Typed ty arg) = ANF.Typed (convertType ty) <$> convertIdent' arg
-
-convertTypedConstructorName :: C.Typed C.ConstructorName -> ANFConvert (ANF.Typed ANF.ConstructorName)
-convertTypedConstructorName (C.Typed ty arg) =
-  ANF.Typed (convertType ty) <$> pure (convertConstructorName arg)
 
 convertTyVarInfo :: C.TyVarInfo -> ANF.TyVarInfo
 convertTyVarInfo (C.TyVarInfo name' id') = ANF.TyVarInfo name' id'
@@ -130,9 +130,11 @@ normalizeName name (C.EVar var) c =
           mkNormalizeLet name (ANF.EApp $ ANF.App (ANF.VVal ident') [] ty) ty c
         -- Not a top-level value, just return
         _ -> c $ ANF.Var (ANF.VVal ident')
-    C.VCons cons -> do
-      cons' <- convertTypedConstructorName cons
-      c $ ANF.Var (ANF.VCons cons')
+    C.VCons (C.Typed ty cons) -> do
+      let
+        cons' = convertDataConstructor cons
+        ty' = convertType ty
+      c $ ANF.Var (ANF.VCons (ANF.Typed ty' cons'))
 normalizeName name expr c = do
   expr' <- normalizeTerm name expr
   let exprType = convertType $ expressionType expr
@@ -166,7 +168,7 @@ convertPattern :: C.Pattern -> ANFConvert ANF.Pattern
 convertPattern (C.PLit lit) = pure $ ANF.PLit lit
 convertPattern (C.PVar var) = ANF.PVar <$> convertTypedIdent var
 convertPattern (C.PCons (C.PatCons cons mArg retTy)) = do
-  cons' <- convertTypedConstructorName cons
+  let cons' = convertDataConstructor cons
   mArg' <- traverse convertTypedIdent mArg
   let retTy' = convertType retTy
   pure $ ANF.PCons $ ANF.PatCons cons' mArg' retTy'
