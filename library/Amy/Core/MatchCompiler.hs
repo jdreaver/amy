@@ -163,7 +163,7 @@ match (PCon pcon pargs) obj dsc state rhs rules =
         (Neg _) -> mapArity (const $ Neg [])
         (Pos _ dargs) -> dargs
 
-    getoargs = mapArity (\i -> Sel (i+1) obj)
+    getoargs = mapArity (\i -> Sel i obj)
 
     newState = MatchState (pcon, []) (zip3Error pargs getoargs getdargs)
     succeed' = compileSucceed (newState : state) rhs rules

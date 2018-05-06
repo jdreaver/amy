@@ -63,7 +63,7 @@ expectedLamCompile =
   Switch Obj
   [ (varC, Success 111)
   , ( lamC
-    , Switch (Sel 2 Obj)
+    , Switch (Sel 1 Obj)
       [ (varC, Success 222)
       , (lamC, Success 333)
       , (appC, Success 444)
@@ -71,17 +71,17 @@ expectedLamCompile =
       (Success 888)
     )
   , ( appC
-    , Switch (Sel 1 Obj)
+    , Switch (Sel 0 Obj)
       [ (lamC, Success 555)
       , (appC, Success 666)
       ]
       Failure
     )
   ]
-  (Switch (Sel 2 Obj)
+  (Switch (Sel 1 Obj)
      [ (letC, Success 777)
      ]
-     (Switch (Sel 3 Obj)
+     (Switch (Sel 2 Obj)
         [ (appC, Success 999)
         ]
         Failure
@@ -114,15 +114,15 @@ spec = do
           , (tupP [falseP, trueP], '4')
           ]
         expected =
-          Switch (Sel 1 Obj)
+          Switch (Sel 0 Obj)
           [ ( trueC
-            , Switch (Sel 2 Obj)
+            , Switch (Sel 1 Obj)
               [ (trueC, Success '1')
               ]
               (Success '3')
             )
           ]
-          ( Switch (Sel 2 Obj)
+          ( Switch (Sel 1 Obj)
             [ (falseC, Success '2')
             ]
             (Success '4')
