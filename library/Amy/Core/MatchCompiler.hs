@@ -139,12 +139,21 @@ data MatchState con
   } deriving (Show, Eq)
 
 -- TODO: Document this
-compileFail :: (Show con, Eq con) => TermDesc con -> Match con a -> PrelimDecision con a
+compileFail
+  :: (Show con, Eq con)
+  => TermDesc con
+  -> Match con a
+  -> PrelimDecision con a
 compileFail _ [] = Failure'
 compileFail dsc ((pat1, rhs1):rulesrest) = match pat1 Root dsc [] rhs1 rulesrest
 
 -- TODO: Document this
-compileSucceed :: (Show con, Eq con) => [MatchState con] -> a -> Match con a -> PrelimDecision con a
+compileSucceed
+  :: (Show con, Eq con)
+  => [MatchState con]
+  -> a
+  -> Match con a
+  -> PrelimDecision con a
 compileSucceed [] rhs _ = Success' rhs
 compileSucceed (MatchState ctx work : staterest) rhs rules =
   case work of
@@ -153,7 +162,15 @@ compileSucceed (MatchState ctx work : staterest) rhs rules =
       match pat obj dsc (MatchState ctx workr : staterest) rhs rules
 
 -- TODO: Document this
-match :: (Show con, Eq con) => Pat con -> Access con -> TermDesc con -> [MatchState con] -> a -> Match con a -> PrelimDecision con a
+match
+  :: (Show con, Eq con)
+  => Pat con
+  -> Access con
+  -> TermDesc con
+  -> [MatchState con]
+  -> a
+  -> Match con a
+  -> PrelimDecision con a
 match (PVar _) _ dsc state rhs rules = compileSucceed (augmentContext state dsc) rhs rules
 match (PCon pcon pargs) obj dsc state rhs rules =
   let
