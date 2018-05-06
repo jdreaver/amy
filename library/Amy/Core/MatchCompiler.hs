@@ -122,36 +122,39 @@ compileMatch = switchify . compileMatch'
 compileMatch' :: Match a -> PrelimDecision a
 compileMatch' = compileFail (Neg [])
 
--- | A 'WordStack' is a stack of hypothesis to still be checked.
-type WorkStack = [[(Pat, Access, TermDesc)]] -- Make this a data type?
-
--- | The 'Context' is a path of constructors from the current sub-term up to
--- the root, along with term descriptions of the arguments to those
--- constructors.
---
--- The argument term descriptions are stored in reverse order (like a stack),
--- and the constructor can be partially applied. When the constructor is fully
--- applied, we convert it to a 'Pos'.
-type Context = [(Con, [TermDesc])]
+-- | A 'MatchState' holds the context and workd stack for the current sub-term.
+data MatchState
+  = MatchState
+  { matchStateContext :: (Con, [TermDesc])
+    -- ^ The Context of successive 'MatchState's is a path of constructors from
+    -- the current sub-term up to the root, along with term descriptions of the
+    -- arguments to those constructors.
+    --
+    -- The argument term descriptions are stored in reverse order (like a
+    -- stack), and the constructor can be partially applied. When the
+    -- constructor is fully applied, we convert it to a 'Pos'.
+  , matchStateWorkStack :: [(Pat, Access, TermDesc)] -- Make this a data type?
+    -- ^ The work stack is the stack of hypotheses still left to be checked.
+  } deriving (Show, Eq)
 
 -- TODO: Document this
 compileFail :: TermDesc -> Match a -> PrelimDecision a
 compileFail _ [] = Failure'
-compileFail dsc ((pat1, rhs1):rulesrest) = match pat1 Obj dsc [] [] rhs1 rulesrest
+compileFail dsc ((pat1, rhs1):rulesrest) = match pat1 Obj dsc [] rhs1 rulesrest
 
 -- TODO: Document this
-compileSucceed :: Context -> WorkStack -> a -> Match a -> PrelimDecision a
-compileSucceed _ [] rhs _ = Success' rhs
-compileSucceed ctx (work1:workrest) rhs rules =
-  case work1 of
-    [] -> compileSucceed (normContext ctx) workrest rhs rules
+compileSucceed :: [MatchState] -> a -> Match a -> PrelimDecision a
+compileSucceed [] rhs _ = Success' rhs
+compileSucceed (MatchState ctx work : staterest) rhs rules =
+  case work of
+    [] -> compileSucceed (normContext ctx staterest) rhs rules
     ((pat, obj, dsc):workr) ->
-      match pat obj dsc ctx (workr:workrest) rhs rules
+      match pat obj dsc (MatchState ctx workr : staterest) rhs rules
 
 -- TODO: Document this
-match :: Pat -> Access -> TermDesc -> Context -> WorkStack -> a -> Match a -> PrelimDecision a
-match (PVar _) _ dsc ctx work rhs rules = compileSucceed (augmentContext ctx dsc) work rhs rules
-match (PCon pcon pargs) obj dsc ctx work rhs rules =
+match :: Pat -> Access -> TermDesc -> [MatchState] -> a -> Match a -> PrelimDecision a
+match (PVar _) _ dsc state rhs rules = compileSucceed (augmentContext state dsc) rhs rules
+match (PCon pcon pargs) obj dsc state rhs rules =
   let
     mapArity f = f <$> [0..(conArity pcon - 1)]
 
@@ -162,9 +165,10 @@ match (PCon pcon pargs) obj dsc ctx work rhs rules =
 
     getoargs = mapArity (\i -> Sel (i+1) obj)
 
-    succeed' = compileSucceed ((pcon, []):ctx) (zip3Error pargs getoargs getdargs:work) rhs rules
+    newState = MatchState (pcon, []) (zip3Error pargs getoargs getdargs)
+    succeed' = compileSucceed (newState : state) rhs rules
 
-    compileFail' newdsc = compileFail (builddsc ctx newdsc work) rules
+    compileFail' newdsc = compileFail (builddsc state newdsc) rules
   in
     case staticmatch pcon dsc of
       Yes -> succeed'
@@ -172,32 +176,31 @@ match (PCon pcon pargs) obj dsc ctx work rhs rules =
       Maybe' negcons -> IfEq obj pcon succeed' $ compileFail' $ Neg negcons
 
 -- | When matching a term succeeds, we augment the context by filling in the
--- hold of the last argument of the local-most constructor with the term
+-- hole of the last argument of the local-most constructor with the term
 -- description.
-augmentContext :: Context -> TermDesc -> Context
+augmentContext :: [MatchState] -> TermDesc -> [MatchState]
 augmentContext [] _ = []
-augmentContext ((con, args):rest) dsc = (con, dsc:args):rest
+augmentContext (MatchState (con, args) work : rest) dsc = MatchState (con, dsc:args) work : rest
 
 -- | When all arguments for a constructor have been found, a positive term
 -- description is constructed and added to the context.
-normContext :: Context -> Context
-normContext [] = error "Unexpected empty list in normContext"
-normContext ((con, args):rest) = augmentContext rest (Pos con (reverse args))
+normContext :: (Con, [TermDesc]) -> [MatchState] -> [MatchState]
+normContext _ [] = []
+normContext (con, args) state = augmentContext state (Pos con (reverse args))
 
 -- TODO: Document and understand this better. I just know it is used when
 -- matching a sub-term fails.
-builddsc :: Context -> TermDesc -> WorkStack -> TermDesc
-builddsc [] dsc [] = dsc
-builddsc ((con, args):rest) dsc (work1:work) =
+builddsc :: [MatchState] -> TermDesc -> TermDesc
+builddsc [] dsc = dsc
+builddsc (MatchState (con, args) work : rest) dsc =
   let
-    dargs = (\(_, _, z) -> z) <$> work1
+    dargs = (\(_, _, z) -> z) <$> work
     conArgs = reverse args ++ (dsc : dargs)
     newDesc =
       if length conArgs /= conArity con
       then error ("Assertion failed in builddsc. Arity/argument mismatch " ++ show (con, conArgs))
       else Pos con conArgs
-  in builddsc rest newDesc work
-builddsc a b c = error $ "Encountered problem in builddsc " ++ show (a, b, c)
+  in builddsc rest newDesc
 
 -- | An 'Access' path is either the full object or a path to select sub-terms
 -- of the object.
