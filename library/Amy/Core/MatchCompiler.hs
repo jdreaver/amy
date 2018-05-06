@@ -311,10 +311,12 @@ compileToNestedCase matches =
 data NestedCase con a
   = Leaf (MatchRule con a)
   | FailureLeaf
-  | NestedCase [NestedCase con a]
+    -- TODO: Do some kind of variable generation and reference variables in the
+    -- nested case.
+  | NestedCase (Access con) [NestedCase con a] (NestedCase con a)
   deriving (Show, Eq)
 
-compileToNestedCase' :: Access con -> Decision con (Pat con, a) -> NestedCase con a
+compileToNestedCase' :: (Show con) => Access con -> Decision con (Pat con, a) -> NestedCase con a
 compileToNestedCase' access decision =
   case decision of
     Failure -> FailureLeaf
@@ -322,12 +324,23 @@ compileToNestedCase' access decision =
     Switch access' matches defaultMatch ->
       let
         matches' = compileToNestedCase' access' . snd <$> matches
+        -- TODO: We can't naively just extract from the default match.
+        -- Sometimes the default match is a "catch-all" match from a variable,
+        -- in which case if we try to extract we will probably fail.
+        --
+        -- We need to delineate between matches that were made from catch-all
+        -- variables and matches made from exhaustive checks.
+        --
+        -- We could also return "Maybe (Pat con)" in extractPattern. If we have
+        -- a Just, we can use the extraction. If we have Nothing, then we must
+        -- have hit some default variable and we should just put a wildcard or
+        -- some fresh unused variable.
         defaultMatch' = compileToNestedCase' access' defaultMatch
-      in NestedCase $ matches' ++ [defaultMatch']
+      in NestedCase access' matches' defaultMatch'
 
-extractPattern :: Pat con -> Access con -> Pat con
+extractPattern :: (Show con) => Pat con -> Access con -> Pat con
 extractPattern pat Root = pat
-extractPattern pat (Sel i access' _) =
+extractPattern pat sel@(Sel i access' _) =
   case extractPattern pat access' of
     PCon _ args -> args !! i
-    _ -> error "Can't extract from non-constructor"
+    pat' -> error $ "Can't extract from non-constructor " ++ show (pat, sel, pat')
