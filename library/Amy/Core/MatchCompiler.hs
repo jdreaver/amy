@@ -141,7 +141,7 @@ data MatchState con
 -- TODO: Document this
 compileFail :: (Show con, Eq con) => TermDesc con -> Match con a -> PrelimDecision con a
 compileFail _ [] = Failure'
-compileFail dsc ((pat1, rhs1):rulesrest) = match pat1 Obj dsc [] rhs1 rulesrest
+compileFail dsc ((pat1, rhs1):rulesrest) = match pat1 Root dsc [] rhs1 rulesrest
 
 -- TODO: Document this
 compileSucceed :: (Show con, Eq con) => [MatchState con] -> a -> Match con a -> PrelimDecision con a
@@ -206,7 +206,7 @@ builddsc (MatchState (con, args) work : rest) dsc =
 -- | An 'Access' path is either the full object or a path to select sub-terms
 -- of the object.
 data Access con
-  = Obj
+  = Root
     -- ^ Full object
   | Sel !Int !(Access con) !(Con con)
     -- ^ Select the i-th subterm of the given 'Access' path.

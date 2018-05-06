@@ -104,10 +104,10 @@ lamMatch =
 
 expectedLamCompile :: Decision Text Int
 expectedLamCompile =
-  Switch Obj
+  Switch Root
   [ (varC, Success 111)
   , ( lamC
-    , Switch (Sel 1 Obj lamC)
+    , Switch (Sel 1 Root lamC)
       [ (varC, Success 222)
       , (lamC, Success 333)
       , (appC, Success 444)
@@ -115,17 +115,17 @@ expectedLamCompile =
       (Success 888)
     )
   , ( appC
-    , Switch (Sel 0 Obj appC)
+    , Switch (Sel 0 Root appC)
       [ (lamC, Success 555)
       , (appC, Success 666)
       ]
       Failure
     )
   ]
-  (Switch (Sel 1 Obj letC)
+  (Switch (Sel 1 Root letC)
      [ (letC, Success 777)
      ]
-     (Switch (Sel 2 Obj letC)
+     (Switch (Sel 2 Root letC)
         [ (appC, Success 999)
         ]
         Failure
@@ -146,7 +146,7 @@ spec = do
     it "handles a single constructor case with a literal" $ do
       compileMatch [(newtypeP (PCon (ConLit (LiteralInt 1)) []), 'a')]
         `shouldBe`
-        Switch (Sel 0 Obj newtypeC)
+        Switch (Sel 0 Root newtypeC)
         [ (ConLit (LiteralInt 1), Success 'a')
         ]
         Failure
@@ -157,7 +157,7 @@ spec = do
         , (newtypeP (PVar "x"), 'b')
         ]
         `shouldBe`
-        Switch (Sel 0 Obj newtypeC)
+        Switch (Sel 0 Root newtypeC)
         [ (ConLit (LiteralInt 1), Success 'a')
         ]
         (Success 'b')
@@ -169,7 +169,7 @@ spec = do
           , (falseP, 'b')
           ]
         expected =
-          Switch Obj
+          Switch Root
           [(trueC, Success 'a')]
           (Success 'b')
       compileMatch match `shouldBe` expected
@@ -183,15 +183,15 @@ spec = do
           , (tupP [falseP, trueP], '4')
           ]
         expected =
-          Switch (Sel 0 Obj (tupC 2))
+          Switch (Sel 0 Root (tupC 2))
           [ ( trueC
-            , Switch (Sel 1 Obj (tupC 2))
+            , Switch (Sel 1 Root (tupC 2))
               [ (trueC, Success '1')
               ]
               (Success '3')
             )
           ]
-          ( Switch (Sel 1 Obj (tupC 2))
+          ( Switch (Sel 1 Root (tupC 2))
             [ (falseC, Success '2')
             ]
             (Success '4')
@@ -207,7 +207,7 @@ spec = do
           , (litP (LiteralInt 4), 'd') -- Redundant
           ]
         expected =
-          Switch Obj
+          Switch Root
           [ (ConLit (LiteralInt 1), Success 'a')
           , (ConLit (LiteralInt 2), Success 'b')
           ]
