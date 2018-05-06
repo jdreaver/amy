@@ -9,6 +9,7 @@ module Amy.Core.MatchCompiler
   , Span
   , Pat(..)
   , Match
+  , MatchRule
   , Decision(..)
   , Access(..)
   , compileMatch
@@ -27,8 +28,8 @@ import Amy.Literal
 --
 
 -- | A 'Con' represents a generic pattern constructor.
-data Con
-  = Con !Text !Span !Arity
+data Con con
+  = Con !con !Span !Arity
     -- ^ A non-literal constructor with a name, span, and arity.
   | ConLit !Literal
     -- ^ A constructor made from a literal. This case is separate because
@@ -46,13 +47,13 @@ type Arity = Int
 type Span = Int
 
 -- | Returns a 'Con's arity or 0 for a 'ConLit'
-conArity :: Con -> Arity
+conArity :: Con con -> Arity
 conArity (Con _ arity _) = arity
 conArity (ConLit _) = 0
 
 -- | The span of a 'Con'. Returns 'Just' for a constructor with finite span and
 -- 'Nothing' for a constructor with infinite span.
-conSpan :: Con -> Maybe Span
+conSpan :: Con con -> Maybe Span
 conSpan (Con _ _ span') = Just span'
 conSpan (ConLit _) = Nothing
 
@@ -62,24 +63,24 @@ conSpan (ConLit _) = Nothing
 
 -- | A 'Pat'tern is either a variable or a constructor applied to more
 -- patterns.
-data Pat
+data Pat con
   = PVar !Text
-  | PCon !Con ![Pat]
+  | PCon !(Con con) ![Pat con]
   deriving (Show, Eq)
 
-type MatchRule a = (Pat, a)
-type Match a = [MatchRule a]
+type MatchRule con a = (Pat con, a)
+type Match con a = [MatchRule con a]
 
 --
 -- Term Description
 --
 
 -- | A 'TermDesc'ription describes information we know about a given term.
-data TermDesc
-  = Pos Con [TermDesc]
+data TermDesc con
+  = Pos (Con con) [TermDesc con]
     -- | A 'Pos'itive description describes a term we know has a constructor
     -- 'Con', and with a 'TermDescr' for each argument.
-  | Neg [Con]
+  | Neg [Con con]
     -- | A 'Neg'ative description describes a term who's constructor is none of
     -- the given constructors.
   deriving (Show, Eq)
@@ -89,22 +90,22 @@ data TermDesc
 --
 
 -- | A 'Decision' is a tree-like structure describing how to match an object.
-data Decision a
+data Decision con a
   = Failure
     -- ^ Leaf node when matching has failed
   | Success a
     -- ^ Leaf node when matching has succeeded
-  | Switch Access [(Con, Decision a)] (Decision a)
+  | Switch Access [(Con con, Decision con a)] (Decision con a)
   deriving (Show, Eq)
 
 -- | A 'PrelimDecision' is like 'Decision' except it is made of simple 'IfEq'
 -- branches. It gets compiled to a 'Decision' by turning consecutive
-data PrelimDecision a
+data PrelimDecision con a
   = Failure'
     -- ^ Leaf node when matching has failed
   | Success' a
     -- ^ Leaf node when matching has succeeded
-  | IfEq Access Con (PrelimDecision a) (PrelimDecision a)
+  | IfEq Access (Con con) (PrelimDecision con a) (PrelimDecision con a)
     -- ^ Tests if the given subterm 'Access' of the object is equal to 'Con'.
     -- If it does, then follow the first 'PrelimDecision', and otherwise follow
     -- the second.
@@ -116,16 +117,16 @@ data PrelimDecision a
 --
 -- The mutually recursive functions 'compileFail', 'compileSucceed', and
 -- 'match' are the meat of the algorithm.
-compileMatch :: Match a -> Decision a
+compileMatch :: (Show con, Eq con) => Match con a -> Decision con a
 compileMatch = switchify . compileMatch'
 
-compileMatch' :: Match a -> PrelimDecision a
+compileMatch' :: (Show con, Eq con) => Match con a -> PrelimDecision con a
 compileMatch' = compileFail (Neg [])
 
 -- | A 'MatchState' holds the context and workd stack for the current sub-term.
-data MatchState
+data MatchState con
   = MatchState
-  { matchStateContext :: (Con, [TermDesc])
+  { matchStateContext :: (Con con, [TermDesc con])
     -- ^ The Context of successive 'MatchState's is a path of constructors from
     -- the current sub-term up to the root, along with term descriptions of the
     -- arguments to those constructors.
@@ -133,17 +134,17 @@ data MatchState
     -- The argument term descriptions are stored in reverse order (like a
     -- stack), and the constructor can be partially applied. When the
     -- constructor is fully applied, we convert it to a 'Pos'.
-  , matchStateWorkStack :: [(Pat, Access, TermDesc)] -- Make this a data type?
+  , matchStateWorkStack :: [(Pat con, Access, TermDesc con)] -- Make this a data type?
     -- ^ The work stack is the stack of hypotheses still left to be checked.
   } deriving (Show, Eq)
 
 -- TODO: Document this
-compileFail :: TermDesc -> Match a -> PrelimDecision a
+compileFail :: (Show con, Eq con) => TermDesc con -> Match con a -> PrelimDecision con a
 compileFail _ [] = Failure'
 compileFail dsc ((pat1, rhs1):rulesrest) = match pat1 Obj dsc [] rhs1 rulesrest
 
 -- TODO: Document this
-compileSucceed :: [MatchState] -> a -> Match a -> PrelimDecision a
+compileSucceed :: (Show con, Eq con) => [MatchState con] -> a -> Match con a -> PrelimDecision con a
 compileSucceed [] rhs _ = Success' rhs
 compileSucceed (MatchState ctx work : staterest) rhs rules =
   case work of
@@ -152,7 +153,7 @@ compileSucceed (MatchState ctx work : staterest) rhs rules =
       match pat obj dsc (MatchState ctx workr : staterest) rhs rules
 
 -- TODO: Document this
-match :: Pat -> Access -> TermDesc -> [MatchState] -> a -> Match a -> PrelimDecision a
+match :: (Show con, Eq con) => Pat con -> Access -> TermDesc con -> [MatchState con] -> a -> Match con a -> PrelimDecision con a
 match (PVar _) _ dsc state rhs rules = compileSucceed (augmentContext state dsc) rhs rules
 match (PCon pcon pargs) obj dsc state rhs rules =
   let
@@ -178,19 +179,19 @@ match (PCon pcon pargs) obj dsc state rhs rules =
 -- | When matching a term succeeds, we augment the context by filling in the
 -- hole of the last argument of the local-most constructor with the term
 -- description.
-augmentContext :: [MatchState] -> TermDesc -> [MatchState]
+augmentContext :: [MatchState con] -> TermDesc con -> [MatchState con]
 augmentContext [] _ = []
 augmentContext (MatchState (con, args) work : rest) dsc = MatchState (con, dsc:args) work : rest
 
 -- | When all arguments for a constructor have been found, a positive term
 -- description is constructed and added to the context.
-normContext :: (Con, [TermDesc]) -> [MatchState] -> [MatchState]
+normContext :: (Con con, [TermDesc con]) -> [MatchState con] -> [MatchState con]
 normContext _ [] = []
 normContext (con, args) state = augmentContext state (Pos con (reverse args))
 
 -- TODO: Document and understand this better. I just know it is used when
 -- matching a sub-term fails.
-builddsc :: [MatchState] -> TermDesc -> TermDesc
+builddsc :: (Show con) => [MatchState con] -> TermDesc con -> TermDesc con
 builddsc [] dsc = dsc
 builddsc (MatchState (con, args) work : rest) dsc =
   let
@@ -211,15 +212,15 @@ data Access
     -- ^ Select the i-th subterm of the given 'Access' path.
   deriving (Show, Eq)
 
-data StaticMatchResult
+data StaticMatchResult con
   = Yes
   | No
-  | Maybe' [Con]
+  | Maybe' [Con con]
     -- ^ The '[Con]' is the new list of negative constructors.
   deriving (Show, Eq)
 
 -- | Attempt to match a constructor against the term description of a pattern.
-staticmatch :: Con -> TermDesc -> StaticMatchResult
+staticmatch :: (Eq con) => Con con -> TermDesc con -> StaticMatchResult con
 staticmatch pcon (Pos con _) =
   if con == pcon
     -- We positively know the object constructor is @con@ and @pcon@ matches
@@ -241,7 +242,7 @@ staticmatch pcon (Neg negcons)
 
 -- | Convert a 'PrelimDecision' into a 'Decision' by converting all consecutive
 -- 'IfEq' nodes into 'Switch' nodes.
-switchify :: PrelimDecision a -> Decision a
+switchify :: PrelimDecision con a -> Decision con a
 switchify Failure' = Failure
 switchify (Success' x) = Success x
 switchify (IfEq acc con successDec failDec) =
@@ -251,7 +252,7 @@ switchify (IfEq acc con successDec failDec) =
 
 -- | Collect consecutive 'IfEq' nodes into a list of 'Switch' decisions as long
 -- as they are acting on the same 'Access' path.
-collectSwitch :: Access -> PrelimDecision a -> [(Con, Decision a)] -> ([(Con, Decision a)], Decision a)
+collectSwitch :: Access -> PrelimDecision con a -> [(Con con, Decision con a)] -> ([(Con con, Decision con a)], Decision con a)
 collectSwitch acc failDec otherDecs =
   case failDec of
     IfEq acc' con' successDec' failDec' ->

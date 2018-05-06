@@ -4,26 +4,33 @@ module Amy.Core.MatchCompilerSpec
   ( spec
   ) where
 
+import Data.Text (Text)
 import Test.Hspec
 
 import Amy.Core.MatchCompiler
 import Amy.Literal
 
-trueC, falseC :: Con
+trueC, falseC :: Con Text
 trueC = Con "True" 0 2
 falseC = Con "False" 0 2
 
-trueP :: Pat
+trueP :: Pat Text
 trueP = PCon trueC []
 
-falseP :: Pat
+falseP :: Pat Text
 falseP = PCon falseC []
 
-tupP :: [Pat] -> Pat
+tupP :: [Pat Text] -> Pat Text
 tupP args = PCon (Con "" (length args) 1) args
 
-litP :: Literal -> Pat
+litP :: Literal -> Pat Text
 litP lit = PCon (ConLit lit) []
+
+newtypeC :: Con Text
+newtypeC = Con "MyNewtype" 1 1
+
+newtypeP :: Pat Text -> Pat Text
+newtypeP pat = PCon newtypeC [pat]
 
 -- data Color = Red | Blue | Green
 
@@ -37,13 +44,13 @@ litP lit = PCon (ConLit lit) []
 -- blueP = PCon blueC []
 -- greenP = PCon greenC []
 
-varC, lamC, appC, letC :: Con
+varC, lamC, appC, letC :: Con Text
 varC = Con "Var" 1 4
 lamC = Con "Lam" 2 4
 appC = Con "App" 2 4
 letC = Con "Let" 3 4
 
-lamMatch :: Match Int
+lamMatch :: Match Text Int
 lamMatch =
   [ (PCon varC [PVar "x"], 111)
   , (PCon lamC [PVar "x", PCon varC [PVar "y"]], 222)
@@ -58,7 +65,41 @@ lamMatch =
   , (PCon appC [PCon appC [PCon lamC [PVar "x", PCon lamC [PVar "y", PVar "z"]], PVar "v"], PVar "w"], 1010)
   ]
 
-expectedLamCompile :: Decision Int
+-- case x of
+--   Var x -> 111
+--   Lam x (Var y) -> 222
+--   Lam x (Lam y z) -> 333
+--   Lam x (App y z) -> 444
+--   App (Lam x y) z -> 555
+--   App (App x y) z -> 666
+--   Let x (Let y z v) w -> 777
+--   Lam x (Let y z v) -> 888
+--   Let x y (App z v) -> 999
+--   App (App (Lam x (Lam y z) v) w) -> 1010
+
+-- Should desugar to:
+-- case x of
+--   Var x -> 111
+--   Lam v1 v2 ->
+--      case v2 of
+--        Var y -> 222
+--        Lam y z -> 333
+--        App y z -> 444
+--        _ -> 888
+--   App v3 v4 ->
+--     case v3 of
+--       Lam x y -> 555
+--       App x y -> 666
+--       _ -> fail
+--   Let v5 v6 v7 ->
+--     case v6 of
+--       Let y z v -> 777
+--       _ ->
+--         case v7 of
+--           App z v -> 999
+--           _ -> fail
+
+expectedLamCompile :: Decision Text Int
 expectedLamCompile =
   Switch Obj
   [ (varC, Success 111)
@@ -92,6 +133,31 @@ spec :: Spec
 spec = do
 
   describe "compileMatch" $ do
+
+    it "handles a simple variable case" $ do
+      compileMatch [(PVar "x" :: Pat Text, 'a')] `shouldBe` Success 'a'
+
+    it "handles a single constructor case with a variable" $ do
+      compileMatch [(newtypeP (PVar "x"), 'a')] `shouldBe` Success 'a'
+
+    it "handles a single constructor case with a literal" $ do
+      compileMatch [(newtypeP (PCon (ConLit (LiteralInt 1)) []), 'a')]
+        `shouldBe`
+        Switch (Sel 0 Obj)
+        [ (ConLit (LiteralInt 1), Success 'a')
+        ]
+        Failure
+
+    it "handles a single constructor case with a literal and variable" $ do
+      compileMatch
+        [ (newtypeP (PCon (ConLit (LiteralInt 1)) []), 'a')
+        , (newtypeP (PVar "x"), 'b')
+        ]
+        `shouldBe`
+        Switch (Sel 0 Obj)
+        [ (ConLit (LiteralInt 1), Success 'a')
+        ]
+        (Success 'b')
 
     it "handles a simple true/false case" $ do
       let
