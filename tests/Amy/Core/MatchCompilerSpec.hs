@@ -85,7 +85,7 @@ lamMatch =
 --   Var x -> 111
 --   Lam v1 v2 ->
 --      case v2 of
---        Var y -> 222
+--        Var y -> 222  -- TODO: Note that what was x is now v1! Not good. Where is x?
 --        Lam y z -> 333
 --        App y z -> 444
 --        Let y z f -> 888  -- How do we know this is Let?
