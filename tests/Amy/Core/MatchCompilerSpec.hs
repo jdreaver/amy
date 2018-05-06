@@ -68,7 +68,7 @@ lamMatch =
   , (PCon appC [PCon appC [PCon lamC [PVar "x", PCon lamC [PVar "y", PVar "z"]], PVar "v"], PVar "w"], 1010)
   ]
 
--- case x of
+-- case lam of
 --   Var x -> 111
 --   Lam x (Var y) -> 222
 --   Lam x (Lam y z) -> 333
@@ -81,14 +81,14 @@ lamMatch =
 --   App (App (Lam x (Lam y z) v) w) -> 1010
 
 -- Should desugar to:
--- case x of
+-- case lam of
 --   Var x -> 111
 --   Lam v1 v2 ->
 --      case v2 of
 --        Var y -> 222
 --        Lam y z -> 333
 --        App y z -> 444
---        _ -> 888
+--        Let y z f -> 888  -- How do we know this is Let?
 --   App v3 v4 ->
 --     case v3 of
 --       Lam x y -> 555
