@@ -14,6 +14,10 @@ module Amy.Core.MatchCompiler
   , Access(..)
   , compileMatch
 
+    -- Nested case
+  , compileToNestedCase
+  , NestedCase(..)
+
     -- Exported for testing
   , compileMatch'
   , PrelimDecision(..)
@@ -292,3 +296,38 @@ zip3Error [] [] [] = []
 zip3Error (x:xs) (y:ys) (z:zs) = (x, y, z) : zip3Error xs ys zs
 zip3Error xs ys zs =
   error $ "Assertion failed in zip3Error. Lists have different length. Leftovers: " ++ show (xs, ys, zs)
+
+
+--
+-- Nested Case conversion
+--
+
+compileToNestedCase :: (Show con, Eq con) => Match con a -> NestedCase con a
+compileToNestedCase matches =
+  let
+    matches' = (\(pat, result) -> (pat, (pat, result))) <$> matches
+  in compileToNestedCase' Root $ compileMatch matches'
+
+data NestedCase con a
+  = Leaf (MatchRule con a)
+  | FailureLeaf
+  | NestedCase [NestedCase con a]
+  deriving (Show, Eq)
+
+compileToNestedCase' :: Access con -> Decision con (Pat con, a) -> NestedCase con a
+compileToNestedCase' access decision =
+  case decision of
+    Failure -> FailureLeaf
+    Success (pat, result) -> Leaf (extractPattern pat access, result)
+    Switch access' matches defaultMatch ->
+      let
+        matches' = compileToNestedCase' access' . snd <$> matches
+        defaultMatch' = compileToNestedCase' access' defaultMatch
+      in NestedCase $ matches' ++ [defaultMatch']
+
+extractPattern :: Pat con -> Access con -> Pat con
+extractPattern pat Root = pat
+extractPattern pat (Sel i access' _) =
+  case extractPattern pat access' of
+    PCon _ args -> args !! i
+    _ -> error "Can't extract from non-constructor"
