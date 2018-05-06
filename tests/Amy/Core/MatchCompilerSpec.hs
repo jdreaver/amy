@@ -20,8 +20,11 @@ trueP = PCon trueC []
 falseP :: Pat Text
 falseP = PCon falseC []
 
+tupC :: Int -> Con Text
+tupC arity = Con "" arity 1
+
 tupP :: [Pat Text] -> Pat Text
-tupP args = PCon (Con "" (length args) 1) args
+tupP args = PCon (tupC (length args)) args
 
 litP :: Literal -> Pat Text
 litP lit = PCon (ConLit lit) []
@@ -104,7 +107,7 @@ expectedLamCompile =
   Switch Obj
   [ (varC, Success 111)
   , ( lamC
-    , Switch (Sel 1 Obj)
+    , Switch (Sel 1 Obj lamC)
       [ (varC, Success 222)
       , (lamC, Success 333)
       , (appC, Success 444)
@@ -112,17 +115,17 @@ expectedLamCompile =
       (Success 888)
     )
   , ( appC
-    , Switch (Sel 0 Obj)
+    , Switch (Sel 0 Obj appC)
       [ (lamC, Success 555)
       , (appC, Success 666)
       ]
       Failure
     )
   ]
-  (Switch (Sel 1 Obj)
+  (Switch (Sel 1 Obj letC)
      [ (letC, Success 777)
      ]
-     (Switch (Sel 2 Obj)
+     (Switch (Sel 2 Obj letC)
         [ (appC, Success 999)
         ]
         Failure
@@ -143,7 +146,7 @@ spec = do
     it "handles a single constructor case with a literal" $ do
       compileMatch [(newtypeP (PCon (ConLit (LiteralInt 1)) []), 'a')]
         `shouldBe`
-        Switch (Sel 0 Obj)
+        Switch (Sel 0 Obj newtypeC)
         [ (ConLit (LiteralInt 1), Success 'a')
         ]
         Failure
@@ -154,7 +157,7 @@ spec = do
         , (newtypeP (PVar "x"), 'b')
         ]
         `shouldBe`
-        Switch (Sel 0 Obj)
+        Switch (Sel 0 Obj newtypeC)
         [ (ConLit (LiteralInt 1), Success 'a')
         ]
         (Success 'b')
@@ -180,15 +183,15 @@ spec = do
           , (tupP [falseP, trueP], '4')
           ]
         expected =
-          Switch (Sel 0 Obj)
+          Switch (Sel 0 Obj (tupC 2))
           [ ( trueC
-            , Switch (Sel 1 Obj)
+            , Switch (Sel 1 Obj (tupC 2))
               [ (trueC, Success '1')
               ]
               (Success '3')
             )
           ]
-          ( Switch (Sel 1 Obj)
+          ( Switch (Sel 1 Obj (tupC 2))
             [ (falseC, Success '2')
             ]
             (Success '4')

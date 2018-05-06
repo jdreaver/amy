@@ -95,7 +95,7 @@ data Decision con a
     -- ^ Leaf node when matching has failed
   | Success a
     -- ^ Leaf node when matching has succeeded
-  | Switch Access [(Con con, Decision con a)] (Decision con a)
+  | Switch (Access con) [(Con con, Decision con a)] (Decision con a)
   deriving (Show, Eq)
 
 -- | A 'PrelimDecision' is like 'Decision' except it is made of simple 'IfEq'
@@ -105,7 +105,7 @@ data PrelimDecision con a
     -- ^ Leaf node when matching has failed
   | Success' a
     -- ^ Leaf node when matching has succeeded
-  | IfEq Access (Con con) (PrelimDecision con a) (PrelimDecision con a)
+  | IfEq (Access con) (Con con) (PrelimDecision con a) (PrelimDecision con a)
     -- ^ Tests if the given subterm 'Access' of the object is equal to 'Con'.
     -- If it does, then follow the first 'PrelimDecision', and otherwise follow
     -- the second.
@@ -134,7 +134,7 @@ data MatchState con
     -- The argument term descriptions are stored in reverse order (like a
     -- stack), and the constructor can be partially applied. When the
     -- constructor is fully applied, we convert it to a 'Pos'.
-  , matchStateWorkStack :: [(Pat con, Access, TermDesc con)] -- Make this a data type?
+  , matchStateWorkStack :: [(Pat con, Access con, TermDesc con)] -- Make this a data type?
     -- ^ The work stack is the stack of hypotheses still left to be checked.
   } deriving (Show, Eq)
 
@@ -153,7 +153,7 @@ compileSucceed (MatchState ctx work : staterest) rhs rules =
       match pat obj dsc (MatchState ctx workr : staterest) rhs rules
 
 -- TODO: Document this
-match :: (Show con, Eq con) => Pat con -> Access -> TermDesc con -> [MatchState con] -> a -> Match con a -> PrelimDecision con a
+match :: (Show con, Eq con) => Pat con -> Access con -> TermDesc con -> [MatchState con] -> a -> Match con a -> PrelimDecision con a
 match (PVar _) _ dsc state rhs rules = compileSucceed (augmentContext state dsc) rhs rules
 match (PCon pcon pargs) obj dsc state rhs rules =
   let
@@ -164,7 +164,7 @@ match (PCon pcon pargs) obj dsc state rhs rules =
         (Neg _) -> mapArity (const $ Neg [])
         (Pos _ dargs) -> dargs
 
-    getoargs = mapArity (\i -> Sel i obj)
+    getoargs = mapArity (\i -> Sel i obj pcon)
 
     newState = MatchState (pcon, []) (zip3Error pargs getoargs getdargs)
     succeed' = compileSucceed (newState : state) rhs rules
@@ -205,10 +205,10 @@ builddsc (MatchState (con, args) work : rest) dsc =
 
 -- | An 'Access' path is either the full object or a path to select sub-terms
 -- of the object.
-data Access
+data Access con
   = Obj
     -- ^ Full object
-  | Sel !Int !Access
+  | Sel !Int !(Access con) !(Con con)
     -- ^ Select the i-th subterm of the given 'Access' path.
   deriving (Show, Eq)
 
@@ -242,7 +242,7 @@ staticmatch pcon (Neg negcons)
 
 -- | Convert a 'PrelimDecision' into a 'Decision' by converting all consecutive
 -- 'IfEq' nodes into 'Switch' nodes.
-switchify :: PrelimDecision con a -> Decision con a
+switchify :: (Eq con) => PrelimDecision con a -> Decision con a
 switchify Failure' = Failure
 switchify (Success' x) = Success x
 switchify (IfEq acc con successDec failDec) =
@@ -252,7 +252,12 @@ switchify (IfEq acc con successDec failDec) =
 
 -- | Collect consecutive 'IfEq' nodes into a list of 'Switch' decisions as long
 -- as they are acting on the same 'Access' path.
-collectSwitch :: Access -> PrelimDecision con a -> [(Con con, Decision con a)] -> ([(Con con, Decision con a)], Decision con a)
+collectSwitch
+  :: (Eq con)
+  => Access con
+  -> PrelimDecision con a
+  -> [(Con con, Decision con a)]
+  -> ([(Con con, Decision con a)], Decision con a)
 collectSwitch acc failDec otherDecs =
   case failDec of
     IfEq acc' con' successDec' failDec' ->
