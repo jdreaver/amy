@@ -58,9 +58,6 @@ data Clause expr = Clause !Con ![Variable] !(CaseExpr expr)
 
 -- TODO: Generate variables properly (use State Int?)
 
--- TODO: Use Seq or something instead of constantly appending to lists. Just
--- search for all instances of ++ in this module.
-
 match :: (Show expr) => [Variable] -> [Equation expr] -> CaseExpr expr -> CaseExpr expr
 match [] eqs def = foldr applyFatbar def (Expr . snd <$> eqs)
 match vars eqs def = foldr (matchGroup vars) def . groupEquations $ eqs
