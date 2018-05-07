@@ -1,3 +1,4 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | Pattern match compiler, inspired by the great book Implementation of
@@ -13,6 +14,7 @@ module Amy.Core.PatternCompiler
   , Clause(..)
   ) where
 
+import Control.Monad.State.Strict
 import Data.List (foldl', sortOn)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
@@ -56,11 +58,24 @@ data Clause expr = Clause !Con ![Variable] !(CaseExpr expr)
 
 -- TODO: Handle substitutions when matching variables
 
--- TODO: Generate variables properly (use State Int?)
+newtype Match expr a = Match (State Int a)
+  deriving (Functor, Applicative, Monad, MonadState Int)
+
+runMatch :: Int -> Match expr a -> a
+runMatch i (Match action) = evalState action i
+
+freshVar :: Match expr Variable
+freshVar = do
+  modify' (+ 1)
+  id' <- get
+  pure $ "_u" <> pack (show id')
 
 match :: (Show expr) => [Variable] -> [Equation expr] -> CaseExpr expr -> CaseExpr expr
-match [] eqs def = foldr applyFatbar def (Expr . snd <$> eqs)
-match vars eqs def = foldr (matchGroup vars) def . groupEquations $ eqs
+match vars eqs def = runMatch 0 $ match' vars eqs def
+
+match' :: (Show expr) => [Variable] -> [Equation expr] -> CaseExpr expr -> Match expr (CaseExpr expr)
+match' [] eqs def = pure $ foldr applyFatbar def (Expr . snd <$> eqs)
+match' vars eqs def = foldM (matchGroup vars) def $ groupEquations eqs
 
 applyFatbar :: (Show expr) => CaseExpr expr -> CaseExpr expr -> CaseExpr expr
 applyFatbar e Fail = e
@@ -113,37 +128,38 @@ concatGroupedEquations (x:y:xs) =
 -- Matching
 --
 
-matchGroup :: (Show expr) => [Variable] -> GroupedEquations expr -> CaseExpr expr -> CaseExpr expr
-matchGroup _ (EmptyEquations _) = error "Encountered empty equations in matchGroup"
-matchGroup vars (VarEquations eqs) = matchVar vars eqs
-matchGroup vars (ConEquations eqs) = matchCon vars eqs
+matchGroup :: (Show expr) => [Variable] -> CaseExpr expr -> GroupedEquations expr -> Match expr (CaseExpr expr)
+matchGroup _ _ (EmptyEquations _) = error "Encountered empty equations in matchGroup"
+matchGroup vars def (VarEquations eqs) = matchVar vars eqs def
+matchGroup vars def (ConEquations eqs) = matchCon vars eqs def
 
-matchVar :: (Show expr) => [Variable] -> [VarEquation expr] -> CaseExpr expr -> CaseExpr expr
+matchVar :: (Show expr) => [Variable] -> [VarEquation expr] -> CaseExpr expr -> Match expr (CaseExpr expr)
 matchVar [] _ _ = error "matchVars called with empty variables"
 matchVar (_:us) eqs def =
   let
     -- TODO: Substitute variable in the expression
     mkNewEquation (VarEquation _ eq) = eq
-  in match us (mkNewEquation <$> eqs) def
+  in match' us (mkNewEquation <$> eqs) def
 
-matchCon :: (Show expr) => [Variable] -> [ConEquation expr] -> CaseExpr expr -> CaseExpr expr
+matchCon :: (Show expr) => [Variable] -> [ConEquation expr] -> CaseExpr expr -> Match expr (CaseExpr expr)
 matchCon [] _ _ = error "matchCon called with empty variables"
 matchCon _ [] _ = error "matchCon called with no equations"
-matchCon (u:us) eqs@(e1:_) def =
+matchCon (u:us) eqs@(e1:_) def = do
   let
     -- Get all possible constructors
     grouped = groupByConstructor eqs
     defaultConsMap = Map.fromList . fmap (\c -> (c, [])) . conInfoAllTypeCons . conEquationInfo $ e1
     consMap = foldl' (\m grp -> Map.insert (conEquationCon $ NE.head grp) (NE.toList grp) m) defaultConsMap grouped
-  in Case u $ uncurry (matchClause us def) <$> Map.toList consMap
+  eqs' <- traverse (uncurry (matchClause us def)) $ Map.toList consMap
+  pure $ Case u eqs'
 
 groupByConstructor :: [ConEquation expr] -> [NonEmpty (ConEquation expr)]
 groupByConstructor = fmap (fmap snd) . NE.groupWith fst . sortOn fst . fmap (\eq@(ConEquation con _ _) -> (con, eq))
 
-matchClause :: (Show expr) => [Variable] -> CaseExpr expr -> Con -> [ConEquation expr] -> Clause expr
-matchClause us def con eqs =
+matchClause :: (Show expr) => [Variable] -> CaseExpr expr -> Con -> [ConEquation expr] -> Match expr (Clause expr)
+matchClause us def con eqs = do
+  us' <- traverse (const freshVar) [1..conArity con]
   let
-    -- TODO: Proper variable generation
-    vs' = ("_u" <>) . pack . show <$> [1..conArity con]
     mkNewEquation (ConEquation _ pats' (pats, expr)) = (pats' ++ pats, expr)
-  in Clause con vs' $ match (vs' ++ us) (mkNewEquation <$> eqs) def
+  eqs' <- match' (us' ++ us) (mkNewEquation <$> eqs) def
+  pure $ Clause con us' eqs'
