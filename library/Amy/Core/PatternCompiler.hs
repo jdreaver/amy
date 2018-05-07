@@ -150,7 +150,7 @@ matchCon (u:us) eqs@(e1:_) def = do
     grouped = groupByConstructor eqs
     defaultConsMap = Map.fromList . fmap (\c -> (c, [])) . conInfoAllTypeCons . conEquationInfo $ e1
     consMap = foldl' (\m grp -> Map.insert (conEquationCon $ NE.head grp) (NE.toList grp) m) defaultConsMap grouped
-  eqs' <- traverse (uncurry (matchClause us def)) $ Map.toList consMap
+  eqs' <- traverse (uncurry (matchClause us def)) $ Map.toAscList consMap
   pure $ Case u eqs'
 
 groupByConstructor :: [ConEquation expr] -> [NonEmpty (ConEquation expr)]
