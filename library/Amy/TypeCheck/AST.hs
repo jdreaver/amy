@@ -7,8 +7,10 @@ module Amy.TypeCheck.AST
   , Binding(..)
   , Extern(..)
   , TypeDeclaration(..)
+  , fromPrimTypeDef
   , DataConstructor(..)
   , fromPrimDataCon
+  , DataConInfo(..)
   , Expr(..)
   , Var(..)
   , If(..)
@@ -77,6 +79,10 @@ data TypeDeclaration
   , typeDeclarationConstructors :: ![DataConstructor]
   } deriving (Show, Eq)
 
+fromPrimTypeDef :: PrimTypeDefinition -> TypeDeclaration
+fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
+  TypeDeclaration (fromPrimTyCon tyCon) (fromPrimDataCon <$> dataCons)
+
 data DataConstructor
   = DataConstructor
   { dataConstructorName :: !Text
@@ -91,6 +97,12 @@ fromPrimDataCon :: PrimDataCon -> DataConstructor
 fromPrimDataCon (PrimDataCon name id' ty span' index) =
   DataConstructor name id' Nothing (fromPrimTyCon ty) span' index
 
+data DataConInfo
+  = DataConInfo
+  { dataConInfoDefinition :: !TypeDeclaration
+  , dataConInfoCons :: !DataConstructor
+  } deriving (Show, Eq)
+
 -- | A renamed 'Expr'
 data Expr
   = ELit !Literal
@@ -104,7 +116,7 @@ data Expr
 
 data Var
   = VVal !(Typed Ident)
-  | VCons !(Typed DataConstructor)
+  | VCons !(Typed DataConInfo)
   deriving (Show, Eq)
 
 data If
@@ -135,7 +147,7 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataConstructor
+  { patConsConstructor :: !DataConInfo
   , patConsArg :: !(Maybe Pattern)
   , patConsType :: !Type
   } deriving (Show, Eq)

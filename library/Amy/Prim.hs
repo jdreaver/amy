@@ -15,11 +15,12 @@ module Amy.Prim
   , PrimTyCon(..)
   , PrimDataCon(..)
   , allPrimTypeDefinitions
-  , allPrimTyCons
-  , allPrimDataCons
 
+  , intTypeDefinition
   , intTyCon
+  , doubleTypeDefinition
   , doubleTyCon
+  , boolTypeDefinition
   , boolTyCon
   , falseDataCon
   , trueDataCon
@@ -166,12 +167,6 @@ allPrimTypeDefinitions =
   , doubleTypeDefinition
   , boolTypeDefinition
   ]
-
-allPrimTyCons :: [PrimTyCon]
-allPrimTyCons = primTypeDefinitionTypeName <$> allPrimTypeDefinitions
-
-allPrimDataCons :: [PrimDataCon]
-allPrimDataCons = concatMap primTypeDefinitionDataConstructors allPrimTypeDefinitions
 
 --
 -- Primitive Functions

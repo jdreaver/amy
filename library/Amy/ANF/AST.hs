@@ -7,6 +7,7 @@ module Amy.ANF.AST
   , TypeDeclaration(..)
   , fromPrimTypeDefinition
   , DataConstructor(..)
+  , DataConInfo(..)
   , Val(..)
   , Var(..)
   , Expr(..)
@@ -81,6 +82,12 @@ fromPrimDataCon :: PrimDataCon -> DataConstructor
 fromPrimDataCon (PrimDataCon name id' ty span' index) =
   DataConstructor name id' Nothing (fromPrimTyCon ty) span' index
 
+data DataConInfo
+  = DataConInfo
+  { dataConInfoDefinition :: !TypeDeclaration
+  , dataConInfoCons :: !DataConstructor
+  } deriving (Show, Eq)
+
 data Val
   = Var !Var
   | Lit !Literal
@@ -88,7 +95,7 @@ data Val
 
 data Var
   = VVal !(Typed Ident)
-  | VCons !(Typed DataConstructor)
+  | VCons !(Typed DataConInfo)
   deriving (Show, Eq)
 
 data Expr
@@ -126,7 +133,7 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataConstructor
+  { patConsConstructor :: !DataConInfo
   , patConsArg :: !(Maybe (Typed Ident))
   , patConsType :: !Type
   } deriving (Show, Eq)

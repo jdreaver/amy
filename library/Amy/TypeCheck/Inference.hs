@@ -177,6 +177,10 @@ convertDataConstructor (R.DataConstructor (Located _ conName) id' mTyArg tyName 
   , T.dataConstructorIndex = index
   }
 
+convertDataConInfo :: R.DataConInfo -> T.DataConInfo
+convertDataConInfo (R.DataConInfo tyDecl dataCon) =
+  T.DataConInfo (convertTypeDeclaration tyDecl) (convertDataConstructor dataCon)
+
 dataConstructorScheme :: T.DataConstructor -> T.Scheme
 dataConstructorScheme (T.DataConstructor _ _ mTyArg tyName _ _) = T.Forall [] ty
  where
@@ -294,8 +298,8 @@ inferExpr (R.EVar var) =
       t <- lookupEnvIdentM valVar'
       pure (T.EVar $ T.VVal (T.Typed t valVar'), [])
     R.VCons cons -> do
-      let cons' = convertDataConstructor cons
-      t <- instantiate $ dataConstructorScheme cons'
+      let cons' = convertDataConInfo cons
+      t <- instantiate $ dataConstructorScheme $ T.dataConInfoCons cons'
       pure (T.EVar $ T.VCons (T.Typed t cons'), [])
 inferExpr (R.EIf (R.If pred' then' else')) = do
   (pred'', predCon) <- inferExpr pred'
@@ -366,8 +370,8 @@ inferPattern (R.PVar (Located _ ident)) = do
   tvar <- freshTypeVariable
   pure (T.PVar $ T.Typed tvar (convertIdent ident), [])
 inferPattern (R.PCons (R.PatCons cons mArg)) = do
-  let cons' = convertDataConstructor cons
-  consTy <- instantiate $ dataConstructorScheme cons'
+  let cons' = convertDataConInfo cons
+  consTy <- instantiate $ dataConstructorScheme $ T.dataConInfoCons cons'
   case mArg of
     -- Convert argument and add a constraint on argument plus constructor
     Just arg -> do

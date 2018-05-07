@@ -5,8 +5,9 @@ module Amy.Renamer.AST
   , Binding(..)
   , Extern(..)
   , TypeDeclaration(..)
+  , fromPrimTypeDef
   , DataConstructor(..)
-  , fromPrimDataCon
+  , DataConInfo(..)
   , Expr(..)
   , Var(..)
   , If(..)
@@ -20,7 +21,6 @@ module Amy.Renamer.AST
   , Ident(..)
   , Type(..)
   , TyConInfo(..)
-  , fromPrimTyCon
   , TyVarInfo(..)
   , Scheme(..)
 
@@ -72,6 +72,10 @@ data TypeDeclaration
   , typeDeclarationConstructors :: ![DataConstructor]
   } deriving (Show, Eq)
 
+fromPrimTypeDef :: PrimTypeDefinition -> TypeDeclaration
+fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
+  TypeDeclaration (fromPrimTyCon tyCon) (fromPrimDataCon <$> dataCons)
+
 data DataConstructor
   = DataConstructor
   { dataConstructorName :: !(Located Text)
@@ -86,6 +90,12 @@ fromPrimDataCon :: PrimDataCon -> DataConstructor
 fromPrimDataCon (PrimDataCon name id' ty span' index) =
   DataConstructor (Located (SourceSpan "" 1 1 1 1) name) id' Nothing (fromPrimTyCon ty) span' index
 
+data DataConInfo
+  = DataConInfo
+  { dataConInfoDefinition :: !TypeDeclaration
+  , dataConInfoCons :: !DataConstructor
+  } deriving (Show, Eq)
+
 -- | A renamed 'Expr'
 data Expr
   = ELit !(Located Literal)
@@ -99,7 +109,7 @@ data Expr
 
 data Var
   = VVal !(Located Ident)
-  | VCons !DataConstructor
+  | VCons !DataConInfo
   deriving (Show, Eq)
 
 data If
@@ -130,7 +140,7 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataConstructor
+  { patConsConstructor :: !DataConInfo
   , patConsArg :: !(Maybe Pattern)
   } deriving (Show, Eq)
 
@@ -166,7 +176,7 @@ data TyConInfo
   { tyConInfoText :: !Text
   , tyConInfoLocation :: !(Maybe SourceSpan)
   , tyConInfoId :: !Int
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 fromPrimTyCon :: PrimTyCon -> TyConInfo
 fromPrimTyCon (PrimTyCon name id') = TyConInfo name Nothing id'

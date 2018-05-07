@@ -64,7 +64,7 @@ data LiteralPattern
 
 literalPattern :: Pattern -> Maybe LiteralPattern
 literalPattern (PLit lit) = Just $ LitLiteralPattern lit
-literalPattern (PCons (PatCons consName Nothing _)) = Just $ ConsEnumPattern consName
+literalPattern (PCons (PatCons consName Nothing _)) = Just $ ConsEnumPattern $ dataConInfoCons consName
 literalPattern _ = Nothing
 
 data VarPattern
@@ -75,7 +75,7 @@ data VarPattern
 
 varPattern :: Pattern -> Maybe VarPattern
 varPattern (PVar (Typed _ ident)) = Just $ VarVarPattern ident
-varPattern (PCons (PatCons cons (Just (Typed _ arg)) _)) = Just $ ConsVarPattern cons arg
+varPattern (PCons (PatCons cons (Just (Typed _ arg)) _)) = Just $ ConsVarPattern (dataConInfoCons cons) arg
 varPattern _ = Nothing
 
 caseBlocks

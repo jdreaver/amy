@@ -48,6 +48,10 @@ convertDataConstructor (C.DataConstructor conName id' mTyArg tyCon span' index) 
   , ANF.dataConstructorIndex = index
   }
 
+convertDataConInfo :: C.DataConInfo -> ANF.DataConInfo
+convertDataConInfo (C.DataConInfo typeDecl dataCon) =
+  ANF.DataConInfo (convertTypeDeclaration typeDecl) (convertDataConstructor dataCon)
+
 convertIdent :: Bool -> C.Ident -> ANF.Ident
 convertIdent isTopLevel (C.Ident name id') = ANF.Ident name id' isTopLevel
 
@@ -132,7 +136,7 @@ normalizeName name (C.EVar var) c =
         _ -> c $ ANF.Var (ANF.VVal ident')
     C.VCons (C.Typed ty cons) -> do
       let
-        cons' = convertDataConstructor cons
+        cons' = convertDataConInfo cons
         ty' = convertType ty
       c $ ANF.Var (ANF.VCons (ANF.Typed ty' cons'))
 normalizeName name expr c = do
@@ -168,7 +172,7 @@ convertPattern :: C.Pattern -> ANFConvert ANF.Pattern
 convertPattern (C.PLit lit) = pure $ ANF.PLit lit
 convertPattern (C.PVar var) = ANF.PVar <$> convertTypedIdent var
 convertPattern (C.PCons (C.PatCons cons mArg retTy)) = do
-  let cons' = convertDataConstructor cons
+  let cons' = convertDataConInfo cons
   mArg' <- traverse convertTypedIdent mArg
   let retTy' = convertType retTy
   pure $ ANF.PCons $ ANF.PatCons cons' mArg' retTy'

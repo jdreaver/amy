@@ -57,7 +57,7 @@ prettyVal (Lit lit) = pretty $ showLiteral lit
 
 prettyVar :: Var -> Doc ann
 prettyVar (VVal (Typed _ var)) = prettyIdent var
-prettyVar (VCons (Typed _ cons)) = pretty . dataConstructorName $ cons
+prettyVar (VCons (Typed _ cons)) = pretty . dataConstructorName . dataConInfoCons $ cons
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (EVal val) = prettyVal val
@@ -75,4 +75,4 @@ prettyPattern :: Pattern -> Doc ann
 prettyPattern (PLit lit) = pretty $ showLiteral lit
 prettyPattern (PVar (Typed _ var)) = prettyIdent var
 prettyPattern (PCons (PatCons cons mArg _)) =
-  pretty (dataConstructorName cons) <> maybe mempty (\(Typed _ arg) -> space <> prettyIdent arg) mArg
+  pretty (dataConstructorName $ dataConInfoCons cons) <> maybe mempty (\(Typed _ arg) -> space <> prettyIdent arg) mArg

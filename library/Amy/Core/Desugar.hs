@@ -37,6 +37,10 @@ desugarDataConstructor (T.DataConstructor conName id' mTyArg tyCon span' index) 
   , C.dataConstructorIndex = index
   }
 
+desugarDataConInfo :: T.DataConInfo -> C.DataConInfo
+desugarDataConInfo (T.DataConInfo typeDecl dataCon) =
+  C.DataConInfo (desugarTypeDeclaration typeDecl) (desugarDataConstructor dataCon)
+
 desugarBinding :: T.Binding -> Desugar C.Binding
 desugarBinding (T.Binding ident scheme args retTy body) =
   C.Binding
@@ -56,9 +60,10 @@ desugarExpr (T.ECase (T.Case scrutinee matches)) = do
   pure $ C.ECase (C.Case scrutinee' matches')
 desugarExpr (T.EIf (T.If pred' then' else')) =
   let
+    boolTyDef = fromPrimTypeDef boolTypeDefinition
     boolTyCon' = T.TyCon $ T.fromPrimTyCon boolTyCon
     mkBoolPatCons cons =
-      T.PatCons (T.fromPrimDataCon cons) Nothing boolTyCon'
+      T.PatCons (T.DataConInfo boolTyDef $ T.fromPrimDataCon cons) Nothing boolTyCon'
     matches =
       NE.fromList
       [ T.Match (T.PCons $ mkBoolPatCons trueDataCon) then'
@@ -77,7 +82,7 @@ desugarExpr (T.EParens expr) = C.EParens <$> desugarExpr expr
 
 desugarVar :: T.Var -> C.Var
 desugarVar (T.VVal ident) = C.VVal $ desugarTypedIdent ident
-desugarVar (T.VCons (T.Typed ty cons)) = C.VCons $ C.Typed (desugarType ty) (desugarDataConstructor cons)
+desugarVar (T.VCons (T.Typed ty cons)) = C.VCons $ C.Typed (desugarType ty) (desugarDataConInfo cons)
 
 desugarMatch :: T.Match -> Desugar C.Match
 desugarMatch (T.Match pat body) = do
@@ -89,7 +94,7 @@ desugarPattern :: T.Pattern -> Desugar C.Pattern
 desugarPattern (T.PLit lit) = pure $ C.PLit lit
 desugarPattern (T.PVar var) = pure $ C.PVar (desugarTypedIdent var)
 desugarPattern pat@(T.PCons (T.PatCons cons mArg retTy)) = do
-  let cons' = desugarDataConstructor cons
+  let cons' = desugarDataConInfo cons
   mArg' <- traverse desugarPattern mArg
   let retTy' = desugarType retTy
   case mArg' of

@@ -6,6 +6,7 @@ module Amy.Core.AST
   , Extern(..)
   , TypeDeclaration(..)
   , DataConstructor(..)
+  , DataConInfo(..)
   , Expr(..)
   , Var(..)
   , If(..)
@@ -78,6 +79,12 @@ data DataConstructor
   , dataConstructorIndex :: !ConstructorIndex
   } deriving (Show, Eq)
 
+data DataConInfo
+  = DataConInfo
+  { dataConInfoDefinition :: !TypeDeclaration
+  , dataConInfoCons :: !DataConstructor
+  } deriving (Show, Eq)
+
 data Expr
   = ELit !Literal
   | EVar !Var
@@ -89,7 +96,7 @@ data Expr
 
 data Var
   = VVal !(Typed Ident)
-  | VCons !(Typed DataConstructor)
+  | VCons !(Typed DataConInfo)
   deriving (Show, Eq)
 
 data If
@@ -119,7 +126,7 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataConstructor
+  { patConsConstructor :: !DataConInfo
   , patConsArg :: !(Maybe (Typed Ident))
   , patConsType :: !Type
   } deriving (Show, Eq)

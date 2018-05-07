@@ -22,4 +22,4 @@ data SourceSpan
   , sourceSpanStartColumn :: !Int
   , sourceSpanEndLine :: !Int
   , sourceSpanEndColumn :: !Int
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)

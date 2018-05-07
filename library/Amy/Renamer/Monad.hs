@@ -14,12 +14,15 @@ module Amy.Renamer.Monad
     -- * Data Constructors
   , addDataConstructorToScope
   , lookupDataConstructorInScope
-  , lookupDataConstructorInScopeOrError
 
     -- * Type Constructors
   , addTypeConstructorToScope
   , lookupTypeConstructorInScope
   , lookupTypeConstructorInScopeOrError
+
+    -- * Type Declarations and DataConInfo
+  , addTypeDeclarationToScope
+  , lookupDataConInfoInScopeOrError
 
     -- * Type Variables
   , addTypeVariableToScope
@@ -33,6 +36,7 @@ module Amy.Renamer.Monad
 import Control.Monad.State.Strict
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Validation
 
@@ -54,6 +58,7 @@ data RenamerState
   , renamerStateValuesInScope :: !(Map Text Ident)
   , renamerStateDataConstructorsInScope :: !(Map Text DataConstructor)
   , renamerStateTypeConstructorsInScope :: !(Map Text TyConInfo)
+  , renamerStateTypeDeclarations :: !(Map TyConInfo TypeDeclaration)
   , renamerStateTypeVariablesInScope :: !(Map Text TyVarInfo)
   } deriving (Show, Eq)
 
@@ -64,8 +69,31 @@ emptyRenamerState =
   , renamerStateValuesInScope = primitiveFunctionNames
   , renamerStateDataConstructorsInScope = primitiveDataConNames
   , renamerStateTypeConstructorsInScope = primitiveTypeNames
+  , renamerStateTypeDeclarations = primitiveTypeDeclNames
   , renamerStateTypeVariablesInScope = Map.empty
   }
+
+
+primitiveTypeDeclarations :: [TypeDeclaration]
+primitiveTypeDeclarations = fromPrimTypeDef <$> allPrimTypeDefinitions
+
+allPrimTyCons :: [TyConInfo]
+allPrimTyCons = typeDeclarationTypeName <$> primitiveTypeDeclarations
+
+allPrimDataCons :: [DataConstructor]
+allPrimDataCons = concatMap typeDeclarationConstructors primitiveTypeDeclarations
+
+primitiveTypeDeclNames :: Map TyConInfo TypeDeclaration
+primitiveTypeDeclNames =
+  Map.fromList $ (\tyDef -> (typeDeclarationTypeName tyDef, tyDef)) <$> primitiveTypeDeclarations
+
+primitiveTypeNames :: Map Text TyConInfo
+primitiveTypeNames =
+  Map.fromList $ (\tyCon -> (tyConInfoText tyCon, tyCon)) <$> allPrimTyCons
+
+primitiveDataConNames :: Map Text DataConstructor
+primitiveDataConNames =
+  Map.fromList $ (\dataCon -> (locatedValue (dataConstructorName dataCon), dataCon)) <$> allPrimDataCons
 
 primitiveFunctionNames :: Map Text Ident
 primitiveFunctionNames =
@@ -76,19 +104,6 @@ primitiveFunctionNames =
        ))
     <$> allPrimitiveFunctions
 
-primitiveTypeNames :: Map Text TyConInfo
-primitiveTypeNames =
-  let
-    infos = fromPrimTyCon <$> allPrimTyCons
-    nameTuples = (\tyCon -> (tyConInfoText tyCon, tyCon)) <$> infos
-  in Map.fromList nameTuples
-
-primitiveDataConNames :: Map Text DataConstructor
-primitiveDataConNames =
-  let
-    infos = fromPrimDataCon <$> allPrimDataCons
-    nameTuples = (\dataCon -> (locatedValue (dataConstructorName dataCon), dataCon)) <$> infos
-  in Map.fromList nameTuples
 
 -- | Generate a new 'NameIntId'
 freshId :: Renamer Int
@@ -169,6 +184,33 @@ lookupTypeConstructorInScope name = Map.lookup name <$> gets renamerStateTypeCon
 lookupTypeConstructorInScopeOrError :: Located Text -> Renamer (Validation [Error] TyConInfo)
 lookupTypeConstructorInScopeOrError name@(Located _ name') =
   maybe (Failure [UnknownTypeConstructor name]) Success <$> lookupTypeConstructorInScope name'
+
+addTypeDeclarationToScope :: Validation [Error] TypeDeclaration -> Renamer (Validation [Error] TypeDeclaration)
+addTypeDeclarationToScope decl =
+  case decl of
+    Failure f -> pure $ Failure f
+    Success decl' -> do
+      let tyCon = typeDeclarationTypeName decl'
+      modify' (\s -> s { renamerStateTypeDeclarations = Map.insert tyCon decl' (renamerStateTypeDeclarations s) })
+      pure decl
+
+lookupTypeDeclaration :: TyConInfo -> Renamer TypeDeclaration
+lookupTypeDeclaration info =
+  fromMaybe (error $ "Couldn't find declaration for " ++ show info)
+  . Map.lookup info
+  <$> gets renamerStateTypeDeclarations
+
+lookupDataConInfoInScopeOrError :: Located Text -> Renamer (Validation [Error] DataConInfo)
+lookupDataConInfoInScopeOrError name = do
+  dataCon <- lookupDataConstructorInScopeOrError name
+  case dataCon of
+    Failure f -> pure $ Failure f
+    Success dataCon' -> do
+      typeDef <- lookupTypeDeclaration (dataConstructorType dataCon')
+      pure
+        $ DataConInfo
+        <$> pure typeDef
+        <*> pure dataCon'
 
 addTypeVariableToScope :: Located Text -> Renamer (Validation [Error] TyVarInfo)
 addTypeVariableToScope (Located span' name) = do

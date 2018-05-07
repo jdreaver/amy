@@ -69,14 +69,14 @@ prettyExpr (EParens expr) = parens $ prettyExpr expr
 
 prettyVar :: Var -> Doc ann
 prettyVar (VVal (Typed _ var)) = prettyIdent var
-prettyVar (VCons (Typed _ cons)) = pretty . dataConstructorName $ cons
+prettyVar (VCons (Typed _ cons)) = pretty . dataConstructorName . dataConInfoCons $ cons
 
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PLit lit) = pretty $ showLiteral lit
 prettyPattern (PVar (Typed _ var)) = prettyIdent var
 prettyPattern (PParens pat) = parens (prettyPattern pat)
 prettyPattern (PCons (PatCons cons mArg _)) =
-  pretty (dataConstructorName cons) <> maybe mempty prettyArg mArg
+  pretty (dataConstructorName $ dataConInfoCons cons) <> maybe mempty prettyArg mArg
  where
   prettyArg = (space <>) . prettyArg'
   prettyArg' arg@PCons{} = parens (prettyPattern arg)

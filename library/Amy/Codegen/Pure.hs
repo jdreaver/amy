@@ -180,7 +180,7 @@ codegenExpr' (ANF.EApp (ANF.App (ANF.VVal (ANF.Typed originalTy ident)) args' re
   returnTyLLVM' <- llvmType returnTy'
   maybeConvertPointer (LocalReference returnTyLLVM' opName) returnTyLLVM
 codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons (ANF.Typed _ cons)) args' _)) = do
-  method <- findCompilationMethod cons <$> compilationMethods
+  method <- findCompilationMethod (dataConInfoCons cons) <$> compilationMethods
   case method of
     CompileUnboxed _ ->
       case args' of
@@ -235,7 +235,7 @@ valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
         ty' <- llvmType ty
         fromMaybe (LocalReference ty' ident') <$> lookupSymbol ident
 valOperand (ANF.Var var@(ANF.VCons (ANF.Typed _ cons))) = do
-  method <- findCompilationMethod cons <$> compilationMethods
+  method <- findCompilationMethod (dataConInfoCons cons) <$> compilationMethods
   case method of
     CompileUnboxed _ -> error $ "Attempted to find operand for applied constructor " ++ show var
     CompileEnum i intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral i)
