@@ -4,10 +4,18 @@ module Amy.Core.PatternCompilerSpec
   ( spec
   ) where
 
+import Data.Text (Text)
 import Test.Hspec
 
 import Amy.Core.PatternCompiler
 import Amy.Literal
+
+-- Utils
+ignoreSubst :: VarSubst a
+ignoreSubst = VarSubst $ \x _ _ -> x
+
+listSubst :: VarSubst [Text]
+listSubst = VarSubst $ \xs var newVar -> (\v -> if v == var then newVar else v) <$> xs
 
 -- Bool type
 trueC, falseC :: Con
@@ -74,19 +82,19 @@ lamC = Con "Lam" 2 4
 appC = Con "App" 2 4
 letC = Con "Let" 3 4
 
-lamEquations :: [Equation Int]
+lamEquations :: [Equation [Text]]
 lamEquations =
-  [ ([PCon varC [PVar "x"]], 111)
-  , ([PCon lamC [PVar "x", PCon varC [PVar "y"]]], 222)
-  , ([PCon lamC [PVar "x", PCon lamC [PVar "y", PVar "z"]]], 333)
-  , ([PCon lamC [PVar "x", PCon appC [PVar "y", PVar "z"]]], 444)
-  , ([PCon appC [PCon lamC [PVar "x", PVar "y"], PVar "z"]], 555)
+  [ ([PCon varC [PVar "x"]], ["x", "111"])
+  , ([PCon lamC [PVar "x", PCon varC [PVar "y"]]], ["222"])
+  , ([PCon lamC [PVar "x", PCon lamC [PVar "y", PVar "z"]]], ["333"])
+  , ([PCon lamC [PVar "x", PCon appC [PVar "y", PVar "z"]]], ["444"])
+  , ([PCon appC [PCon lamC [PVar "x", PVar "y"], PVar "z"]], ["x", "y", "z", "555"])
   --, (PCon appC [PCon appC [PCon lamC [PVar "x", PCon lamC [PVar "y", PVar "z"]], PVar "v"], PVar "w"], 0)
-  , ([PCon appC [PCon appC [PVar "x", PVar "y"], PVar "z"]], 666)
-  , ([PCon letC [PVar "x", PCon letC [PVar "y", PVar "z", PVar "v"], PVar "w"]], 777)
-  , ([PCon lamC [PVar "x", PCon letC [PVar "y", PVar "z", PVar "v"]]], 888)
-  , ([PCon letC [PVar "x", PVar "y", PCon appC [PVar "z", PVar "v"]]], 999)
-  , ([PCon appC [PCon appC [PCon lamC [PVar "x", PCon lamC [PVar "y", PVar "z"]], PVar "v"], PVar "w"]], 1010)
+  , ([PCon appC [PCon appC [PVar "x", PVar "y"], PVar "z"]], ["666"])
+  , ([PCon letC [PVar "x", PCon letC [PVar "y", PVar "z", PVar "v"], PVar "w"]], ["777"])
+  , ([PCon lamC [PVar "x", PCon letC [PVar "y", PVar "z", PVar "v"]]], ["888"])
+  , ([PCon letC [PVar "x", PVar "y", PCon appC [PVar "z", PVar "v"]]], ["x", "y", "z", "v", "999"])
+  , ([PCon appC [PCon appC [PCon lamC [PVar "x", PCon lamC [PVar "y", PVar "z"]], PVar "v"], PVar "w"]], ["1010"])
   ]
 
 -- case lam of
@@ -123,28 +131,28 @@ lamEquations =
 --           App z v -> 999
 --           _ -> fail
 
-lamExpected :: CaseExpr Int
+lamExpected :: CaseExpr [Text]
 lamExpected =
-  Case "x"
+  Case "c"
   [Clause appC ["_u1", "_u2"]
      (Case "_u1"
-        [Clause appC ["_u3", "_u4"] (Expr 666),
-         Clause lamC ["_u9", "_u10"] (Expr 555)]
+        [Clause appC ["_u3", "_u4"] (Expr ["666"]),
+         Clause lamC ["_u9", "_u10"] (Expr ["_u10", "_u2", "_u9", "555"])]
         (Just Error)),
    Clause lamC ["_u11", "_u12"]
      (Case "_u12"
-        [Clause appC ["_u13", "_u14"] (Expr 444),
-         Clause lamC ["_u15", "_u16"] (Expr 333),
-         Clause letC ["_u17", "_u18", "_u19"] (Expr 888),
-         Clause varC ["_u20"] (Expr 222)]
+        [Clause appC ["_u13", "_u14"] (Expr ["444"]),
+         Clause lamC ["_u15", "_u16"] (Expr ["333"]),
+         Clause letC ["_u17", "_u18", "_u19"] (Expr ["888"]),
+         Clause varC ["_u20"] (Expr ["222"])]
         Nothing),
    Clause letC ["_u21", "_u22", "_u23"]
      (Case "_u22"
-        [Clause letC ["_u26", "_u27", "_u28"] (Expr 777)]
+        [Clause letC ["_u26", "_u27", "_u28"] (Expr ["777"])]
         (Just
-           (Case "_u23" [Clause appC ["_u24", "_u25"] (Expr 999)]
+           (Case "_u23" [Clause appC ["_u24", "_u25"] (Expr ["_u21", "_u22", "_u24", "_u25", "999"])]
               (Just Error)))),
-   Clause varC ["_u29"] (Expr 111)]
+   Clause varC ["_u29"] (Expr ["_u29", "111"])]
   Nothing
 
 spec :: Spec
@@ -153,30 +161,30 @@ spec = do
   describe "compileMatch" $ do
 
     it "handles a simple variable case" $ do
-      match ["x"] [([PVar "x"], 'a')] `shouldBe` Expr 'a'
+      match ignoreSubst ["x"] [([PVar "x"], 'a')] `shouldBe` Expr 'a'
 
     it "handles a single constructor case with a variable" $ do
-      match ["x"] [([newtypeP (PVar "y")], 'a')]
+      match ignoreSubst ["x"] [([newtypeP (PVar "y")], 'a')]
         `shouldBe`
         Case "x" [Clause newtypeC ["_u1"] (Expr 'a')] Nothing
 
     it "handles a single constructor case with a literal and variable" $ do
       let
         equations =
-          [ ([newtypeP (intP 1)], 'a')
-          , ([newtypeP (PVar "y")], 'b')
+          [ ([newtypeP (intP 1)], ["x"])
+          , ([newtypeP (PVar "y")], ["x", "y"])
           ]
         expected =
           Case "x"
           [ Clause (Con "MyNewtype" 1 1) ["_u1"]
             ( Case "_u1"
-              [ Clause (ConLit (LiteralInt 1)) [] (Expr 'a')
+              [ Clause (ConLit (LiteralInt 1)) [] (Expr ["x"])
               ]
-              (Just (Expr 'b'))
+              (Just (Expr ["x", "_u1"]))
             )
           ]
           Nothing
-      match ["x"] equations `shouldBe` expected
+      match listSubst ["x"] equations `shouldBe` expected
 
     it "handles a simple true/false case" $ do
       let
@@ -190,7 +198,7 @@ spec = do
           , Clause trueC [] (Expr 'a')
           ]
           Nothing
-      match ["x"] equations `shouldBe` expected
+      match ignoreSubst ["x"] equations `shouldBe` expected
 
     it "handles a pair of bools case" $ do
       let
@@ -218,10 +226,10 @@ spec = do
             )
           ]
           Nothing
-      match ["x", "y"] equations `shouldBe` expected
+      match ignoreSubst ["x", "y"] equations `shouldBe` expected
 
     it "handles the mappairs example" $ do
-      match ["x1", "x2", "x3"] mappairsEquations `shouldBe` mappairsExpect
+      match ignoreSubst ["x1", "x2", "x3"] mappairsEquations `shouldBe` mappairsExpect
 
     it "handles the example from the Setsoft paper" $ do
-      match ["x"] lamEquations `shouldBe` lamExpected
+      match listSubst ["c"] lamEquations `shouldBe` lamExpected

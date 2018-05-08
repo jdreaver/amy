@@ -1,11 +1,13 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 -- | Pattern match compiler, inspired by the great book Implementation of
 -- Functional Programming Languages.
 
 module Amy.Core.PatternCompiler
   ( match
+  , VarSubst(..)
   , Pattern(..)
   , Con(..)
   , Equation
@@ -13,6 +15,7 @@ module Amy.Core.PatternCompiler
   , Clause(..)
   ) where
 
+import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -58,11 +61,18 @@ data Clause expr = Clause !Con ![Variable] !(CaseExpr expr)
 
 -- TODO: Handle substitutions when matching variables
 
-newtype Match expr a = Match (State Int a)
-  deriving (Functor, Applicative, Monad, MonadState Int)
+newtype Match expr a = Match (ReaderT (VarSubst expr) (State Int) a)
+  deriving (Functor, Applicative, Monad, MonadReader (VarSubst expr), MonadState Int)
 
-runMatch :: Int -> Match expr a -> a
-runMatch i (Match action) = evalState action i
+newtype VarSubst expr = VarSubst { _unVarSubst :: expr -> Variable -> Variable -> expr }
+
+substituteVariable :: expr -> Variable -> Variable -> Match expr expr
+substituteVariable expr var newVar = do
+  VarSubst f <- ask
+  pure $ f expr var newVar
+
+runMatch :: VarSubst expr -> Int -> Match expr a -> a
+runMatch subst i (Match action) = evalState (runReaderT action subst) i
 
 freshVar :: Match expr Variable
 freshVar = do
@@ -70,8 +80,8 @@ freshVar = do
   id' <- get
   pure $ "_u" <> pack (show id')
 
-match :: (Show expr) => [Variable] -> [Equation expr] -> CaseExpr expr
-match vars eqs = runMatch 0 $ match' vars eqs Error
+match :: (Show expr) => VarSubst expr -> [Variable] -> [Equation expr] -> CaseExpr expr
+match subst vars eqs = runMatch subst 0 $ match' vars eqs Error
 
 match' :: (Show expr) => [Variable] -> [Equation expr] -> CaseExpr expr -> Match expr (CaseExpr expr)
 match' [] eqs def = pure $ foldr applyFatbar def (Expr . snd <$> eqs)
@@ -137,11 +147,10 @@ matchGroup vars (ConEquations eqs) = matchCon vars eqs
 
 matchVar :: (Show expr) => [Variable] -> [VarEquation expr] -> CaseExpr expr -> Match expr (CaseExpr expr)
 matchVar [] _ _ = error "matchVars called with empty variables"
-matchVar (_:us) eqs def =
-  let
-    -- TODO: Substitute variable in the expression
-    mkNewEquation (VarEquation _ eq) = eq
-  in match' us (mkNewEquation <$> eqs) def
+matchVar (u:us) eqs def = do
+  let mkNewEquation (VarEquation var (ps, eq)) = (ps,) <$>  substituteVariable eq var u
+  eqs' <- traverse mkNewEquation eqs
+  match' us eqs' def
 
 matchCon :: (Show expr) => [Variable] -> [ConEquation expr] -> CaseExpr expr -> Match expr (CaseExpr expr)
 matchCon [] _ _ = error "matchCon called with empty variables"
