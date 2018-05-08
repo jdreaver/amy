@@ -11,57 +11,60 @@ import Amy.Core.PatternCompiler
 import Amy.Literal
 
 -- Utils
-ignoreSubst :: VarSubst a
+ignoreSubst :: VarSubst expr var
 ignoreSubst = VarSubst $ \x _ _ -> x
 
-listSubst :: VarSubst [Text]
+listSubst :: VarSubst [Text] Text
 listSubst = VarSubst $ \xs var newVar -> (\v -> if v == var then newVar else v) <$> xs
 
+mkVar :: MakeVar Text
+mkVar = MakeVar $ \_ x -> x
+
 -- Bool type
-trueC, falseC :: Con
+trueC, falseC :: Con Text
 trueC = Con "True" 0 2
 falseC = Con "False" 0 2
 
-trueP :: Pattern
+trueP :: Pattern Text Text
 trueP = PCon trueC []
 
-falseP :: Pattern
+falseP :: Pattern Text Text
 falseP = PCon falseC []
 
 -- List type
-nilC, consC :: Con
+nilC, consC :: Con Text
 nilC = Con "Nil" 0 2
 consC = Con "Cons" 2 2
 
-nilP :: Pattern
+nilP :: Pattern Text Text
 nilP = PCon nilC []
 
-consP :: Pattern -> Pattern -> Pattern
+consP :: Pattern Text Text -> Pattern Text Text -> Pattern Text Text
 consP x y = PCon consC [x, y]
 
 -- Newtype
-newtypeC :: Con
+newtypeC :: Con Text
 newtypeC = Con "MyNewtype" 1 1
 
-newtypeP :: Pattern -> Pattern
+newtypeP :: Pattern Text Text -> Pattern Text Text
 newtypeP pat = PCon newtypeC [pat]
 
 -- Literal
-intC :: Int -> Con
+intC :: Int -> Con Text
 intC = ConLit . LiteralInt
 
-intP :: Int -> Pattern
+intP :: Int -> Pattern Text Text
 intP i = PCon (intC i) []
 
 -- mappairs example from book
-mappairsEquations :: [Equation Int]
+mappairsEquations :: [Equation Int Text Text]
 mappairsEquations =
   [ ([PVar "f", nilP, PVar "ys"], 1)
   , ([PVar "f", consP (PVar "x") (PVar "xs"), nilP], 2)
   , ([PVar "f", consP (PVar "x") (PVar "xs"), consP (PVar "y") (PVar "ys")], 3)
   ]
 
-mappairsExpect :: CaseExpr Int
+mappairsExpect :: CaseExpr Int Text Text
 mappairsExpect =
   Case "x2"
   [ Clause consC ["_u1", "_u2"]
@@ -76,13 +79,13 @@ mappairsExpect =
   Nothing
 
 -- Example from Sestoft paper
-varC, lamC, appC, letC :: Con
+varC, lamC, appC, letC :: Con Text
 varC = Con "Var" 1 4
 lamC = Con "Lam" 2 4
 appC = Con "App" 2 4
 letC = Con "Let" 3 4
 
-lamEquations :: [Equation [Text]]
+lamEquations :: [Equation [Text] Text Text]
 lamEquations =
   [ ([PCon varC [PVar "x"]], ["x", "111"])
   , ([PCon lamC [PVar "x", PCon varC [PVar "y"]]], ["222"])
@@ -131,7 +134,7 @@ lamEquations =
 --           App z v -> 999
 --           _ -> fail
 
-lamExpected :: CaseExpr [Text]
+lamExpected :: CaseExpr [Text] Text Text
 lamExpected =
   Case "c"
   [Clause appC ["_u1", "_u2"]
@@ -161,10 +164,10 @@ spec = do
   describe "compileMatch" $ do
 
     it "handles a simple variable case" $ do
-      match ignoreSubst ["x"] [([PVar "x"], 'a')] `shouldBe` Expr 'a'
+      match ignoreSubst mkVar ["x"] [([PVar "x"], 'a')] `shouldBe` (Expr 'a' :: CaseExpr Char Text Text)
 
     it "handles a single constructor case with a variable" $ do
-      match ignoreSubst ["x"] [([newtypeP (PVar "y")], 'a')]
+      match ignoreSubst mkVar ["x"] [([newtypeP (PVar "y")], 'a')]
         `shouldBe`
         Case "x" [Clause newtypeC ["_u1"] (Expr 'a')] Nothing
 
@@ -184,7 +187,7 @@ spec = do
             )
           ]
           Nothing
-      match listSubst ["x"] equations `shouldBe` expected
+      match listSubst mkVar ["x"] equations `shouldBe` expected
 
     it "handles a simple true/false case" $ do
       let
@@ -198,7 +201,7 @@ spec = do
           , Clause trueC [] (Expr 'a')
           ]
           Nothing
-      match ignoreSubst ["x"] equations `shouldBe` expected
+      match ignoreSubst mkVar ["x"] equations `shouldBe` expected
 
     it "handles a pair of bools case" $ do
       let
@@ -226,10 +229,10 @@ spec = do
             )
           ]
           Nothing
-      match ignoreSubst ["x", "y"] equations `shouldBe` expected
+      match ignoreSubst mkVar ["x", "y"] equations `shouldBe` expected
 
     it "handles the mappairs example" $ do
-      match ignoreSubst ["x1", "x2", "x3"] mappairsEquations `shouldBe` mappairsExpect
+      match ignoreSubst mkVar ["x1", "x2", "x3"] mappairsEquations `shouldBe` mappairsExpect
 
     it "handles the example from the Setsoft paper" $ do
-      match listSubst ["c"] lamEquations `shouldBe` lamExpected
+      match listSubst mkVar ["c"] lamEquations `shouldBe` lamExpected

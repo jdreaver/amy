@@ -8,8 +8,11 @@
 module Amy.Core.PatternCompiler
   ( match
   , VarSubst(..)
+  , MakeVar(..)
   , Pattern(..)
   , Con(..)
+  , Arity
+  , Span
   , Equation
   , CaseExpr(..)
   , Clause(..)
@@ -24,66 +27,77 @@ import Data.Text (Text, pack)
 
 import Amy.Literal
 
-data Pattern
-  = PCon !Con ![Pattern]
-  | PVar !Variable
+data Pattern con var
+  = PCon !(Con con) ![Pattern con var]
+  | PVar !var
   deriving (Show, Eq)
 
-type Variable = Text
-
-data Con
-  = Con !Text !Arity !Span
+data Con con
+  = Con !con !Arity !Span
   | ConLit !Literal
   deriving (Show, Eq, Ord)
 
-conArity :: Con -> Arity
+conArity :: Con con -> Arity
 conArity (Con _ arity _) = arity
 conArity (ConLit _) = 0
 
-conSpan :: Con -> Maybe Span
+conSpan :: Con con -> Maybe Span
 conSpan (Con _ _ span') = Just span'
 conSpan (ConLit _) = Nothing
 
 type Arity = Int
 type Span = Int
 
-type Equation expr = ([Pattern], expr)
+type Equation expr con var = ([Pattern con var], expr)
 
-data CaseExpr expr
-  = Case !Variable ![Clause expr] !(Maybe (CaseExpr expr))
+data CaseExpr expr con var
+  = Case !var ![Clause expr con var] !(Maybe (CaseExpr expr con var))
   | Expr !expr
   | Fail
   | Error
   deriving (Show, Eq)
 
-data Clause expr = Clause !Con ![Variable] !(CaseExpr expr)
+data Clause expr con var = Clause !(Con con) ![var] !(CaseExpr expr con var)
   deriving (Show, Eq)
 
--- TODO: Handle substitutions when matching variables
+newtype Match expr var a = Match (ReaderT (MatchData expr var) (State Int) a)
+  deriving (Functor, Applicative, Monad, MonadReader (MatchData expr var), MonadState Int)
 
-newtype Match expr a = Match (ReaderT (VarSubst expr) (State Int) a)
-  deriving (Functor, Applicative, Monad, MonadReader (VarSubst expr), MonadState Int)
+data MatchData expr var = MatchData (VarSubst expr var) (MakeVar var)
 
-newtype VarSubst expr = VarSubst { _unVarSubst :: expr -> Variable -> Variable -> expr }
+newtype VarSubst expr var = VarSubst (expr -> var -> var -> expr)
+newtype MakeVar var = MakeVar (Int -> Text -> var)
 
-substituteVariable :: expr -> Variable -> Variable -> Match expr expr
+substituteVariable :: expr -> var -> var -> Match expr var expr
 substituteVariable expr var newVar = do
-  VarSubst f <- ask
+  MatchData (VarSubst f) _ <- ask
   pure $ f expr var newVar
 
-runMatch :: VarSubst expr -> Int -> Match expr a -> a
-runMatch subst i (Match action) = evalState (runReaderT action subst) i
+runMatch :: MatchData expr var -> Int -> Match expr var a -> a
+runMatch matchData i (Match action) = evalState (runReaderT action matchData) i
 
-freshVar :: Match expr Variable
+freshVar :: Match expr var var
 freshVar = do
   modify' (+ 1)
   id' <- get
-  pure $ "_u" <> pack (show id')
+  MatchData _ (MakeVar mkVar) <- ask
+  pure $ mkVar id' ("_u" <> pack (show id'))
 
-match :: (Show expr) => VarSubst expr -> [Variable] -> [Equation expr] -> CaseExpr expr
-match subst vars eqs = runMatch subst 0 $ match' vars eqs Error
+match
+  :: (Show expr, Ord con)
+  => VarSubst expr var
+  -> MakeVar var
+  -> [var]
+  -> [Equation expr con var]
+  -> CaseExpr expr con var
+match subst mkVar vars eqs = runMatch (MatchData subst mkVar) 0 $ match' vars eqs Error
 
-match' :: (Show expr) => [Variable] -> [Equation expr] -> CaseExpr expr -> Match expr (CaseExpr expr)
+match'
+  :: (Show expr, Ord con)
+  => [var]
+  -> [Equation expr con var]
+  -> CaseExpr expr con var
+  -> Match expr var (CaseExpr expr con var)
 match' [] eqs def = pure $ foldr applyFatbar def (Expr . snd <$> eqs)
 match' vars eqs def = foldrM (matchGroup vars) def $ groupEquations eqs
 
@@ -92,10 +106,13 @@ foldrM :: Monad m => (a -> b -> m b) -> b -> [a] -> m b
 foldrM _ d [] = return d
 foldrM f d (x:xs) = f x =<< foldrM f d xs
 
-applyFatbar :: (Show expr) => CaseExpr expr -> CaseExpr expr -> CaseExpr expr
+applyFatbar
+  :: CaseExpr expr con var
+  -> CaseExpr expr con var
+  -> CaseExpr expr con var
 applyFatbar e Fail = e
 applyFatbar Fail e = e
-applyFatbar e@Case{} _ = error $ "Can't guarantee case doesn't fail yet " ++ show e
+applyFatbar Case{} _ = error "Can't guarantee case doesn't fail yet "
 applyFatbar e@(Expr _) _ = e
 applyFatbar Error _ = Error
 
@@ -103,30 +120,27 @@ applyFatbar Error _ = Error
 -- Equation grouping
 --
 
-data GroupedEquations expr
+data GroupedEquations expr con var
   = EmptyEquations ![expr]
-  | VarEquations ![VarEquation expr]
-  | ConEquations ![ConEquation expr]
+  | VarEquations ![VarEquation expr con var]
+  | ConEquations ![ConEquation expr con var]
   deriving (Show, Eq)
 
-data VarEquation expr = VarEquation !Variable !(Equation expr)
+data VarEquation expr con var = VarEquation !var !(Equation expr con var)
   deriving (Show, Eq)
 
-data ConEquation expr = ConEquation !Con ![Pattern] !(Equation expr)
+data ConEquation expr con var = ConEquation !(Con con) ![Pattern con var] !(Equation expr con var)
   deriving (Show, Eq)
 
-conEquationCon :: ConEquation expr -> Con
-conEquationCon (ConEquation con _ _) = con
-
-groupEquations :: [Equation expr] -> [GroupedEquations expr]
+groupEquations :: [Equation expr con var] -> [GroupedEquations expr con var]
 groupEquations = concatGroupedEquations . fmap equationType
 
-equationType :: Equation expr -> GroupedEquations expr
+equationType :: Equation expr con var -> GroupedEquations expr con var
 equationType ([], expr) = EmptyEquations [expr]
 equationType (PVar var:ps, expr) = VarEquations [VarEquation var (ps, expr)]
 equationType (PCon con ps:ps', expr) = ConEquations [ConEquation con ps' (ps, expr)]
 
-concatGroupedEquations :: [GroupedEquations expr] -> [GroupedEquations expr]
+concatGroupedEquations :: [GroupedEquations expr con var] -> [GroupedEquations expr con var]
 concatGroupedEquations [] = []
 concatGroupedEquations [x] = [x]
 concatGroupedEquations (x:y:xs) =
@@ -140,44 +154,65 @@ concatGroupedEquations (x:y:xs) =
 -- Matching
 --
 
-matchGroup :: (Show expr) => [Variable] -> GroupedEquations expr -> CaseExpr expr -> Match expr (CaseExpr expr)
+matchGroup
+  :: (Show expr, Ord con)
+  => [var]
+  -> GroupedEquations expr con var
+  -> CaseExpr expr con var
+  -> Match expr var (CaseExpr expr con var)
 matchGroup _ (EmptyEquations _) = error "Encountered empty equations in matchGroup"
 matchGroup vars (VarEquations eqs) = matchVar vars eqs
 matchGroup vars (ConEquations eqs) = matchCon vars eqs
 
-matchVar :: (Show expr) => [Variable] -> [VarEquation expr] -> CaseExpr expr -> Match expr (CaseExpr expr)
+matchVar
+  :: (Show expr, Ord con)
+  => [var]
+  -> [VarEquation expr con var]
+  -> CaseExpr expr con var
+  -> Match expr var (CaseExpr expr con var)
 matchVar [] _ _ = error "matchVars called with empty variables"
 matchVar (u:us) eqs def = do
   let mkNewEquation (VarEquation var (ps, eq)) = (ps,) <$>  substituteVariable eq var u
   eqs' <- traverse mkNewEquation eqs
   match' us eqs' def
 
-matchCon :: (Show expr) => [Variable] -> [ConEquation expr] -> CaseExpr expr -> Match expr (CaseExpr expr)
+matchCon
+  :: (Show expr, Ord con)
+  => [var]
+  -> [ConEquation expr con var]
+  -> CaseExpr expr con var
+  -> Match expr var (CaseExpr expr con var)
 matchCon [] _ _ = error "matchCon called with empty variables"
 matchCon _ [] _ = error "matchCon called with no equations"
-matchCon (u:us) eqs@(eq1:_) def = do
+matchCon (u:us) eqs@(ConEquation con _ _ : _) def = do
   let
     grouped = groupByConstructor eqs
     -- Check for inexhaustive match.
-    span' = conSpan . conEquationCon $ eq1
     default' =
-      case span' of
-        Just s ->
-          if length grouped < s
+      case conSpan con of
+        Just span' ->
+          if length grouped < span'
           then Just def
           else Nothing
         Nothing -> Just def
   eqs' <- traverse (matchClause us def) grouped
   pure $ Case u eqs' default'
 
-groupByConstructor :: [ConEquation expr] -> [NonEmpty (ConEquation expr)]
+groupByConstructor
+  :: (Ord con)
+  => [ConEquation expr con var]
+  -> [NonEmpty (ConEquation expr con var)]
 groupByConstructor = fmap (fmap snd) . NE.groupWith fst . sortOn fst . fmap (\eq@(ConEquation con _ _) -> (con, eq))
 
-matchClause :: (Show expr) => [Variable] -> CaseExpr expr -> NonEmpty (ConEquation expr) -> Match expr (Clause expr)
+matchClause
+  :: (Show expr, Ord con)
+  => [var]
+  -> CaseExpr expr con var
+  -> NonEmpty (ConEquation expr con var)
+  -> Match expr var (Clause expr con var)
 matchClause us def eqs = do
-  let con = conEquationCon $ NE.head eqs
+  let (ConEquation con _ _) = NE.head eqs
   us' <- traverse (const freshVar) [1..conArity con]
-  let
-    mkNewEquation (ConEquation _ pats' (pats, expr)) = (pats' ++ pats, expr)
+  let mkNewEquation (ConEquation _ pats' (pats, expr)) = (pats' ++ pats, expr)
   eqs' <- match' (us' ++ us) (NE.toList $ mkNewEquation <$> eqs) def
   pure $ Clause con us' eqs'
