@@ -1,12 +1,10 @@
 extern abs :: Int -> Int
 
-MyInt = MyInt Int
-
 Void = Void
 
 MyEnum = MyEnumA | MyEnumB | MyEnumC
 
-MySum = MySumA Int | MySumB Double
+MySum = MySumA Int | MySumB Double | MySumC
 
 EmptyType
 
@@ -22,11 +20,13 @@ main =
     y = x
     b =
       case (iAdd# x 2) of
-        1 -> g
-        o -> MyInt (iSub# o 3)
+        1 -> mySum
+        o -> MySumA (iSub# o 3)
     b' =
       case b of
-        MyInt b'' -> b''
+        MySumA sa -> sa
+        MySumB sb -> 0
+        MySumC -> 1
     v = Void
     u =
       case v of
@@ -42,9 +42,6 @@ main =
 
 # f :: Int -> Int
 f x = if True then abs x else threeHundred
-
-g :: MyInt
-g = MyInt 1
 
 myEnum :: MyEnum
 myEnum = MyEnumB
