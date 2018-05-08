@@ -23,6 +23,7 @@ import Control.Monad.State.Strict
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
+import qualified Data.Map.Strict as Map
 import Data.Text (Text, pack)
 
 import Amy.Literal
@@ -236,11 +237,21 @@ matchCon (u:us) eqs@(ConEquation con _ _ : _) def = do
   eqs' <- traverse (matchClause us def) grouped
   pure $ Case u eqs' default'
 
+-- | Groups constructors equations by 'Con'.
 groupByConstructor
   :: (Ord con)
   => [ConEquation expr con var]
   -> [NonEmpty (ConEquation expr con var)]
-groupByConstructor = fmap (fmap snd) . NE.groupWith fst . sortOn fst . fmap (\eq@(ConEquation con _ _) -> (con, eq))
+groupByConstructor eqs =
+  let
+    -- N.B. We record the original order of the constructors as they come in.
+    -- We then sort all of the equations by order of their constructor before
+    -- grouping. That way when we group them, they don't come out in whatever
+    -- random order "Ord con" gives us.
+    consAndEqs = (\(i, eq@(ConEquation con _ _)) -> (con, (i, eq))) <$> zip [(0 :: Int)..] eqs
+    originalOrder = Map.fromList $ reverse $ (\(con, (i, _)) -> (con, i)) <$> consAndEqs
+    grouped = NE.groupWith fst $ sortOn (\(con, _) -> originalOrder Map.! con) consAndEqs
+  in fmap (snd . snd) <$> grouped
 
 matchClause
   :: (Show expr, Ord con)

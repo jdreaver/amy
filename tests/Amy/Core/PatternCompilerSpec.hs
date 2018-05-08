@@ -67,14 +67,14 @@ mappairsEquations =
 mappairsExpect :: CaseExpr Int Text Text
 mappairsExpect =
   Case "x2"
-  [ Clause consC ["_u1", "_u2"]
+  [ Clause nilC [] (Expr 1)
+  , Clause consC ["_u1", "_u2"]
      (Case "_u1"
-        [ Clause consC ["_u3", "_u4"] (Expr 3)
-        , Clause nilC [] (Expr 2)
+        [ Clause nilC [] (Expr 2)
+        , Clause consC ["_u3", "_u4"] (Expr 3)
         ]
         Nothing
      )
-  , Clause nilC [] (Expr 1)
   ]
   Nothing
 
@@ -92,7 +92,7 @@ lamEquations =
   , ([PCon lamC [PVar "x", PCon lamC [PVar "y", PVar "z"]]], ["333"])
   , ([PCon lamC [PVar "x", PCon appC [PVar "y", PVar "z"]]], ["444"])
   , ([PCon appC [PCon lamC [PVar "x", PVar "y"], PVar "z"]], ["x", "y", "z", "555"])
-  --, (PCon appC [PCon appC [PCon lamC [PVar "x", PCon lamC [PVar "y", PVar "z"]], PVar "v"], PVar "w"], 0)
+  --, ([PCon appC [PCon appC [PCon lamC [PVar "x", PCon lamC [PVar "y", PVar "z"]], PVar "v"], PVar "w"]], ["000"])
   , ([PCon appC [PCon appC [PVar "x", PVar "y"], PVar "z"]], ["666"])
   , ([PCon letC [PVar "x", PCon letC [PVar "y", PVar "z", PVar "v"], PVar "w"]], ["777"])
   , ([PCon lamC [PVar "x", PCon letC [PVar "y", PVar "z", PVar "v"]]], ["888"])
@@ -137,25 +137,27 @@ lamEquations =
 lamExpected :: CaseExpr [Text] Text Text
 lamExpected =
   Case "c"
-  [Clause appC ["_u1", "_u2"]
-     (Case "_u1"
-        [Clause appC ["_u3", "_u4"] (Expr ["666"]),
-         Clause lamC ["_u9", "_u10"] (Expr ["_u10", "_u2", "_u9", "555"])]
-        (Just Error)),
-   Clause lamC ["_u11", "_u12"]
-     (Case "_u12"
-        [Clause appC ["_u13", "_u14"] (Expr ["444"]),
-         Clause lamC ["_u15", "_u16"] (Expr ["333"]),
-         Clause letC ["_u17", "_u18", "_u19"] (Expr ["888"]),
-         Clause varC ["_u20"] (Expr ["222"])]
+  [Clause (Con "Var" 1 4) ["_u1"] (Expr ["_u1", "111"]),
+   Clause (Con "Lam" 2 4) ["_u2", "_u3"]
+     (Case "_u3"
+        [Clause (Con "Var" 1 4) ["_u4"] (Expr ["222"]),
+         Clause (Con "Lam" 2 4) ["_u5", "_u6"] (Expr ["333"]),
+         Clause (Con "App" 2 4) ["_u7", "_u8"] (Expr ["444"]),
+         Clause (Con "Let" 3 4) ["_u9", "_u10", "_u11"] (Expr ["888"])]
         Nothing),
-   Clause letC ["_u21", "_u22", "_u23"]
-     (Case "_u22"
-        [Clause letC ["_u26", "_u27", "_u28"] (Expr ["777"])]
+   Clause (Con "App" 2 4) ["_u12", "_u13"]
+     (Case "_u12"
+        [Clause (Con "Lam" 2 4) ["_u14", "_u15"] (Expr ["_u15", "_u13", "_u14", "555"]),
+         Clause (Con "App" 2 4) ["_u16", "_u17"] (Expr ["666"])]
+        (Just Error)),
+   Clause (Con "Let" 3 4) ["_u22", "_u23", "_u24"]
+     (Case "_u23"
+        [Clause (Con "Let" 3 4) ["_u27", "_u28", "_u29"] (Expr ["777"])]
         (Just
-           (Case "_u23" [Clause appC ["_u24", "_u25"] (Expr ["_u21", "_u22", "_u24", "_u25", "999"])]
-              (Just Error)))),
-   Clause varC ["_u29"] (Expr ["_u29", "111"])]
+           (Case "_u24"
+              [Clause (Con "App" 2 4) ["_u25", "_u26"]
+                 (Expr ["_u22", "_u23", "_u25", "_u26", "999"])]
+              (Just Error))))]
   Nothing
 
 spec :: Spec
@@ -197,8 +199,8 @@ spec = do
           ]
         expected =
           Case "x"
-          [ Clause falseC [] (Expr 'b')
-          , Clause trueC [] (Expr 'a')
+          [ Clause trueC [] (Expr 'a')
+          , Clause falseC [] (Expr 'b')
           ]
           Nothing
       match ignoreSubst mkVar ["x"] equations `shouldBe` expected
@@ -213,17 +215,17 @@ spec = do
           ]
         expected =
           Case "x"
-          [ Clause falseC []
+          [ Clause trueC []
             ( Case "y"
-              [ Clause falseC [] (Expr '2')
-              , Clause trueC [] (Expr '4')
+              [ Clause trueC [] (Expr '1')
+              , Clause falseC [] (Expr '3')
               ]
               Nothing
             )
-          , Clause trueC []
+          , Clause falseC []
             ( Case "y"
-              [ Clause falseC [] (Expr '3')
-              , Clause trueC [] (Expr '1')
+              [ Clause falseC [] (Expr '2')
+              , Clause trueC [] (Expr '4')
               ]
               Nothing
             )
