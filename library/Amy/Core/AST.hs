@@ -19,6 +19,7 @@ module Amy.Core.AST
   , expressionType
 
   , Ident(..)
+  , substExpr
   , Type(..)
   , TyConInfo(..)
   , TyVarInfo(..)
@@ -67,7 +68,7 @@ data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConInfo
   , typeDeclarationConstructors :: ![DataConstructor]
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 data DataConstructor
   = DataConstructor
@@ -77,13 +78,13 @@ data DataConstructor
   , dataConstructorType :: !TyConInfo
   , dataConstructorSpan :: !ConstructorSpan
   , dataConstructorIndex :: !ConstructorIndex
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 data DataConInfo
   = DataConInfo
   { dataConInfoDefinition :: !TypeDeclaration
   , dataConInfoCons :: !DataConstructor
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 data Expr
   = ELit !Literal
@@ -168,6 +169,35 @@ data Ident
   { identText :: !Text
   , identId :: !Int
   } deriving (Show, Eq, Ord)
+
+substExpr :: Expr -> Ident -> Ident -> Expr
+substExpr e@(ELit _) _ _ = e
+substExpr (EVar v) var newVar =
+  case v of
+    VVal (Typed ty ident) -> EVar (VVal $ Typed ty $ replaceIdent ident var newVar)
+    VCons _ -> EVar v
+substExpr (ECase (Case scrut bind alts default')) var newVar =
+  ECase
+  ( Case
+    (substExpr scrut var newVar)
+    bind
+    ((\m -> substMatch m var newVar) <$> alts)
+    ((\e -> substExpr e var newVar) <$> default')
+  )
+substExpr (ELet (Let bindings body)) var newVar =
+  ELet (Let ((\b -> substBinding b var newVar) <$> bindings) (substExpr body var newVar))
+substExpr (EApp (App f args ty)) var newVar =
+  EApp (App (substExpr f var newVar) ((\arg -> substExpr arg var newVar) <$> args) ty)
+substExpr (EParens expr) var newVar = EParens (substExpr expr var newVar)
+
+substBinding :: Binding -> Ident -> Ident -> Binding
+substBinding binding var newVar = binding { bindingBody = substExpr (bindingBody binding) var newVar }
+
+substMatch :: Match -> Ident -> Ident -> Match
+substMatch match' var newVar = match' { matchBody = substExpr (matchBody match') var newVar }
+
+replaceIdent :: Ident -> Ident -> Ident -> Ident
+replaceIdent var oldVar newVar = if var == oldVar then newVar else var
 
 data ConstructorName
   = ConstructorName

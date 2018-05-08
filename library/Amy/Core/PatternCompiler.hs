@@ -8,7 +8,6 @@
 module Amy.Core.PatternCompiler
   ( match
   , VarSubst(..)
-  , MakeVar(..)
   , Pattern(..)
   , Con(..)
   , Arity
@@ -23,17 +22,18 @@ import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
-import Data.Text (Text, pack)
+import Data.Text (pack)
 
+import Amy.Core.AST (Ident(..))
 import Amy.Core.Monad
 import Amy.Literal
 
 -- | A 'Pattern' is either a constructor or a variable.
-data Pattern con var
-  = PCon !(Con con) ![Pattern con var]
+data Pattern con
+  = PCon !(Con con) ![Pattern con]
     -- ^ Constructor patterns are nested. We have the constructor tag and a
     -- list of pattern arguments.
-  | PVar !var
+  | PVar !Ident
     -- ^ Variables are catch-all patterns that match anything and binds the
     -- result to the variable.
   deriving (Show, Eq)
@@ -66,11 +66,11 @@ conSpan (Con _ _ span') = Just span'
 conSpan (ConLit _) = Nothing
 
 -- | An 'Equation' is a list of patterns and an expression.
-type Equation expr con var = ([Pattern con var], expr)
+type Equation expr con = ([Pattern con], expr)
 
 -- | A 'CaseExpr' is the output of the match algorithm
-data CaseExpr expr con var
-  = Case !var ![Clause expr con var] !(Maybe (CaseExpr expr con var))
+data CaseExpr expr con
+  = Case !Ident ![Clause expr con] !(Maybe (CaseExpr expr con))
     -- ^ Corresponds to a case in Core
   | Expr !expr
     -- ^ An input expression
@@ -80,65 +80,58 @@ data CaseExpr expr con var
 
 -- | A case expression contains a list of 'Clauses' that match against a
 -- constructor.
-data Clause expr con var =
+data Clause expr con =
   Clause
     !(Con con) -- ^ Constructor for the clause
-    ![var] -- ^ Variables to bind the constructor arguments to
-    !(CaseExpr expr con var) -- ^ Expression for the clause
+    ![Ident] -- ^ Variables to bind the constructor arguments to
+    !(CaseExpr expr con) -- ^ Expression for the clause
   deriving (Show, Eq)
 
 -- | Monad to run the algorithm in.
-newtype Match expr var a = Match (ReaderT (MatchData expr var) Desugar a)
-  deriving (Functor, Applicative, Monad, MonadReader (MatchData expr var))
-
-data MatchData expr var = MatchData (VarSubst expr var) (MakeVar var)
+newtype Match expr a = Match (ReaderT (VarSubst expr) Desugar a)
+  deriving (Functor, Applicative, Monad, MonadReader (VarSubst expr))
 
 -- | A 'VarSubst' is a function to replace variables in an expression.
-newtype VarSubst expr var = VarSubst (expr -> var -> var -> expr)
+newtype VarSubst expr = VarSubst (expr -> Ident -> Ident -> expr)
 
--- | Describes how to make a new variable given an 'Int' ID and a 'Text' name.
-newtype MakeVar var = MakeVar (Int -> Text -> var)
-
-substituteVariable :: expr -> var -> var -> Match expr var expr
+substituteVariable :: expr -> Ident -> Ident -> Match expr expr
 substituteVariable expr var newVar = do
-  MatchData (VarSubst f) _ <- ask
+  VarSubst f <- ask
   pure $ f expr var newVar
 
-runMatch :: MatchData expr var -> Match expr var a -> Desugar a
-runMatch matchData (Match action) = runReaderT action matchData
+runMatch :: VarSubst expr -> Match expr a -> Desugar a
+runMatch subst (Match action) = runReaderT action subst
 
-freshVar :: Match expr var var
+freshVar :: Match expr Ident
 freshVar = do
   id' <- Match $ lift freshId
-  MatchData _ (MakeVar mkVar) <- ask
-  pure $ mkVar id' ("_u" <> pack (show id'))
+  pure $ Ident ("_u" <> pack (show id')) id'
 
 -- | Main function for this algorithm. Takes equations and produces a
 -- 'CaseExpr'.
 match
   :: (Show expr, Ord con)
-  => VarSubst expr var
-  -> MakeVar var
-  -> [var]
-  -> [Equation expr con var]
-  -> Desugar (CaseExpr expr con var)
-match subst mkVar vars eqs = runMatch (MatchData subst mkVar) $ match' vars eqs Error
+  => VarSubst expr
+  -> [Ident]
+  -> [Equation expr con]
+  -> Desugar (CaseExpr expr con)
+match subst vars eqs = runMatch subst $ match' vars eqs Error
 
 match'
   :: (Show expr, Ord con)
-  => [var]
-  -> [Equation expr con var]
-  -> CaseExpr expr con var
-  -> Match expr var (CaseExpr expr con var)
+  => [Ident]
+  -> [Equation expr con]
+  -> CaseExpr expr con
+  -> Match expr (CaseExpr expr con)
 match' [] eqs def = pure $ foldr applyFatbar def (Expr . snd <$> eqs)
 match' vars eqs def = foldM (matchGroup vars) def $ reverse $ groupEquations eqs
 
 -- | The book uses a special infix operator called FATBAR. This function
 -- applies some FATBAR optimizations.
 applyFatbar
-  :: CaseExpr expr con var
-  -> CaseExpr expr con var
-  -> CaseExpr expr con var
+  :: CaseExpr expr con
+  -> CaseExpr expr con
+  -> CaseExpr expr con
 applyFatbar Case{} _ = error "Can't guarantee case doesn't fail yet "
 applyFatbar e@(Expr _) _ = e
 applyFatbar Error _ = Error
@@ -154,26 +147,26 @@ applyFatbar Error _ = Error
 -- general case constructors and variables are mixed. If we group a list of
 -- equations by their type, then we can treat each group as a simpler case of
 -- all variables or all constructors.
-groupEquations :: [Equation expr con var] -> [GroupedEquations expr con var]
+groupEquations :: [Equation expr con] -> [GroupedEquations expr con]
 groupEquations = concatGroupedEquations . fmap equationType
 
-data GroupedEquations expr con var
-  = VarEquations ![VarEquation expr con var]
-  | ConEquations ![ConEquation expr con var]
+data GroupedEquations expr con
+  = VarEquations ![VarEquation expr con]
+  | ConEquations ![ConEquation expr con]
   deriving (Show, Eq)
 
-data VarEquation expr con var = VarEquation !var !(Equation expr con var)
+data VarEquation expr con = VarEquation !Ident !(Equation expr con)
   deriving (Show, Eq)
 
-data ConEquation expr con var = ConEquation !(Con con) ![Pattern con var] !(Equation expr con var)
+data ConEquation expr con = ConEquation !(Con con) ![Pattern con] !(Equation expr con)
   deriving (Show, Eq)
 
-equationType :: Equation expr con var -> GroupedEquations expr con var
+equationType :: Equation expr con -> GroupedEquations expr con
 equationType ([], _) = error "Encountered empty equations in equationType"
 equationType (PVar var:ps, expr) = VarEquations [VarEquation var (ps, expr)]
 equationType (PCon con ps:ps', expr) = ConEquations [ConEquation con ps' (ps, expr)]
 
-concatGroupedEquations :: [GroupedEquations expr con var] -> [GroupedEquations expr con var]
+concatGroupedEquations :: [GroupedEquations expr con] -> [GroupedEquations expr con]
 concatGroupedEquations [] = []
 concatGroupedEquations [x] = [x]
 concatGroupedEquations (x:y:xs) =
@@ -190,10 +183,10 @@ concatGroupedEquations (x:y:xs) =
 -- simple case of all variables or all constructors.
 matchGroup
   :: (Show expr, Ord con)
-  => [var]
-  -> CaseExpr expr con var
-  -> GroupedEquations expr con var
-  -> Match expr var (CaseExpr expr con var)
+  => [Ident]
+  -> CaseExpr expr con
+  -> GroupedEquations expr con
+  -> Match expr (CaseExpr expr con)
 matchGroup vars def (VarEquations eqs) = matchVar vars eqs def
 matchGroup vars def (ConEquations eqs) = matchCon vars eqs def
 
@@ -201,10 +194,10 @@ matchGroup vars def (ConEquations eqs) = matchCon vars eqs def
 -- the pattern variable in the equation with the match variable.
 matchVar
   :: (Show expr, Ord con)
-  => [var]
-  -> [VarEquation expr con var]
-  -> CaseExpr expr con var
-  -> Match expr var (CaseExpr expr con var)
+  => [Ident]
+  -> [VarEquation expr con]
+  -> CaseExpr expr con
+  -> Match expr (CaseExpr expr con)
 matchVar [] _ _ = error "matchVars called with empty variables"
 matchVar (u:us) eqs def = do
   let mkNewEquation (VarEquation var (ps, eq)) = (ps,) <$>  substituteVariable eq var u
@@ -216,10 +209,10 @@ matchVar (u:us) eqs def = do
 -- in a 'Case' expression.
 matchCon
   :: (Show expr, Ord con)
-  => [var]
-  -> [ConEquation expr con var]
-  -> CaseExpr expr con var
-  -> Match expr var (CaseExpr expr con var)
+  => [Ident]
+  -> [ConEquation expr con]
+  -> CaseExpr expr con
+  -> Match expr (CaseExpr expr con)
 matchCon [] _ _ = error "matchCon called with empty variables"
 matchCon _ [] _ = error "matchCon called with no equations"
 matchCon (u:us) eqs@(ConEquation con _ _ : _) def = do
@@ -239,8 +232,8 @@ matchCon (u:us) eqs@(ConEquation con _ _ : _) def = do
 -- | Groups constructors equations by 'Con'.
 groupByConstructor
   :: (Ord con)
-  => [ConEquation expr con var]
-  -> [NonEmpty (ConEquation expr con var)]
+  => [ConEquation expr con]
+  -> [NonEmpty (ConEquation expr con)]
 groupByConstructor eqs =
   let
     -- N.B. We record the original order of the constructors as they come in.
@@ -254,10 +247,10 @@ groupByConstructor eqs =
 
 matchClause
   :: (Show expr, Ord con)
-  => [var]
-  -> CaseExpr expr con var
-  -> NonEmpty (ConEquation expr con var)
-  -> Match expr var (Clause expr con var)
+  => [Ident]
+  -> CaseExpr expr con
+  -> NonEmpty (ConEquation expr con)
+  -> Match expr (Clause expr con)
 matchClause us def eqs = do
   let (ConEquation con _ _) = NE.head eqs
   us' <- traverse (const freshVar) [1..conArity con]
