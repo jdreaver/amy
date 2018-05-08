@@ -47,7 +47,7 @@ prettyExpr (EVar var) = prettyVar var
 prettyExpr (EIf (If pred' then' else')) =
   prettyIf (prettyExpr pred') (prettyExpr then') (prettyExpr else')
 prettyExpr (ECase (Case scrutinee matches)) =
-  prettyCase (prettyExpr scrutinee) (toList $ mkMatch <$> matches)
+  prettyCase (prettyExpr scrutinee) Nothing (toList $ mkMatch <$> matches)
  where
   mkMatch (Match pat body) = (prettyPattern pat, prettyExpr body)
 prettyExpr (ELet (Let bindings body)) =

@@ -94,9 +94,9 @@ prettyIf pred' then' else' =
     , "else" <> groupOrHang else'
     ]
 
-prettyCase :: Doc ann -> [(Doc ann, Doc ann)] -> Doc ann
-prettyCase scrutinee matches =
-  "case" <+> scrutinee <+> "of" <>
+prettyCase :: Doc ann -> Maybe (Doc ann) -> [(Doc ann, Doc ann)] -> Doc ann
+prettyCase scrutinee mBinder matches =
+  "case" <+> scrutinee <+> "of" <> maybe mempty (space <>) mBinder <>
   groupOrHang (vcatHardLines matches')
  where
   prettyMatch pat body = pat <+> "->" <> groupOrHang body

@@ -65,7 +65,8 @@ prettyExpr :: Expr -> Doc ann
 prettyExpr (EVal val) = prettyVal val
 prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault _)) =
   prettyCase
-    (prettyVal scrutinee <+> prettyIdent bind)
+    (prettyVal scrutinee)
+    (Just $ prettyIdent bind)
     (toList (mkMatch <$> matches) ++ defaultMatch)
  where
   mkMatch (Match pat body) = (prettyPattern pat, prettyExpr body)

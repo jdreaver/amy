@@ -63,7 +63,8 @@ prettyExpr (ELit lit) = pretty $ showLiteral lit
 prettyExpr (EVar var) = prettyVar var
 prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault)) =
   prettyCase
-    (prettyExpr scrutinee <+> prettyIdent bind)
+    (prettyExpr scrutinee)
+    (Just $ prettyIdent bind)
     (toList (mkMatch <$> matches) ++ defaultMatch)
  where
   mkMatch (Match pat body) = (prettyPattern pat, prettyExpr body)
