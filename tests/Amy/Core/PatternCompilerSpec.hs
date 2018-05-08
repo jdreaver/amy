@@ -84,10 +84,10 @@ mappairsEquations =
 
 mappairsExpect :: CaseExpr Int Text
 mappairsExpect =
-  Case y
+  CaseExpr y
   [ Clause nilC [] (Expr 1)
   , Clause consC [mkId 1, mkId 2]
-     (Case (mkId 1)
+     (CaseExpr (mkId 1)
         [ Clause nilC [] (Expr 2)
         , Clause consC [mkId 3, mkId 4] (Expr 3)
         ]
@@ -154,25 +154,25 @@ lamEquations =
 
 lamExpected :: CaseExpr [Ident] Text
 lamExpected =
-  Case c
+  CaseExpr c
   [Clause (Con "Var" 1 4) [mkId 1] (Expr [mkId 1, Ident "111" 111]),
    Clause (Con "Lam" 2 4) [mkId 2, mkId 3]
-     (Case (mkId 3)
+     (CaseExpr (mkId 3)
         [Clause (Con "Var" 1 4) [mkId 4] (Expr [Ident "222" 222]),
          Clause (Con "Lam" 2 4) [mkId 5, mkId 6] (Expr [Ident "333" 333]),
          Clause (Con "App" 2 4) [mkId 7, mkId 8] (Expr [Ident "444" 444]),
          Clause (Con "Let" 3 4) [mkId 9, mkId 10, mkId 11] (Expr [Ident "888" 888])]
         Nothing),
    Clause (Con "App" 2 4) [mkId 12, mkId 13]
-     (Case (mkId 12)
+     (CaseExpr (mkId 12)
         [Clause (Con "Lam" 2 4) [mkId 14, mkId 15] (Expr [mkId 15, mkId 13, mkId 14, Ident "555" 555]),
          Clause (Con "App" 2 4) [mkId 16, mkId 17] (Expr [Ident "666" 666])]
         (Just Error)),
    Clause (Con "Let" 3 4) [mkId 22, mkId 23, mkId 24]
-     (Case (mkId 23)
+     (CaseExpr (mkId 23)
         [Clause (Con "Let" 3 4) [mkId 27, mkId 28, mkId 29] (Expr [Ident "777" 777])]
         (Just
-           (Case (mkId 24)
+           (CaseExpr (mkId 24)
               [Clause (Con "App" 2 4) [mkId 25, mkId 26]
                  (Expr [mkId 22, mkId 23, mkId 25, mkId 26, Ident "999" 999])]
               (Just Error))))]
@@ -189,7 +189,7 @@ spec = do
     it "handles a single constructor case with a variable" $ do
       match' ignoreSubst [x] [([newtypeP (PVar y)], 'a')]
         `shouldBe`
-        Case x [Clause newtypeC [mkId 1] (Expr 'a')] Nothing
+        CaseExpr x [Clause newtypeC [mkId 1] (Expr 'a')] Nothing
 
     it "handles a single constructor case with a literal and variable" $ do
       let
@@ -198,9 +198,9 @@ spec = do
           , ([newtypeP (PVar y)], [x, y])
           ]
         expected =
-          Case (x)
+          CaseExpr x
           [ Clause newtypeC [mkId 1]
-            ( Case (mkId 1)
+            ( CaseExpr (mkId 1)
               [ Clause (intC 1) [] (Expr [x])
               ]
               (Just (Expr [x, mkId 1]))
@@ -216,7 +216,7 @@ spec = do
           , ([falseP], 'b')
           ]
         expected =
-          Case x
+          CaseExpr x
           [ Clause trueC [] (Expr 'a')
           , Clause falseC [] (Expr 'b')
           ]
@@ -234,7 +234,7 @@ spec = do
           , ([intP 3], 'f')
           ]
         expected =
-          Case x
+          CaseExpr x
           [ Clause (intC 1) [] (Expr 'a')
           , Clause (intC 2) [] (Expr 'b')
           , Clause (intC 3) [] (Expr 'f')
@@ -251,16 +251,16 @@ spec = do
           , ([falseP, trueP], '4')
           ]
         expected =
-          Case x
+          CaseExpr x
           [ Clause trueC []
-            ( Case y
+            ( CaseExpr y
               [ Clause trueC [] (Expr '1')
               , Clause falseC [] (Expr '3')
               ]
               Nothing
             )
           , Clause falseC []
-            ( Case y
+            ( CaseExpr y
               [ Clause falseC [] (Expr '2')
               , Clause trueC [] (Expr '4')
               ]

@@ -24,9 +24,8 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import Data.Text (pack)
 
-import Amy.Core.AST (Ident(..))
+import Amy.Core.AST
 import Amy.Core.Monad
-import Amy.Literal
 
 -- | A 'InputPattern' is either a constructor or a variable.
 data InputPattern con
@@ -70,7 +69,7 @@ type Equation expr con = ([InputPattern con], expr)
 
 -- | A 'CaseExpr' is the output of the match algorithm
 data CaseExpr expr con
-  = Case !Ident ![Clause expr con] !(Maybe (CaseExpr expr con))
+  = CaseExpr !Ident ![Clause expr con] !(Maybe (CaseExpr expr con))
     -- ^ Corresponds to a case in Core
   | Expr !expr
     -- ^ An input expression
@@ -88,23 +87,23 @@ data Clause expr con =
   deriving (Show, Eq)
 
 -- | Monad to run the algorithm in.
-newtype Match expr a = Match (ReaderT (VarSubst expr) Desugar a)
+newtype MatchM expr a = MatchM (ReaderT (VarSubst expr) Desugar a)
   deriving (Functor, Applicative, Monad, MonadReader (VarSubst expr))
 
 -- | A 'VarSubst' is a function to replace variables in an expression.
 newtype VarSubst expr = VarSubst (expr -> Ident -> Ident -> expr)
 
-substituteVariable :: expr -> Ident -> Ident -> Match expr expr
+substituteVariable :: expr -> Ident -> Ident -> MatchM expr expr
 substituteVariable expr var newVar = do
   VarSubst f <- ask
   pure $ f expr var newVar
 
-runMatch :: VarSubst expr -> Match expr a -> Desugar a
-runMatch subst (Match action) = runReaderT action subst
+runMatchM :: VarSubst expr -> MatchM expr a -> Desugar a
+runMatchM subst (MatchM action) = runReaderT action subst
 
-freshVar :: Match expr Ident
+freshVar :: MatchM expr Ident
 freshVar = do
-  id' <- Match $ lift freshId
+  id' <- MatchM $ lift freshId
   pure $ Ident ("_u" <> pack (show id')) id'
 
 -- | Main function for this algorithm. Takes equations and produces a
@@ -115,14 +114,14 @@ match
   -> [Ident]
   -> [Equation expr con]
   -> Desugar (CaseExpr expr con)
-match subst vars eqs = runMatch subst $ match' vars eqs Error
+match subst vars eqs = runMatchM subst $ match' vars eqs Error
 
 match'
   :: (Show expr, Ord con)
   => [Ident]
   -> [Equation expr con]
   -> CaseExpr expr con
-  -> Match expr (CaseExpr expr con)
+  -> MatchM expr (CaseExpr expr con)
 match' [] eqs def = pure $ foldr applyFatbar def (Expr . snd <$> eqs)
 match' vars eqs def = foldM (matchGroup vars) def $ reverse $ groupEquations eqs
 
@@ -132,7 +131,7 @@ applyFatbar
   :: CaseExpr expr con
   -> CaseExpr expr con
   -> CaseExpr expr con
-applyFatbar Case{} _ = error "Can't guarantee case doesn't fail yet "
+applyFatbar CaseExpr{} _ = error "Can't guarantee case doesn't fail yet "
 applyFatbar e@(Expr _) _ = e
 applyFatbar Error _ = Error
 -- applyFatbar e Fail = e
@@ -186,7 +185,7 @@ matchGroup
   => [Ident]
   -> CaseExpr expr con
   -> GroupedEquations expr con
-  -> Match expr (CaseExpr expr con)
+  -> MatchM expr (CaseExpr expr con)
 matchGroup vars def (VarEquations eqs) = matchVar vars eqs def
 matchGroup vars def (ConEquations eqs) = matchCon vars eqs def
 
@@ -197,7 +196,7 @@ matchVar
   => [Ident]
   -> [VarEquation expr con]
   -> CaseExpr expr con
-  -> Match expr (CaseExpr expr con)
+  -> MatchM expr (CaseExpr expr con)
 matchVar [] _ _ = error "matchVars called with empty variables"
 matchVar (u:us) eqs def = do
   let mkNewEquation (VarEquation var (ps, eq)) = (ps,) <$>  substituteVariable eq var u
@@ -212,7 +211,7 @@ matchCon
   => [Ident]
   -> [ConEquation expr con]
   -> CaseExpr expr con
-  -> Match expr (CaseExpr expr con)
+  -> MatchM expr (CaseExpr expr con)
 matchCon [] _ _ = error "matchCon called with empty variables"
 matchCon _ [] _ = error "matchCon called with no equations"
 matchCon (u:us) eqs@(ConEquation con _ _ : _) def = do
@@ -227,7 +226,7 @@ matchCon (u:us) eqs@(ConEquation con _ _ : _) def = do
           else Nothing
         Nothing -> Just def
   eqs' <- traverse (matchClause us def) grouped
-  pure $ Case u eqs' default'
+  pure $ CaseExpr u eqs' default'
 
 -- | Groups constructors equations by 'Con'.
 groupByConstructor
@@ -250,7 +249,7 @@ matchClause
   => [Ident]
   -> CaseExpr expr con
   -> NonEmpty (ConEquation expr con)
-  -> Match expr (Clause expr con)
+  -> MatchM expr (Clause expr con)
 matchClause us def eqs = do
   let (ConEquation con _ _) = NE.head eqs
   us' <- traverse (const freshVar) [1..conArity con]

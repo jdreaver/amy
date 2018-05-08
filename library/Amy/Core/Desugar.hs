@@ -155,7 +155,7 @@ convertPattern (T.PCons (T.PatCons info mArg _)) =
 convertPattern (T.PParens pat) = convertPattern pat
 
 restoreCaseExpr :: PC.CaseExpr C.Expr C.DataConInfo -> Desugar C.Expr
-restoreCaseExpr (PC.Case scrutinee clauses mDefault) = do
+restoreCaseExpr (PC.CaseExpr scrutinee clauses mDefault) = do
   let
     scrutineeTy = desugarType $ T.TyCon $ T.fromPrimTyCon boolTyCon -- TODO: FIXME
     scrutinee' = C.EVar $ C.VVal $ C.Typed scrutineeTy scrutinee
