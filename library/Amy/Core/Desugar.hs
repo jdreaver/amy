@@ -133,6 +133,9 @@ desugarTyVarInfo ty@(T.TyVarInfo name id' gen) =
 -- Case Expressions
 --
 
+-- TODO: Just use the Core AST in the pattern compiler so we don't have to have
+-- all this silly conversion logic.
+
 matchToEquation :: T.Match -> Desugar (PC.Equation C.DataConInfo)
 matchToEquation (T.Match pat body) = do
   let pat' = convertPattern pat
