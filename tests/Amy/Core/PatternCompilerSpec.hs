@@ -181,9 +181,9 @@ spec = do
           ]
         expected =
           Case "x"
-          [ Clause (Con "MyNewtype" 1 1) ["_u1"]
+          [ Clause newtypeC ["_u1"]
             ( Case "_u1"
-              [ Clause (ConLit (LiteralInt 1)) [] (Expr ["x"])
+              [ Clause (intC 1) [] (Expr ["x"])
               ]
               (Just (Expr ["x", "_u1"]))
             )
@@ -203,6 +203,25 @@ spec = do
           , Clause falseC [] (Expr 'b')
           ]
           Nothing
+      match ignoreSubst mkVar ["x"] equations `shouldBe` expected
+
+    it "handles redundant branches" $ do
+      let
+        equations =
+          [ ([intP 1], 'a')
+          , ([intP 2], 'b')
+          , ([intP 2], 'c')
+          , ([intP 1], 'd')
+          , ([intP 2], 'e')
+          , ([intP 3], 'f')
+          ]
+        expected =
+          Case "x"
+          [ Clause (intC 1) [] (Expr 'a')
+          , Clause (intC 2) [] (Expr 'b')
+          , Clause (intC 3) [] (Expr 'f')
+          ]
+          (Just Error)
       match ignoreSubst mkVar ["x"] equations `shouldBe` expected
 
     it "handles a pair of bools case" $ do
