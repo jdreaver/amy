@@ -63,9 +63,12 @@ mappairsExpect =
      (Case "_u1"
         [ Clause consC ["_u3", "_u4"] (Expr 3)
         , Clause nilC [] (Expr 2)
-        ])
+        ]
+        Nothing
+     )
   , Clause nilC [] (Expr 1)
   ]
+  Nothing
 
 -- Example from Sestoft paper
 varC, lamC, appC, letC :: Con
@@ -135,37 +138,23 @@ lamExpected =
   [Clause (Con "App" 2) ["_u1", "_u2"]
      (Case "_u1"
         [Clause (Con "App" 2) ["_u3", "_u4"] (Expr 666),
-         Clause (Con "Lam" 2) ["_u21", "_u22"] (Expr 555),
-         Clause (Con "Let" 3) ["_u23", "_u24", "_u25"] Error,
-         Clause (Con "Var" 1) ["_u26"] Error]),
-   Clause (Con "Lam" 2) ["_u27", "_u28"]
-     (Case "_u28"
-        [Clause (Con "App" 2) ["_u29", "_u30"] (Expr 444),
-         Clause (Con "Lam" 2) ["_u31", "_u32"] (Expr 333),
-         Clause (Con "Let" 3) ["_u33", "_u34", "_u35"] (Expr 888),
-         Clause (Con "Var" 1) ["_u36"] (Expr 222)]),
-   Clause (Con "Let" 3) ["_u37", "_u38", "_u39"]
-     (Case "_u38"
-        [Clause (Con "App" 2) ["_u48", "_u49"]
-           (Case "_u39"
-              [Clause (Con "App" 2) ["_u40", "_u41"] (Expr 999),
-               Clause (Con "Lam" 2) ["_u42", "_u43"] Error,
-               Clause (Con "Let" 3) ["_u44", "_u45", "_u46"] Error,
-               Clause (Con "Var" 1) ["_u47"] Error]),
-         Clause (Con "Lam" 2) ["_u50", "_u51"]
-           (Case "_u39"
-              [Clause (Con "App" 2) ["_u40", "_u41"] (Expr 999),
-               Clause (Con "Lam" 2) ["_u42", "_u43"] Error,
-               Clause (Con "Let" 3) ["_u44", "_u45", "_u46"] Error,
-               Clause (Con "Var" 1) ["_u47"] Error]),
-         Clause (Con "Let" 3) ["_u52", "_u53", "_u54"] (Expr 777),
-         Clause (Con "Var" 1) ["_u55"]
-           (Case "_u39"
-              [Clause (Con "App" 2) ["_u40", "_u41"] (Expr 999),
-               Clause (Con "Lam" 2) ["_u42", "_u43"] Error,
-               Clause (Con "Let" 3) ["_u44", "_u45", "_u46"] Error,
-               Clause (Con "Var" 1) ["_u47"] Error])]),
-   Clause (Con "Var" 1) ["_u56"] (Expr 111)]
+         Clause (Con "Lam" 2) ["_u9", "_u10"] (Expr 555)]
+        (Just Error)),
+   Clause (Con "Lam" 2) ["_u11", "_u12"]
+     (Case "_u12"
+        [Clause (Con "App" 2) ["_u13", "_u14"] (Expr 444),
+         Clause (Con "Lam" 2) ["_u15", "_u16"] (Expr 333),
+         Clause (Con "Let" 3) ["_u17", "_u18", "_u19"] (Expr 888),
+         Clause (Con "Var" 1) ["_u20"] (Expr 222)]
+        Nothing),
+   Clause (Con "Let" 3) ["_u21", "_u22", "_u23"]
+     (Case "_u22"
+        [Clause (Con "Let" 3) ["_u26", "_u27", "_u28"] (Expr 777)]
+        (Just
+           (Case "_u23" [Clause (Con "App" 2) ["_u24", "_u25"] (Expr 999)]
+              (Just Error)))),
+   Clause (Con "Var" 1) ["_u29"] (Expr 111)]
+  Nothing
 
 spec :: Spec
 spec = do
@@ -178,7 +167,7 @@ spec = do
     it "handles a single constructor case with a variable" $ do
       match ["x"] [([newtypeP (PVar "y")], 'a')]
         `shouldBe`
-        Case "x" [Clause (Con "MyNewtype" 1) ["_u1"] (Expr 'a')]
+        Case "x" [Clause (Con "MyNewtype" 1) ["_u1"] (Expr 'a')] Nothing
 
     it "handles a simple true/false case" $ do
       let
@@ -191,6 +180,7 @@ spec = do
           [ Clause falseC [] (Expr 'b')
           , Clause trueC [] (Expr 'a')
           ]
+          Nothing
       match ["x"] equations `shouldBe` expected
 
     it "handles a pair of bools case" $ do
@@ -208,14 +198,17 @@ spec = do
               [ Clause falseC [] (Expr '2')
               , Clause trueC [] (Expr '4')
               ]
+              Nothing
             )
           , Clause trueC []
             ( Case "y"
               [ Clause falseC [] (Expr '3')
               , Clause trueC [] (Expr '1')
               ]
+              Nothing
             )
           ]
+          Nothing
       match ["x", "y"] equations `shouldBe` expected
 
     it "handles the mappairs example" $ do

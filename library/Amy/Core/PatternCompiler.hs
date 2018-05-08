@@ -15,10 +15,9 @@ module Amy.Core.PatternCompiler
   ) where
 
 import Control.Monad.State.Strict
-import Data.List (foldl', sortOn)
+import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
-import qualified Data.Map.Strict as Map
 import Data.Text (Text, pack)
 
 data Pattern
@@ -47,7 +46,7 @@ type Arity = Int
 type Equation expr = ([Pattern], expr)
 
 data CaseExpr expr
-  = Case !Variable ![Clause expr]
+  = Case !Variable ![Clause expr] !(Maybe (CaseExpr expr))
   | Expr !expr
   | Fail
   | Error
@@ -149,22 +148,26 @@ matchVar (_:us) eqs def =
 matchCon :: (Show expr) => [Variable] -> [ConEquation expr] -> CaseExpr expr -> Match expr (CaseExpr expr)
 matchCon [] _ _ = error "matchCon called with empty variables"
 matchCon _ [] _ = error "matchCon called with no equations"
-matchCon (u:us) eqs@(e1:_) def = do
+matchCon (u:us) eqs@(eq1:_) def = do
   let
-    -- Get all possible constructors
     grouped = groupByConstructor eqs
-    defaultConsMap = Map.fromList . fmap (\c -> (c, [])) . conInfoAllTypeCons . conEquationInfo $ e1
-    consMap = foldl' (\m grp -> Map.insert (conEquationCon $ NE.head grp) (NE.toList grp) m) defaultConsMap grouped
-  eqs' <- traverse (uncurry (matchClause us def)) $ Map.toAscList consMap
-  pure $ Case u eqs'
+    -- Check for inexhaustive match.
+    allCons = conInfoAllTypeCons . conEquationInfo $ eq1
+    default' =
+      if length grouped < length allCons
+      then Just def
+      else Nothing
+  eqs' <- traverse (matchClause us def) grouped
+  pure $ Case u eqs' default'
 
 groupByConstructor :: [ConEquation expr] -> [NonEmpty (ConEquation expr)]
 groupByConstructor = fmap (fmap snd) . NE.groupWith fst . sortOn fst . fmap (\eq@(ConEquation con _ _) -> (con, eq))
 
-matchClause :: (Show expr) => [Variable] -> CaseExpr expr -> Con -> [ConEquation expr] -> Match expr (Clause expr)
-matchClause us def con eqs = do
+matchClause :: (Show expr) => [Variable] -> CaseExpr expr -> NonEmpty (ConEquation expr) -> Match expr (Clause expr)
+matchClause us def eqs = do
+  let con = conEquationCon $ NE.head eqs
   us' <- traverse (const freshVar) [1..conArity con]
   let
     mkNewEquation (ConEquation _ pats' (pats, expr)) = (pats' ++ pats, expr)
-  eqs' <- match' (us' ++ us) (mkNewEquation <$> eqs) def
+  eqs' <- match' (us' ++ us) (NE.toList $ mkNewEquation <$> eqs) def
   pure $ Clause con us' eqs'
