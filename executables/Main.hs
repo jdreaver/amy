@@ -104,7 +104,7 @@ data Command
 
 getCommand :: IO Command
 getCommand =
-  execParser $ info (helper <*> commandParser) (fullDesc <> progDesc "Front Row Ops script")
+  execParser $ info (helper <*> commandParser) (fullDesc <> progDesc "Amy compile CLI")
 
 commandParser :: Parser Command
 commandParser =
