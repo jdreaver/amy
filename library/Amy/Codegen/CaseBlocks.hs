@@ -30,6 +30,7 @@ data CaseLiteralBlock
   , caseLiteralBlockName :: !Name
   , caseLiteralBlockNextName :: !Name
   , caseLiteralBlockConstant :: !C.Constant
+  , caseLiteralBlockBind :: !(Maybe (Typed Ident))
   } deriving (Show, Eq)
 
 data CaseDefaultBlock
@@ -82,15 +83,20 @@ caseBlocks mkBlockName compilationMethods (Case _ bind matches mDefault ty) =
 
     -- Compute literal blocks
     literalBlock (Match pat expr, (blockName, nextBlockName)) =
-      CaseLiteralBlock
-      { caseLiteralBlockExpr = expr
-      , caseLiteralBlockName = blockName
-      , caseLiteralBlockNextName = nextBlockName
-      , caseLiteralBlockConstant =
+      let
+        (constant, mBind) =
           case pat of
-            PLit lit -> literalConstant lit
-            PCons (PatCons (DataConInfo _ con) _ _) -> constructorConstant compilationMethods con
-      }
+            PLit lit -> (literalConstant lit, Nothing)
+            PCons (PatCons (DataConInfo _ con) mArg _) ->
+              (constructorConstant compilationMethods con, mArg)
+      in
+        CaseLiteralBlock
+        { caseLiteralBlockExpr = expr
+        , caseLiteralBlockName = blockName
+        , caseLiteralBlockNextName = nextBlockName
+        , caseLiteralBlockConstant = constant
+        , caseLiteralBlockBind = mBind
+        }
     literalBlocks = literalBlock <$> zip matches (zip literalBlockNames nextLiteralBlockNames)
 
     -- Compute end block
@@ -121,4 +127,4 @@ constructorConstant
 constructorConstant compilationMethods cons =
   case findCompilationMethod cons compilationMethods of
     CompileEnum i intBits -> C.Int intBits (fromIntegral i)
-    CompileTaggedUnion _ _ _ -> error $ "Cannot compile tagged pairs, we have an enum! " ++ show cons
+    CompileTaggedUnion _ i intBits -> C.Int intBits (fromIntegral i)

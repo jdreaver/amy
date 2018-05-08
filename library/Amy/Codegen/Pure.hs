@@ -128,8 +128,9 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee _ _ _ _)) = do
 
   -- Generate the switch statement
   scrutineeOp <- valOperand scrutinee
+  -- TODO: Extract tag from scrutinee op if we have to
   let
-    switchNames = (\(CaseLiteralBlock _ name' _ constant) -> (constant, name')) <$> literalBlocks
+    switchNames = (\(CaseLiteralBlock _ name' _ constant _) -> (constant, name')) <$> literalBlocks
   terminateBlock (Do $ Switch scrutineeOp switchDefaultBlockName switchNames []) switchDefaultBlockName
 
   -- Generate case blocks
@@ -144,7 +145,10 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee _ _ _ _)) = do
     generateCaseDefaultBlock (CaseDefaultBlock expr _ nextBlockName ident) = do
       addSymbolToTable ident scrutineeOp
       generateBlockExpr expr nextBlockName
-    generateCaseLiteralBlock (CaseLiteralBlock expr _ nextBlockName _) =
+    generateCaseLiteralBlock (CaseLiteralBlock expr _ nextBlockName _ mBind) = do
+      for_ mBind $ \_ -> do
+        -- TODO: Extract value from tagged union
+        pure ()
       generateBlockExpr expr nextBlockName
 
   mDefaultOpAndBlock <- traverse generateCaseDefaultBlock mDefaultBlock
