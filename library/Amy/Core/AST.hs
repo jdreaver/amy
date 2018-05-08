@@ -110,7 +110,7 @@ data If
 data Case
   = Case
   { caseScrutinee :: !Expr
-  , caseScrutineeBinding :: !Ident
+  , caseScrutineeBinding :: !(Typed Ident)
   , caseAlternatives :: ![Match]
   , caseDefault :: !(Maybe Expr)
   } deriving (Show, Eq)

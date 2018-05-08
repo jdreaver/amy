@@ -85,7 +85,7 @@ normalizeExpr _ (C.ELit lit) c = c $ ANF.EVal $ ANF.Lit lit
 normalizeExpr name var@C.EVar{} c = normalizeName name var (c . ANF.EVal)
 normalizeExpr name expr@(C.ECase (C.Case scrutinee bind matches defaultExpr)) c =
   normalizeName name scrutinee $ \scrutineeVal -> do
-    let bind' = convertIdent False bind
+    bind' <- convertTypedIdent bind
     matches' <- traverse normalizeMatch matches
     defaultExpr' <- traverse (normalizeTerm "caseDef") defaultExpr
     let ty = convertType $ expressionType expr

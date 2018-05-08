@@ -142,7 +142,7 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee _ _ _ _)) = do
       finalBlockName <- currentBlockName
       terminateBlock (Do $ Br endBlockName []) nextBlockName
       pure (op, finalBlockName)
-    generateCaseDefaultBlock (CaseDefaultBlock expr _ nextBlockName ident) = do
+    generateCaseDefaultBlock (CaseDefaultBlock expr _ nextBlockName (Typed _ ident)) = do
       addSymbolToTable ident scrutineeOp
       generateBlockExpr expr nextBlockName
     generateCaseLiteralBlock (CaseLiteralBlock expr _ nextBlockName _ mBind) = do

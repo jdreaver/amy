@@ -61,7 +61,7 @@ prettyIdent (Ident name _) = pretty name
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit lit) = pretty $ showLiteral lit
 prettyExpr (EVar var) = prettyVar var
-prettyExpr (ECase (Case scrutinee bind matches mDefault)) =
+prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault)) =
   prettyCase
     (prettyExpr scrutinee <+> prettyIdent bind)
     (toList (mkMatch <$> matches) ++ defaultMatch)

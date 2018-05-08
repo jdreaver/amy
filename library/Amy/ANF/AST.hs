@@ -114,7 +114,7 @@ data Let
 data Case
   = Case
   { caseScrutinee :: !Val
-  , caseScrutineeBinding :: !Ident
+  , caseScrutineeBinding :: !(Typed Ident)
   , caseAlternatives :: ![Match]
   , caseDefault :: !(Maybe Expr)
   , caseType :: !Type

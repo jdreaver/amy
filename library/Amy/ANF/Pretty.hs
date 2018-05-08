@@ -63,7 +63,7 @@ prettyVar (VCons (Typed _ cons)) = pretty . dataConstructorName . dataConInfoCon
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (EVal val) = prettyVal val
-prettyExpr (ECase (Case scrutinee bind matches mDefault _)) =
+prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault _)) =
   prettyCase
     (prettyVal scrutinee <+> prettyIdent bind)
     (toList (mkMatch <$> matches) ++ defaultMatch)

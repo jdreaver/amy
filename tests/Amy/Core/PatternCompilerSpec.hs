@@ -13,20 +13,26 @@ import Amy.Core.Monad
 import Amy.Core.PatternCompiler
 
 -- Utils
-mkId :: Int -> Ident
-mkId i = Ident ("_u" <> pack (show i)) i
+mkId :: Int -> Typed Ident
+mkId i = mkIdent $ Ident ("_u" <> pack (show i)) i
 
-x, y, z, v, w, c :: Ident
-x = Ident "x" 0
-y = Ident "y" 1
-z = Ident "z" 2
-v = Ident "v" 3
-w = Ident "w" 4
-c = Ident "c" 0
+mkIdent :: Ident -> Typed Ident
+mkIdent = Typed boolTy
+
+x, y, z, v, w, c, f, xs, ys :: Typed Ident
+x = Typed boolTy $ Ident "x" 0
+y = Typed boolTy $ Ident "y" 1
+z = Typed boolTy $ Ident "z" 2
+v = Typed boolTy $ Ident "v" 3
+w = Typed boolTy $ Ident "w" 4
+c = Typed boolTy $ Ident "c" 0
+f = Typed boolTy $ Ident "f" 0
+xs = Typed boolTy $ Ident "xs" 10
+ys = Typed boolTy $ Ident "ys" 11
 
 match'
   :: (Ord con)
-  => [Ident]
+  => [Typed Ident]
   -> [Equation con]
   -> CaseExpr con
 match' vars eqs = runDesugar 0 $ match vars eqs
@@ -34,18 +40,18 @@ match' vars eqs = runDesugar 0 $ match vars eqs
 boolTy :: Type
 boolTy = TyCon $ TyConInfo "Bool" 0
 
-mkVal :: Ident -> Expr
-mkVal x' = EVar $ VVal (Typed boolTy x')
+mkVal :: Typed Ident -> Expr
+mkVal x' = EVar $ VVal x'
 
-mkExpr :: [Ident] -> Expr
+mkExpr :: [Typed Ident] -> Expr
 mkExpr [] = error "empty list"
 mkExpr [x'] = mkVal x'
-mkExpr (x':y':xs) = EApp (App (mkVal x') (NE.fromList $ mkVal <$> (y':xs)) boolTy)
+mkExpr (x':y':xs') = EApp (App (mkVal x') (NE.fromList $ mkVal <$> (y':xs')) boolTy)
 
 -- Bool type
 trueC, falseC :: Con Text
-trueC = Con "True" 0 2
-falseC = Con "False" 0 2
+trueC = Con "True" [] 2
+falseC = Con "False" [] 2
 
 trueP :: InputPattern Text
 trueP = PCon trueC []
@@ -55,8 +61,8 @@ falseP = PCon falseC []
 
 -- List type
 nilC, consC :: Con Text
-nilC = Con "Nil" 0 2
-consC = Con "Cons" 2 2
+nilC = Con "Nil" [] 2
+consC = Con "Cons" [boolTy, boolTy] 2
 
 nilP :: InputPattern Text
 nilP = PCon nilC []
@@ -66,7 +72,7 @@ consP x' y' = PCon consC [x', y']
 
 -- Newtype
 newtypeC :: Con Text
-newtypeC = Con "MyNewtype" 1 1
+newtypeC = Con "MyNewtype" [boolTy] 1
 
 newtypeP :: InputPattern Text -> InputPattern Text
 newtypeP pat = PCon newtypeC [pat]
@@ -81,9 +87,9 @@ intP i = PCon (intC i) []
 -- mappairs example from book
 mappairsEquations :: [Equation Text]
 mappairsEquations =
-  [ ([PVar (Ident "f" 0), nilP, PVar (Ident "ys" 1)], mkVal x)
-  , ([PVar (Ident "f" 0), consP (PVar x) (PVar (Ident "xs" 2)), nilP], mkVal y)
-  , ([PVar (Ident "f" 0), consP (PVar x) (PVar (Ident "xs" 2)), consP (PVar y) (PVar (Ident "ys" 4))], mkVal z)
+  [ ([PVar f, nilP, PVar ys], mkVal x)
+  , ([PVar f, consP (PVar x) (PVar xs), nilP], mkVal y)
+  , ([PVar f, consP (PVar x) (PVar xs), consP (PVar y) (PVar ys)], mkVal z)
   ]
 
 mappairsExpect :: CaseExpr Text
@@ -102,24 +108,27 @@ mappairsExpect =
 
 -- Example from Sestoft paper
 varC, lamC, appC, letC :: Con Text
-varC = Con "Var" 1 4
-lamC = Con "Lam" 2 4
-appC = Con "App" 2 4
-letC = Con "Let" 3 4
+varC = Con "Var" [boolTy] 4
+lamC = Con "Lam" [boolTy, boolTy] 4
+appC = Con "App" [boolTy, boolTy] 4
+letC = Con "Let" [boolTy, boolTy, boolTy] 4
+
+lamId :: Int -> Typed Ident
+lamId i = mkIdent $ Ident (pack $ show i) i
 
 lamEquations :: [Equation Text]
 lamEquations =
-  [ ([PCon varC [PVar x]], mkExpr [x, Ident "111" 111])
-  , ([PCon lamC [PVar x, PCon varC [PVar y]]], mkExpr [Ident "222" 222])
-  , ([PCon lamC [PVar x, PCon lamC [PVar y, PVar z]]], mkExpr [Ident "333" 333])
-  , ([PCon lamC [PVar x, PCon appC [PVar y, PVar z]]], mkExpr [Ident "444" 444])
-  , ([PCon appC [PCon lamC [PVar x, PVar y], PVar z]], mkExpr [x, y, z, Ident "555" 555])
-  --, ([PCon appC [PCon appC [PCon lamC [PVar x, PCon lamC [PVar y, PVar z]], PVar v], PVar w]], mkExpr [Ident "000" 000])
-  , ([PCon appC [PCon appC [PVar x, PVar y], PVar z]], mkExpr [Ident "666" 666])
-  , ([PCon letC [PVar x, PCon letC [PVar y, PVar z, PVar v], PVar w]], mkExpr [Ident "777" 777])
-  , ([PCon lamC [PVar x, PCon letC [PVar y, PVar z, PVar v]]], mkExpr [Ident "888" 888])
-  , ([PCon letC [PVar x, PVar y, PCon appC [PVar z, PVar v]]], mkExpr [x, y, z, v, Ident "999" 999])
-  , ([PCon appC [PCon appC [PCon lamC [PVar x, PCon lamC [PVar y, PVar z]], PVar v], PVar w]], mkExpr [Ident "1010" 1010])
+  [ ([PCon varC [PVar x]], mkExpr [x, lamId 111])
+  , ([PCon lamC [PVar x, PCon varC [PVar y]]], mkExpr [lamId 222])
+  , ([PCon lamC [PVar x, PCon lamC [PVar y, PVar z]]], mkExpr [lamId 333])
+  , ([PCon lamC [PVar x, PCon appC [PVar y, PVar z]]], mkExpr [lamId 444])
+  , ([PCon appC [PCon lamC [PVar x, PVar y], PVar z]], mkExpr [x, y, z, lamId 555])
+  --, ([PCon appC [PCon appC [PCon lamC [PVar x, PCon lamC [PVar y, PVar z]], PVar v], PVar w]], mkExpr [lamId 000])
+  , ([PCon appC [PCon appC [PVar x, PVar y], PVar z]], mkExpr [lamId 666])
+  , ([PCon letC [PVar x, PCon letC [PVar y, PVar z, PVar v], PVar w]], mkExpr [lamId 777])
+  , ([PCon lamC [PVar x, PCon letC [PVar y, PVar z, PVar v]]], mkExpr [lamId 888])
+  , ([PCon letC [PVar x, PVar y, PCon appC [PVar z, PVar v]]], mkExpr [x, y, z, v, lamId 999])
+  , ([PCon appC [PCon appC [PCon lamC [PVar x, PCon lamC [PVar y, PVar z]], PVar v], PVar w]], mkExpr [lamId 1010])
   ]
 
 -- case lam of
@@ -159,26 +168,26 @@ lamEquations =
 lamExpected :: CaseExpr Text
 lamExpected =
   CaseExpr c
-  [Clause (Con "Var" 1 4) [mkId 1] (Expr $ mkExpr [mkId 1, Ident "111" 111]),
-   Clause (Con "Lam" 2 4) [mkId 2, mkId 3]
+  [Clause varC [mkId 1] (Expr $ mkExpr [mkId 1, lamId 111]),
+   Clause lamC [mkId 2, mkId 3]
      (CaseExpr (mkId 3)
-        [Clause (Con "Var" 1 4) [mkId 4] (Expr $ mkExpr [Ident "222" 222]),
-         Clause (Con "Lam" 2 4) [mkId 5, mkId 6] (Expr $ mkExpr [Ident "333" 333]),
-         Clause (Con "App" 2 4) [mkId 7, mkId 8] (Expr $ mkExpr [Ident "444" 444]),
-         Clause (Con "Let" 3 4) [mkId 9, mkId 10, mkId 11] (Expr $ mkExpr [Ident "888" 888])]
+        [Clause varC [mkId 4] (Expr $ mkExpr [lamId 222]),
+         Clause lamC [mkId 5, mkId 6] (Expr $ mkExpr [lamId 333]),
+         Clause appC [mkId 7, mkId 8] (Expr $ mkExpr [lamId 444]),
+         Clause letC [mkId 9, mkId 10, mkId 11] (Expr $ mkExpr [lamId 888])]
         Nothing),
-   Clause (Con "App" 2 4) [mkId 12, mkId 13]
+   Clause appC [mkId 12, mkId 13]
      (CaseExpr (mkId 12)
-        [Clause (Con "Lam" 2 4) [mkId 14, mkId 15] (Expr $ mkExpr [mkId 15, mkId 13, mkId 14, Ident "555" 555]),
-         Clause (Con "App" 2 4) [mkId 16, mkId 17] (Expr $ mkExpr [Ident "666" 666])]
+        [Clause lamC [mkId 14, mkId 15] (Expr $ mkExpr [mkId 15, mkId 13, mkId 14, lamId 555]),
+         Clause appC [mkId 16, mkId 17] (Expr $ mkExpr [lamId 666])]
         (Just Error)),
-   Clause (Con "Let" 3 4) [mkId 22, mkId 23, mkId 24]
+   Clause letC [mkId 22, mkId 23, mkId 24]
      (CaseExpr (mkId 23)
-        [Clause (Con "Let" 3 4) [mkId 27, mkId 28, mkId 29] (Expr $ mkExpr [Ident "777" 777])]
+        [Clause letC [mkId 27, mkId 28, mkId 29] (Expr $ mkExpr [lamId 777])]
         (Just
            (CaseExpr (mkId 24)
-              [Clause (Con "App" 2 4) [mkId 25, mkId 26]
-                 (Expr $ mkExpr [mkId 22, mkId 23, mkId 25, mkId 26, Ident "999" 999])]
+              [Clause appC [mkId 25, mkId 26]
+                 (Expr $ mkExpr [mkId 22, mkId 23, mkId 25, mkId 26, lamId 999])]
               (Just Error))))]
   Nothing
 
@@ -278,4 +287,4 @@ spec = do
       match' [x, y, z] mappairsEquations `shouldBe` mappairsExpect
 
     it "handles the example from the Setsoft paper" $ do
-      match' [Ident "c" 0] lamEquations `shouldBe` lamExpected
+      match' [c] lamEquations `shouldBe` lamExpected

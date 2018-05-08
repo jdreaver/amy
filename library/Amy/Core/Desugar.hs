@@ -5,7 +5,7 @@ module Amy.Core.Desugar
   ) where
 
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromMaybe, maybeToList)
+import Data.Maybe (maybeToList)
 
 import Amy.Core.AST as C
 import Amy.Core.Monad
@@ -60,9 +60,10 @@ desugarExpr (T.EVar var) = pure $ C.EVar (desugarVar var)
 desugarExpr (T.ECase (T.Case scrutinee matches)) = do
   -- Desugar the case expression
   scrutinee' <- desugarExpr scrutinee
+  let scrutineeTy = desugarType $ T.expressionType scrutinee
   scrutineeIdent <- freshIdent "c"
   equations <- NE.toList <$> traverse matchToEquation matches
-  caseExpr <- PC.match [scrutineeIdent] equations
+  caseExpr <- PC.match [C.Typed scrutineeTy scrutineeIdent] equations
   caseExpr' <- restoreCaseExpr caseExpr
   pure $
     case caseExpr' of
@@ -144,21 +145,20 @@ matchToEquation (T.Match pat body) = do
 
 convertPattern :: T.Pattern -> PC.InputPattern C.DataConInfo
 convertPattern (T.PLit lit) = PC.PCon (PC.ConLit lit) []
-convertPattern (T.PVar (T.Typed _ ident)) = PC.PVar $ desugarIdent ident
+convertPattern (T.PVar ident) = PC.PVar $ desugarTypedIdent ident
 convertPattern (T.PCons (T.PatCons info mArg _)) =
   let
     info' = desugarDataConInfo info
     argPats = convertPattern <$> maybeToList mArg
-    arity = length argPats
+    argTys = C.TyCon <$> maybeToList (C.dataConstructorArgument (C.dataConInfoCons info'))
     (ConstructorSpan span') = C.dataConstructorSpan $ C.dataConInfoCons info'
-  in PC.PCon (PC.Con info' arity span') argPats
+  in PC.PCon (PC.Con info' argTys span') argPats
 convertPattern (T.PParens pat) = convertPattern pat
 
 restoreCaseExpr :: PC.CaseExpr C.DataConInfo -> Desugar C.Expr
 restoreCaseExpr (PC.CaseExpr scrutinee clauses mDefault) = do
   let
-    scrutineeTy = desugarType $ T.TyCon $ T.fromPrimTyCon boolTyCon -- TODO: FIXME
-    scrutinee' = C.EVar $ C.VVal $ C.Typed scrutineeTy scrutinee
+    scrutinee' = C.EVar $ C.VVal scrutinee
   clauses' <- traverse restoreClause clauses
   defaultClause <- traverse restoreCaseExpr mDefault
   pure $ C.ECase $ C.Case scrutinee' scrutinee clauses' defaultClause
@@ -173,14 +173,10 @@ restoreClause clause@(PC.Clause (PC.ConLit _) _ _) =
 restoreClause (PC.Clause (PC.Con con _ _) args caseExpr) = do
   let
     patTy = C.TyCon $ C.dataConstructorType $ C.dataConInfoCons con
-    mArgTy = C.TyCon <$> C.dataConstructorArgument (C.dataConInfoCons con)
     arg =
       case args of
         [] -> Nothing
-        [x] ->
-          let
-            argTy = fromMaybe (error "Couldn't get arg type") mArgTy
-          in Just (C.Typed argTy x)
+        [x] -> Just x
         xs -> error $ "Encountered too many arguments! " ++ show xs
     pat = C.PCons $ C.PatCons con arg patTy
   expr <- restoreCaseExpr caseExpr

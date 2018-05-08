@@ -38,7 +38,7 @@ data CaseDefaultBlock
   { caseDefaultBlockExpr :: !Expr
   , caseDefaultBlockName :: !Name
   , caseDefaultBlockNextName :: !Name
-  , caseDefaultBlockIdent :: !Ident
+  , caseDefaultBlockIdent :: !(Typed Ident)
   } deriving (Show, Eq)
 
 data CaseEndBlock

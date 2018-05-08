@@ -7,7 +7,6 @@ module Amy.Core.PatternCompiler
   ( match
   , InputPattern(..)
   , Con(..)
-  , Arity
   , Span
   , Equation
   , CaseExpr(..)
@@ -29,7 +28,7 @@ data InputPattern con
   = PCon !(Con con) ![InputPattern con]
     -- ^ Constructor patterns are nested. We have the constructor tag and a
     -- list of pattern arguments.
-  | PVar !Ident
+  | PVar !(Typed Ident)
     -- ^ Variables are catch-all patterns that match anything and binds the
     -- result to the variable.
   deriving (Show, Eq)
@@ -37,20 +36,16 @@ data InputPattern con
 -- | A 'Con'structor is used to construct data types and destructure them in
 -- patterns.
 data Con con
-  = Con !con !Arity !Span
+  = Con !con ![Type] !Span
     -- ^ "Normal" constructor
   | ConLit !Literal
     -- ^ Special constructor for a literal. Literals have 0 arity and infinite
     -- span.
   deriving (Show, Eq, Ord)
 
--- | 'Arity' is the number of arguments a constructor takes. A constructor with
--- no arguments has arity 0, and a constructor with N arguments has arity N.
-type Arity = Int
-
-conArity :: Con con -> Arity
-conArity (Con _ arity _) = arity
-conArity (ConLit _) = 0
+conArgTys :: Con con -> [Type]
+conArgTys (Con _ argTys _) = argTys
+conArgTys (ConLit _) = []
 
 -- | The 'Span' of a constructor is the total number of constructors in the
 -- constructor's type. For example, in @data Bool = False | True@, each
@@ -66,7 +61,7 @@ type Equation con = ([InputPattern con], Expr)
 
 -- | A 'CaseExpr' is the output of the match algorithm
 data CaseExpr con
-  = CaseExpr !Ident ![Clause con] !(Maybe (CaseExpr con))
+  = CaseExpr !(Typed Ident) ![Clause con] !(Maybe (CaseExpr con))
     -- ^ Corresponds to a case in Core
   | Expr !Expr
     -- ^ An input expression
@@ -79,7 +74,7 @@ data CaseExpr con
 data Clause con =
   Clause
     !(Con con) -- ^ Constructor for the clause
-    ![Ident] -- ^ Variables to bind the constructor arguments to
+    ![Typed Ident] -- ^ Variables to bind the constructor arguments to
     !(CaseExpr con) -- ^ Expression for the clause
   deriving (Show, Eq)
 
@@ -92,14 +87,14 @@ freshVar = do
 -- 'CaseExpr'.
 match
   :: (Ord con)
-  => [Ident]
+  => [Typed Ident]
   -> [Equation con]
   -> Desugar (CaseExpr con)
 match vars eqs = match' vars eqs Error
 
 match'
   :: (Ord con)
-  => [Ident]
+  => [Typed Ident]
   -> [Equation con]
   -> CaseExpr con
   -> Desugar (CaseExpr con)
@@ -132,7 +127,7 @@ data GroupedEquations con
   | ConEquations ![ConEquation con]
   deriving (Show, Eq)
 
-data VarEquation con = VarEquation !Ident !(Equation con)
+data VarEquation con = VarEquation !(Typed Ident) !(Equation con)
   deriving (Show, Eq)
 
 data ConEquation con = ConEquation !(Con con) ![InputPattern con] !(Equation con)
@@ -160,7 +155,7 @@ concatGroupedEquations (x:y:xs) =
 -- simple case of all variables or all constructors.
 matchGroup
   :: (Ord con)
-  => [Ident]
+  => [Typed Ident]
   -> CaseExpr con
   -> GroupedEquations con
   -> Desugar (CaseExpr con)
@@ -171,14 +166,14 @@ matchGroup vars def (ConEquations eqs) = matchCon vars eqs def
 -- the pattern variable in the equation with the match variable.
 matchVar
   :: (Ord con)
-  => [Ident]
+  => [Typed Ident]
   -> [VarEquation con]
   -> CaseExpr con
   -> Desugar (CaseExpr con)
 matchVar [] _ _ = error "matchVars called with empty variables"
 matchVar (u:us) eqs def = do
   let
-    mkNewEquation (VarEquation var (ps, eq)) = (ps, substExpr eq var u)
+    mkNewEquation (VarEquation (Typed _ var) (ps, eq)) = (ps, substExpr eq var (typedValue u))
     eqs' = mkNewEquation <$> eqs
   match' us eqs' def
 
@@ -187,7 +182,7 @@ matchVar (u:us) eqs def = do
 -- in a 'Case' expression.
 matchCon
   :: (Ord con)
-  => [Ident]
+  => [Typed Ident]
   -> [ConEquation con]
   -> CaseExpr con
   -> Desugar (CaseExpr con)
@@ -225,13 +220,13 @@ groupByConstructor eqs =
 
 matchClause
   :: (Ord con)
-  => [Ident]
+  => [Typed Ident]
   -> CaseExpr con
   -> NonEmpty (ConEquation con)
   -> Desugar (Clause con)
 matchClause us def eqs = do
   let (ConEquation con _ _) = NE.head eqs
-  us' <- traverse (const freshVar) [1..conArity con]
+  us' <- traverse (\ty -> Typed ty <$> freshVar) $ conArgTys con
   let mkNewEquation (ConEquation _ pats' (pats, expr)) = (pats' ++ pats, expr)
   eqs' <- match' (us' ++ us) (NE.toList $ mkNewEquation <$> eqs) def
   pure $ Clause con us' eqs'
