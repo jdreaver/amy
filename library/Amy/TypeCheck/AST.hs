@@ -77,7 +77,7 @@ data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConInfo
   , typeDeclarationConstructors :: ![DataConstructor]
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 fromPrimTypeDef :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
@@ -91,7 +91,7 @@ data DataConstructor
   , dataConstructorType :: !TyConInfo
   , dataConstructorSpan :: !ConstructorSpan
   , dataConstructorIndex :: !ConstructorIndex
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 fromPrimDataCon :: PrimDataCon -> DataConstructor
 fromPrimDataCon (PrimDataCon name id' ty span' index) =
@@ -101,7 +101,7 @@ data DataConInfo
   = DataConInfo
   { dataConInfoDefinition :: !TypeDeclaration
   , dataConInfoCons :: !DataConstructor
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 -- | A renamed 'Expr'
 data Expr

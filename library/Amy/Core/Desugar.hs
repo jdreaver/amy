@@ -1,11 +1,15 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Amy.Core.Desugar
   ( desugarModule
   ) where
 
 import qualified Data.List.NonEmpty as NE
+import Data.Maybe (fromMaybe, maybeToList)
 
 import Amy.Core.AST as C
 import Amy.Core.Monad
+import Amy.Core.PatternCompiler as PC
 import Amy.Prim
 import Amy.TypeCheck.AST as T
 
@@ -54,10 +58,25 @@ desugarExpr :: T.Expr -> Desugar C.Expr
 desugarExpr (T.ELit lit) = pure $ C.ELit lit
 desugarExpr (T.EVar var) = pure $ C.EVar (desugarVar var)
 desugarExpr (T.ECase (T.Case scrutinee matches)) = do
-  -- TODO: Desugar case expressions
+  -- Desugar the case expression
   scrutinee' <- desugarExpr scrutinee
-  matches' <- traverse desugarMatch matches
-  pure $ C.ECase (C.Case scrutinee' matches')
+  scrutineeIdent@(C.Ident scrutineeVar scrutineeVarId) <- freshIdent "c"
+  let
+    equations = NE.toList $ matchToEquation <$> matches
+    caseExpr = PC.match identVarSubst mkIdent [T.Ident scrutineeVar scrutineeVarId] equations
+  caseExpr' <- restoreCaseExpr caseExpr
+
+  -- Bind the scrutinee to a variable
+  let
+    scrutineeBinding =
+      C.Binding
+      { C.bindingName = scrutineeIdent
+      , C.bindingType = desugarScheme $ T.Forall [] $ T.expressionType scrutinee
+      , C.bindingArgs = []
+      , C.bindingReturnType = desugarType $ T.expressionType scrutinee
+      , C.bindingBody = scrutinee'
+      }
+  pure $ C.ELet $ C.Let [scrutineeBinding] caseExpr'
 desugarExpr (T.EIf (T.If pred' then' else')) =
   let
     boolTyDef = fromPrimTypeDef boolTypeDefinition
@@ -84,25 +103,6 @@ desugarVar :: T.Var -> C.Var
 desugarVar (T.VVal ident) = C.VVal $ desugarTypedIdent ident
 desugarVar (T.VCons (T.Typed ty cons)) = C.VCons $ C.Typed (desugarType ty) (desugarDataConInfo cons)
 
-desugarMatch :: T.Match -> Desugar C.Match
-desugarMatch (T.Match pat body) = do
-  pat' <- desugarPattern pat
-  expr' <- desugarExpr body
-  pure $ C.Match pat' expr'
-
-desugarPattern :: T.Pattern -> Desugar C.Pattern
-desugarPattern (T.PLit lit) = pure $ C.PLit lit
-desugarPattern (T.PVar var) = pure $ C.PVar (desugarTypedIdent var)
-desugarPattern pat@(T.PCons (T.PatCons cons mArg retTy)) = do
-  let cons' = desugarDataConInfo cons
-  mArg' <- traverse desugarPattern mArg
-  let retTy' = desugarType retTy
-  case mArg' of
-    Nothing -> pure $ C.PCons (C.PatCons cons' Nothing retTy')
-    Just (C.PVar ident) -> pure $ C.PCons (C.PatCons cons' (Just ident) retTy')
-    _ -> error $ "Cant convert nested patterns yet " ++ show pat
-desugarPattern (T.PParens pat) = desugarPattern pat
-
 desugarIdent :: T.Ident -> C.Ident
 desugarIdent (T.Ident name id') = C.Ident name id'
 
@@ -125,3 +125,96 @@ desugarTyVarInfo ty@(T.TyVarInfo name id' gen) =
   case gen of
     TyVarGenerated -> error $ "Found generated type name, bad! " ++ show ty
     TyVarNotGenerated -> C.TyVarInfo name id'
+
+--
+-- Case Expressions
+--
+
+identVarSubst :: VarSubst T.Expr T.Ident
+identVarSubst = VarSubst substExpr
+
+substExpr :: T.Expr -> T.Ident -> T.Ident -> T.Expr
+substExpr e@(T.ELit _) _ _ = e
+substExpr (T.EVar v) var newVar =
+  case v of
+    T.VVal (T.Typed ty ident) -> T.EVar (T.VVal $ T.Typed ty $ replaceIdent ident var newVar)
+    T.VCons _ -> T.EVar v
+substExpr (T.EIf (T.If pred' then' else')) var newVar =
+  T.EIf (T.If (substExpr pred' var newVar) (substExpr then' var newVar) (substExpr else' var newVar))
+substExpr (T.ECase (T.Case scrut alts)) var newVar =
+  T.ECase (T.Case (substExpr scrut var newVar) ((\m -> substMatch m var newVar) <$> alts))
+substExpr (T.ELet (T.Let bindings body)) var newVar =
+  T.ELet (T.Let ((\b -> substBinding b var newVar) <$> bindings) (substExpr body var newVar))
+substExpr (T.EApp (T.App f args ty)) var newVar =
+  T.EApp (T.App (substExpr f var newVar) ((\arg -> substExpr arg var newVar) <$> args) ty)
+substExpr (T.EParens expr) var newVar = T.EParens (substExpr expr var newVar)
+
+substBinding :: T.Binding -> T.Ident -> T.Ident -> T.Binding
+substBinding binding var newVar = binding { T.bindingBody = substExpr (T.bindingBody binding) var newVar }
+
+substMatch :: T.Match -> T.Ident -> T.Ident -> T.Match
+substMatch match' var newVar = match' { T.matchBody = substExpr (T.matchBody match') var newVar }
+
+replaceIdent :: T.Ident -> T.Ident -> T.Ident -> T.Ident
+replaceIdent var oldVar newVar = if var == oldVar then newVar else var
+
+mkIdent :: MakeVar T.Ident
+mkIdent = MakeVar $ flip T.Ident
+
+matchToEquation :: T.Match -> PC.Equation T.Expr T.DataConInfo T.Ident
+matchToEquation (T.Match pat body) = ([convertPattern pat], body)
+
+convertPattern :: T.Pattern -> PC.Pattern T.DataConInfo T.Ident
+convertPattern (T.PLit lit) = PC.PCon (PC.ConLit lit) []
+convertPattern (T.PVar (T.Typed _ ident)) = PC.PVar ident
+convertPattern (T.PCons (T.PatCons info mArg _)) =
+  let
+    argPats = convertPattern <$> maybeToList mArg
+    arity = length argPats
+    (ConstructorSpan span') = T.dataConstructorSpan $ T.dataConInfoCons info
+  in PC.PCon (PC.Con info arity span') argPats
+convertPattern (T.PParens pat) = convertPattern pat
+
+restoreCaseExpr :: PC.CaseExpr T.Expr T.DataConInfo T.Ident -> Desugar C.Expr
+restoreCaseExpr (PC.Case scrutinee clauses mDefault) = do
+  let
+    scrutineeTy = desugarType $ T.TyCon $ T.fromPrimTyCon boolTyCon -- TODO: FIXME
+    scrutineeIdent = desugarIdent scrutinee
+    scrutinee' = C.EVar $ C.VVal $ C.Typed scrutineeTy scrutineeIdent
+  clauses' <- traverse restoreClause clauses
+  defaultClause <-
+    case mDefault of
+      Nothing -> pure []
+      Just def -> do
+        def' <- restoreCaseExpr def
+        pure [C.Match (C.PVar $ C.Typed scrutineeTy scrutineeIdent) def']
+  let
+    matches =
+      fromMaybe (error "Somehow ended up with no matches")
+      $ NE.nonEmpty (clauses' ++ defaultClause)
+  pure $ C.ECase $ C.Case scrutinee' matches
+restoreCaseExpr (PC.Expr expr) = desugarExpr expr
+restoreCaseExpr Error = error "Found inexhaustive pattern match"
+
+restoreClause :: PC.Clause T.Expr T.DataConInfo T.Ident -> Desugar C.Match
+restoreClause (PC.Clause (PC.ConLit lit) [] caseExpr) =
+  C.Match (C.PLit lit) <$> restoreCaseExpr caseExpr
+restoreClause clause@(PC.Clause (PC.ConLit _) _ _) =
+  error $ "Encountered literal clause with arguments! " ++ show clause
+restoreClause (PC.Clause (PC.Con con _ _) args caseExpr) = do
+  let
+    con' = desugarDataConInfo con
+    patTy = C.TyCon $ C.dataConstructorType $ C.dataConInfoCons con'
+    mArgTy = C.TyCon <$> C.dataConstructorArgument (C.dataConInfoCons con')
+    arg =
+      case args of
+        [] -> Nothing
+        [x] ->
+          let
+            x' = desugarIdent x
+            argTy = fromMaybe (error "Couldn't get arg type") mArgTy
+          in Just (C.Typed argTy x')
+        xs -> error $ "Encountered too many arguments! " ++ show xs
+    pat = C.PCons $ C.PatCons con' arg patTy
+  expr <- restoreCaseExpr caseExpr
+  pure $ C.Match pat expr

@@ -62,6 +62,7 @@ case.end.10:                                      ; preds = %case.0.10
   switch i8 %7, label %case.0.12 [
     i8 0, label %case.0.12
     i8 1, label %case.1.12
+    i8 2, label %case.2.12
   ]
 
 case.0.12:                                        ; preds = %case.end.10, %case.end.10
@@ -70,8 +71,11 @@ case.0.12:                                        ; preds = %case.end.10, %case.
 case.1.12:                                        ; preds = %case.end.10
   br label %case.end.12
 
-case.end.12:                                      ; preds = %case.1.12, %case.0.12
-  %end.12 = phi i64 [ 1, %case.0.12 ], [ 2, %case.1.12 ]
+case.2.12:                                        ; preds = %case.end.10
+  br label %case.end.12
+
+case.end.12:                                      ; preds = %case.2.12, %case.1.12, %case.0.12
+  %end.12 = phi i64 [ 1, %case.0.12 ], [ 2, %case.1.12 ], [ 3, %case.2.12 ]
   %8 = add i64 %end.10, %end.0
   %9 = add i64 %end.12, %8
   ret i64 %9

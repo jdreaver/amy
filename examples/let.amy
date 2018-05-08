@@ -36,6 +36,7 @@ main =
       case s of
         MyEnumA -> 1
         MyEnumB -> 2
+        MyEnumC -> 3
   in
     let z = iAdd# u y; a = iAdd# t z in a
 
