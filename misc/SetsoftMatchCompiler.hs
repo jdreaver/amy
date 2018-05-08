@@ -2,8 +2,27 @@
 
 -- | Implementation of "ML pattern match compilation and partial evaluation" by
 -- Peter Sestoft
+--
+-- I was using this for converting nested patterns into case expressions, but I
+-- hit a few snags:
+--
+-- - I thought the code was a bit too complicated for my needs, even after
+--   refactoring it and understanding it better.
+--
+-- - It wasn't clear how I was going to extend it to records when those are
+--   added to the language.
+--
+-- - It became very complicated to translate the output of the algorithm into
+--   case expressions, which was my original goal.
+--
+-- I decided to move ahead with the SPJ/Wadler algorithm from Implementation of
+-- Functional Programming Languages. That algorithm is much more direct, it is
+-- easier to understand, and it produces nested case expressions directly.
+--
+-- I'm keeping this code here because I think the algorithm is very elegant and
+-- produces a good decision tree, so I may come back to it eventually.
 
-module Amy.Core.MatchCompiler
+module MatchCompiler
   ( Con(..)
   , Arity
   , Span
