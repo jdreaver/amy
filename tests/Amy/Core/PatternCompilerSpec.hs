@@ -183,10 +183,10 @@ spec = do
   describe "compileMatch" $ do
 
     it "handles a simple variable case" $ do
-      match ["x"] [([PVar "x"], 'a')] Error `shouldBe` Expr 'a'
+      match ["x"] [([PVar "x"], 'a')] `shouldBe` Expr 'a'
 
     it "handles a single constructor case with a variable" $ do
-      match ["x"] [([newtypeP (PVar "y")], 'a')] Error
+      match ["x"] [([newtypeP (PVar "y")], 'a')]
         `shouldBe`
         Case "x" [Clause (Con "MyNewtype" 1) ["_u1"] (Expr 'a')]
 
@@ -201,7 +201,7 @@ spec = do
           [ Clause falseC [] (Expr 'b')
           , Clause trueC [] (Expr 'a')
           ]
-      match ["x"] equations Error `shouldBe` expected
+      match ["x"] equations `shouldBe` expected
 
     it "handles a pair of bools case" $ do
       let
@@ -226,10 +226,10 @@ spec = do
               ]
             )
           ]
-      match ["x", "y"] equations Error `shouldBe` expected
+      match ["x", "y"] equations `shouldBe` expected
 
     it "handles the mappairs example" $ do
-      match ["x1", "x2", "x3"] mappairsEquations Error `shouldBe` mappairsExpect
+      match ["x1", "x2", "x3"] mappairsEquations `shouldBe` mappairsExpect
 
     it "handles the example from the Setsoft paper" $ do
-      match ["x"] lamEquations Error `shouldBe` lamExpected
+      match ["x"] lamEquations `shouldBe` lamExpected

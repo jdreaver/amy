@@ -70,8 +70,8 @@ freshVar = do
   id' <- get
   pure $ "_u" <> pack (show id')
 
-match :: (Show expr) => [Variable] -> [Equation expr] -> CaseExpr expr -> CaseExpr expr
-match vars eqs def = runMatch 0 $ match' vars eqs def
+match :: (Show expr) => [Variable] -> [Equation expr] -> CaseExpr expr
+match vars eqs = runMatch 0 $ match' vars eqs Error
 
 match' :: (Show expr) => [Variable] -> [Equation expr] -> CaseExpr expr -> Match expr (CaseExpr expr)
 match' [] eqs def = pure $ foldr applyFatbar def (Expr . snd <$> eqs)
