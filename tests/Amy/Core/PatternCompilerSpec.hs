@@ -7,6 +7,7 @@ module Amy.Core.PatternCompilerSpec
 import Test.Hspec
 
 import Amy.Core.PatternCompiler
+import Amy.Literal
 
 -- Bool type
 trueC, falseC :: Con
@@ -36,6 +37,13 @@ newtypeC = Con "MyNewtype" 1 1
 
 newtypeP :: Pattern -> Pattern
 newtypeP pat = PCon newtypeC [pat]
+
+-- Literal
+intC :: Int -> Con
+intC = ConLit . LiteralInt
+
+intP :: Int -> Pattern
+intP i = PCon (intC i) []
 
 -- mappairs example from book
 mappairsEquations :: [Equation Int]
@@ -151,6 +159,24 @@ spec = do
       match ["x"] [([newtypeP (PVar "y")], 'a')]
         `shouldBe`
         Case "x" [Clause newtypeC ["_u1"] (Expr 'a')] Nothing
+
+    it "handles a single constructor case with a literal and variable" $ do
+      let
+        equations =
+          [ ([newtypeP (intP 1)], 'a')
+          , ([newtypeP (PVar "y")], 'b')
+          ]
+        expected =
+          Case "x"
+          [ Clause (Con "MyNewtype" 1 1) ["_u1"]
+            ( Case "_u1"
+              [ Clause (ConLit (LiteralInt 1)) [] (Expr 'a')
+              ]
+              (Just (Expr 'b'))
+            )
+          ]
+          Nothing
+      match ["x"] equations `shouldBe` expected
 
     it "handles a simple true/false case" $ do
       let

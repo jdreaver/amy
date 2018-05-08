@@ -19,6 +19,8 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Text (Text, pack)
 
+import Amy.Literal
+
 data Pattern
   = PCon !Con ![Pattern]
   | PVar !Variable
@@ -28,14 +30,16 @@ type Variable = Text
 
 data Con
   = Con !Text !Arity !Span
-  -- ConLit !Int
+  | ConLit !Literal
   deriving (Show, Eq, Ord)
 
 conArity :: Con -> Arity
 conArity (Con _ arity _) = arity
+conArity (ConLit _) = 0
 
-conSpan :: Con -> Span
-conSpan (Con _ _ span') = span'
+conSpan :: Con -> Maybe Span
+conSpan (Con _ _ span') = Just span'
+conSpan (ConLit _) = Nothing
 
 type Arity = Int
 type Span = Int
@@ -148,9 +152,12 @@ matchCon (u:us) eqs@(eq1:_) def = do
     -- Check for inexhaustive match.
     span' = conSpan . conEquationCon $ eq1
     default' =
-      if length grouped < span'
-      then Just def
-      else Nothing
+      case span' of
+        Just s ->
+          if length grouped < s
+          then Just def
+          else Nothing
+        Nothing -> Just def
   eqs' <- traverse (matchClause us def) grouped
   pure $ Case u eqs' default'
 

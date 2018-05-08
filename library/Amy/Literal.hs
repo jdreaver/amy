@@ -13,7 +13,7 @@ import Amy.Prim
 data Literal
   = LiteralInt !Int
   | LiteralDouble !Double
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 showLiteral :: Literal -> String
 showLiteral (LiteralInt x) = show x
