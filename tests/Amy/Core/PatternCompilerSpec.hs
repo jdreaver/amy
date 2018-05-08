@@ -10,43 +10,32 @@ import Amy.Core.PatternCompiler
 
 -- Bool type
 trueC, falseC :: Con
-trueC = Con "True" 0
-falseC = Con "False" 0
-
-trueCI, falseCI :: ConInfo
-trueCI = ConInfo trueC [falseC, trueC]
-falseCI = ConInfo falseC [falseC, trueC]
+trueC = Con "True" 0 2
+falseC = Con "False" 0 2
 
 trueP :: Pattern
-trueP = PCon trueCI []
+trueP = PCon trueC []
 
 falseP :: Pattern
-falseP = PCon falseCI []
+falseP = PCon falseC []
 
 -- List type
 nilC, consC :: Con
-nilC = Con "Nil" 0
-consC = Con "Cons" 2
-
-nilCI, consCI :: ConInfo
-nilCI = ConInfo nilC [nilC, consC]
-consCI = ConInfo consC [nilC, consC]
+nilC = Con "Nil" 0 2
+consC = Con "Cons" 2 2
 
 nilP :: Pattern
-nilP = PCon nilCI []
+nilP = PCon nilC []
 
 consP :: Pattern -> Pattern -> Pattern
-consP x y = PCon consCI [x, y]
+consP x y = PCon consC [x, y]
 
 -- Newtype
 newtypeC :: Con
-newtypeC = Con "MyNewtype" 1
-
-newtypeCI :: ConInfo
-newtypeCI = ConInfo newtypeC [newtypeC]
+newtypeC = Con "MyNewtype" 1 1
 
 newtypeP :: Pattern -> Pattern
-newtypeP pat = PCon newtypeCI [pat]
+newtypeP pat = PCon newtypeC [pat]
 
 -- mappairs example from book
 mappairsEquations :: [Equation Int]
@@ -72,30 +61,24 @@ mappairsExpect =
 
 -- Example from Sestoft paper
 varC, lamC, appC, letC :: Con
-varC = Con "Var" 1
-lamC = Con "Lam" 2
-appC = Con "App" 2
-letC = Con "Let" 3
-
-varCI, lamCI, appCI, letCI :: ConInfo
-varCI = ConInfo varC [varC, lamC, appC, letC]
-lamCI = ConInfo lamC [varC, lamC, appC, letC]
-appCI = ConInfo appC [varC, lamC, appC, letC]
-letCI = ConInfo letC [varC, lamC, appC, letC]
+varC = Con "Var" 1 4
+lamC = Con "Lam" 2 4
+appC = Con "App" 2 4
+letC = Con "Let" 3 4
 
 lamEquations :: [Equation Int]
 lamEquations =
-  [ ([PCon varCI [PVar "x"]], 111)
-  , ([PCon lamCI [PVar "x", PCon varCI [PVar "y"]]], 222)
-  , ([PCon lamCI [PVar "x", PCon lamCI [PVar "y", PVar "z"]]], 333)
-  , ([PCon lamCI [PVar "x", PCon appCI [PVar "y", PVar "z"]]], 444)
-  , ([PCon appCI [PCon lamCI [PVar "x", PVar "y"], PVar "z"]], 555)
+  [ ([PCon varC [PVar "x"]], 111)
+  , ([PCon lamC [PVar "x", PCon varC [PVar "y"]]], 222)
+  , ([PCon lamC [PVar "x", PCon lamC [PVar "y", PVar "z"]]], 333)
+  , ([PCon lamC [PVar "x", PCon appC [PVar "y", PVar "z"]]], 444)
+  , ([PCon appC [PCon lamC [PVar "x", PVar "y"], PVar "z"]], 555)
   --, (PCon appC [PCon appC [PCon lamC [PVar "x", PCon lamC [PVar "y", PVar "z"]], PVar "v"], PVar "w"], 0)
-  , ([PCon appCI [PCon appCI [PVar "x", PVar "y"], PVar "z"]], 666)
-  , ([PCon letCI [PVar "x", PCon letCI [PVar "y", PVar "z", PVar "v"], PVar "w"]], 777)
-  , ([PCon lamCI [PVar "x", PCon letCI [PVar "y", PVar "z", PVar "v"]]], 888)
-  , ([PCon letCI [PVar "x", PVar "y", PCon appCI [PVar "z", PVar "v"]]], 999)
-  , ([PCon appCI [PCon appCI [PCon lamCI [PVar "x", PCon lamCI [PVar "y", PVar "z"]], PVar "v"], PVar "w"]], 1010)
+  , ([PCon appC [PCon appC [PVar "x", PVar "y"], PVar "z"]], 666)
+  , ([PCon letC [PVar "x", PCon letC [PVar "y", PVar "z", PVar "v"], PVar "w"]], 777)
+  , ([PCon lamC [PVar "x", PCon letC [PVar "y", PVar "z", PVar "v"]]], 888)
+  , ([PCon letC [PVar "x", PVar "y", PCon appC [PVar "z", PVar "v"]]], 999)
+  , ([PCon appC [PCon appC [PCon lamC [PVar "x", PCon lamC [PVar "y", PVar "z"]], PVar "v"], PVar "w"]], 1010)
   ]
 
 -- case lam of
@@ -135,25 +118,25 @@ lamEquations =
 lamExpected :: CaseExpr Int
 lamExpected =
   Case "x"
-  [Clause (Con "App" 2) ["_u1", "_u2"]
+  [Clause appC ["_u1", "_u2"]
      (Case "_u1"
-        [Clause (Con "App" 2) ["_u3", "_u4"] (Expr 666),
-         Clause (Con "Lam" 2) ["_u9", "_u10"] (Expr 555)]
+        [Clause appC ["_u3", "_u4"] (Expr 666),
+         Clause lamC ["_u9", "_u10"] (Expr 555)]
         (Just Error)),
-   Clause (Con "Lam" 2) ["_u11", "_u12"]
+   Clause lamC ["_u11", "_u12"]
      (Case "_u12"
-        [Clause (Con "App" 2) ["_u13", "_u14"] (Expr 444),
-         Clause (Con "Lam" 2) ["_u15", "_u16"] (Expr 333),
-         Clause (Con "Let" 3) ["_u17", "_u18", "_u19"] (Expr 888),
-         Clause (Con "Var" 1) ["_u20"] (Expr 222)]
+        [Clause appC ["_u13", "_u14"] (Expr 444),
+         Clause lamC ["_u15", "_u16"] (Expr 333),
+         Clause letC ["_u17", "_u18", "_u19"] (Expr 888),
+         Clause varC ["_u20"] (Expr 222)]
         Nothing),
-   Clause (Con "Let" 3) ["_u21", "_u22", "_u23"]
+   Clause letC ["_u21", "_u22", "_u23"]
      (Case "_u22"
-        [Clause (Con "Let" 3) ["_u26", "_u27", "_u28"] (Expr 777)]
+        [Clause letC ["_u26", "_u27", "_u28"] (Expr 777)]
         (Just
-           (Case "_u23" [Clause (Con "App" 2) ["_u24", "_u25"] (Expr 999)]
+           (Case "_u23" [Clause appC ["_u24", "_u25"] (Expr 999)]
               (Just Error)))),
-   Clause (Con "Var" 1) ["_u29"] (Expr 111)]
+   Clause varC ["_u29"] (Expr 111)]
   Nothing
 
 spec :: Spec
@@ -167,7 +150,7 @@ spec = do
     it "handles a single constructor case with a variable" $ do
       match ["x"] [([newtypeP (PVar "y")], 'a')]
         `shouldBe`
-        Case "x" [Clause (Con "MyNewtype" 1) ["_u1"] (Expr 'a')] Nothing
+        Case "x" [Clause newtypeC ["_u1"] (Expr 'a')] Nothing
 
     it "handles a simple true/false case" $ do
       let

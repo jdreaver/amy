@@ -7,7 +7,6 @@
 module Amy.Core.PatternCompiler
   ( match
   , Pattern(..)
-  , ConInfo(..)
   , Con(..)
   , Equation
   , CaseExpr(..)
@@ -21,27 +20,25 @@ import qualified Data.List.NonEmpty as NE
 import Data.Text (Text, pack)
 
 data Pattern
-  = PCon !ConInfo ![Pattern]
+  = PCon !Con ![Pattern]
   | PVar !Variable
   deriving (Show, Eq)
 
 type Variable = Text
 
-data ConInfo
-  = ConInfo
-  { conInfoCon :: !Con
-  , conInfoAllTypeCons :: ![Con]
-  } deriving (Show, Eq, Ord)
-
 data Con
-  = Con !Text !Arity
+  = Con !Text !Arity !Span
   -- ConLit !Int
   deriving (Show, Eq, Ord)
 
 conArity :: Con -> Arity
-conArity (Con _ arity) = arity
+conArity (Con _ arity _) = arity
+
+conSpan :: Con -> Span
+conSpan (Con _ _ span') = span'
 
 type Arity = Int
+type Span = Int
 
 type Equation expr = ([Pattern], expr)
 
@@ -101,14 +98,11 @@ data GroupedEquations expr
 data VarEquation expr = VarEquation !Variable !(Equation expr)
   deriving (Show, Eq)
 
-data ConEquation expr = ConEquation !ConInfo ![Pattern] !(Equation expr)
+data ConEquation expr = ConEquation !Con ![Pattern] !(Equation expr)
   deriving (Show, Eq)
 
-conEquationInfo :: ConEquation expr -> ConInfo
-conEquationInfo (ConEquation info _ _) = info
-
 conEquationCon :: ConEquation expr -> Con
-conEquationCon = conInfoCon . conEquationInfo
+conEquationCon (ConEquation con _ _) = con
 
 groupEquations :: [Equation expr] -> [GroupedEquations expr]
 groupEquations = concatGroupedEquations . fmap equationType
@@ -152,9 +146,9 @@ matchCon (u:us) eqs@(eq1:_) def = do
   let
     grouped = groupByConstructor eqs
     -- Check for inexhaustive match.
-    allCons = conInfoAllTypeCons . conEquationInfo $ eq1
+    span' = conSpan . conEquationCon $ eq1
     default' =
-      if length grouped < length allCons
+      if length grouped < span'
       then Just def
       else Nothing
   eqs' <- traverse (matchClause us def) grouped
