@@ -117,7 +117,7 @@ codegenExpr' (ANF.ELet (ANF.Let bindings expr)) = do
     op <- codegenExpr' (ANF.bindingBody binding)
     addSymbolToTable (ANF.bindingName binding) op
   codegenExpr' expr
-codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee _ _ _ _)) = do
+codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = do
   caseId <- freshId
 
   compilationMethods' <- compilationMethods
@@ -128,10 +128,28 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee _ _ _ _)) = do
 
   -- Generate the switch statement
   scrutineeOp <- valOperand scrutinee
-  -- TODO: Extract tag from scrutinee op if we have to
+
+  -- Extract tag from scrutinee op if we have to
+  switchOp <-
+    case bindingTy of
+      TyCon tyCon -> do
+        tyConRep <- getTyConRep tyCon
+        case tyConRep of
+          TyConEnum _ -> pure scrutineeOp
+          TyConTaggedUnion _ bits -> do
+            tagPtrName <- freshUnName
+            tagOpName <- freshUnName
+            let
+              tagPtrOp = LocalReference (PointerType (IntegerType 32) (AddrSpace 0)) tagPtrName
+              tagOp = LocalReference (IntegerType bits) tagOpName
+            addInstruction $ tagPtrName := GetElementPtr False scrutineeOp [gepIndex 0, gepIndex 0] []
+            addInstruction $ tagOpName := Load False tagPtrOp Nothing 0 []
+            pure tagOp
+      _ -> pure scrutineeOp
+
   let
     switchNames = (\(CaseLiteralBlock _ name' _ constant _) -> (constant, name')) <$> literalBlocks
-  terminateBlock (Do $ Switch scrutineeOp switchDefaultBlockName switchNames []) switchDefaultBlockName
+  terminateBlock (Do $ Switch switchOp switchDefaultBlockName switchNames []) switchDefaultBlockName
 
   -- Generate case blocks
   let
@@ -146,9 +164,23 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee _ _ _ _)) = do
       addSymbolToTable ident scrutineeOp
       generateBlockExpr expr nextBlockName
     generateCaseLiteralBlock (CaseLiteralBlock expr _ nextBlockName _ mBind) = do
-      for_ mBind $ \_ -> do
-        -- TODO: Extract value from tagged union
-        pure ()
+      for_ mBind $ \(Typed ty ident) -> do
+        -- Compute pointer to tagged union value
+        dataPtrName <- freshUnName
+        let
+          dataPtrOp = LocalReference (PointerType (PointerType (IntegerType 64) (AddrSpace 0)) (AddrSpace 0)) dataPtrName
+        addInstruction $ dataPtrName := GetElementPtr False scrutineeOp [gepIndex 0, gepIndex 1] []
+
+        -- Load value from pointer
+        dataName <- freshUnName
+        let
+          dataOp = LocalReference (PointerType (IntegerType 64) (AddrSpace 0)) dataName
+        addInstruction $ dataName := Load False dataPtrOp Nothing 0 []
+        ty' <- llvmType ty
+        dataOp' <- maybeConvertPointer dataOp ty'
+
+        -- Add to symbol table
+        addSymbolToTable ident dataOp'
       generateBlockExpr expr nextBlockName
 
   mDefaultOpAndBlock <- traverse generateCaseDefaultBlock mDefaultBlock
@@ -194,7 +226,6 @@ codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons (ANF.Typed _ cons)) args' _)) = d
       tagPtrName <- freshUnName
       let
         tagPtrOp = LocalReference (PointerType (IntegerType 32) (AddrSpace 0)) tagPtrName
-        gepIndex i = ConstantOperand $ C.Int 32 i
         tagOp = ConstantOperand $ C.Int intBits (fromIntegral intTag)
       addInstruction $ tagPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex 0] []
       addInstruction $ Do $ Store False tagPtrOp tagOp Nothing 0 []
@@ -206,7 +237,7 @@ codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons (ANF.Typed _ cons)) args' _)) = d
           _ -> error $ "Can't set tagged union data because there isn't exactly one argument " ++ show app
       argOp' <- maybeConvertPointer argOp (PointerType (IntegerType 64) (AddrSpace 0))
       dataPtrName <- freshUnName
-      let dataPtrOp = LocalReference (PointerType (IntegerType 64) (AddrSpace 0)) dataPtrName
+      let dataPtrOp = LocalReference (PointerType (PointerType (IntegerType 64) (AddrSpace 0)) (AddrSpace 0)) dataPtrName
       addInstruction $ dataPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex 1] []
       addInstruction $ Do $ Store False dataPtrOp argOp' Nothing 0 []
 
@@ -218,6 +249,9 @@ codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   addInstruction $ opName := primitiveFunctionInstruction prim argOps
   returnTy' <- llvmType returnTy
   pure $ LocalReference returnTy' opName
+
+gepIndex :: Integer -> Operand
+gepIndex i = ConstantOperand $ C.Int 32 i
 
 valOperand :: ANF.Val -> BlockGen Operand
 valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
