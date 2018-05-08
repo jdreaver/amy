@@ -134,17 +134,7 @@ lamExpected =
   Case "x"
   [Clause (Con "App" 2) ["_u1", "_u2"]
      (Case "_u1"
-        [Clause (Con "App" 2) ["_u3", "_u4"]
-           (Case "_u4"
-              [Clause (Con "App" 2) ["_u5", "_u6"] (Expr 666),
-               Clause (Con "Lam" 2) ["_u7", "_u8"]
-                 (Case "_u2"
-                    [Clause (Con "App" 2) ["_u9", "_u10"] (Expr 666),
-                     Clause (Con "Lam" 2) ["_u11", "_u12"] (Expr 1010),
-                     Clause (Con "Let" 3) ["_u13", "_u14", "_u15"] (Expr 666),
-                     Clause (Con "Var" 1) ["_u16"] (Expr 666)]),
-               Clause (Con "Let" 3) ["_u17", "_u18", "_u19"] (Expr 666),
-               Clause (Con "Var" 1) ["_u20"] (Expr 666)]),
+        [Clause (Con "App" 2) ["_u3", "_u4"] (Expr 666),
          Clause (Con "Lam" 2) ["_u21", "_u22"] (Expr 555),
          Clause (Con "Let" 3) ["_u23", "_u24", "_u25"] Error,
          Clause (Con "Var" 1) ["_u26"] Error]),
@@ -155,25 +145,25 @@ lamExpected =
          Clause (Con "Let" 3) ["_u33", "_u34", "_u35"] (Expr 888),
          Clause (Con "Var" 1) ["_u36"] (Expr 222)]),
    Clause (Con "Let" 3) ["_u37", "_u38", "_u39"]
-     (Case "_u39"
-        [Clause (Con "App" 2) ["_u48", "_u49"] (Expr 999),
+     (Case "_u38"
+        [Clause (Con "App" 2) ["_u48", "_u49"]
+           (Case "_u39"
+              [Clause (Con "App" 2) ["_u40", "_u41"] (Expr 999),
+               Clause (Con "Lam" 2) ["_u42", "_u43"] Error,
+               Clause (Con "Let" 3) ["_u44", "_u45", "_u46"] Error,
+               Clause (Con "Var" 1) ["_u47"] Error]),
          Clause (Con "Lam" 2) ["_u50", "_u51"]
-           (Case "_u38"
-              [Clause (Con "App" 2) ["_u40", "_u41"] Error,
+           (Case "_u39"
+              [Clause (Con "App" 2) ["_u40", "_u41"] (Expr 999),
                Clause (Con "Lam" 2) ["_u42", "_u43"] Error,
-               Clause (Con "Let" 3) ["_u44", "_u45", "_u46"] (Expr 777),
+               Clause (Con "Let" 3) ["_u44", "_u45", "_u46"] Error,
                Clause (Con "Var" 1) ["_u47"] Error]),
-         Clause (Con "Let" 3) ["_u52", "_u53", "_u54"]
-           (Case "_u38"
-              [Clause (Con "App" 2) ["_u40", "_u41"] Error,
-               Clause (Con "Lam" 2) ["_u42", "_u43"] Error,
-               Clause (Con "Let" 3) ["_u44", "_u45", "_u46"] (Expr 777),
-               Clause (Con "Var" 1) ["_u47"] Error]),
+         Clause (Con "Let" 3) ["_u52", "_u53", "_u54"] (Expr 777),
          Clause (Con "Var" 1) ["_u55"]
-           (Case "_u38"
-              [Clause (Con "App" 2) ["_u40", "_u41"] Error,
+           (Case "_u39"
+              [Clause (Con "App" 2) ["_u40", "_u41"] (Expr 999),
                Clause (Con "Lam" 2) ["_u42", "_u43"] Error,
-               Clause (Con "Let" 3) ["_u44", "_u45", "_u46"] (Expr 777),
+               Clause (Con "Let" 3) ["_u44", "_u45", "_u46"] Error,
                Clause (Con "Var" 1) ["_u47"] Error])]),
    Clause (Con "Var" 1) ["_u56"] (Expr 111)]
 

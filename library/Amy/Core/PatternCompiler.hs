@@ -75,7 +75,12 @@ match vars eqs = runMatch 0 $ match' vars eqs Error
 
 match' :: (Show expr) => [Variable] -> [Equation expr] -> CaseExpr expr -> Match expr (CaseExpr expr)
 match' [] eqs def = pure $ foldr applyFatbar def (Expr . snd <$> eqs)
-match' vars eqs def = foldM (matchGroup vars) def $ groupEquations eqs
+match' vars eqs def = foldrM (matchGroup vars) def $ groupEquations eqs
+
+-- TODO: Refactor the algorithm so we can use foldM instead of foldrM
+foldrM :: Monad m => (a -> b -> m b) -> b -> [a] -> m b
+foldrM _ d [] = return d
+foldrM f d (x:xs) = f x =<< foldrM f d xs
 
 applyFatbar :: (Show expr) => CaseExpr expr -> CaseExpr expr -> CaseExpr expr
 applyFatbar e Fail = e
@@ -128,10 +133,10 @@ concatGroupedEquations (x:y:xs) =
 -- Matching
 --
 
-matchGroup :: (Show expr) => [Variable] -> CaseExpr expr -> GroupedEquations expr -> Match expr (CaseExpr expr)
-matchGroup _ _ (EmptyEquations _) = error "Encountered empty equations in matchGroup"
-matchGroup vars def (VarEquations eqs) = matchVar vars eqs def
-matchGroup vars def (ConEquations eqs) = matchCon vars eqs def
+matchGroup :: (Show expr) => [Variable] -> GroupedEquations expr -> CaseExpr expr -> Match expr (CaseExpr expr)
+matchGroup _ (EmptyEquations _) = error "Encountered empty equations in matchGroup"
+matchGroup vars (VarEquations eqs) = matchVar vars eqs
+matchGroup vars (ConEquations eqs) = matchCon vars eqs
 
 matchVar :: (Show expr) => [Variable] -> [VarEquation expr] -> CaseExpr expr -> Match expr (CaseExpr expr)
 matchVar [] _ _ = error "matchVars called with empty variables"
