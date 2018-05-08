@@ -121,8 +121,6 @@ codegenExpr' (ANF.ELet (ANF.Let bindings expr)) = do
 codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee _ _ _ _)) = do
   caseId <- freshId
 
-  -- TODO: Move a lot of this logic to ANF. conversion, like finding the default
-  -- match and converting match patterns to literals.
   compilationMethods' <- compilationMethods
   let
     mkCaseName nameBase = stringToName $ nameBase ++ show caseId

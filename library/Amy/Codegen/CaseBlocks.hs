@@ -61,11 +61,11 @@ caseBlocks mkBlockName compilationMethods (Case _ bind matches mDefault ty) =
     literalBlockNames = mkBlockName . (\i -> "case." ++ i ++ ".") . show <$> [0 .. (length matches - 1)]
     nextLiteralBlockNames = drop 1 literalBlockNames ++ [endBlockName]
 
+    -- Compute default block
     defaultBlockNextName =
       case literalBlockNames of
         [] -> endBlockName
         firstBlockName:_ -> firstBlockName
-
     mkDefaultBlock expr =
       CaseDefaultBlock
       { caseDefaultBlockExpr = expr
@@ -80,8 +80,7 @@ caseBlocks mkBlockName compilationMethods (Case _ bind matches mDefault ty) =
         (Nothing, firstBlockName:_) -> firstBlockName
         (Nothing, []) -> endBlockName
 
-    -- Combine the cons and lit matches. TODO: Is it bad that they are out of
-    -- their original order?
+    -- Compute literal blocks
     literalBlock (Match pat expr, (blockName, nextBlockName)) =
       CaseLiteralBlock
       { caseLiteralBlockExpr = expr

@@ -6,6 +6,6 @@ packages:
 # TODO: See if we can get llvm-hs-pretty into Stackage so we don't need
 # extra-deps.
 extra-deps:
-  - llvm-hs-pretty-0.2.0.0
-  - wl-pprint-text-1.1.1.1 # Needed for llvm-hs-pretty-0.2.0.0
+  - llvm-hs-pretty-0.2.1.0
+  - wl-pprint-text-1.1.1.1 # Needed for llvm-hs-pretty-0.2.1.0
   - base-compat-0.10.1 # Needed for wl-pprint-text-1.1.1.1
