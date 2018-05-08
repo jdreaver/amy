@@ -7,6 +7,7 @@ module Amy.Core.PatternCompilerSpec
 import Data.Text (Text)
 import Test.Hspec
 
+import Amy.Core.Monad
 import Amy.Core.PatternCompiler
 import Amy.Literal
 
@@ -19,6 +20,15 @@ listSubst = VarSubst $ \xs var newVar -> (\v -> if v == var then newVar else v) 
 
 mkVar :: MakeVar Text
 mkVar = MakeVar $ \_ x -> x
+
+match'
+  :: (Show expr, Ord con)
+  => VarSubst expr var
+  -> MakeVar var
+  -> [var]
+  -> [Equation expr con var]
+  -> CaseExpr expr con var
+match' subst mkVar' vars eqs = runDesugar 0 $ match subst mkVar' vars eqs
 
 -- Bool type
 trueC, falseC :: Con Text
@@ -166,10 +176,10 @@ spec = do
   describe "compileMatch" $ do
 
     it "handles a simple variable case" $ do
-      match ignoreSubst mkVar ["x"] [([PVar "x"], 'a')] `shouldBe` (Expr 'a' :: CaseExpr Char Text Text)
+      match' ignoreSubst mkVar ["x"] [([PVar "x"], 'a')] `shouldBe` (Expr 'a' :: CaseExpr Char Text Text)
 
     it "handles a single constructor case with a variable" $ do
-      match ignoreSubst mkVar ["x"] [([newtypeP (PVar "y")], 'a')]
+      match' ignoreSubst mkVar ["x"] [([newtypeP (PVar "y")], 'a')]
         `shouldBe`
         Case "x" [Clause newtypeC ["_u1"] (Expr 'a')] Nothing
 
@@ -189,7 +199,7 @@ spec = do
             )
           ]
           Nothing
-      match listSubst mkVar ["x"] equations `shouldBe` expected
+      match' listSubst mkVar ["x"] equations `shouldBe` expected
 
     it "handles a simple true/false case" $ do
       let
@@ -203,7 +213,7 @@ spec = do
           , Clause falseC [] (Expr 'b')
           ]
           Nothing
-      match ignoreSubst mkVar ["x"] equations `shouldBe` expected
+      match' ignoreSubst mkVar ["x"] equations `shouldBe` expected
 
     it "handles redundant branches" $ do
       let
@@ -222,7 +232,7 @@ spec = do
           , Clause (intC 3) [] (Expr 'f')
           ]
           (Just Error)
-      match ignoreSubst mkVar ["x"] equations `shouldBe` expected
+      match' ignoreSubst mkVar ["x"] equations `shouldBe` expected
 
     it "handles a pair of bools case" $ do
       let
@@ -250,10 +260,10 @@ spec = do
             )
           ]
           Nothing
-      match ignoreSubst mkVar ["x", "y"] equations `shouldBe` expected
+      match' ignoreSubst mkVar ["x", "y"] equations `shouldBe` expected
 
     it "handles the mappairs example" $ do
-      match ignoreSubst mkVar ["x1", "x2", "x3"] mappairsEquations `shouldBe` mappairsExpect
+      match' ignoreSubst mkVar ["x1", "x2", "x3"] mappairsEquations `shouldBe` mappairsExpect
 
     it "handles the example from the Setsoft paper" $ do
-      match listSubst mkVar ["c"] lamEquations `shouldBe` lamExpected
+      match' listSubst mkVar ["c"] lamEquations `shouldBe` lamExpected

@@ -63,7 +63,7 @@ desugarExpr (T.ECase (T.Case scrutinee matches)) = do
   scrutineeIdent@(C.Ident scrutineeVar scrutineeVarId) <- freshIdent "c"
   let
     equations = NE.toList $ matchToEquation <$> matches
-    caseExpr = PC.match identVarSubst mkIdent [T.Ident scrutineeVar scrutineeVarId] equations
+  caseExpr <- PC.match identVarSubst mkIdent [T.Ident scrutineeVar scrutineeVarId] equations
   caseExpr' <- restoreCaseExpr caseExpr
   pure $
     case caseExpr' of

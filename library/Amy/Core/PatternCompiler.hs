@@ -19,13 +19,13 @@ module Amy.Core.PatternCompiler
   ) where
 
 import Control.Monad.Reader
-import Control.Monad.State.Strict
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import Data.Text (Text, pack)
 
+import Amy.Core.Monad
 import Amy.Literal
 
 -- | A 'Pattern' is either a constructor or a variable.
@@ -88,8 +88,8 @@ data Clause expr con var =
   deriving (Show, Eq)
 
 -- | Monad to run the algorithm in.
-newtype Match expr var a = Match (ReaderT (MatchData expr var) (State Int) a)
-  deriving (Functor, Applicative, Monad, MonadReader (MatchData expr var), MonadState Int)
+newtype Match expr var a = Match (ReaderT (MatchData expr var) Desugar a)
+  deriving (Functor, Applicative, Monad, MonadReader (MatchData expr var))
 
 data MatchData expr var = MatchData (VarSubst expr var) (MakeVar var)
 
@@ -104,13 +104,12 @@ substituteVariable expr var newVar = do
   MatchData (VarSubst f) _ <- ask
   pure $ f expr var newVar
 
-runMatch :: MatchData expr var -> Int -> Match expr var a -> a
-runMatch matchData i (Match action) = evalState (runReaderT action matchData) i
+runMatch :: MatchData expr var -> Match expr var a -> Desugar a
+runMatch matchData (Match action) = runReaderT action matchData
 
 freshVar :: Match expr var var
 freshVar = do
-  modify' (+ 1)
-  id' <- get
+  id' <- Match $ lift freshId
   MatchData _ (MakeVar mkVar) <- ask
   pure $ mkVar id' ("_u" <> pack (show id'))
 
@@ -122,8 +121,8 @@ match
   -> MakeVar var
   -> [var]
   -> [Equation expr con var]
-  -> CaseExpr expr con var
-match subst mkVar vars eqs = runMatch (MatchData subst mkVar) 0 $ match' vars eqs Error
+  -> Desugar (CaseExpr expr con var)
+match subst mkVar vars eqs = runMatch (MatchData subst mkVar) $ match' vars eqs Error
 
 match'
   :: (Show expr, Ord con)
