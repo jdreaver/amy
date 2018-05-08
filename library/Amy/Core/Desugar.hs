@@ -62,7 +62,7 @@ desugarExpr (T.ECase (T.Case scrutinee matches)) = do
   scrutinee' <- desugarExpr scrutinee
   scrutineeIdent <- freshIdent "c"
   equations <- NE.toList <$> traverse matchToEquation matches
-  caseExpr <- PC.match identVarSubst [scrutineeIdent] equations
+  caseExpr <- PC.match [scrutineeIdent] equations
   caseExpr' <- restoreCaseExpr caseExpr
   pure $
     case caseExpr' of
@@ -133,10 +133,7 @@ desugarTyVarInfo ty@(T.TyVarInfo name id' gen) =
 -- Case Expressions
 --
 
-identVarSubst :: VarSubst C.Expr
-identVarSubst = VarSubst C.substExpr
-
-matchToEquation :: T.Match -> Desugar (PC.Equation C.Expr C.DataConInfo)
+matchToEquation :: T.Match -> Desugar (PC.Equation C.DataConInfo)
 matchToEquation (T.Match pat body) = do
   let pat' = convertPattern pat
   body' <- desugarExpr body
@@ -154,7 +151,7 @@ convertPattern (T.PCons (T.PatCons info mArg _)) =
   in PC.PCon (PC.Con info' arity span') argPats
 convertPattern (T.PParens pat) = convertPattern pat
 
-restoreCaseExpr :: PC.CaseExpr C.Expr C.DataConInfo -> Desugar C.Expr
+restoreCaseExpr :: PC.CaseExpr C.DataConInfo -> Desugar C.Expr
 restoreCaseExpr (PC.CaseExpr scrutinee clauses mDefault) = do
   let
     scrutineeTy = desugarType $ T.TyCon $ T.fromPrimTyCon boolTyCon -- TODO: FIXME
@@ -165,7 +162,7 @@ restoreCaseExpr (PC.CaseExpr scrutinee clauses mDefault) = do
 restoreCaseExpr (PC.Expr expr) = pure expr
 restoreCaseExpr Error = error "Found inexhaustive pattern match"
 
-restoreClause :: PC.Clause C.Expr C.DataConInfo -> Desugar C.Match
+restoreClause :: PC.Clause C.DataConInfo -> Desugar C.Match
 restoreClause (PC.Clause (PC.ConLit lit) [] caseExpr) =
   C.Match (C.PLit lit) <$> restoreCaseExpr caseExpr
 restoreClause clause@(PC.Clause (PC.ConLit _) _ _) =
