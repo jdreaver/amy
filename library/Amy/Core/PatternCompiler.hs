@@ -131,12 +131,7 @@ match'
   -> CaseExpr expr con var
   -> Match expr var (CaseExpr expr con var)
 match' [] eqs def = pure $ foldr applyFatbar def (Expr . snd <$> eqs)
-match' vars eqs def = foldrM (matchGroup vars) def $ groupEquations eqs
-
--- TODO: Refactor the algorithm so we can use foldM instead of foldrM
-foldrM :: Monad m => (a -> b -> m b) -> b -> [a] -> m b
-foldrM _ d [] = return d
-foldrM f d (x:xs) = f x =<< foldrM f d xs
+match' vars eqs def = foldM (matchGroup vars) def $ reverse $ groupEquations eqs
 
 -- | The book uses a special infix operator called FATBAR. This function
 -- applies some FATBAR optimizations.
@@ -196,11 +191,11 @@ concatGroupedEquations (x:y:xs) =
 matchGroup
   :: (Show expr, Ord con)
   => [var]
-  -> GroupedEquations expr con var
   -> CaseExpr expr con var
+  -> GroupedEquations expr con var
   -> Match expr var (CaseExpr expr con var)
-matchGroup vars (VarEquations eqs) = matchVar vars eqs
-matchGroup vars (ConEquations eqs) = matchCon vars eqs
+matchGroup vars def (VarEquations eqs) = matchVar vars eqs def
+matchGroup vars def (ConEquations eqs) = matchCon vars eqs def
 
 -- | The variable case is simple. Eat up the first match variable and replace
 -- the pattern variable in the equation with the match variable.
