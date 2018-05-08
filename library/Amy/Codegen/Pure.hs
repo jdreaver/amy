@@ -67,7 +67,6 @@ codegenTypeDeclaration (ANF.TypeDeclaration tyCon _) = do
   tyConRep <- getTyConRep tyCon
   pure $
     case tyConRep of
-      TyConUnboxed _ -> Nothing
       TyConEnum _ -> Nothing
       TyConTaggedUnion name' intBits ->
         Just $
@@ -180,10 +179,6 @@ codegenExpr' (ANF.EApp (ANF.App (ANF.VVal (ANF.Typed originalTy ident)) args' re
 codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons (ANF.Typed _ cons)) args' _)) = do
   method <- findCompilationMethod (dataConInfoCons cons) <$> compilationMethods
   case method of
-    CompileUnboxed _ ->
-      case args' of
-        [arg] -> valOperand arg
-        _ -> error $ "Can't unbox App because there isn't exactly one argument " ++ show app
     CompileEnum i intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral i)
     CompileTaggedUnion structName intTag intBits -> do
       -- Allocate struct
@@ -235,7 +230,6 @@ valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
 valOperand (ANF.Var var@(ANF.VCons (ANF.Typed _ cons))) = do
   method <- findCompilationMethod (dataConInfoCons cons) <$> compilationMethods
   case method of
-    CompileUnboxed _ -> error $ "Attempted to find operand for applied constructor " ++ show var
     CompileEnum i intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral i)
     CompileTaggedUnion _ _ _ -> error $ "Can't compile tagged pairs yet " ++ show var
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
@@ -283,7 +277,6 @@ llvmType ty = go (typeToNonEmpty ty)
           Nothing -> do
             rep <- getTyConRep tyName
             case rep of
-              TyConUnboxed prim -> pure prim
               TyConEnum intBits -> pure $ IntegerType intBits
               TyConTaggedUnion structName _ -> pure $ PointerType (NamedTypeReference structName) (AddrSpace 0)
       ANF.TyVar _ -> pure $ PointerType (IntegerType 64) (AddrSpace 0)

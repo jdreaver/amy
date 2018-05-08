@@ -120,6 +120,5 @@ constructorConstant
   -> C.Constant
 constructorConstant compilationMethods cons =
   case findCompilationMethod cons compilationMethods of
-    CompileUnboxed _ -> error $ "Cannot unbox, we have an enum! " ++ show cons
     CompileEnum i intBits -> C.Int intBits (fromIntegral i)
     CompileTaggedUnion _ _ _ -> error $ "Cannot compile tagged pairs, we have an enum! " ++ show cons

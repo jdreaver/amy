@@ -25,9 +25,7 @@ import Amy.Prim
 
 -- | Describes how a type constructor is represented in LLVM.
 data TyConRep
-  = TyConUnboxed !LLVM.Type
-    -- ^ Represent a TyCon as an LLVM primitive Type like an int or double
-  | TyConEnum !Word32
+  = TyConEnum !Word32
     -- ^ Compile as an int type with 'Word32' bits.
   | TyConTaggedUnion !Name !Word32
     -- ^ Represent as a struct with a 'Word32'-sized integer tag and an integer
@@ -36,9 +34,7 @@ data TyConRep
 
 -- | Describes how a data constructor is represented in LLVM.
 data DataConRep
-  = CompileUnboxed !TyConInfo
-    -- ^ Unbox to the given type
-  | CompileEnum !Int !Word32
+  = CompileEnum !Int !Word32
     -- ^ Compile as an integer enum. The 'Word32' is the size of the integer
     -- type.
   | CompileTaggedUnion !Name !Int !Word32
@@ -50,38 +46,26 @@ data DataConRep
 typeCompilationMethod
   :: TypeDeclaration
   -> (Map DataConstructor DataConRep, (TyConInfo, TyConRep))
-typeCompilationMethod decl@(TypeDeclaration tyName constructors) =
-  case constructors of
-    -- Single constructor around another type
-    [con@(DataConstructor _ _ (Just argTy) _ _ _)] ->
-      let
-        primArgTy =
-          fromMaybe (error $ "Cannot unbox constructor to primitive type " ++ show decl)
-          $ llvmPrimitiveType argTy
-      in
-        ( Map.singleton con $ CompileUnboxed argTy
-        , (tyName, TyConUnboxed primArgTy)
-        )
-    _ ->
-      -- Check if we can do an enum. This is when all constructors have no
-      -- arguments.
-      if all (isNothing . dataConstructorArgument) constructors
-      then
-        let
-          mkMethod con = (con, CompileEnum (fromIntegral . unConstructorIndex $ dataConstructorIndex con) wordSize)
-        in
-          ( Map.fromList $ mkMethod <$> constructors
-          , (tyName, TyConEnum wordSize)
-          )
-      -- Can't do an enum. We'll have to use tagged pairs.
-      else
-        let
-          structName = textToName (tyConInfoText tyName)
-          mkMethod con = (con, CompileTaggedUnion structName (fromIntegral . unConstructorIndex $ dataConstructorIndex con) wordSize)
-        in
-          ( Map.fromList $ mkMethod <$> constructors
-          , (tyName, TyConTaggedUnion structName wordSize)
-          )
+typeCompilationMethod (TypeDeclaration tyName constructors) =
+  -- Check if we can do an enum. This is when all constructors have no
+  -- arguments.
+  if all (isNothing . dataConstructorArgument) constructors
+  then
+    let
+      mkMethod con = (con, CompileEnum (fromIntegral . unConstructorIndex $ dataConstructorIndex con) wordSize)
+    in
+      ( Map.fromList $ mkMethod <$> constructors
+      , (tyName, TyConEnum wordSize)
+      )
+  -- Can't do an enum. We'll have to use tagged pairs.
+  else
+    let
+      structName = textToName (tyConInfoText tyName)
+      mkMethod con = (con, CompileTaggedUnion structName (fromIntegral . unConstructorIndex $ dataConstructorIndex con) wordSize)
+    in
+      ( Map.fromList $ mkMethod <$> constructors
+      , (tyName, TyConTaggedUnion structName wordSize)
+      )
  where
   -- Pick a proper integer size
   wordSize :: Word32
