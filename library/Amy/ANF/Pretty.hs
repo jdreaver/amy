@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Amy.ANF.Pretty
   ( prettyModule
   , prettyExpr
@@ -61,10 +63,16 @@ prettyVar (VCons (Typed _ cons)) = pretty . dataConstructorName . dataConInfoCon
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (EVal val) = prettyVal val
-prettyExpr (ECase (Case scrutinee matches _)) =
-  prettyCase (prettyVal scrutinee) (toList $ mkMatch <$> matches)
+prettyExpr (ECase (Case scrutinee bind matches mDefault _)) =
+  prettyCase
+    (prettyVal scrutinee <+> prettyIdent bind)
+    (toList (mkMatch <$> matches) ++ defaultMatch)
  where
   mkMatch (Match pat body) = (prettyPattern pat, prettyExpr body)
+  defaultMatch =
+    case mDefault of
+      Nothing -> []
+      Just def -> [("__DEFAULT", prettyExpr def)]
 prettyExpr (ELet (Let bindings body)) =
   prettyLet (prettyBinding' <$> bindings) (prettyExpr body)
 prettyExpr (EApp (App f args _)) = sep $ prettyVar f : (prettyVal <$> args)
@@ -73,6 +81,5 @@ prettyExpr (EPrimOp (App (PrimitiveFunction _ name _ _) args _)) =
 
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PLit lit) = pretty $ showLiteral lit
-prettyPattern (PVar (Typed _ var)) = prettyIdent var
 prettyPattern (PCons (PatCons cons mArg _)) =
   pretty (dataConstructorName $ dataConInfoCons cons) <> maybe mempty (\(Typed _ arg) -> space <> prettyIdent arg) mArg

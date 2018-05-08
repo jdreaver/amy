@@ -41,43 +41,35 @@ case.0.6:                                         ; preds = %case.end.0
 
 case.end.6:                                       ; preds = %case.0.6, %case.default.6
   %end.6 = phi i64 [ %5, %case.default.6 ], [ %6, %case.0.6 ]
-  switch i64 %end.6, label %case.default.9 [
+  switch i1 false, label %case.0.9 [
+    i1 false, label %case.0.9
   ]
 
-case.default.9:                                   ; preds = %case.end.6
+case.0.9:                                         ; preds = %case.end.6, %case.end.6
   br label %case.end.9
 
-case.end.9:                                       ; preds = %case.default.9
-  %end.9 = phi i64 [ %end.6, %case.default.9 ]
-  switch i1 false, label %case.0.10 [
-    i1 false, label %case.0.10
-  ]
-
-case.0.10:                                        ; preds = %case.end.9, %case.end.9
-  br label %case.end.10
-
-case.end.10:                                      ; preds = %case.0.10
-  %end.10 = phi i64 [ %end.9, %case.0.10 ]
+case.end.9:                                       ; preds = %case.0.9
+  %end.9 = phi i64 [ %end.6, %case.0.9 ]
   %7 = call i8 @myEnum()
-  switch i8 %7, label %case.0.12 [
-    i8 0, label %case.0.12
-    i8 1, label %case.1.12
-    i8 2, label %case.2.12
+  switch i8 %7, label %case.0.11 [
+    i8 0, label %case.0.11
+    i8 1, label %case.1.11
+    i8 2, label %case.2.11
   ]
 
-case.0.12:                                        ; preds = %case.end.10, %case.end.10
-  br label %case.end.12
+case.0.11:                                        ; preds = %case.end.9, %case.end.9
+  br label %case.end.11
 
-case.1.12:                                        ; preds = %case.end.10
-  br label %case.end.12
+case.1.11:                                        ; preds = %case.end.9
+  br label %case.end.11
 
-case.2.12:                                        ; preds = %case.end.10
-  br label %case.end.12
+case.2.11:                                        ; preds = %case.end.9
+  br label %case.end.11
 
-case.end.12:                                      ; preds = %case.2.12, %case.1.12, %case.0.12
-  %end.12 = phi i64 [ 1, %case.0.12 ], [ 2, %case.1.12 ], [ 3, %case.2.12 ]
-  %8 = add i64 %end.10, %end.0
-  %9 = add i64 %end.12, %8
+case.end.11:                                      ; preds = %case.2.11, %case.1.11, %case.0.11
+  %end.11 = phi i64 [ 1, %case.0.11 ], [ 2, %case.1.11 ], [ 3, %case.2.11 ]
+  %8 = add i64 %end.9, %end.0
+  %9 = add i64 %end.11, %8
   ret i64 %9
 }
 

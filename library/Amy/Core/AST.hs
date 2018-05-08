@@ -109,7 +109,9 @@ data If
 data Case
   = Case
   { caseScrutinee :: !Expr
-  , caseAlternatives :: !(NonEmpty Match)
+  , caseScrutineeBinding :: !Ident
+  , caseAlternatives :: ![Match]
+  , caseDefault :: !(Maybe Expr)
   } deriving (Show, Eq)
 
 data Match
@@ -120,7 +122,6 @@ data Match
 
 data Pattern
   = PLit !Literal
-  | PVar !(Typed Ident)
   | PCons !PatCons
   deriving (Show, Eq)
 
@@ -153,7 +154,11 @@ expressionType (EVar var) =
   case var of
     VVal (Typed ty _) -> ty
     VCons (Typed ty _) -> ty
-expressionType (ECase (Case _ (Match _ expr :| _))) = expressionType expr
+expressionType e@(ECase (Case _ _ matches defaultMatch)) =
+  case (matches, defaultMatch) of
+    (Match _ expr : _, _) -> expressionType expr
+    ([], Just expr) -> expressionType expr
+    _ -> error $ "Found empty case expression with no branches " ++ show e
 expressionType (ELet let') = expressionType (letExpression let')
 expressionType (EApp app) = appReturnType app
 expressionType (EParens expr) = expressionType expr

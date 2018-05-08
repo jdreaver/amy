@@ -118,7 +118,7 @@ codegenExpr' (ANF.ELet (ANF.Let bindings expr)) = do
     op <- codegenExpr' (ANF.bindingBody binding)
     addSymbolToTable (ANF.bindingName binding) op
   codegenExpr' expr
-codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee _ _)) = do
+codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee _ _ _ _)) = do
   caseId <- freshId
 
   -- TODO: Move a lot of this logic to ANF. conversion, like finding the default
@@ -126,7 +126,7 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee _ _)) = do
   compilationMethods' <- compilationMethods
   let
     mkCaseName nameBase = stringToName $ nameBase ++ show caseId
-    (CaseBlocks switchDefaultBlockName mDefaultBlock literalBlocks endBlock) = caseBlocks mkCaseName compilationMethods' case'
+    (CaseBlocks switchDefaultBlockName literalBlocks mDefaultBlock endBlock) = caseBlocks mkCaseName compilationMethods' case'
     (CaseEndBlock endBlockName endOpName endType) = endBlock
 
   -- Generate the switch statement
@@ -144,13 +144,13 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee _ _)) = do
       finalBlockName <- currentBlockName
       terminateBlock (Do $ Br endBlockName []) nextBlockName
       pure (op, finalBlockName)
-    generateCaseVarBlock (CaseVarBlock expr _ nextBlockName ident) = do
+    generateCaseDefaultBlock (CaseDefaultBlock expr _ nextBlockName ident) = do
       addSymbolToTable ident scrutineeOp
       generateBlockExpr expr nextBlockName
     generateCaseLiteralBlock (CaseLiteralBlock expr _ nextBlockName _) =
       generateBlockExpr expr nextBlockName
 
-  mDefaultOpAndBlock <- traverse generateCaseVarBlock mDefaultBlock
+  mDefaultOpAndBlock <- traverse generateCaseDefaultBlock mDefaultBlock
   matchOpsAndBlocks <- traverse generateCaseLiteralBlock literalBlocks
 
   -- Generate end block

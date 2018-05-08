@@ -83,11 +83,13 @@ normalizeExpr
   -> ANFConvert ANF.Expr
 normalizeExpr _ (C.ELit lit) c = c $ ANF.EVal $ ANF.Lit lit
 normalizeExpr name var@C.EVar{} c = normalizeName name var (c . ANF.EVal)
-normalizeExpr name expr@(C.ECase (C.Case scrutinee matches)) c =
+normalizeExpr name expr@(C.ECase (C.Case scrutinee bind matches defaultExpr)) c =
   normalizeName name scrutinee $ \scrutineeVal -> do
+    let bind' = convertIdent False bind
     matches' <- traverse normalizeMatch matches
+    defaultExpr' <- traverse (normalizeTerm "caseDef") defaultExpr
     let ty = convertType $ expressionType expr
-    c $ ANF.ECase (ANF.Case scrutineeVal matches' ty)
+    c $ ANF.ECase (ANF.Case scrutineeVal bind' matches' defaultExpr' ty)
 normalizeExpr name (C.ELet (C.Let bindings expr)) c = do
   bindings' <- traverse (normalizeBinding Nothing) bindings
   expr' <- normalizeExpr name expr c
@@ -170,7 +172,6 @@ normalizeMatch (C.Match pat body) = do
 
 convertPattern :: C.Pattern -> ANFConvert ANF.Pattern
 convertPattern (C.PLit lit) = pure $ ANF.PLit lit
-convertPattern (C.PVar var) = ANF.PVar <$> convertTypedIdent var
 convertPattern (C.PCons (C.PatCons cons mArg retTy)) = do
   let cons' = convertDataConInfo cons
   mArg' <- traverse convertTypedIdent mArg

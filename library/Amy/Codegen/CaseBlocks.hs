@@ -1,19 +1,13 @@
-{-# LANGUAGE TupleSections #-}
-
 module Amy.Codegen.CaseBlocks
   ( CaseBlocks(..)
   , caseBlocks
   , CaseLiteralBlock(..)
-  , CaseVarBlock(..)
+  , CaseDefaultBlock(..)
   , CaseEndBlock(..)
-  , LiteralPattern(..)
-  , VarPattern(..)
   , literalConstant
   ) where
 
-import Data.Foldable (toList)
 import Data.Map.Strict (Map)
-import Data.Maybe (mapMaybe)
 import LLVM.AST as LLVM
 import qualified LLVM.AST.Constant as C
 import LLVM.AST.Float as F
@@ -25,8 +19,8 @@ import Amy.Literal
 data CaseBlocks
   = CaseBlocks
   { caseBlocksSwitchDefaultBlockName :: !Name
-  , caseBlocksDefaultBlock :: !(Maybe CaseVarBlock)
   , caseBlocksLiteralBlocks :: ![CaseLiteralBlock]
+  , caseBlocksDefaultBlock :: !(Maybe CaseDefaultBlock)
   , caseBlocksEndBlock :: !CaseEndBlock
   } deriving (Show, Eq)
 
@@ -38,12 +32,12 @@ data CaseLiteralBlock
   , caseLiteralBlockConstant :: !C.Constant
   } deriving (Show, Eq)
 
-data CaseVarBlock
-  = CaseVarBlock
-  { caseVarBlockExpr :: !Expr
-  , caseVarBlockName :: !Name
-  , caseVarBlockNextName :: !Name
-  , caseVarBlockIdent :: !Ident
+data CaseDefaultBlock
+  = CaseDefaultBlock
+  { caseDefaultBlockExpr :: !Expr
+  , caseDefaultBlockName :: !Name
+  , caseDefaultBlockNextName :: !Name
+  , caseDefaultBlockIdent :: !Ident
   } deriving (Show, Eq)
 
 data CaseEndBlock
@@ -53,52 +47,18 @@ data CaseEndBlock
   , caseEndBlockType :: !ANF.Type
   } deriving (Show, Eq)
 
-data LiteralPattern
-  = LitLiteralPattern !Literal
-  | ConsEnumPattern !DataConstructor
-  -- Not implemented yet: ConsLiteralPattern !(Typed ConstructorName, Literal)
-  deriving (Show, Eq)
-
--- TODO: Once we have proper case-in-case desugaring, refactor this logic to
--- remove all the special cases for constructors.
-
-literalPattern :: Pattern -> Maybe LiteralPattern
-literalPattern (PLit lit) = Just $ LitLiteralPattern lit
-literalPattern (PCons (PatCons consName Nothing _)) = Just $ ConsEnumPattern $ dataConInfoCons consName
-literalPattern _ = Nothing
-
-data VarPattern
-  = VarVarPattern !Ident
-  | ConsVarPattern !DataConstructor !Ident
-  -- TODO: Wildcard pattern
-  deriving (Show, Eq)
-
-varPattern :: Pattern -> Maybe VarPattern
-varPattern (PVar (Typed _ ident)) = Just $ VarVarPattern ident
-varPattern (PCons (PatCons cons (Just (Typed _ arg)) _)) = Just $ ConsVarPattern (dataConInfoCons cons) arg
-varPattern _ = Nothing
-
 caseBlocks
   :: (String -> Name)
   -> Map DataConstructor DataConRep
   -> Case
   -> CaseBlocks
-caseBlocks mkBlockName compilationMethods (Case _ matches ty) =
+caseBlocks mkBlockName compilationMethods (Case _ bind matches mDefault ty) =
   let
-    -- Extract patterns
-    blockPattern :: (Pattern -> Maybe a) -> Match -> Maybe (Expr, a)
-    blockPattern maybePat (Match pat expr) = (expr,) <$> maybePat pat
-    literalPatterns = mapMaybe (blockPattern literalPattern) (toList matches)
-    varPatterns = mapMaybe (blockPattern varPattern) (toList matches)
-
-    -- TODO: Ensure that no patterns fell through the cracks. The length of the
-    -- literal plus var patterns should equal the langth of all the matches.
-
     -- Compute names for everything
     defaultBlockName = mkBlockName "case.default."
     endBlockName = mkBlockName "case.end."
     endOpName = mkBlockName "end."
-    literalBlockNames = mkBlockName . (\i -> "case." ++ i ++ ".") . show <$> [0 .. (length literalPatterns - 1)]
+    literalBlockNames = mkBlockName . (\i -> "case." ++ i ++ ".") . show <$> [0 .. (length matches - 1)]
     nextLiteralBlockNames = drop 1 literalBlockNames ++ [endBlockName]
 
     defaultBlockNextName =
@@ -106,41 +66,33 @@ caseBlocks mkBlockName compilationMethods (Case _ matches ty) =
         [] -> endBlockName
         firstBlockName:_ -> firstBlockName
 
-    -- Figure out the default block from the variable matches
-    -- TODO: Have a proper default block if we can't find one,
-    -- hopefully something that prints an error? Having a default should
-    -- probably be handled in Core/ANF..
-    firstVarPattern = if null varPatterns then Nothing else Just (head varPatterns)
-    varBlock (expr, pat) =
-      CaseVarBlock
-      { caseVarBlockExpr = expr
-      , caseVarBlockName = defaultBlockName
-      , caseVarBlockNextName = defaultBlockNextName
-      , caseVarBlockIdent =
-          case pat of
-            VarVarPattern ident -> ident
-            ConsVarPattern _ ident -> ident
+    mkDefaultBlock expr =
+      CaseDefaultBlock
+      { caseDefaultBlockExpr = expr
+      , caseDefaultBlockName = defaultBlockName
+      , caseDefaultBlockNextName = defaultBlockNextName
+      , caseDefaultBlockIdent = bind
       }
-    defaultBlock = varBlock <$> firstVarPattern
+    defaultBlock = mkDefaultBlock <$> mDefault
     switchDefaultBlockName =
       case (defaultBlock, literalBlockNames) of
-        (Just block, _) -> caseVarBlockName block
+        (Just block, _) -> caseDefaultBlockName block
         (Nothing, firstBlockName:_) -> firstBlockName
         (Nothing, []) -> endBlockName
 
     -- Combine the cons and lit matches. TODO: Is it bad that they are out of
     -- their original order?
-    literalBlock ((expr, pat), (blockName, nextBlockName)) =
+    literalBlock (Match pat expr, (blockName, nextBlockName)) =
       CaseLiteralBlock
       { caseLiteralBlockExpr = expr
       , caseLiteralBlockName = blockName
       , caseLiteralBlockNextName = nextBlockName
       , caseLiteralBlockConstant =
           case pat of
-            LitLiteralPattern lit -> literalConstant lit
-            ConsEnumPattern cons -> constructorConstant compilationMethods cons
+            PLit lit -> literalConstant lit
+            PCons (PatCons (DataConInfo _ con) _ _) -> constructorConstant compilationMethods con
       }
-    literalBlocks = literalBlock <$> zip literalPatterns (zip literalBlockNames nextLiteralBlockNames)
+    literalBlocks = literalBlock <$> zip matches (zip literalBlockNames nextLiteralBlockNames)
 
     -- Compute end block
     endBlock =
@@ -152,8 +104,8 @@ caseBlocks mkBlockName compilationMethods (Case _ matches ty) =
   in
     CaseBlocks
     { caseBlocksSwitchDefaultBlockName = switchDefaultBlockName
-    , caseBlocksDefaultBlock = defaultBlock
     , caseBlocksLiteralBlocks = literalBlocks
+    , caseBlocksDefaultBlock = defaultBlock
     , caseBlocksEndBlock = endBlock
     }
 

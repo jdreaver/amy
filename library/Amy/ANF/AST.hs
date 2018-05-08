@@ -29,7 +29,6 @@ module Amy.ANF.AST
   , module Amy.ASTCommon
   ) where
 
-import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 
 import Amy.ASTCommon
@@ -115,7 +114,9 @@ data Let
 data Case
   = Case
   { caseScrutinee :: !Val
-  , caseAlternatives :: !(NonEmpty Match)
+  , caseScrutineeBinding :: !Ident
+  , caseAlternatives :: ![Match]
+  , caseDefault :: !(Maybe Expr)
   , caseType :: !Type
   } deriving (Show, Eq)
 
@@ -127,7 +128,6 @@ data Match
 
 data Pattern
   = PLit !Literal
-  | PVar !(Typed Ident)
   | PCons !PatCons
   deriving (Show, Eq)
 

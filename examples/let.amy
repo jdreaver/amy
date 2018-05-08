@@ -23,10 +23,10 @@ main =
     b =
       case (iAdd# x 2) of
         1 -> g
-        o -> MyInt (iSub# o 3)
+        o -> iSub# o 3
     b' =
       case b of
-        MyInt b'' -> b''
+        b'' -> b''
     v = Void
     u =
       case v of
@@ -43,8 +43,11 @@ main =
 # f :: Int -> Int
 f x = if True then abs x else threeHundred
 
-g :: MyInt
-g = MyInt 1
+# g :: MyInt
+# g = MyInt 1
+
+g :: Int
+g = 1
 
 myEnum :: MyEnum
 myEnum = MyEnumB

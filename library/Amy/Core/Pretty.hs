@@ -61,10 +61,16 @@ prettyIdent (Ident name _) = pretty name
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit lit) = pretty $ showLiteral lit
 prettyExpr (EVar var) = prettyVar var
-prettyExpr (ECase (Case scrutinee matches)) =
-  prettyCase (prettyExpr scrutinee) (toList $ mkMatch <$> matches)
+prettyExpr (ECase (Case scrutinee bind matches mDefault)) =
+  prettyCase
+    (prettyExpr scrutinee <+> prettyIdent bind)
+    (toList (mkMatch <$> matches) ++ defaultMatch)
  where
   mkMatch (Match pat body) = (prettyPattern pat, prettyExpr body)
+  defaultMatch =
+    case mDefault of
+      Nothing -> []
+      Just def -> [("__DEFAULT", prettyExpr def)]
 prettyExpr (ELet (Let bindings body)) =
   prettyLet (prettyBinding' <$> bindings) (prettyExpr body)
 prettyExpr (EApp (App f args _)) = sep $ prettyExpr f : (prettyExpr <$> toList args)
@@ -76,6 +82,5 @@ prettyVar (VCons (Typed _ cons)) = pretty . dataConstructorName . dataConInfoCon
 
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PLit lit) = pretty $ showLiteral lit
-prettyPattern (PVar (Typed _ var)) = prettyIdent var
 prettyPattern (PCons (PatCons cons mArg _)) =
   pretty (dataConstructorName $ dataConInfoCons cons) <> maybe mempty (\(Typed _ arg) -> space <> prettyIdent arg) mArg

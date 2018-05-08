@@ -65,18 +65,22 @@ desugarExpr (T.ECase (T.Case scrutinee matches)) = do
     equations = NE.toList $ matchToEquation <$> matches
     caseExpr = PC.match identVarSubst mkIdent [T.Ident scrutineeVar scrutineeVarId] equations
   caseExpr' <- restoreCaseExpr caseExpr
+  pure $
+    case caseExpr' of
+      (C.ECase case') -> C.ECase $ case' { C.caseScrutinee = scrutinee' }
+      e ->
+        -- Bind the scrutinee to a variable
+        let
+          scrutineeBinding =
+            C.Binding
+            { C.bindingName = scrutineeIdent
+            , C.bindingType = desugarScheme $ T.Forall [] $ T.expressionType scrutinee
+            , C.bindingArgs = []
+            , C.bindingReturnType = desugarType $ T.expressionType scrutinee
+            , C.bindingBody = scrutinee'
+            }
+        in C.ELet $ C.Let [scrutineeBinding] e
 
-  -- Bind the scrutinee to a variable
-  let
-    scrutineeBinding =
-      C.Binding
-      { C.bindingName = scrutineeIdent
-      , C.bindingType = desugarScheme $ T.Forall [] $ T.expressionType scrutinee
-      , C.bindingArgs = []
-      , C.bindingReturnType = desugarType $ T.expressionType scrutinee
-      , C.bindingBody = scrutinee'
-      }
-  pure $ C.ELet $ C.Let [scrutineeBinding] caseExpr'
 desugarExpr (T.EIf (T.If pred' then' else')) =
   let
     boolTyDef = fromPrimTypeDef boolTypeDefinition
@@ -182,17 +186,9 @@ restoreCaseExpr (PC.Case scrutinee clauses mDefault) = do
     scrutineeIdent = desugarIdent scrutinee
     scrutinee' = C.EVar $ C.VVal $ C.Typed scrutineeTy scrutineeIdent
   clauses' <- traverse restoreClause clauses
-  defaultClause <-
-    case mDefault of
-      Nothing -> pure []
-      Just def -> do
-        def' <- restoreCaseExpr def
-        pure [C.Match (C.PVar $ C.Typed scrutineeTy scrutineeIdent) def']
-  let
-    matches =
-      fromMaybe (error "Somehow ended up with no matches")
-      $ NE.nonEmpty (clauses' ++ defaultClause)
-  pure $ C.ECase $ C.Case scrutinee' matches
+  defaultClause <- traverse restoreCaseExpr mDefault
+  pure $ C.ECase $ C.Case scrutinee' scrutineeIdent clauses' defaultClause
+
 restoreCaseExpr (PC.Expr expr) = desugarExpr expr
 restoreCaseExpr Error = error "Found inexhaustive pattern match"
 
