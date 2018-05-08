@@ -43,10 +43,10 @@ trueC, falseC :: Con Text
 trueC = Con "True" 0 2
 falseC = Con "False" 0 2
 
-trueP :: Pattern Text
+trueP :: InputPattern Text
 trueP = PCon trueC []
 
-falseP :: Pattern Text
+falseP :: InputPattern Text
 falseP = PCon falseC []
 
 -- List type
@@ -54,24 +54,24 @@ nilC, consC :: Con Text
 nilC = Con "Nil" 0 2
 consC = Con "Cons" 2 2
 
-nilP :: Pattern Text
+nilP :: InputPattern Text
 nilP = PCon nilC []
 
-consP :: Pattern Text -> Pattern Text -> Pattern Text
+consP :: InputPattern Text -> InputPattern Text -> InputPattern Text
 consP x' y' = PCon consC [x', y']
 
 -- Newtype
 newtypeC :: Con Text
 newtypeC = Con "MyNewtype" 1 1
 
-newtypeP :: Pattern Text -> Pattern Text
+newtypeP :: InputPattern Text -> InputPattern Text
 newtypeP pat = PCon newtypeC [pat]
 
 -- Literal
 intC :: Int -> Con Text
 intC = ConLit . LiteralInt
 
-intP :: Int -> Pattern Text
+intP :: Int -> InputPattern Text
 intP i = PCon (intC i) []
 
 -- mappairs example from book

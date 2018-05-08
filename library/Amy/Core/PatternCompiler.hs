@@ -8,7 +8,7 @@
 module Amy.Core.PatternCompiler
   ( match
   , VarSubst(..)
-  , Pattern(..)
+  , InputPattern(..)
   , Con(..)
   , Arity
   , Span
@@ -28,9 +28,9 @@ import Amy.Core.AST (Ident(..))
 import Amy.Core.Monad
 import Amy.Literal
 
--- | A 'Pattern' is either a constructor or a variable.
-data Pattern con
-  = PCon !(Con con) ![Pattern con]
+-- | A 'InputPattern' is either a constructor or a variable.
+data InputPattern con
+  = PCon !(Con con) ![InputPattern con]
     -- ^ Constructor patterns are nested. We have the constructor tag and a
     -- list of pattern arguments.
   | PVar !Ident
@@ -66,7 +66,7 @@ conSpan (Con _ _ span') = Just span'
 conSpan (ConLit _) = Nothing
 
 -- | An 'Equation' is a list of patterns and an expression.
-type Equation expr con = ([Pattern con], expr)
+type Equation expr con = ([InputPattern con], expr)
 
 -- | A 'CaseExpr' is the output of the match algorithm
 data CaseExpr expr con
@@ -158,7 +158,7 @@ data GroupedEquations expr con
 data VarEquation expr con = VarEquation !Ident !(Equation expr con)
   deriving (Show, Eq)
 
-data ConEquation expr con = ConEquation !(Con con) ![Pattern con] !(Equation expr con)
+data ConEquation expr con = ConEquation !(Con con) ![InputPattern con] !(Equation expr con)
   deriving (Show, Eq)
 
 equationType :: Equation expr con -> GroupedEquations expr con

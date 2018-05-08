@@ -142,7 +142,7 @@ matchToEquation (T.Match pat body) = do
   body' <- desugarExpr body
   pure ([pat'], body')
 
-convertPattern :: T.Pattern -> PC.Pattern C.DataConInfo
+convertPattern :: T.Pattern -> PC.InputPattern C.DataConInfo
 convertPattern (T.PLit lit) = PC.PCon (PC.ConLit lit) []
 convertPattern (T.PVar (T.Typed _ ident)) = PC.PVar $ desugarIdent ident
 convertPattern (T.PCons (T.PatCons info mArg _)) =
