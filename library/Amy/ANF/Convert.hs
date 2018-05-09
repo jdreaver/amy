@@ -91,7 +91,7 @@ normalizeExpr name expr@(C.ECase (C.Case scrutinee bind matches defaultExpr)) c 
     let ty = convertType $ expressionType expr
     c $ ANF.ECase (ANF.Case scrutineeVal bind' matches' defaultExpr' ty)
 normalizeExpr name (C.ELet (C.Let bindings expr)) c = do
-  bindings' <- traverse (normalizeBinding Nothing) bindings
+  bindings' <- traverse normalizeLetBinding bindings
   expr' <- normalizeExpr name expr c
   pure $ ANF.ELet $ ANF.Let bindings' expr'
 normalizeExpr name (C.EApp (C.App func args retTy)) c =
@@ -150,11 +150,11 @@ mkNormalizeLet :: Text -> ANF.Expr -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Exp
 mkNormalizeLet name expr exprType c = do
   newIdent <- freshIdent name
   body <- c $ ANF.Var (ANF.VVal $ ANF.Typed exprType newIdent)
-  pure $ ANF.ELet $ ANF.Let [ANF.Binding newIdent (ANF.Forall [] exprType) [] exprType expr] body
+  pure $ ANF.ELet $ ANF.Let [ANF.LetBinding newIdent (ANF.Forall [] exprType) expr] body
 
 normalizeBinding :: Maybe Text -> C.Binding -> ANFConvert ANF.Binding
 normalizeBinding mName (C.Binding ident@(C.Ident name _) scheme args retTy body) = do
-  -- If we are given a base name, then use iC. Otherwise use the binding name
+  -- If we are given a base name, then use it. Otherwise use the binding name
   -- as the base name for all sub expressions.
   let subName = fromMaybe name mName
   body' <- normalizeTerm subName body
@@ -163,6 +163,15 @@ normalizeBinding mName (C.Binding ident@(C.Ident name _) scheme args retTy body)
   args' <- traverse convertTypedIdent args
   let retTy' = convertType retTy
   pure $ ANF.Binding ident' scheme' args' retTy' body'
+
+normalizeLetBinding :: C.Binding -> ANFConvert ANF.LetBinding
+normalizeLetBinding (C.Binding ident@(C.Ident name _) scheme [] _ body) = do
+  body' <- normalizeTerm name body
+  ident' <- convertIdent' ident
+  let scheme' = convertScheme scheme
+  pure $ ANF.LetBinding ident' scheme' body'
+normalizeLetBinding bind@C.Binding{} =
+  error $ "Encountered let binding with arguments. Functions not allowed in ANF. " ++ show bind
 
 normalizeMatch :: C.Match -> ANFConvert ANF.Match
 normalizeMatch (C.Match pat body) = do

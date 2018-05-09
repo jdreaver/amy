@@ -113,9 +113,9 @@ codegenExpr expr = runBlockGen $ codegenExpr' expr
 codegenExpr' :: ANF.Expr -> BlockGen Operand
 codegenExpr' (ANF.EVal val) = valOperand val
 codegenExpr' (ANF.ELet (ANF.Let bindings expr)) = do
-  for_ bindings $ \binding -> do
-    op <- codegenExpr' (ANF.bindingBody binding)
-    addSymbolToTable (ANF.bindingName binding) op
+  for_ bindings $ \(ANF.LetBinding ident _ body) -> do
+    op <- codegenExpr' body
+    addSymbolToTable ident op
   codegenExpr' expr
 codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = do
   caseId <- freshId

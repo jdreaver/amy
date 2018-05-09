@@ -12,6 +12,7 @@ module Amy.ANF.AST
   , Var(..)
   , Expr(..)
   , Let(..)
+  , LetBinding(..)
   , Case(..)
   , Match(..)
   , Pattern(..)
@@ -107,8 +108,15 @@ data Expr
 
 data Let
   = Let
-  { letBindings :: ![Binding]
+  { letBindings :: ![LetBinding]
   , letExpression :: !Expr
+  } deriving (Show, Eq)
+
+data LetBinding
+  = LetBinding
+  { letBindingName :: !Ident
+  , letBindingType :: !Scheme
+  , letBindingBody :: !Expr
   } deriving (Show, Eq)
 
 data Case
