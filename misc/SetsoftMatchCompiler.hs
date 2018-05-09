@@ -161,7 +161,6 @@ data MatchState con
     -- ^ The work stack is the stack of hypotheses still left to be checked.
   } deriving (Show, Eq)
 
--- TODO: Document this
 compileFail
   :: (Show con, Eq con)
   => TermDesc con
@@ -170,7 +169,6 @@ compileFail
 compileFail _ [] = Failure'
 compileFail dsc ((pat1, rhs1):rulesrest) = match pat1 Root dsc [] rhs1 rulesrest
 
--- TODO: Document this
 compileSucceed
   :: (Show con, Eq con)
   => [MatchState con]
@@ -184,7 +182,6 @@ compileSucceed (MatchState ctx work : staterest) rhs rules =
     ((pat, obj, dsc):workr) ->
       match pat obj dsc (MatchState ctx workr : staterest) rhs rules
 
--- TODO: Document this
 match
   :: (Show con, Eq con)
   => Pat con
@@ -229,8 +226,6 @@ normContext :: (Con con, [TermDesc con]) -> [MatchState con] -> [MatchState con]
 normContext _ [] = []
 normContext (con, args) state = augmentContext state (Pos con (reverse args))
 
--- TODO: Document and understand this better. I just know it is used when
--- matching a sub-term fails.
 builddsc :: (Show con) => [MatchState con] -> TermDesc con -> TermDesc con
 builddsc [] dsc = dsc
 builddsc (MatchState (con, args) work : rest) dsc =
@@ -330,8 +325,6 @@ compileToNestedCase matches =
 data NestedCase con a
   = Leaf (MatchRule con a)
   | FailureLeaf
-    -- TODO: Do some kind of variable generation and reference variables in the
-    -- nested case.
   | NestedCase (Access con) [NestedCase con a] (NestedCase con a)
   deriving (Show, Eq)
 
@@ -346,17 +339,6 @@ compileToNestedCase' access decision =
     Switch access' matches defaultMatch ->
       let
         matches' = compileToNestedCase' access' . snd <$> matches
-        -- TODO: We can't naively just extract from the default match.
-        -- Sometimes the default match is a "catch-all" match from a variable,
-        -- in which case if we try to extract we will probably fail.
-        --
-        -- We need to delineate between matches that were made from catch-all
-        -- variables and matches made from exhaustive checks.
-        --
-        -- We could also return "Maybe (Pat con)" in extractPattern. If we have
-        -- a Just, we can use the extraction. If we have Nothing, then we must
-        -- have hit some default variable and we should just put a wildcard or
-        -- some fresh unused variable.
         defaultMatch' = compileToNestedCase' access' defaultMatch
       in NestedCase access' matches' defaultMatch'
 
