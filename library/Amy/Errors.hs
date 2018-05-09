@@ -22,7 +22,7 @@ data Error
 
   -- Renamer
   | UnknownVariable !(Located Text)
-  | VariableShadowed !(Located Text) !R.Ident
+  | VariableShadowed !(Located Text) !(Located R.Ident)
   | DuplicateDataConstructorName !(Located Text) !R.DataConstructor
   | TypeConstructorAlreadyExists !(Located Text) !R.TyConInfo
   | UnknownTypeConstructor !(Located Text)

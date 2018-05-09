@@ -55,7 +55,7 @@ data RenamerState
   = RenamerState
   { renamerStateLastId :: !Int
     -- ^ Last 'NameIntId' generated
-  , renamerStateValuesInScope :: !(Map Text Ident)
+  , renamerStateValuesInScope :: !(Map Text (Located Ident))
   , renamerStateDataConstructorsInScope :: !(Map Text DataConstructor)
   , renamerStateTypeConstructorsInScope :: !(Map Text TyConInfo)
   , renamerStateTypeDeclarations :: !(Map TyConInfo TypeDeclaration)
@@ -95,12 +95,12 @@ primitiveDataConNames :: Map Text DataConstructor
 primitiveDataConNames =
   Map.fromList $ (\dataCon -> (locatedValue (dataConstructorName dataCon), dataCon)) <$> allPrimDataCons
 
-primitiveFunctionNames :: Map Text Ident
+primitiveFunctionNames :: Map Text (Located Ident)
 primitiveFunctionNames =
   Map.fromList $
     (\(PrimitiveFunction _ name id' _) ->
        ( name
-       , Ident name id'
+       , Located (SourceSpan "" 1 1 1 1) (Ident name id')
        ))
     <$> allPrimitiveFunctions
 
@@ -120,15 +120,16 @@ addValueToScope lName@(Located span' name) = do
   case mExistingName of
     Just existingName -> pure $ Failure [VariableShadowed lName existingName]
     Nothing -> do
-      modify' (\s -> s { renamerStateValuesInScope = Map.insert name ident (renamerStateValuesInScope s) })
-      pure $ Success (Located span' ident)
+      let located = Located span' ident
+      modify' (\s -> s { renamerStateValuesInScope = Map.insert name located (renamerStateValuesInScope s) })
+      pure $ Success located
 
-lookupValueInScope :: Text -> Renamer (Maybe Ident)
+lookupValueInScope :: Text -> Renamer (Maybe (Located Ident))
 lookupValueInScope name = Map.lookup name <$> gets renamerStateValuesInScope
 
 lookupValueInScopeOrError :: Located Text -> Renamer (Validation [Error] (Located Ident))
 lookupValueInScopeOrError name@(Located span' name') =
-  maybe (Failure [UnknownVariable name]) (Success . Located span') <$> lookupValueInScope name'
+  maybe (Failure [UnknownVariable name]) (\(Located _ ident) -> Success $ Located span' ident) <$> lookupValueInScope name'
 
 addDataConstructorToScope
   :: Located Text
