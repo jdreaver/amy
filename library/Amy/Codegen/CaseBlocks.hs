@@ -50,7 +50,7 @@ data CaseEndBlock
 
 caseBlocks
   :: (String -> Name)
-  -> Map DataConstructor DataConRep
+  -> Map TyConInfo TypeCompilationMethod
   -> Case
   -> CaseBlocks
 caseBlocks mkBlockName compilationMethods (Case _ bind matches mDefault ty) =
@@ -121,10 +121,12 @@ literalConstant lit =
     LiteralDouble x -> C.Float (F.Double x)
 
 constructorConstant
-  :: Map DataConstructor DataConRep
+  :: Map TyConInfo TypeCompilationMethod
   -> DataConstructor
   -> C.Constant
-constructorConstant compilationMethods cons =
-  case findCompilationMethod cons compilationMethods of
-    CompileEnum i intBits -> C.Int intBits (fromIntegral i)
-    CompileTaggedUnion _ i intBits -> C.Int intBits (fromIntegral i)
+constructorConstant compilationMethods con =
+  case findCompilationMethod con compilationMethods of
+    CompileEnum intBits -> C.Int intBits (fromIntegral i)
+    CompileTaggedUnion _ intBits -> C.Int intBits (fromIntegral i)
+ where
+  (ConstructorIndex i) = dataConstructorIndex con

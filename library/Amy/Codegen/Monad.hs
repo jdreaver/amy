@@ -16,8 +16,8 @@ module Amy.Codegen.Monad
   , freshId
   , freshUnName
   , topLevelType
-  , compilationMethods
-  , getTyConRep
+  , getTypeCompilationMethods
+  , getTypeCompilationMethod
   ) where
 
 import Control.Monad.Reader
@@ -39,18 +39,15 @@ runCodeGen topLevelTypes typeDeclarations (CodeGen action) =
   let
     typeMap = Map.fromList topLevelTypes
     allTypeDeclarations = typeDeclarations ++ (fromPrimTypeDefinition <$> allPrimTypeDefinitions)
-    (dataConCompilationMethods, tyConReps) =
-      unzip $ typeCompilationMethod <$> allTypeDeclarations
-    dataConCompilationMethods' = Map.unions dataConCompilationMethods
+    tyConReps = (\t -> (typeDeclarationTypeName t, typeCompilationMethod t)) <$> allTypeDeclarations
     tyConRepsMap = Map.fromList tyConReps
-    readState = CodeGenRead typeMap dataConCompilationMethods' tyConRepsMap
+    readState = CodeGenRead typeMap tyConRepsMap
   in runReader action readState
 
 data CodeGenRead
   = CodeGenRead
   { codeGenReadTopLevelTypes :: !(Map Ident ANF.Type)
-  , codeGenReadDataConReps :: !(Map DataConstructor DataConRep)
-  , codeGenReadTyConReps :: !(Map TyConInfo TyConRep)
+  , codeGenReadTypeCompilationMethods :: !(Map TyConInfo TypeCompilationMethod)
   }
 
 newtype BlockGen a = BlockGen (StateT BlockGenState CodeGen a)
@@ -126,10 +123,10 @@ freshUnName = UnName <$> freshId
 topLevelType :: (MonadReader CodeGenRead m) => Ident -> m (Maybe ANF.Type)
 topLevelType ident = asks (Map.lookup ident . codeGenReadTopLevelTypes)
 
-compilationMethods :: (MonadReader CodeGenRead m) => m (Map DataConstructor DataConRep)
-compilationMethods = asks codeGenReadDataConReps
+getTypeCompilationMethods :: (MonadReader CodeGenRead m) => m (Map TyConInfo TypeCompilationMethod)
+getTypeCompilationMethods = asks codeGenReadTypeCompilationMethods
 
-getTyConRep :: (MonadReader CodeGenRead m) => TyConInfo -> m TyConRep
-getTyConRep tyCon = asks (fromMaybe err . Map.lookup tyCon . codeGenReadTyConReps)
+getTypeCompilationMethod :: (MonadReader CodeGenRead m) => TyConInfo -> m TypeCompilationMethod
+getTypeCompilationMethod tyCon = fromMaybe err . Map.lookup tyCon <$> getTypeCompilationMethods
   where
-   err = error $ "Couldn't find TyConRep of TyConInfo " ++ show tyCon
+   err = error $ "Couldn't find TypeCompilationMethod of TyConInfo " ++ show tyCon

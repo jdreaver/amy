@@ -64,11 +64,11 @@ codegenExtern extern = do
 
 codegenTypeDeclaration :: ANF.TypeDeclaration -> CodeGen (Maybe Definition)
 codegenTypeDeclaration (ANF.TypeDeclaration tyCon _) = do
-  tyConRep <- getTyConRep tyCon
+  tyConRep <- getTypeCompilationMethod tyCon
   pure $
     case tyConRep of
-      TyConEnum _ -> Nothing
-      TyConTaggedUnion name' intBits ->
+      CompileEnum _ -> Nothing
+      CompileTaggedUnion name' intBits ->
         Just $
           TypeDefinition
           name'
@@ -119,8 +119,7 @@ codegenExpr' (ANF.ELet (ANF.Let bindings expr)) = do
   codegenExpr' expr
 codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = do
   caseId <- freshId
-
-  compilationMethods' <- compilationMethods
+  compilationMethods' <- getTypeCompilationMethods
   let
     mkCaseName nameBase = stringToName $ nameBase ++ show caseId
     (CaseBlocks switchDefaultBlockName literalBlocks mDefaultBlock endBlock) = caseBlocks mkCaseName compilationMethods' case'
@@ -133,10 +132,10 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = 
   switchOp <-
     case bindingTy of
       TyCon tyCon -> do
-        tyConRep <- getTyConRep tyCon
+        tyConRep <- getTypeCompilationMethod tyCon
         case tyConRep of
-          TyConEnum _ -> pure scrutineeOp
-          TyConTaggedUnion _ bits -> do
+          CompileEnum _ -> pure scrutineeOp
+          CompileTaggedUnion _ bits -> do
             tagPtrName <- freshUnName
             tagOpName <- freshUnName
             let
@@ -213,10 +212,11 @@ codegenExpr' (ANF.EApp (ANF.App (ANF.VVal (ANF.Typed originalTy ident)) args' re
   returnTyLLVM' <- llvmType returnTy'
   maybeConvertPointer (LocalReference returnTyLLVM' opName) returnTyLLVM
 codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons (ANF.Typed _ cons)) args' _)) = do
-  method <- findCompilationMethod (dataConInfoCons cons) <$> compilationMethods
+  method <- findCompilationMethod (dataConInfoCons cons) <$> getTypeCompilationMethods
+  let (ConstructorIndex intIndex) = dataConstructorIndex $ dataConInfoCons cons
   case method of
-    CompileEnum i intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral i)
-    CompileTaggedUnion structName intTag intBits -> do
+    CompileEnum intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral intIndex)
+    CompileTaggedUnion structName intBits -> do
       -- Allocate struct
       allocName <- freshUnName
       let allocOp = LocalReference (PointerType (NamedTypeReference structName) (AddrSpace 0)) allocName
@@ -226,7 +226,7 @@ codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons (ANF.Typed _ cons)) args' _)) = d
       tagPtrName <- freshUnName
       let
         tagPtrOp = LocalReference (PointerType (IntegerType 32) (AddrSpace 0)) tagPtrName
-        tagOp = ConstantOperand $ C.Int intBits (fromIntegral intTag)
+        tagOp = ConstantOperand $ C.Int intBits (fromIntegral intIndex)
       addInstruction $ tagPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex 0] []
       addInstruction $ Do $ Store False tagPtrOp tagOp Nothing 0 []
 
@@ -266,10 +266,11 @@ valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
         ty' <- llvmType ty
         fromMaybe (LocalReference ty' ident') <$> lookupSymbol ident
 valOperand (ANF.Var var@(ANF.VCons (ANF.Typed _ cons))) = do
-  method <- findCompilationMethod (dataConInfoCons cons) <$> compilationMethods
+  method <- findCompilationMethod (dataConInfoCons cons) <$> getTypeCompilationMethods
+  let (ConstructorIndex intIndex) = dataConstructorIndex $ dataConInfoCons cons
   case method of
-    CompileEnum i intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral i)
-    CompileTaggedUnion _ _ _ -> error $ "Can't compile tagged pairs yet " ++ show var
+    CompileEnum intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral intIndex)
+    CompileTaggedUnion _ _ -> error $ "Can't compile tagged pairs yet " ++ show var
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
 
 primitiveFunctionInstruction
@@ -313,10 +314,10 @@ llvmType ty = go (typeToNonEmpty ty)
         case llvmPrimitiveType tyName of
           Just prim -> pure prim
           Nothing -> do
-            rep <- getTyConRep tyName
+            rep <- getTypeCompilationMethod tyName
             case rep of
-              TyConEnum intBits -> pure $ IntegerType intBits
-              TyConTaggedUnion structName _ -> pure $ PointerType (NamedTypeReference structName) (AddrSpace 0)
+              CompileEnum intBits -> pure $ IntegerType intBits
+              CompileTaggedUnion structName _ -> pure $ PointerType (NamedTypeReference structName) (AddrSpace 0)
       ANF.TyVar _ -> pure $ PointerType (IntegerType 64) (AddrSpace 0)
       ANF.TyFun{} -> mkFunctionType ty
   go _ = mkFunctionType ty

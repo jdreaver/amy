@@ -1,8 +1,7 @@
 {-# LANGUAGE MultiWayIf #-}
 
 module Amy.Codegen.TypeCompilation
-  ( TyConRep(..)
-  , DataConRep(..)
+  ( TypeCompilationMethod(..)
   , typeCompilationMethod
   , findCompilationMethod
   , llvmPrimitiveType
@@ -18,54 +17,24 @@ import Amy.ANF.AST
 import Amy.Codegen.Utils
 import Amy.Prim
 
--- TODO: Ever since we store much more information in DataConstructor, I don't
--- think we need a map from DataConstructor to DataConRep. If we know the
--- TyConRep for the data constructor's Type, we can surmise what to do with
--- each constructor.
-
 -- | Describes how a type constructor is represented in LLVM.
-data TyConRep
-  = TyConEnum !Word32
+data TypeCompilationMethod
+  = CompileEnum !Word32
     -- ^ Compile as an int type with 'Word32' bits.
-  | TyConTaggedUnion !Name !Word32
+  | CompileTaggedUnion !Name !Word32
     -- ^ Represent as a struct with a 'Word32'-sized integer tag and an integer
     -- pointer to data.
   deriving (Show, Eq)
 
--- | Describes how a data constructor is represented in LLVM.
-data DataConRep
-  = CompileEnum !Int !Word32
-    -- ^ Compile as an integer enum. The 'Word32' is the size of the integer
-    -- type.
-  | CompileTaggedUnion !Name !Int !Word32
-    -- ^ Compile as a pair of integer tag and pointer to data. The 'Word32' is
-    -- the size of the integer type.
-  deriving (Show, Eq)
-
 -- | Decide how we are going to compile a type declaration.
-typeCompilationMethod
-  :: TypeDeclaration
-  -> (Map DataConstructor DataConRep, (TyConInfo, TyConRep))
+typeCompilationMethod :: TypeDeclaration -> TypeCompilationMethod
 typeCompilationMethod (TypeDeclaration tyName constructors) =
   -- Check if we can do an enum. This is when all constructors have no
   -- arguments.
   if all (isNothing . dataConstructorArgument) constructors
-  then
-    let
-      mkMethod con = (con, CompileEnum (fromIntegral . unConstructorIndex $ dataConstructorIndex con) wordSize)
-    in
-      ( Map.fromList $ mkMethod <$> constructors
-      , (tyName, TyConEnum wordSize)
-      )
+  then CompileEnum wordSize
   -- Can't do an enum. We'll have to use tagged pairs.
-  else
-    let
-      structName = textToName (tyConInfoText tyName)
-      mkMethod con = (con, CompileTaggedUnion structName (fromIntegral . unConstructorIndex $ dataConstructorIndex con) wordSize)
-    in
-      ( Map.fromList $ mkMethod <$> constructors
-      , (tyName, TyConTaggedUnion structName wordSize)
-      )
+  else CompileTaggedUnion (textToName (tyConInfoText tyName)) wordSize
  where
   -- Pick a proper integer size
   wordSize :: Word32
@@ -76,10 +45,11 @@ typeCompilationMethod (TypeDeclaration tyName constructors) =
 
 findCompilationMethod
   :: DataConstructor
-  -> Map DataConstructor DataConRep
-  -> DataConRep
-findCompilationMethod cons compilationMethods =
-  fromMaybe (error $ "No compilation method for " ++ show cons) $ Map.lookup cons compilationMethods
+  -> Map TyConInfo TypeCompilationMethod
+  -> TypeCompilationMethod
+findCompilationMethod con compilationMethods =
+  fromMaybe (error $ "No compilation method for " ++ show con)
+  $ Map.lookup (dataConstructorType con) compilationMethods
 
 -- | Convert from an Amy primitive type to an LLVM type
 llvmPrimitiveType :: TyConInfo -> Maybe LLVM.Type

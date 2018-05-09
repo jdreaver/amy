@@ -117,7 +117,7 @@ data Case
   , caseScrutineeBinding :: !(Typed Ident)
   , caseAlternatives :: ![Match]
   , caseDefault :: !(Maybe Expr)
-  , caseType :: !Type -- TODO: Is this redundant with the Typed binding?
+  , caseType :: !Type
   } deriving (Show, Eq)
 
 data Match
