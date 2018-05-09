@@ -22,12 +22,12 @@ void my_print(int z, MyPrintEnv* env) {
 
 struct Closure make_my_print_closure(int x, int y)
 {
-  struct MyPrintEnv* env = (struct MyPrintEnv*)malloc(sizeof(struct MyPrintEnv*));
-  env->x = x;
-  env->y = y;
+  struct MyPrintEnv env;
+  env.x = x;
+  env.y = y;
 
   struct Closure closure;
-  closure.env = env;
+  closure.env = &env;
   closure.func_ptr = &my_print;
 
   return closure;
@@ -48,13 +48,13 @@ void my_other(int z, MyOtherEnv* env) {
 
 struct Closure make_my_other_closure(int x, int y, int a)
 {
-  struct MyOtherEnv* env = (struct MyOtherEnv*)malloc(sizeof(struct MyOtherEnv*));
-  env->x = x;
-  env->y = y;
-  env->a = a;
+  struct MyOtherEnv env;
+  env.x = x;
+  env.y = y;
+  env.a = a;
 
   struct Closure closure;
-  closure.env = env;
+  closure.env = &env;
   closure.func_ptr = &my_other;
 
   return closure;
