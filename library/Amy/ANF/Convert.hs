@@ -79,50 +79,45 @@ convertTyVarInfo (C.TyVarInfo name' id') = ANF.TyVarInfo name' id'
 normalizeExpr
   :: Text -- ^ Base name for generated variables
   -> C.Expr -- ^ Expression to normalize
-  -> (ANF.Expr -> ANFConvert ANF.Expr) -- ^ Logical continuation (TODO: Is this needed?)
   -> ANFConvert ANF.Expr
-normalizeExpr _ (C.ELit lit) c = c $ ANF.EVal $ ANF.Lit lit
-normalizeExpr name var@C.EVar{} c = normalizeName name var (c . ANF.EVal)
-normalizeExpr name expr@(C.ECase (C.Case scrutinee bind matches defaultExpr)) c =
+normalizeExpr _ (C.ELit lit) = pure $ ANF.EVal $ ANF.Lit lit
+normalizeExpr name var@C.EVar{} = normalizeName name var (pure . ANF.EVal)
+normalizeExpr name expr@(C.ECase (C.Case scrutinee bind matches defaultExpr)) =
   normalizeName name scrutinee $ \scrutineeVal -> do
     bind' <- convertTypedIdent bind
     matches' <- traverse normalizeMatch matches
-    defaultExpr' <- traverse (normalizeTerm "caseDef") defaultExpr
+    defaultExpr' <- traverse (normalizeExpr "caseDef") defaultExpr
     let ty = convertType $ expressionType expr
-    c $ ANF.ECase (ANF.Case scrutineeVal bind' matches' defaultExpr' ty)
-normalizeExpr name (C.ELet (C.Let bindings expr)) c = do
+    pure $ ANF.ECase (ANF.Case scrutineeVal bind' matches' defaultExpr' ty)
+normalizeExpr name (C.ELet (C.Let bindings expr)) = do
   bindings' <- traverse normalizeLetBinding bindings
-  expr' <- normalizeExpr name expr c
+  expr' <- normalizeExpr name expr
   pure $ ANF.ELet $ ANF.Let bindings' expr'
-normalizeExpr name (C.EApp (C.App func args retTy)) c =
+normalizeExpr name (C.EApp (C.App func args retTy)) =
   normalizeList (normalizeName name) (toList args) $ \argVals ->
   normalizeName name func $ \funcVal -> do
     let retTy' = convertType retTy
     case funcVal of
       (ANF.Lit lit) -> error $ "Encountered lit function application " ++ show lit
-      (ANF.Var ident) -> normalizeApp ident argVals retTy' c
-normalizeExpr name (C.EParens expr) c = normalizeExpr name expr c
+      (ANF.Var ident) -> normalizeApp ident argVals retTy'
+normalizeExpr name (C.EParens expr) = normalizeExpr name expr
 
 normalizeApp
   :: ANF.Var
   -> [ANF.Val]
   -> ANF.Type
-  -> (ANF.Expr -> ANFConvert a)
-  -> ANFConvert a
-normalizeApp var argVals retTy c =
+  -> ANFConvert ANF.Expr
+normalizeApp var argVals retTy =
   case var of
     ANF.VVal tyIdent@(ANF.Typed _ ident) ->
       case Map.lookup (ANF.identId ident) primitiveFunctionsById of
         -- Primitive operation
-        Just prim -> c $ ANF.EPrimOp $ ANF.App prim argVals retTy
+        Just prim -> pure $ ANF.EPrimOp $ ANF.App prim argVals retTy
         -- Default, just a function call
-        Nothing -> c $ ANF.EApp $ ANF.App tyIdent argVals retTy
+        Nothing -> pure $ ANF.EApp $ ANF.App tyIdent argVals retTy
     ANF.VCons con ->
       -- Default, just a function call
-      c $ ANF.ECons $ ANF.App con argVals retTy
-
-normalizeTerm :: Text -> C.Expr -> ANFConvert ANF.Expr
-normalizeTerm name expr = normalizeExpr name expr pure
+      pure $ ANF.ECons $ ANF.App con argVals retTy
 
 normalizeName :: Text -> C.Expr -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 normalizeName _ (C.ELit lit) c = c $ ANF.Lit lit
@@ -142,7 +137,7 @@ normalizeName name (C.EVar var) c =
         ty' = convertType ty
       c $ ANF.Var (ANF.VCons (ANF.Typed ty' cons'))
 normalizeName name expr c = do
-  expr' <- normalizeTerm name expr
+  expr' <- normalizeExpr name expr
   let exprType = convertType $ expressionType expr
   mkNormalizeLet name expr' exprType c
 
@@ -157,7 +152,7 @@ normalizeBinding mName (C.Binding ident@(C.Ident name _) scheme args retTy body)
   -- If we are given a base name, then use it. Otherwise use the binding name
   -- as the base name for all sub expressions.
   let subName = fromMaybe name mName
-  body' <- normalizeTerm subName body
+  body' <- normalizeExpr subName body
   ident' <- convertIdent' ident
   let scheme' = convertScheme scheme
   args' <- traverse convertTypedIdent args
@@ -166,7 +161,7 @@ normalizeBinding mName (C.Binding ident@(C.Ident name _) scheme args retTy body)
 
 normalizeLetBinding :: C.Binding -> ANFConvert ANF.LetBinding
 normalizeLetBinding (C.Binding ident@(C.Ident name _) scheme [] _ body) = do
-  body' <- normalizeTerm name body
+  body' <- normalizeExpr name body
   ident' <- convertIdent' ident
   let scheme' = convertScheme scheme
   pure $ ANF.LetBinding ident' scheme' body'
@@ -176,7 +171,7 @@ normalizeLetBinding bind@C.Binding{} =
 normalizeMatch :: C.Match -> ANFConvert ANF.Match
 normalizeMatch (C.Match pat body) = do
   pat' <- convertPattern pat
-  body' <- normalizeTerm "case" body
+  body' <- normalizeExpr "case" body
   pure $ ANF.Match pat' body'
 
 convertPattern :: C.Pattern -> ANFConvert ANF.Pattern
