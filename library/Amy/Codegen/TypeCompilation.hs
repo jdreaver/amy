@@ -4,7 +4,6 @@ module Amy.Codegen.TypeCompilation
   ( TypeCompilationMethod(..)
   , typeCompilationMethod
   , findCompilationMethod
-  , llvmPrimitiveType
   ) where
 
 import Data.Map.Strict (Map)
@@ -15,7 +14,6 @@ import LLVM.AST as LLVM
 
 import Amy.ANF.AST
 import Amy.Codegen.Utils
-import Amy.Prim
 
 -- | Describes how a type constructor is represented in LLVM.
 data TypeCompilationMethod
@@ -50,13 +48,3 @@ findCompilationMethod
 findCompilationMethod con compilationMethods =
   fromMaybe (error $ "No compilation method for " ++ show con)
   $ Map.lookup (dataConstructorType con) compilationMethods
-
--- | Convert from an Amy primitive type to an LLVM type
-llvmPrimitiveType :: TyConInfo -> Maybe LLVM.Type
-llvmPrimitiveType tyCon
-  | tyCon == intTyCon' = Just (IntegerType 64)
-  | tyCon == doubleTyCon' = Just (FloatingPointType DoubleFP)
-  | otherwise = Nothing
- where
-  intTyCon' = fromPrimTyCon intTyCon
-  doubleTyCon' = fromPrimTyCon doubleTyCon

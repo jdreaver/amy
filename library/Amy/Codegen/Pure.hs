@@ -331,6 +331,16 @@ llvmType ty = go (typeToNonEmpty ty)
       ANF.TyFun{} -> mkFunctionType ty
   go _ = mkFunctionType ty
 
+-- | Convert from an Amy primitive type to an LLVM type
+llvmPrimitiveType :: TyConInfo -> Maybe LLVM.Type
+llvmPrimitiveType tyCon
+  | tyCon == intTyCon' = Just (IntegerType 64)
+  | tyCon == doubleTyCon' = Just (FloatingPointType DoubleFP)
+  | otherwise = Nothing
+ where
+  intTyCon' = fromPrimTyCon intTyCon
+  doubleTyCon' = fromPrimTyCon doubleTyCon
+
 mkFunctionType :: (MonadReader CodeGenRead m) => ANF.Type -> m LLVM.Type
 mkFunctionType ty = do
   resType <- llvmType $ NE.last ts
