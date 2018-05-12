@@ -50,6 +50,8 @@ case.end.6:                                       ; preds = %case.0.6, %case.def
   %end.6 = phi %MySum* [ %6, %case.default.6 ], [ %10, %case.0.6 ]
   %11 = getelementptr %MySum, %MySum* %end.6, i32 0, i32 0
   %12 = load i8, i8* %11
+  %13 = getelementptr %MySum, %MySum* %end.6, i32 0, i32 1
+  %14 = load i64*, i64** %13
   switch i8 %12, label %case.0.13 [
     i8 0, label %case.0.13
     i8 1, label %case.1.13
@@ -57,16 +59,12 @@ case.end.6:                                       ; preds = %case.0.6, %case.def
   ]
 
 case.0.13:                                        ; preds = %case.end.6, %case.end.6
-  %13 = getelementptr %MySum, %MySum* %end.6, i32 0, i32 1
-  %14 = load i64*, i64** %13
   %15 = load i64, i64* %14
   br label %case.end.13
 
 case.1.13:                                        ; preds = %case.end.6
-  %16 = getelementptr %MySum, %MySum* %end.6, i32 0, i32 1
-  %17 = load i64*, i64** %16
-  %18 = bitcast i64* %17 to double*
-  %19 = load double, double* %18
+  %16 = bitcast i64* %14 to double*
+  %17 = load double, double* %16
   br label %case.end.13
 
 case.2.13:                                        ; preds = %case.end.6
@@ -74,36 +72,36 @@ case.2.13:                                        ; preds = %case.end.6
 
 case.end.13:                                      ; preds = %case.2.13, %case.1.13, %case.0.13
   %end.13 = phi i64 [ %15, %case.0.13 ], [ 0, %case.1.13 ], [ 1, %case.2.13 ]
-  switch i1 false, label %case.0.23 [
-    i1 false, label %case.0.23
+  switch i1 false, label %case.0.21 [
+    i1 false, label %case.0.21
   ]
 
-case.0.23:                                        ; preds = %case.end.13, %case.end.13
+case.0.21:                                        ; preds = %case.end.13, %case.end.13
+  br label %case.end.21
+
+case.end.21:                                      ; preds = %case.0.21
+  %end.21 = phi i64 [ %end.13, %case.0.21 ]
+  %18 = call i8 @myEnum()
+  switch i8 %18, label %case.0.23 [
+    i8 0, label %case.0.23
+    i8 1, label %case.1.23
+    i8 2, label %case.2.23
+  ]
+
+case.0.23:                                        ; preds = %case.end.21, %case.end.21
   br label %case.end.23
 
-case.end.23:                                      ; preds = %case.0.23
-  %end.23 = phi i64 [ %end.13, %case.0.23 ]
-  %20 = call i8 @myEnum()
-  switch i8 %20, label %case.0.25 [
-    i8 0, label %case.0.25
-    i8 1, label %case.1.25
-    i8 2, label %case.2.25
-  ]
+case.1.23:                                        ; preds = %case.end.21
+  br label %case.end.23
 
-case.0.25:                                        ; preds = %case.end.23, %case.end.23
-  br label %case.end.25
+case.2.23:                                        ; preds = %case.end.21
+  br label %case.end.23
 
-case.1.25:                                        ; preds = %case.end.23
-  br label %case.end.25
-
-case.2.25:                                        ; preds = %case.end.23
-  br label %case.end.25
-
-case.end.25:                                      ; preds = %case.2.25, %case.1.25, %case.0.25
-  %end.25 = phi i64 [ 1, %case.0.25 ], [ 2, %case.1.25 ], [ 3, %case.2.25 ]
-  %21 = add i64 %end.23, %end.0
-  %22 = add i64 %end.25, %21
-  ret i64 %22
+case.end.23:                                      ; preds = %case.2.23, %case.1.23, %case.0.23
+  %end.23 = phi i64 [ 1, %case.0.23 ], [ 2, %case.1.23 ], [ 3, %case.2.23 ]
+  %19 = add i64 %end.21, %end.0
+  %20 = add i64 %end.23, %19
+  ret i64 %20
 }
 
 define private i64 @f(i64 %x) {

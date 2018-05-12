@@ -129,22 +129,10 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = 
   scrutineeOp <- valOperand scrutinee
 
   -- Extract tag from scrutinee op if we have to
-  switchOp <-
+  (switchOp, mArgOp) <-
     case bindingTy of
-      TyCon tyCon -> do
-        tyConRep <- getTypeCompilationMethod tyCon
-        case tyConRep of
-          CompileEnum _ -> pure scrutineeOp
-          CompileTaggedUnion _ bits -> do
-            tagPtrName <- freshUnName
-            tagOpName <- freshUnName
-            let
-              tagPtrOp = LocalReference (PointerType (IntegerType 32) (AddrSpace 0)) tagPtrName
-              tagOp = LocalReference (IntegerType bits) tagOpName
-            addInstruction $ tagPtrName := GetElementPtr False scrutineeOp [gepIndex 0, gepIndex 0] []
-            addInstruction $ tagOpName := Load False tagPtrOp Nothing 0 []
-            pure tagOp
-      _ -> pure scrutineeOp
+      TyCon tyCon -> unpackConstructor scrutineeOp tyCon
+      _ -> pure (scrutineeOp, Nothing)
 
   let
     switchNames = (\(CaseLiteralBlock _ name' _ constant _) -> (constant, name')) <$> literalBlocks
@@ -164,22 +152,11 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = 
       generateBlockExpr expr nextBlockName
     generateCaseLiteralBlock (CaseLiteralBlock expr _ nextBlockName _ mBind) = do
       for_ mBind $ \(Typed ty ident) -> do
-        -- Compute pointer to tagged union value
-        dataPtrName <- freshUnName
-        let
-          dataPtrOp = LocalReference (PointerType (PointerType (IntegerType 64) (AddrSpace 0)) (AddrSpace 0)) dataPtrName
-        addInstruction $ dataPtrName := GetElementPtr False scrutineeOp [gepIndex 0, gepIndex 1] []
-
-        -- Load value from pointer
-        dataName <- freshUnName
-        let
-          dataOp = LocalReference (PointerType (IntegerType 64) (AddrSpace 0)) dataName
-        addInstruction $ dataName := Load False dataPtrOp Nothing 0 []
+        -- Convert constructor argument and add to symbol table
+        let argOp = fromMaybe (error "Can't extract argument for tagged union") mArgOp
         ty' <- llvmType ty
-        dataOp' <- maybeConvertPointer dataOp ty'
-
-        -- Add to symbol table
-        addSymbolToTable ident dataOp'
+        dataOp <- maybeConvertPointer argOp ty'
+        addSymbolToTable ident dataOp
       generateBlockExpr expr nextBlockName
 
   mDefaultOpAndBlock <- traverse generateCaseDefaultBlock mDefaultBlock
@@ -275,6 +252,35 @@ packConstructor con mArg = do
 
       -- Return pointer
       pure allocOp
+
+unpackConstructor :: Operand -> TyConInfo -> BlockGen (Operand, Maybe Operand)
+unpackConstructor conOp tyCon = do
+  method <- getTypeCompilationMethod tyCon
+  case method of
+    CompileEnum _ -> pure (conOp, Nothing)
+    CompileTaggedUnion _ bits -> do
+      -- Unpack tag
+      tagPtrName <- freshUnName
+      tagOpName <- freshUnName
+      let
+        tagPtrOp = LocalReference (PointerType (IntegerType 32) (AddrSpace 0)) tagPtrName
+        tagOp = LocalReference (IntegerType bits) tagOpName
+      addInstruction $ tagPtrName := GetElementPtr False conOp [gepIndex 0, gepIndex 0] []
+      addInstruction $ tagOpName := Load False tagPtrOp Nothing 0 []
+
+      -- Compute pointer to tagged union value
+      dataPtrName <- freshUnName
+      let
+        dataPtrOp = LocalReference (PointerType (PointerType (IntegerType 64) (AddrSpace 0)) (AddrSpace 0)) dataPtrName
+      addInstruction $ dataPtrName := GetElementPtr False conOp [gepIndex 0, gepIndex 1] []
+
+      -- Load value from pointer
+      dataName <- freshUnName
+      let
+        dataOp = LocalReference (PointerType (IntegerType 64) (AddrSpace 0)) dataName
+      addInstruction $ dataName := Load False dataPtrOp Nothing 0 []
+
+      pure (tagOp, Just dataOp)
 
 primitiveFunctionInstruction
   :: PrimitiveFunction
