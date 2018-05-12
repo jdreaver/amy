@@ -1,13 +1,5 @@
 extern abs :: Int -> Int
 
-Void = Void
-
-MyEnum = MyEnumA | MyEnumB | MyEnumC
-
-MySum = MySumA Int | MySumB Double | MySumC
-
-EmptyType
-
 main :: Int
 main =
   let
@@ -15,43 +7,13 @@ main =
     x =
       if True
         then abs (f 100)
-        else abs (f 200)
+        else abs (f threeHundred)
     y :: Int
     y = x
-    b =
-      case (iAdd# x 2) of
-        1 -> mySum
-        o -> MySumA (iSub# o 3)
-    b' =
-      case b of
-        MySumA sa -> sa
-        MySumB sb -> 0
-        MySumC -> 1
-    v = Void
-    u =
-      case v of
-        Void -> b'
-    s = myEnum
-    t =
-      case s of
-        MyEnumA -> 1
-        MyEnumB -> 2
-        MyEnumC -> 3
-  in
-    let z = iAdd# u y
-    in iAdd# t z
+  in iAdd# x y
 
 # f :: Int -> Int
 f x = if True then abs x else threeHundred
 
-myEnum :: MyEnum
-myEnum = MyEnumB
-
-mySum :: MySum
-mySum =
-  case True of
-    True -> MySumB 1.1
-    False -> MySumC
-
 threeHundred :: Int
-threeHundred = 100
+threeHundred = 300

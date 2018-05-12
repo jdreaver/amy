@@ -1,0 +1,27 @@
+Void = Void
+
+MyEnum = MyEnumA | MyEnumB | MyEnumC
+
+MySum = MySumA Int | MySumB Double | MySumC
+
+EmptyType
+
+main :: Int
+main =
+  let
+    x :: MySum
+    x = MySumB 7.8
+    y :: MyEnum
+    y = MyEnumB
+  in
+    case x of
+      MySumA x' -> 0
+      MySumB x' -> f x' y
+      MySumC -> 1
+
+f :: Double -> MyEnum -> Int
+f x enum =
+  case enum of
+    MyEnumA -> 2
+    MyEnumB -> doubleToInt# x
+    MyEnumC -> 3
