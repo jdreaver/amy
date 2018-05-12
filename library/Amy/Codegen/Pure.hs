@@ -147,8 +147,7 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = 
         -- Convert constructor argument and add to symbol table
         let
           argOp = fromMaybe (error "Can't extract argument for tagged union") mArgOp
-          ty' = llvmType ty
-        dataOp <- maybeConvertPointer argOp ty'
+        dataOp <- maybeConvertPointer argOp $ llvmType ty
         addSymbolToTable ident dataOp
       generateBlockExpr expr nextBlockName
 
@@ -170,8 +169,7 @@ codegenExpr' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = 
   -- Convert arguments to pointers if we have to
   argOps <- for (zip args' argTys') $ \(arg, argTy) -> do
     originalOp <- valOperand arg
-    let argTy' = llvmType argTy
-    maybeConvertPointer originalOp argTy'
+    maybeConvertPointer originalOp $ llvmType argTy
 
   -- Add call instruction
   opName <- freshUnName
