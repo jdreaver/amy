@@ -85,8 +85,8 @@ normalizeExpr name var@C.EVar{} = normalizeName name var (pure . ANF.EVal)
 normalizeExpr name expr@(C.ECase (C.Case scrutinee bind matches defaultExpr)) =
   normalizeName name scrutinee $ \scrutineeVal -> do
     bind' <- convertTypedIdent bind
-    matches' <- traverse normalizeMatch matches
-    defaultExpr' <- traverse (normalizeExpr "caseDef") defaultExpr
+    matches' <- traverse (normalizeMatch name) matches
+    defaultExpr' <- traverse (normalizeExpr name) defaultExpr
     let ty = convertType $ expressionType expr
     pure $ ANF.ECase (ANF.Case scrutineeVal bind' matches' defaultExpr' ty)
 normalizeExpr name (C.ELet (C.Let bindings expr)) = do
@@ -159,10 +159,10 @@ normalizeLetBinding (C.Binding ident@(C.Ident name _) scheme [] _ body) = do
 normalizeLetBinding bind@C.Binding{} =
   error $ "Encountered let binding with arguments. Functions not allowed in ANF. " ++ show bind
 
-normalizeMatch :: C.Match -> ANFConvert ANF.Match
-normalizeMatch (C.Match pat body) = do
+normalizeMatch :: Text -> C.Match -> ANFConvert ANF.Match
+normalizeMatch name (C.Match pat body) = do
   pat' <- convertPattern pat
-  body' <- normalizeExpr "case" body
+  body' <- normalizeExpr name body
   pure $ ANF.Match pat' body'
 
 convertPattern :: C.Pattern -> ANFConvert ANF.Pattern
