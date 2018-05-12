@@ -76,7 +76,9 @@ prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault _)) =
       Just def -> [("__DEFAULT", prettyExpr def)]
 prettyExpr (ELet (Let bindings body)) =
   prettyLet (prettyLetBinding <$> bindings) (prettyExpr body)
-prettyExpr (EApp (App f args _)) = sep $ prettyVar f : (prettyVal <$> args)
+prettyExpr (EApp (App (Typed _ ident) args _)) = sep $ prettyIdent ident : (prettyVal <$> args)
+prettyExpr (ECons (App (Typed _ info) args _)) =
+  sep $ pretty (dataConstructorName $ dataConInfoCons info) : (prettyVal <$> args)
 prettyExpr (EPrimOp (App (PrimitiveFunction _ name _ _) args _)) =
   sep $ pretty name : (prettyVal <$> args)
 

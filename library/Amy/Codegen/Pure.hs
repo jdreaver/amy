@@ -192,7 +192,7 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = 
     endOpRef = LocalReference endTy endOpName
   addInstruction $ endOpName := Phi endTy allOpsAndBlocks []
   pure endOpRef
-codegenExpr' (ANF.EApp (ANF.App (ANF.VVal (ANF.Typed originalTy ident)) args' returnTy)) = do
+codegenExpr' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = do
   ty <- fromMaybe originalTy <$> topLevelType ident
   funcOperand <- valOperand (ANF.Var $ ANF.VVal $ ANF.Typed ty ident)
   let
@@ -211,7 +211,7 @@ codegenExpr' (ANF.EApp (ANF.App (ANF.VVal (ANF.Typed originalTy ident)) args' re
   returnTyLLVM <- llvmType returnTy
   returnTyLLVM' <- llvmType returnTy'
   maybeConvertPointer (LocalReference returnTyLLVM' opName) returnTyLLVM
-codegenExpr' (ANF.EApp app@(ANF.App (ANF.VCons (ANF.Typed _ cons)) args' _)) = do
+codegenExpr' (ANF.ECons app@(ANF.App (ANF.Typed _ cons) args' _)) = do
   method <- findCompilationMethod (dataConInfoCons cons) <$> getTypeCompilationMethods
   let (ConstructorIndex intIndex) = dataConstructorIndex $ dataConInfoCons cons
   case method of

@@ -111,15 +111,15 @@ normalizeApp
   -> ANFConvert a
 normalizeApp var argVals retTy c =
   case var of
-    ANF.VVal (ANF.Typed _ ident) ->
+    ANF.VVal tyIdent@(ANF.Typed _ ident) ->
       case Map.lookup (ANF.identId ident) primitiveFunctionsById of
         -- Primitive operation
         Just prim -> c $ ANF.EPrimOp $ ANF.App prim argVals retTy
         -- Default, just a function call
-        Nothing -> c $ ANF.EApp $ ANF.App var argVals retTy
-    ANF.VCons _ ->
+        Nothing -> c $ ANF.EApp $ ANF.App tyIdent argVals retTy
+    ANF.VCons con ->
       -- Default, just a function call
-      c $ ANF.EApp $ ANF.App var argVals retTy
+      c $ ANF.ECons $ ANF.App con argVals retTy
 
 normalizeTerm :: Text -> C.Expr -> ANFConvert ANF.Expr
 normalizeTerm name expr = normalizeExpr name expr pure
@@ -133,7 +133,7 @@ normalizeName name (C.EVar var) c =
       case ident' of
         -- Top-level values need to be first called as functions
         (ANF.Typed ty@(ANF.TyCon _) (ANF.Ident _ _ True)) ->
-          mkNormalizeLet name (ANF.EApp $ ANF.App (ANF.VVal ident') [] ty) ty c
+          mkNormalizeLet name (ANF.EApp $ ANF.App ident' [] ty) ty c
         -- Not a top-level value, just return
         _ -> c $ ANF.Var (ANF.VVal ident')
     C.VCons (C.Typed ty cons) -> do

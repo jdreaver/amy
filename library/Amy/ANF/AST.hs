@@ -102,7 +102,8 @@ data Expr
   = EVal !Val
   | ELet !Let
   | ECase !Case
-  | EApp !(App Var)
+  | EApp !(App (Typed Ident))
+  | ECons !(App (Typed DataConInfo))
   | EPrimOp !(App PrimitiveFunction)
   deriving (Show, Eq)
 
