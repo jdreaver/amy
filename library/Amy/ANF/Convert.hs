@@ -23,34 +23,42 @@ normalizeModule (C.Module bindings externs typeDeclarations maxId) =
       ++ (C.externName <$> externs)
 
     -- Actual conversion
-    typeDeclarations' = convertTypeDeclaration <$> typeDeclarations
-    externs' = convertExtern <$> externs
-    convertState = anfConvertState (maxId + 1) topLevelNames
-  in runANFConvert convertState $ do
+    convertRead = anfConvertRead topLevelNames typeDeclarations
+    convertState = anfConvertState (maxId + 1)
+  in runANFConvert convertRead convertState $ do
+    typeDeclarations' <- traverse convertTypeDeclaration typeDeclarations
+    externs' <- traverse convertExtern externs
     bindings' <- traverse (normalizeBinding (Just "res")) bindings
     pure $ ANF.Module bindings' externs' typeDeclarations'
 
-convertExtern :: C.Extern -> ANF.Extern
-convertExtern (C.Extern name ty) = ANF.Extern (convertIdent True name) (convertType ty)
+convertExtern :: C.Extern -> ANFConvert ANF.Extern
+convertExtern (C.Extern name ty) = ANF.Extern (convertIdent True name) <$> convertType ty
 
-convertTypeDeclaration :: C.TypeDeclaration -> ANF.TypeDeclaration
-convertTypeDeclaration (C.TypeDeclaration tyName cons) =
-  ANF.TypeDeclaration (convertTyConInfo tyName) (convertDataConstructor <$> cons)
+convertTypeDeclaration :: C.TypeDeclaration -> ANFConvert ANF.TypeDeclaration
+convertTypeDeclaration (C.TypeDeclaration tyName con) = do
+  tyName' <- convertTyConInfo tyName
+  con' <- traverse convertDataConstructor con
+  pure $ ANF.TypeDeclaration tyName' con'
 
-convertDataConstructor :: C.DataConstructor -> ANF.DataConstructor
-convertDataConstructor (C.DataConstructor conName id' mTyArg tyCon span' index) =
-  ANF.DataConstructor
-  { ANF.dataConstructorName = conName
-  , ANF.dataConstructorId = id'
-  , ANF.dataConstructorArgument = convertTyConInfo <$> mTyArg
-  , ANF.dataConstructorType = convertTyConInfo tyCon
-  , ANF.dataConstructorSpan = span'
-  , ANF.dataConstructorIndex = index
-  }
+convertDataConstructor :: C.DataConstructor -> ANFConvert ANF.DataConstructor
+convertDataConstructor (C.DataConstructor conName id' mTyArg tyCon span' index) = do
+  mTyArg' <- traverse convertTyConInfo mTyArg
+  tyCon' <- convertTyConInfo tyCon
+  pure
+    ANF.DataConstructor
+    { ANF.dataConstructorName = conName
+    , ANF.dataConstructorId = id'
+    , ANF.dataConstructorArgument = mTyArg'
+    , ANF.dataConstructorType = tyCon'
+    , ANF.dataConstructorSpan = span'
+    , ANF.dataConstructorIndex = index
+    }
 
-convertDataConInfo :: C.DataConInfo -> ANF.DataConInfo
-convertDataConInfo (C.DataConInfo typeDecl dataCon) =
-  ANF.DataConInfo (convertTypeDeclaration typeDecl) (convertDataConstructor dataCon)
+convertDataConInfo :: C.DataConInfo -> ANFConvert ANF.DataConInfo
+convertDataConInfo (C.DataConInfo typeDecl dataCon) = do
+  typeDecl' <- convertTypeDeclaration typeDecl
+  dataCon' <- convertDataConstructor dataCon
+  pure $ ANF.DataConInfo typeDecl' dataCon'
 
 convertIdent :: Bool -> C.Ident -> ANF.Ident
 convertIdent isTopLevel (C.Ident name id') = ANF.Ident name id' isTopLevel
@@ -59,19 +67,23 @@ convertIdent' :: C.Ident -> ANFConvert ANF.Ident
 convertIdent' ident@(C.Ident name id') =
   ANF.Ident name id' <$> isIdentTopLevel ident
 
-convertScheme :: C.Scheme -> ANF.Scheme
-convertScheme (C.Forall vars ty) = ANF.Forall (convertTyVarInfo <$> vars) (convertType ty)
+convertScheme :: C.Scheme -> ANFConvert ANF.Scheme
+convertScheme (C.Forall vars ty) = ANF.Forall (convertTyVarInfo <$> vars) <$> convertType ty
 
-convertType :: C.Type -> ANF.Type
-convertType (C.TyCon name) = ANF.TyCon (convertTyConInfo name)
-convertType (C.TyVar name) = ANF.TyVar (convertTyVarInfo name)
-convertType (C.TyFun ty1 ty2) = ANF.TyFun (convertType ty1) (convertType ty2)
+convertType :: C.Type -> ANFConvert ANF.Type
+convertType (C.TyCon name) = ANF.TyCon <$> convertTyConInfo name
+convertType (C.TyVar name) = pure $ ANF.TyVar (convertTyVarInfo name)
+convertType (C.TyFun ty1 ty2) = ANF.TyFun <$> convertType ty1 <*> convertType ty2
 
-convertTyConInfo :: C.TyConInfo -> ANF.TyConInfo
-convertTyConInfo (C.TyConInfo name' id') = ANF.TyConInfo name' id'
+convertTyConInfo :: C.TyConInfo -> ANFConvert ANF.TyConInfo
+convertTyConInfo info@(C.TyConInfo name' id') =
+  ANF.TyConInfo name' id' <$> getTyConInfoTypeRep info
 
 convertTypedIdent :: C.Typed C.Ident -> ANFConvert (ANF.Typed ANF.Ident)
-convertTypedIdent (C.Typed ty arg) = ANF.Typed (convertType ty) <$> convertIdent' arg
+convertTypedIdent (C.Typed ty arg) = do
+  ty' <- convertType ty
+  arg' <- convertIdent' arg
+  pure $ ANF.Typed ty' arg'
 
 convertTyVarInfo :: C.TyVarInfo -> ANF.TyVarInfo
 convertTyVarInfo (C.TyVarInfo name' id') = ANF.TyVarInfo name' id'
@@ -87,7 +99,7 @@ normalizeExpr name expr@(C.ECase (C.Case scrutinee bind matches defaultExpr)) =
     bind' <- convertTypedIdent bind
     matches' <- traverse (normalizeMatch name) matches
     defaultExpr' <- traverse (normalizeExpr name) defaultExpr
-    let ty = convertType $ expressionType expr
+    ty <- convertType $ expressionType expr
     pure $ ANF.ECase (ANF.Case scrutineeVal bind' matches' defaultExpr' ty)
 normalizeExpr name (C.ELet (C.Let bindings expr)) = do
   bindings' <- traverse normalizeLetBinding bindings
@@ -96,7 +108,7 @@ normalizeExpr name (C.ELet (C.Let bindings expr)) = do
 normalizeExpr name (C.EApp (C.App func args retTy)) =
   normalizeList (normalizeName name) (toList args) $ \argVals ->
   normalizeName name func $ \funcVal -> do
-    let retTy' = convertType retTy
+    retTy' <- convertType retTy
     case funcVal of
       ANF.Lit lit -> error $ "Encountered lit function application " ++ show lit
       ANF.Var (ANF.VVal tyIdent@(ANF.Typed _ ident)) ->
@@ -123,13 +135,12 @@ normalizeName name (C.EVar var) c =
         -- Not a top-level value, just return
         _ -> c $ ANF.Var (ANF.VVal ident')
     C.VCons (C.Typed ty cons) -> do
-      let
-        cons' = convertDataConInfo cons
-        ty' = convertType ty
+      cons' <- convertDataConInfo cons
+      ty' <- convertType ty
       c $ ANF.Var (ANF.VCons (ANF.Typed ty' cons'))
 normalizeName name expr c = do
   expr' <- normalizeExpr name expr
-  let exprType = convertType $ expressionType expr
+  exprType <- convertType $ expressionType expr
   mkNormalizeLet name expr' exprType c
 
 mkNormalizeLet :: Text -> ANF.Expr -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
@@ -145,16 +156,16 @@ normalizeBinding mName (C.Binding ident@(C.Ident name _) scheme args retTy body)
   let subName = fromMaybe name mName
   body' <- normalizeExpr subName body
   ident' <- convertIdent' ident
-  let scheme' = convertScheme scheme
+  scheme' <- convertScheme scheme
   args' <- traverse convertTypedIdent args
-  let retTy' = convertType retTy
+  retTy' <- convertType retTy
   pure $ ANF.Binding ident' scheme' args' retTy' body'
 
 normalizeLetBinding :: C.Binding -> ANFConvert ANF.LetBinding
 normalizeLetBinding (C.Binding ident@(C.Ident name _) scheme [] _ body) = do
   body' <- normalizeExpr name body
   ident' <- convertIdent' ident
-  let scheme' = convertScheme scheme
+  scheme' <- convertScheme scheme
   pure $ ANF.LetBinding ident' scheme' body'
 normalizeLetBinding bind@C.Binding{} =
   error $ "Encountered let binding with arguments. Functions not allowed in ANF. " ++ show bind
@@ -168,9 +179,9 @@ normalizeMatch name (C.Match pat body) = do
 convertPattern :: C.Pattern -> ANFConvert ANF.Pattern
 convertPattern (C.PLit lit) = pure $ ANF.PLit lit
 convertPattern (C.PCons (C.PatCons cons mArg retTy)) = do
-  let cons' = convertDataConInfo cons
+  cons' <- convertDataConInfo cons
   mArg' <- traverse convertTypedIdent mArg
-  let retTy' = convertType retTy
+  retTy' <- convertType retTy
   pure $ ANF.PCons $ ANF.PatCons cons' mArg' retTy'
 
 -- | Helper for normalizing lists of things

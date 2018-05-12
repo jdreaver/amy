@@ -6,11 +6,10 @@ module Amy.Codegen.Pure
   ( codegenModule
   ) where
 
-import Control.Monad.Reader
 import Data.Foldable (for_)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (catMaybes, fromMaybe)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Traversable (for)
 import LLVM.AST as LLVM
 import LLVM.AST.AddrSpace
@@ -23,7 +22,6 @@ import qualified LLVM.AST.Linkage as L
 import Amy.ANF as ANF
 import Amy.Codegen.CaseBlocks
 import Amy.Codegen.Monad
-import Amy.Codegen.TypeCompilation
 import Amy.Codegen.TypeConversion
 import Amy.Codegen.Utils
 import Amy.Prim
@@ -34,9 +32,10 @@ codegenModule (ANF.Module bindings externs typeDeclarations) =
     topLevelTypes =
       ((\(ANF.Binding name' (ANF.Forall _ ty) _ _ _) -> (name', ty)) <$> bindings)
       ++ ((\(ANF.Extern name' ty) -> (name', ty)) <$> externs)
-    definitions = runCodeGen topLevelTypes typeDeclarations $ do
-      externs' <- traverse codegenExtern externs
-      typeDefs <- catMaybes <$> traverse codegenTypeDeclaration typeDeclarations
+    definitions = runCodeGen topLevelTypes $ do
+      let
+        externs' = codegenExtern <$> externs
+        typeDefs = mapMaybe codegenTypeDeclaration typeDeclarations
       bindings' <- traverse codegenTopLevelBinding bindings
       pure $ externs' ++ typeDefs ++ bindings'
   in
@@ -45,16 +44,14 @@ codegenModule (ANF.Module bindings externs typeDeclarations) =
     , moduleDefinitions = definitions
     }
 
-codegenExtern :: ANF.Extern -> CodeGen Definition
-codegenExtern extern = do
+codegenExtern :: ANF.Extern -> Definition
+codegenExtern extern =
   let
     (paramTypes, returnType') = argAndReturnTypes (ANF.externType extern)
-    mkParam ty = do
-      ty' <- llvmType ty
-      pure $ Parameter ty' (UnName 0) []
-  params <- traverse mkParam paramTypes
-  retTy <- llvmType returnType'
-  pure $
+    mkParam ty = Parameter (llvmType ty) (UnName 0) []
+    params = mkParam <$> paramTypes
+    retTy = llvmType returnType'
+  in
     GlobalDefinition
     functionDefaults
     { name = identToName $ ANF.externName extern
@@ -62,32 +59,28 @@ codegenExtern extern = do
     , LLVM.returnType = retTy
     }
 
-codegenTypeDeclaration :: ANF.TypeDeclaration -> CodeGen (Maybe Definition)
-codegenTypeDeclaration (ANF.TypeDeclaration tyCon _) = do
-  tyConRep <- getTypeCompilationMethod tyCon
-  pure $
-    case tyConRep of
-      CompileEnum _ -> Nothing
-      CompileTaggedUnion name' intBits ->
-        Just $
-          TypeDefinition
-          name'
-          (Just $
-            StructureType
-            False
-            [ IntegerType intBits
-            , PointerType (IntegerType 64) (AddrSpace 0)
-            ]
-          )
+codegenTypeDeclaration :: ANF.TypeDeclaration -> Maybe Definition
+codegenTypeDeclaration (ANF.TypeDeclaration tyCon _) =
+  case tyConInfoTypeRep tyCon of
+    EnumRep _ -> Nothing
+    TaggedUnionRep name' intBits ->
+      Just $
+        TypeDefinition
+        (textToName name')
+        (Just $
+          StructureType
+          False
+          [ IntegerType intBits
+          , PointerType (IntegerType 64) (AddrSpace 0)
+          ]
+        )
 
 codegenTopLevelBinding :: ANF.Binding -> CodeGen Definition
 codegenTopLevelBinding binding = do
   let
-    argToParam (ANF.Typed ty ident) = do
-      ty' <- llvmType ty
-      pure $ Parameter ty' (identToName ident) []
-  params <- traverse argToParam (ANF.bindingArgs binding)
-  returnType' <- llvmType $ ANF.bindingReturnType binding
+    argToParam (ANF.Typed ty ident) = Parameter (llvmType ty) (identToName ident) []
+    params = argToParam <$> ANF.bindingArgs binding
+    returnType' = llvmType $ ANF.bindingReturnType binding
   blocks <- codegenExpr $ ANF.bindingBody binding
   pure $
     GlobalDefinition
@@ -119,10 +112,9 @@ codegenExpr' (ANF.ELet (ANF.Let bindings expr)) = do
   codegenExpr' expr
 codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = do
   caseId <- freshId
-  compilationMethods' <- getTypeCompilationMethods
   let
     mkCaseName nameBase = stringToName $ nameBase ++ show caseId
-    (CaseBlocks switchDefaultBlockName literalBlocks mDefaultBlock endBlock) = caseBlocks mkCaseName compilationMethods' case'
+    (CaseBlocks switchDefaultBlockName literalBlocks mDefaultBlock endBlock) = caseBlocks mkCaseName case'
     (CaseEndBlock endBlockName endOpName endType) = endBlock
 
   -- Generate the switch statement
@@ -153,8 +145,9 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = 
     generateCaseLiteralBlock (CaseLiteralBlock expr _ nextBlockName _ mBind) = do
       for_ mBind $ \(Typed ty ident) -> do
         -- Convert constructor argument and add to symbol table
-        let argOp = fromMaybe (error "Can't extract argument for tagged union") mArgOp
-        ty' <- llvmType ty
+        let
+          argOp = fromMaybe (error "Can't extract argument for tagged union") mArgOp
+          ty' = llvmType ty
         dataOp <- maybeConvertPointer argOp ty'
         addSymbolToTable ident dataOp
       generateBlockExpr expr nextBlockName
@@ -163,8 +156,8 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = 
   matchOpsAndBlocks <- traverse generateCaseLiteralBlock literalBlocks
 
   -- Generate end block
-  endTy <- llvmType endType
   let
+    endTy = llvmType endType
     allOpsAndBlocks = maybe id (:) mDefaultOpAndBlock matchOpsAndBlocks
     endOpRef = LocalReference endTy endOpName
   addInstruction $ endOpName := Phi endTy allOpsAndBlocks []
@@ -177,7 +170,7 @@ codegenExpr' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = 
   -- Convert arguments to pointers if we have to
   argOps <- for (zip args' argTys') $ \(arg, argTy) -> do
     originalOp <- valOperand arg
-    argTy' <- llvmType argTy
+    let argTy' = llvmType argTy
     maybeConvertPointer originalOp argTy'
 
   -- Add call instruction
@@ -185,8 +178,9 @@ codegenExpr' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = 
   addInstruction $ opName := Call Nothing CC.C [] (Right funcOperand) ((\arg -> (arg, [])) <$> argOps) [] []
 
   -- Return operand, maybe converting it too
-  returnTyLLVM <- llvmType returnTy
-  returnTyLLVM' <- llvmType returnTy'
+  let
+    returnTyLLVM = llvmType returnTy
+    returnTyLLVM' = llvmType returnTy'
   maybeConvertPointer (LocalReference returnTyLLVM' opName) returnTyLLVM
 codegenExpr' (ANF.ECons app@(ANF.App (ANF.Typed _ (DataConInfo _ con)) args' _)) = do
   let
@@ -200,7 +194,7 @@ codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   opName <- freshUnName
   argOps <- traverse valOperand args'
   addInstruction $ opName := primitiveFunctionInstruction prim argOps
-  returnTy' <- llvmType returnTy
+  let returnTy' = llvmType returnTy
   pure $ LocalReference returnTy' opName
 
 gepIndex :: Integer -> Operand
@@ -213,25 +207,26 @@ valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
   in
     case ident of
       (ANF.Ident _ _ True) -> do
-        funcTy <- mkFunctionType ty
+        let funcTy = mkFunctionType ty
         pure $ ConstantOperand $ C.GlobalReference funcTy ident'
       _ -> do
-        ty' <- llvmType ty
+        let ty' = llvmType ty
         fromMaybe (LocalReference ty' ident') <$> lookupSymbol ident
 valOperand (ANF.Var (ANF.VCons (ANF.Typed _ (DataConInfo _ con)))) = packConstructor con Nothing
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
 
 packConstructor :: DataConstructor -> Maybe ANF.Val -> BlockGen Operand
 packConstructor con mArg = do
-  method <- findCompilationMethod con <$> getTypeCompilationMethods
   let (ConstructorIndex intIndex) = dataConstructorIndex con
-  case method of
-    CompileEnum intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral intIndex)
-    CompileTaggedUnion structName intBits -> do
+  case tyConInfoTypeRep (dataConstructorType con) of
+    EnumRep intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral intIndex)
+    TaggedUnionRep structName intBits -> do
+      let structName' = textToName structName
+
       -- Allocate struct
       allocName <- freshUnName
-      let allocOp = LocalReference (PointerType (NamedTypeReference structName) (AddrSpace 0)) allocName
-      addInstruction $ allocName := Alloca (NamedTypeReference structName) Nothing 0 []
+      let allocOp = LocalReference (PointerType (NamedTypeReference structName') (AddrSpace 0)) allocName
+      addInstruction $ allocName := Alloca (NamedTypeReference structName') Nothing 0 []
 
       -- Set the tag
       tagPtrName <- freshUnName
@@ -254,11 +249,10 @@ packConstructor con mArg = do
       pure allocOp
 
 unpackConstructor :: Operand -> TyConInfo -> BlockGen (Operand, Maybe Operand)
-unpackConstructor conOp tyCon = do
-  method <- getTypeCompilationMethod tyCon
-  case method of
-    CompileEnum _ -> pure (conOp, Nothing)
-    CompileTaggedUnion _ bits -> do
+unpackConstructor conOp tyCon =
+  case tyConInfoTypeRep tyCon of
+    EnumRep _ -> pure (conOp, Nothing)
+    TaggedUnionRep _ bits -> do
       -- Unpack tag
       tagPtrName <- freshUnName
       tagOpName <- freshUnName
@@ -313,45 +307,42 @@ typeToNonEmpty (t1 `ANF.TyFun` t2) = NE.cons t1 (typeToNonEmpty t2)
 typeToNonEmpty ty = ty :| []
 
 -- TODO: Add tests for this
-llvmType :: forall m. (MonadReader CodeGenRead m) => ANF.Type -> m LLVM.Type
+llvmType :: ANF.Type -> LLVM.Type
 llvmType ty = go (typeToNonEmpty ty)
  where
-  go :: NonEmpty ANF.Type -> m LLVM.Type
+  go :: NonEmpty ANF.Type -> LLVM.Type
   go (ty' :| []) =
     case ty' of
-      ANF.TyCon tyName ->
-        case llvmPrimitiveType tyName of
-          Just prim -> pure prim
-          Nothing -> do
-            rep <- getTypeCompilationMethod tyName
-            case rep of
-              CompileEnum intBits -> pure $ IntegerType intBits
-              CompileTaggedUnion structName _ -> pure $ PointerType (NamedTypeReference structName) (AddrSpace 0)
-      ANF.TyVar _ -> pure $ PointerType (IntegerType 64) (AddrSpace 0)
+      ANF.TyCon tyCon ->
+        case llvmPrimitiveType tyCon of
+          Just prim -> prim
+          Nothing ->
+            case tyConInfoTypeRep tyCon of
+              EnumRep intBits -> IntegerType intBits
+              TaggedUnionRep structName _ ->
+                PointerType (NamedTypeReference (textToName structName)) (AddrSpace 0)
+      ANF.TyVar _ -> PointerType (IntegerType 64) (AddrSpace 0)
       ANF.TyFun{} -> mkFunctionType ty
   go _ = mkFunctionType ty
 
 -- | Convert from an Amy primitive type to an LLVM type
 llvmPrimitiveType :: TyConInfo -> Maybe LLVM.Type
-llvmPrimitiveType tyCon
-  | tyCon == intTyCon' = Just (IntegerType 64)
-  | tyCon == doubleTyCon' = Just (FloatingPointType DoubleFP)
+llvmPrimitiveType (TyConInfo _ id' _)
+  | id' == intTyConId = Just (IntegerType 64)
+  | id' == doubleTyConId = Just (FloatingPointType DoubleFP)
   | otherwise = Nothing
  where
-  intTyCon' = fromPrimTyCon intTyCon
-  doubleTyCon' = fromPrimTyCon doubleTyCon
+  intTyConId = primTyConId intTyCon
+  doubleTyConId = primTyConId doubleTyCon
 
-mkFunctionType :: (MonadReader CodeGenRead m) => ANF.Type -> m LLVM.Type
-mkFunctionType ty = do
-  resType <- llvmType $ NE.last ts
-  argTypes <- traverse llvmType (NE.init ts)
-  pure $
-    PointerType
-    FunctionType
-    { resultType = resType
-    , argumentTypes = argTypes
-    , isVarArg = False
-    }
-    (AddrSpace 0)
+mkFunctionType :: ANF.Type -> LLVM.Type
+mkFunctionType ty =
+  PointerType
+  FunctionType
+  { resultType = llvmType $ NE.last ts
+  , argumentTypes = llvmType <$> NE.init ts
+  , isVarArg = False
+  }
+  (AddrSpace 0)
  where
   ts = typeToNonEmpty ty

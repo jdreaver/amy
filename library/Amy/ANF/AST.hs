@@ -5,7 +5,6 @@ module Amy.ANF.AST
   , Binding(..)
   , Extern(..)
   , TypeDeclaration(..)
-  , fromPrimTypeDefinition
   , DataConstructor(..)
   , DataConInfo(..)
   , Val(..)
@@ -22,7 +21,6 @@ module Amy.ANF.AST
   , Ident(..)
   , Type(..)
   , TyConInfo(..)
-  , fromPrimTyCon
   , TyVarInfo(..)
   , Scheme(..)
   , Typed(..)
@@ -32,6 +30,7 @@ module Amy.ANF.AST
 
 import Data.Text (Text)
 
+import Amy.ANF.TypeRep
 import Amy.ASTCommon
 import Amy.Literal
 import Amy.Prim
@@ -64,10 +63,6 @@ data TypeDeclaration
   , typeDeclarationConstructors :: ![DataConstructor]
   } deriving (Show, Eq)
 
-fromPrimTypeDefinition :: PrimTypeDefinition -> TypeDeclaration
-fromPrimTypeDefinition (PrimTypeDefinition tyName cons) =
-  TypeDeclaration (fromPrimTyCon tyName) (fromPrimDataCon <$> cons)
-
 data DataConstructor
   = DataConstructor
   { dataConstructorName :: !Text
@@ -77,10 +72,6 @@ data DataConstructor
   , dataConstructorSpan :: !ConstructorSpan
   , dataConstructorIndex :: !ConstructorIndex
   } deriving (Show, Eq, Ord)
-
-fromPrimDataCon :: PrimDataCon -> DataConstructor
-fromPrimDataCon (PrimDataCon name id' ty span' index) =
-  DataConstructor name id' Nothing (fromPrimTyCon ty) span' index
 
 data DataConInfo
   = DataConInfo
@@ -174,10 +165,8 @@ data TyConInfo
   = TyConInfo
   { tyConInfoText :: !Text
   , tyConInfoId :: !Int
+  , tyConInfoTypeRep :: !TypeRep
   } deriving (Show, Eq, Ord)
-
-fromPrimTyCon :: PrimTyCon -> TyConInfo
-fromPrimTyCon (PrimTyCon name id') = TyConInfo name id'
 
 data TyVarInfo
   = TyVarInfo

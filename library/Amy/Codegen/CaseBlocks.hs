@@ -7,13 +7,12 @@ module Amy.Codegen.CaseBlocks
   , literalConstant
   ) where
 
-import Data.Map.Strict (Map)
 import LLVM.AST as LLVM
 import qualified LLVM.AST.Constant as C
 import LLVM.AST.Float as F
 
 import Amy.ANF.AST as ANF
-import Amy.Codegen.TypeCompilation
+import Amy.ANF.TypeRep
 import Amy.Literal
 
 data CaseBlocks
@@ -48,12 +47,8 @@ data CaseEndBlock
   , caseEndBlockType :: !ANF.Type
   } deriving (Show, Eq)
 
-caseBlocks
-  :: (String -> Name)
-  -> Map TyConInfo TypeCompilationMethod
-  -> Case
-  -> CaseBlocks
-caseBlocks mkBlockName compilationMethods (Case _ bind matches mDefault ty) =
+caseBlocks :: (String -> Name) -> Case -> CaseBlocks
+caseBlocks mkBlockName (Case _ bind matches mDefault ty) =
   let
     -- Compute names for everything
     defaultBlockName = mkBlockName "case.default."
@@ -87,8 +82,7 @@ caseBlocks mkBlockName compilationMethods (Case _ bind matches mDefault ty) =
         (constant, mBind) =
           case pat of
             PLit lit -> (literalConstant lit, Nothing)
-            PCons (PatCons (DataConInfo _ con) mArg _) ->
-              (constructorConstant compilationMethods con, mArg)
+            PCons (PatCons (DataConInfo _ con) mArg _) -> (constructorConstant con, mArg)
       in
         CaseLiteralBlock
         { caseLiteralBlockExpr = expr
@@ -120,13 +114,10 @@ literalConstant lit =
     LiteralInt i -> C.Int 64 (fromIntegral i)
     LiteralDouble x -> C.Float (F.Double x)
 
-constructorConstant
-  :: Map TyConInfo TypeCompilationMethod
-  -> DataConstructor
-  -> C.Constant
-constructorConstant compilationMethods con =
-  case findCompilationMethod con compilationMethods of
-    CompileEnum intBits -> C.Int intBits (fromIntegral i)
-    CompileTaggedUnion _ intBits -> C.Int intBits (fromIntegral i)
+constructorConstant :: DataConstructor -> C.Constant
+constructorConstant con =
+  case tyConInfoTypeRep (dataConstructorType con) of
+    EnumRep intBits -> C.Int intBits (fromIntegral i)
+    TaggedUnionRep _ intBits -> C.Int intBits (fromIntegral i)
  where
   (ConstructorIndex i) = dataConstructorIndex con

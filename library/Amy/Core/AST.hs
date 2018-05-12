@@ -5,6 +5,7 @@ module Amy.Core.AST
   , Binding(..)
   , Extern(..)
   , TypeDeclaration(..)
+  , fromPrimTypeDefinition
   , DataConstructor(..)
   , DataConInfo(..)
   , Expr(..)
@@ -70,6 +71,10 @@ data TypeDeclaration
   , typeDeclarationConstructors :: ![DataConstructor]
   } deriving (Show, Eq, Ord)
 
+fromPrimTypeDefinition :: PrimTypeDefinition -> TypeDeclaration
+fromPrimTypeDefinition (PrimTypeDefinition tyName cons) =
+  TypeDeclaration (fromPrimTyCon tyName) (fromPrimDataCon <$> cons)
+
 data DataConstructor
   = DataConstructor
   { dataConstructorName :: !Text
@@ -79,6 +84,10 @@ data DataConstructor
   , dataConstructorSpan :: !ConstructorSpan
   , dataConstructorIndex :: !ConstructorIndex
   } deriving (Show, Eq, Ord)
+
+fromPrimDataCon :: PrimDataCon -> DataConstructor
+fromPrimDataCon (PrimDataCon name id' ty span' index) =
+  DataConstructor name id' Nothing (fromPrimTyCon ty) span' index
 
 data DataConInfo
   = DataConInfo

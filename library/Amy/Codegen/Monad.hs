@@ -16,38 +16,29 @@ module Amy.Codegen.Monad
   , freshId
   , freshUnName
   , topLevelType
-  , getTypeCompilationMethods
-  , getTypeCompilationMethod
   ) where
 
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe)
 import LLVM.AST as LLVM
 
 import Amy.ANF.AST as ANF
-import Amy.Codegen.TypeCompilation
-import Amy.Prim
 
 newtype CodeGen a = CodeGen (Reader CodeGenRead a)
   deriving (Functor, Applicative, Monad, MonadReader CodeGenRead)
 
-runCodeGen :: [(Ident, ANF.Type)] -> [TypeDeclaration] -> CodeGen a -> a
-runCodeGen topLevelTypes typeDeclarations (CodeGen action) =
+runCodeGen :: [(Ident, ANF.Type)] -> CodeGen a -> a
+runCodeGen topLevelTypes (CodeGen action) =
   let
     typeMap = Map.fromList topLevelTypes
-    allTypeDeclarations = typeDeclarations ++ (fromPrimTypeDefinition <$> allPrimTypeDefinitions)
-    tyConReps = (\t -> (typeDeclarationTypeName t, typeCompilationMethod t)) <$> allTypeDeclarations
-    tyConRepsMap = Map.fromList tyConReps
-    readState = CodeGenRead typeMap tyConRepsMap
+    readState = CodeGenRead typeMap
   in runReader action readState
 
 data CodeGenRead
   = CodeGenRead
   { codeGenReadTopLevelTypes :: !(Map Ident ANF.Type)
-  , codeGenReadTypeCompilationMethods :: !(Map TyConInfo TypeCompilationMethod)
   }
 
 newtype BlockGen a = BlockGen (StateT BlockGenState CodeGen a)
@@ -122,11 +113,3 @@ freshUnName = UnName <$> freshId
 
 topLevelType :: (MonadReader CodeGenRead m) => Ident -> m (Maybe ANF.Type)
 topLevelType ident = asks (Map.lookup ident . codeGenReadTopLevelTypes)
-
-getTypeCompilationMethods :: (MonadReader CodeGenRead m) => m (Map TyConInfo TypeCompilationMethod)
-getTypeCompilationMethods = asks codeGenReadTypeCompilationMethods
-
-getTypeCompilationMethod :: (MonadReader CodeGenRead m) => TyConInfo -> m TypeCompilationMethod
-getTypeCompilationMethod tyCon = fromMaybe err . Map.lookup tyCon <$> getTypeCompilationMethods
-  where
-   err = error $ "Couldn't find TypeCompilationMethod of TyConInfo " ++ show tyCon
