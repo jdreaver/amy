@@ -133,6 +133,12 @@ entry:
 
 define private %MySum* @mySum() {
 entry:
+  switch i1 true, label %case.0.0 [
+    i1 true, label %case.0.0
+    i1 false, label %case.1.0
+  ]
+
+case.0.0:                                         ; preds = %entry, %entry
   %0 = alloca %MySum
   %1 = getelementptr %MySum, %MySum* %0, i32 0, i32 0
   store i8 1, i8* %1
@@ -141,7 +147,17 @@ entry:
   %3 = bitcast double* %2 to i64*
   %4 = getelementptr %MySum, %MySum* %0, i32 0, i32 1
   store i64* %3, i64** %4
-  ret %MySum* %0
+  br label %case.end.0
+
+case.1.0:                                         ; preds = %entry
+  %5 = alloca %MySum
+  %6 = getelementptr %MySum, %MySum* %5, i32 0, i32 0
+  store i8 2, i8* %6
+  br label %case.end.0
+
+case.end.0:                                       ; preds = %case.1.0, %case.0.0
+  %end.0 = phi %MySum* [ %0, %case.0.0 ], [ %5, %case.1.0 ]
+  ret %MySum* %end.0
 }
 
 define private i64 @threeHundred() {

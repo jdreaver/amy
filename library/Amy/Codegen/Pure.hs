@@ -211,38 +211,14 @@ codegenExpr' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = 
   returnTyLLVM <- llvmType returnTy
   returnTyLLVM' <- llvmType returnTy'
   maybeConvertPointer (LocalReference returnTyLLVM' opName) returnTyLLVM
-codegenExpr' (ANF.ECons app@(ANF.App (ANF.Typed _ cons) args' _)) = do
-  method <- findCompilationMethod (dataConInfoCons cons) <$> getTypeCompilationMethods
-  let (ConstructorIndex intIndex) = dataConstructorIndex $ dataConInfoCons cons
-  case method of
-    CompileEnum intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral intIndex)
-    CompileTaggedUnion structName intBits -> do
-      -- Allocate struct
-      allocName <- freshUnName
-      let allocOp = LocalReference (PointerType (NamedTypeReference structName) (AddrSpace 0)) allocName
-      addInstruction $ allocName := Alloca (NamedTypeReference structName) Nothing 0 []
-
-      -- Set the tag
-      tagPtrName <- freshUnName
-      let
-        tagPtrOp = LocalReference (PointerType (IntegerType 32) (AddrSpace 0)) tagPtrName
-        tagOp = ConstantOperand $ C.Int intBits (fromIntegral intIndex)
-      addInstruction $ tagPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex 0] []
-      addInstruction $ Do $ Store False tagPtrOp tagOp Nothing 0 []
-
-      -- Set data
-      argOp <-
-        case args' of
-          [arg] -> valOperand arg
-          _ -> error $ "Can't set tagged union data because there isn't exactly one argument " ++ show app
-      argOp' <- maybeConvertPointer argOp (PointerType (IntegerType 64) (AddrSpace 0))
-      dataPtrName <- freshUnName
-      let dataPtrOp = LocalReference (PointerType (PointerType (IntegerType 64) (AddrSpace 0)) (AddrSpace 0)) dataPtrName
-      addInstruction $ dataPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex 1] []
-      addInstruction $ Do $ Store False dataPtrOp argOp' Nothing 0 []
-
-      -- Return pointer
-      pure allocOp
+codegenExpr' (ANF.ECons app@(ANF.App (ANF.Typed _ (DataConInfo _ con)) args' _)) = do
+  let
+    mArg =
+      case args' of
+        [] -> Nothing
+        [x] -> Just x
+        _ -> error $ "Found too many arguments in ECons " ++ show app
+  packConstructor con mArg
 codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   opName <- freshUnName
   argOps <- traverse valOperand args'
@@ -265,13 +241,40 @@ valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
       _ -> do
         ty' <- llvmType ty
         fromMaybe (LocalReference ty' ident') <$> lookupSymbol ident
-valOperand (ANF.Var var@(ANF.VCons (ANF.Typed _ cons))) = do
-  method <- findCompilationMethod (dataConInfoCons cons) <$> getTypeCompilationMethods
-  let (ConstructorIndex intIndex) = dataConstructorIndex $ dataConInfoCons cons
+valOperand (ANF.Var (ANF.VCons (ANF.Typed _ (DataConInfo _ con)))) = packConstructor con Nothing
+valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
+
+packConstructor :: DataConstructor -> Maybe ANF.Val -> BlockGen Operand
+packConstructor con mArg = do
+  method <- findCompilationMethod con <$> getTypeCompilationMethods
+  let (ConstructorIndex intIndex) = dataConstructorIndex con
   case method of
     CompileEnum intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral intIndex)
-    CompileTaggedUnion _ _ -> error $ "Can't compile tagged pairs yet " ++ show var
-valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
+    CompileTaggedUnion structName intBits -> do
+      -- Allocate struct
+      allocName <- freshUnName
+      let allocOp = LocalReference (PointerType (NamedTypeReference structName) (AddrSpace 0)) allocName
+      addInstruction $ allocName := Alloca (NamedTypeReference structName) Nothing 0 []
+
+      -- Set the tag
+      tagPtrName <- freshUnName
+      let
+        tagPtrOp = LocalReference (PointerType (IntegerType 32) (AddrSpace 0)) tagPtrName
+        tagOp = ConstantOperand $ C.Int intBits (fromIntegral intIndex)
+      addInstruction $ tagPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex 0] []
+      addInstruction $ Do $ Store False tagPtrOp tagOp Nothing 0 []
+
+      -- Set data
+      for_ mArg $ \arg -> do
+        argOp <- valOperand arg
+        argOp' <- maybeConvertPointer argOp (PointerType (IntegerType 64) (AddrSpace 0))
+        dataPtrName <- freshUnName
+        let dataPtrOp = LocalReference (PointerType (PointerType (IntegerType 64) (AddrSpace 0)) (AddrSpace 0)) dataPtrName
+        addInstruction $ dataPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex 1] []
+        addInstruction $ Do $ Store False dataPtrOp argOp' Nothing 0 []
+
+      -- Return pointer
+      pure allocOp
 
 primitiveFunctionInstruction
   :: PrimitiveFunction
