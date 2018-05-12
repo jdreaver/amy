@@ -98,26 +98,17 @@ normalizeExpr name (C.EApp (C.App func args retTy)) =
   normalizeName name func $ \funcVal -> do
     let retTy' = convertType retTy
     case funcVal of
-      (ANF.Lit lit) -> error $ "Encountered lit function application " ++ show lit
-      (ANF.Var ident) -> normalizeApp ident argVals retTy'
-normalizeExpr name (C.EParens expr) = normalizeExpr name expr
-
-normalizeApp
-  :: ANF.Var
-  -> [ANF.Val]
-  -> ANF.Type
-  -> ANFConvert ANF.Expr
-normalizeApp var argVals retTy =
-  case var of
-    ANF.VVal tyIdent@(ANF.Typed _ ident) ->
-      case Map.lookup (ANF.identId ident) primitiveFunctionsById of
-        -- Primitive operation
-        Just prim -> pure $ ANF.EPrimOp $ ANF.App prim argVals retTy
+      ANF.Lit lit -> error $ "Encountered lit function application " ++ show lit
+      ANF.Var (ANF.VVal tyIdent@(ANF.Typed _ ident)) ->
+        case Map.lookup (ANF.identId ident) primitiveFunctionsById of
+          -- Primitive operation
+          Just prim -> pure $ ANF.EPrimOp $ ANF.App prim argVals retTy'
+          -- Default, just a function call
+          Nothing -> pure $ ANF.EApp $ ANF.App tyIdent argVals retTy'
+      ANF.Var (ANF.VCons con) ->
         -- Default, just a function call
-        Nothing -> pure $ ANF.EApp $ ANF.App tyIdent argVals retTy
-    ANF.VCons con ->
-      -- Default, just a function call
-      pure $ ANF.ECons $ ANF.App con argVals retTy
+        pure $ ANF.ECons $ ANF.App con argVals retTy'
+normalizeExpr name (C.EParens expr) = normalizeExpr name expr
 
 normalizeName :: Text -> C.Expr -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 normalizeName _ (C.ELit lit) c = c $ ANF.Lit lit
