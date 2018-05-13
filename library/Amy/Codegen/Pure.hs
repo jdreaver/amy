@@ -105,6 +105,9 @@ codegenExpr expr = runBlockGen $ codegenExpr' (textToName "ret") expr
 
 codegenExpr' :: Name -> ANF.Expr -> BlockGen Operand
 codegenExpr' name' (ANF.EVal val) = do
+  -- If we get here that means the inliner probably didn't do its job very
+  -- well, and there is a primitive value being used as a top-level expression.
+  -- No worries, LLVM will most certainly remove these redundant instructions.
   op <- valOperand val
   bindOpToName name' op
   pure (LocalReference (operandType op) name')
