@@ -124,7 +124,6 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
 
   -- Generate the switch statement
   scrutineeOp <- valOperand scrutinee
-  bindOpToName (identToName bindingIdent) scrutineeOp
 
   -- Extract tag from scrutinee op if we have to
   (switchOp, mArgOp) <-
@@ -146,7 +145,8 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
       finalBlockName <- currentBlockName
       terminateBlock (Do $ Br endBlockName []) nextBlockName
       pure (LocalReference (operandType op) exprName, finalBlockName)
-    generateCaseDefaultBlock (CaseDefaultBlock expr _ nextBlockName) =
+    generateCaseDefaultBlock (CaseDefaultBlock expr _ nextBlockName) = do
+      bindOpToName (identToName bindingIdent) scrutineeOp
       generateBlockExpr expr nextBlockName
     generateCaseLiteralBlock (CaseLiteralBlock expr _ nextBlockName _ mBind) = do
       for_ mBind $ \(Typed ty ident) -> do

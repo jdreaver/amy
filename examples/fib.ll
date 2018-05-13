@@ -11,15 +11,15 @@ entry:
 
 define private i64 @fib(i64 %x) {
 entry:
-  %0 = alloca i64
-  store i64 %x, i64* %0
-  %c31 = load i64, i64* %0
   switch i64 %x, label %case.default.ret [
     i64 0, label %case.0.ret
     i64 1, label %case.1.ret
   ]
 
 case.default.ret:                                 ; preds = %entry
+  %0 = alloca i64
+  store i64 %x, i64* %0
+  %c31 = load i64, i64* %0
   %res34 = sub i64 %c31, 1
   %res35 = call i64 @fib(i64 %res34)
   %res36 = sub i64 %c31, 2
