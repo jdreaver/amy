@@ -126,6 +126,8 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
   scrutineeOp <- valOperand scrutinee
 
   -- Extract tag from scrutinee op if we have to
+  -- TODO: Should we extract the argument once here or extract it in every
+  -- block that needs it? I feel like extracting it here is a bit funny.
   (switchOp, mArgOp) <-
     case bindingTy of
       TaggedUnionType _ bits -> unpackConstructor scrutineeOp bits
