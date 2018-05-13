@@ -5,12 +5,15 @@ module Amy.ANF.Convert
   ) where
 
 import Data.Foldable (toList)
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 
 import Amy.ANF.AST as ANF
 import Amy.ANF.Monad
+import Amy.ANF.TypeRep
 import Amy.Core.AST as C
 import Amy.Prim
 
@@ -35,10 +38,10 @@ convertExtern :: C.Extern -> ANFConvert ANF.Extern
 convertExtern (C.Extern name ty) = ANF.Extern (convertIdent True name) <$> convertType ty
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANFConvert ANF.TypeDeclaration
-convertTypeDeclaration (C.TypeDeclaration tyName con) = do
-  tyName' <- convertTyConInfo tyName
+convertTypeDeclaration (C.TypeDeclaration tyConInfo con) = do
+  ty <- convertTyConInfo tyConInfo
   con' <- traverse convertDataConstructor con
-  pure $ ANF.TypeDeclaration tyName' con'
+  pure $ ANF.TypeDeclaration (C.tyConInfoText tyConInfo) ty con'
 
 convertDataConstructor :: C.DataConstructor -> ANFConvert ANF.DataConstructor
 convertDataConstructor (C.DataConstructor conName id' mTyArg tyCon span' index) = do
@@ -67,26 +70,53 @@ convertIdent' :: C.Ident -> ANFConvert ANF.Ident
 convertIdent' ident@(C.Ident name id') =
   ANF.Ident name id' <$> isIdentTopLevel ident
 
-convertScheme :: C.Scheme -> ANFConvert ANF.Scheme
-convertScheme (C.Forall vars ty) = ANF.Forall (convertTyVarInfo <$> vars) <$> convertType ty
-
 convertType :: C.Type -> ANFConvert ANF.Type
-convertType (C.TyCon name) = ANF.TyCon <$> convertTyConInfo name
-convertType (C.TyVar name) = pure $ ANF.TyVar (convertTyVarInfo name)
-convertType (C.TyFun ty1 ty2) = ANF.TyFun <$> convertType ty1 <*> convertType ty2
+convertType ty = go (typeToNonEmpty ty)
+ where
+  go :: NonEmpty C.Type -> ANFConvert ANF.Type
+  go (ty' :| []) =
+    case ty' of
+      C.TyCon info -> convertTyConInfo info
+      C.TyVar _ -> pure OpaquePointerType
+      C.TyFun{} -> mkFunctionType ty
+  go _ = mkFunctionType ty
 
-convertTyConInfo :: C.TyConInfo -> ANFConvert ANF.TyConInfo
-convertTyConInfo info@(C.TyConInfo name' id') =
-  ANF.TyConInfo name' id' <$> getTyConInfoTypeRep info
+convertTyConInfo :: C.TyConInfo -> ANFConvert ANF.Type
+convertTyConInfo info =
+  case maybePrimitiveType info of
+    Just prim -> pure prim
+    Nothing -> do
+      typeRep' <- getTyConInfoTypeRep info
+      case typeRep' of
+        EnumRep intBits -> pure $ EnumType intBits
+        TaggedUnionRep structName intBits -> pure $ TaggedUnionType structName intBits
+
+mkFunctionType :: C.Type -> ANFConvert ANF.Type
+mkFunctionType ty = do
+  args <- traverse convertType (NE.init ts)
+  returnType <- convertType $ NE.last ts
+  pure $ FuncType args returnType
+ where
+  ts = typeToNonEmpty ty
+
+typeToNonEmpty :: C.Type -> NonEmpty C.Type
+typeToNonEmpty (t1 `C.TyFun` t2) = NE.cons t1 (typeToNonEmpty t2)
+typeToNonEmpty ty = ty :| []
+
+maybePrimitiveType :: C.TyConInfo -> Maybe ANF.Type
+maybePrimitiveType (C.TyConInfo _ id')
+  | id' == intTyConId = Just PrimIntType
+  | id' == doubleTyConId = Just PrimDoubleType
+  | otherwise = Nothing
+ where
+  intTyConId = primTyConId intTyCon
+  doubleTyConId = primTyConId doubleTyCon
 
 convertTypedIdent :: C.Typed C.Ident -> ANFConvert (ANF.Typed ANF.Ident)
 convertTypedIdent (C.Typed ty arg) = do
   ty' <- convertType ty
   arg' <- convertIdent' arg
   pure $ ANF.Typed ty' arg'
-
-convertTyVarInfo :: C.TyVarInfo -> ANF.TyVarInfo
-convertTyVarInfo (C.TyVarInfo name' id') = ANF.TyVarInfo name' id'
 
 normalizeExpr
   :: Text -- ^ Base name for generated variables
@@ -130,8 +160,10 @@ normalizeName name (C.EVar var) c =
       ident' <- convertTypedIdent ident
       case ident' of
         -- Top-level values need to be first called as functions
-        (ANF.Typed ty@(ANF.TyCon _) (ANF.Ident _ _ True)) ->
-          mkNormalizeLet name (ANF.EApp $ ANF.App ident' [] ty) ty c
+        (ANF.Typed ty (ANF.Ident _ _ True)) ->
+          case ty of
+            FuncType{} -> c $ ANF.Var (ANF.VVal ident')
+            _ -> mkNormalizeLet name (ANF.EApp $ ANF.App ident' [] ty) ty c
         -- Not a top-level value, just return
         _ -> c $ ANF.Var (ANF.VVal ident')
     C.VCons (C.Typed ty cons) -> do
@@ -147,26 +179,25 @@ mkNormalizeLet :: Text -> ANF.Expr -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Exp
 mkNormalizeLet name expr exprType c = do
   newIdent <- freshIdent name
   body <- c $ ANF.Var (ANF.VVal $ ANF.Typed exprType newIdent)
-  pure $ ANF.ELet $ ANF.Let [ANF.LetBinding newIdent (ANF.Forall [] exprType) expr] body
+  pure $ ANF.ELet $ ANF.Let [ANF.LetBinding newIdent exprType expr] body
 
 normalizeBinding :: Maybe Text -> C.Binding -> ANFConvert ANF.Binding
-normalizeBinding mName (C.Binding ident@(C.Ident name _) scheme args retTy body) = do
+normalizeBinding mName (C.Binding ident@(C.Ident name _) _ args retTy body) = do
   -- If we are given a base name, then use it. Otherwise use the binding name
   -- as the base name for all sub expressions.
   let subName = fromMaybe name mName
   body' <- normalizeExpr subName body
   ident' <- convertIdent' ident
-  scheme' <- convertScheme scheme
   args' <- traverse convertTypedIdent args
   retTy' <- convertType retTy
-  pure $ ANF.Binding ident' scheme' args' retTy' body'
+  pure $ ANF.Binding ident' args' retTy' body'
 
 normalizeLetBinding :: C.Binding -> ANFConvert ANF.LetBinding
-normalizeLetBinding (C.Binding ident@(C.Ident name _) scheme [] _ body) = do
+normalizeLetBinding (C.Binding ident@(C.Ident name _) (C.Forall _ ty) [] _ body) = do
   body' <- normalizeExpr name body
+  ty' <- convertType ty
   ident' <- convertIdent' ident
-  scheme' <- convertScheme scheme
-  pure $ ANF.LetBinding ident' scheme' body'
+  pure $ ANF.LetBinding ident' ty' body'
 normalizeLetBinding bind@C.Binding{} =
   error $ "Encountered let binding with arguments. Functions not allowed in ANF. " ++ show bind
 

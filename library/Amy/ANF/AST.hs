@@ -20,17 +20,14 @@ module Amy.ANF.AST
 
   , Ident(..)
   , Type(..)
-  , TyConInfo(..)
-  , TyVarInfo(..)
-  , Scheme(..)
   , Typed(..)
 
   , module Amy.ASTCommon
   ) where
 
 import Data.Text (Text)
+import GHC.Word (Word32)
 
-import Amy.ANF.TypeRep
 import Amy.ASTCommon
 import Amy.Literal
 import Amy.Prim
@@ -45,7 +42,6 @@ data Module
 data Binding
   = Binding
   { bindingName :: !Ident
-  , bindingType :: !Scheme
   , bindingArgs :: ![Typed Ident]
   , bindingReturnType :: !Type
   , bindingBody :: !Expr
@@ -59,7 +55,8 @@ data Extern
 
 data TypeDeclaration
   = TypeDeclaration
-  { typeDeclarationTypeName :: !TyConInfo
+  { typeDeclarationTypeName :: !Text
+  , typeDeclarationType :: !Type
   , typeDeclarationConstructors :: ![DataConstructor]
   } deriving (Show, Eq)
 
@@ -67,8 +64,8 @@ data DataConstructor
   = DataConstructor
   { dataConstructorName :: !Text
   , dataConstructorId :: !Int
-  , dataConstructorArgument :: !(Maybe TyConInfo)
-  , dataConstructorType :: !TyConInfo
+  , dataConstructorArgument :: !(Maybe Type)
+  , dataConstructorType :: !Type
   , dataConstructorSpan :: !ConstructorSpan
   , dataConstructorIndex :: !ConstructorIndex
   } deriving (Show, Eq, Ord)
@@ -107,7 +104,7 @@ data Let
 data LetBinding
   = LetBinding
   { letBindingName :: !Ident
-  , letBindingType :: !Scheme
+  , letBindingType :: !Type
   , letBindingBody :: !Expr
   } deriving (Show, Eq)
 
@@ -154,29 +151,15 @@ data Ident
   } deriving (Show, Eq, Ord)
 
 data Type
-  = TyCon !TyConInfo
-  | TyVar !TyVarInfo
-  | TyFun !Type !Type
+  = PrimIntType
+  | PrimDoubleType
+  | PointerType !Type
+  | OpaquePointerType
+    -- ^ Used for polymorphic types
+  | FuncType ![Type] !Type
+  | EnumType !Word32
+  | TaggedUnionType !Text !Word32
   deriving (Show, Eq, Ord)
-
-infixr 0 `TyFun`
-
-data TyConInfo
-  = TyConInfo
-  { tyConInfoText :: !Text
-  , tyConInfoId :: !Int
-  , tyConInfoTypeRep :: !TypeRep
-  } deriving (Show, Eq, Ord)
-
-data TyVarInfo
-  = TyVarInfo
-  { tyVarInfoName :: !Text
-  , tyVarInfoId :: !Int
-  } deriving (Show, Eq, Ord)
-
-data Scheme
-  = Forall ![TyVarInfo] Type
-  deriving (Show, Eq)
 
 data Typed a
   = Typed

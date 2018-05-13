@@ -13,18 +13,7 @@ import Amy.Pretty
 import Amy.Prim
 
 mkPrettyType :: Type -> PrettyType ann
-mkPrettyType (TyCon name) = PTyDoc $ prettyTyConInfo name
-mkPrettyType (TyVar name) = PTyDoc $ prettyTyVarInfo name
-mkPrettyType (TyFun ty1 ty2) = PTyFun (mkPrettyType ty1) (mkPrettyType ty2)
-
-prettyTyConInfo :: TyConInfo -> Doc ann
-prettyTyConInfo (TyConInfo name _ _) = pretty name
-
-prettyTyVarInfo :: TyVarInfo -> Doc ann
-prettyTyVarInfo (TyVarInfo name _) = pretty name
-
-mkPrettyScheme :: Scheme -> PrettyScheme ann
-mkPrettyScheme (Forall vars ty) = PForall (prettyTyVarInfo <$> vars) (mkPrettyType ty)
+mkPrettyType = PTyDoc . pretty . show
 
 prettyModule :: Module -> Doc ann
 prettyModule (Module bindings externs typeDeclarations) =
@@ -38,15 +27,15 @@ prettyExtern' (Extern name ty) =
   prettyExtern (prettyIdent name) (mkPrettyType ty)
 
 prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
-prettyTypeDeclaration' (TypeDeclaration tyName cons) =
-   prettyTypeDeclaration (prettyTyConInfo tyName) (prettyConstructor <$> cons)
+prettyTypeDeclaration' (TypeDeclaration tyName _ cons) =
+   prettyTypeDeclaration (pretty tyName) (prettyConstructor <$> cons)
  where
   prettyConstructor (DataConstructor conName _ mArg _ _ _) =
-    prettyDataConstructor (pretty conName) (prettyTyConInfo <$> mArg)
+    prettyDataConstructor (pretty conName) (prettyType . mkPrettyType <$> mArg)
 
 prettyBinding' :: Binding -> Doc ann
-prettyBinding' (Binding ident scheme args _ body) =
-  prettyBindingScheme (prettyIdent ident) (mkPrettyScheme scheme) <>
+prettyBinding' (Binding ident args retTy body) =
+  prettyBindingType (prettyIdent ident) (mkPrettyType $ FuncType (typedType <$> args) retTy) <>
   hardline <>
   prettyBinding (prettyIdent ident) (prettyIdent . typedValue <$> args) (prettyExpr body)
 
@@ -83,8 +72,8 @@ prettyExpr (EPrimOp (App (PrimitiveFunction _ name _ _) args _)) =
   sep $ pretty name : (prettyVal <$> args)
 
 prettyLetBinding :: LetBinding -> Doc ann
-prettyLetBinding (LetBinding ident scheme body) =
-  prettyBindingScheme (prettyIdent ident) (mkPrettyScheme scheme) <>
+prettyLetBinding (LetBinding ident ty body) =
+  prettyBindingType (prettyIdent ident) (mkPrettyType ty) <>
   hardline <>
   prettyBinding (prettyIdent ident) [] (prettyExpr body)
 

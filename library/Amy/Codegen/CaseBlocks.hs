@@ -12,7 +12,6 @@ import qualified LLVM.AST.Constant as C
 import LLVM.AST.Float as F
 
 import Amy.ANF.AST as ANF
-import Amy.ANF.TypeRep
 import Amy.Literal
 
 data CaseBlocks
@@ -116,8 +115,9 @@ literalConstant lit =
 
 constructorConstant :: DataConstructor -> C.Constant
 constructorConstant con =
-  case tyConInfoTypeRep (dataConstructorType con) of
-    EnumRep intBits -> C.Int intBits (fromIntegral i)
-    TaggedUnionRep _ intBits -> C.Int intBits (fromIntegral i)
+  case dataConstructorType con of
+    EnumType intBits -> C.Int intBits (fromIntegral i)
+    TaggedUnionType _ intBits -> C.Int intBits (fromIntegral i)
+    _ -> error $ "Invalid constructor type " ++ show con
  where
   (ConstructorIndex i) = dataConstructorIndex con

@@ -7,10 +7,10 @@ module Amy.Codegen.Pure
   ) where
 
 import Data.Foldable (for_)
-import Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Text (Text)
 import Data.Traversable (for)
+import GHC.Word (Word32)
 import LLVM.AST as LLVM
 import LLVM.AST.AddrSpace
 import qualified LLVM.AST.CallingConvention as CC
@@ -30,7 +30,7 @@ codegenModule :: ANF.Module -> LLVM.Module
 codegenModule (ANF.Module bindings externs typeDeclarations) =
   let
     topLevelTypes =
-      ((\(ANF.Binding name' (ANF.Forall _ ty) _ _ _) -> (name', ty)) <$> bindings)
+      ((\(ANF.Binding name' argTys retTy _) -> (name', FuncType (typedType <$> argTys) retTy)) <$> bindings)
       ++ ((\(ANF.Extern name' ty) -> (name', ty)) <$> externs)
     definitions = runCodeGen topLevelTypes $ do
       let
@@ -47,23 +47,25 @@ codegenModule (ANF.Module bindings externs typeDeclarations) =
 codegenExtern :: ANF.Extern -> Definition
 codegenExtern extern =
   let
-    (paramTypes, returnType') = argAndReturnTypes (ANF.externType extern)
+    (paramTypes, retTy) =
+      case ANF.externType extern of
+        FuncType argTys ret -> (argTys, ret)
+        _ -> error $ "Found extern with non function type " ++ show extern
     mkParam ty = Parameter (llvmType ty) (UnName 0) []
     params = mkParam <$> paramTypes
-    retTy = llvmType returnType'
+    retTy' = llvmType retTy
   in
     GlobalDefinition
     functionDefaults
     { name = identToName $ ANF.externName extern
     , parameters = (params, False)
-    , LLVM.returnType = retTy
+    , LLVM.returnType = retTy'
     }
 
 codegenTypeDeclaration :: ANF.TypeDeclaration -> Maybe Definition
-codegenTypeDeclaration (ANF.TypeDeclaration tyCon _) =
-  case tyConInfoTypeRep tyCon of
-    EnumRep _ -> Nothing
-    TaggedUnionRep name' intBits ->
+codegenTypeDeclaration (ANF.TypeDeclaration _ ty _) =
+  case ty of
+    TaggedUnionType name' intBits ->
       Just $
         TypeDefinition
         (textToName name')
@@ -71,9 +73,10 @@ codegenTypeDeclaration (ANF.TypeDeclaration tyCon _) =
           StructureType
           False
           [ IntegerType intBits
-          , PointerType (IntegerType 64) (AddrSpace 0)
+          , LLVM.PointerType (IntegerType 64) (AddrSpace 0)
           ]
         )
+    _ -> Nothing
 
 codegenTopLevelBinding :: ANF.Binding -> CodeGen Definition
 codegenTopLevelBinding binding = do
@@ -94,11 +97,6 @@ codegenTopLevelBinding binding = do
           then L.External
           else L.Private
     }
-
-argAndReturnTypes :: ANF.Type -> ([ANF.Type], ANF.Type)
-argAndReturnTypes ty = (NE.init tyNE, NE.last tyNE)
- where
-  tyNE = typeToNonEmpty ty
 
 codegenExpr :: ANF.Expr -> CodeGen [BasicBlock]
 codegenExpr expr = runBlockGen $ codegenExpr' expr
@@ -123,7 +121,7 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = 
   -- Extract tag from scrutinee op if we have to
   (switchOp, mArgOp) <-
     case bindingTy of
-      TyCon tyCon -> unpackConstructor scrutineeOp tyCon
+      TaggedUnionType _ bits -> unpackConstructor scrutineeOp bits
       _ -> pure (scrutineeOp, Nothing)
 
   let
@@ -165,7 +163,10 @@ codegenExpr' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = 
   ty <- fromMaybe originalTy <$> topLevelType ident
   funcOperand <- valOperand (ANF.Var $ ANF.VVal $ ANF.Typed ty ident)
   let
-    (argTys', returnTy') = argAndReturnTypes ty
+    (argTys', returnTy') =
+      case ty of
+        FuncType argTys ret -> (argTys, ret)
+        _ -> error $ "Tried to EApp a non-function type " ++ show ty
   -- Convert arguments to pointers if we have to
   argOps <- for (zip args' argTys') $ \(arg, argTy) -> do
     originalOp <- valOperand arg
@@ -187,7 +188,7 @@ codegenExpr' (ANF.ECons app@(ANF.App (ANF.Typed _ (DataConInfo _ con)) args' _))
         [] -> Nothing
         [x] -> Just x
         _ -> error $ "Found too many arguments in ECons " ++ show app
-  packConstructor con mArg
+  maybePackConstructor con mArg
 codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   opName <- freshUnName
   argOps <- traverse valOperand args'
@@ -204,75 +205,78 @@ valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
     ident' = identToName ident
   in
     case ident of
-      (ANF.Ident _ _ True) -> do
-        let funcTy = mkFunctionType ty
-        pure $ ConstantOperand $ C.GlobalReference funcTy ident'
+      (ANF.Ident _ _ True) ->
+        pure $ ConstantOperand $ C.GlobalReference (llvmType ty) ident'
       _ -> do
         let ty' = llvmType ty
         fromMaybe (LocalReference ty' ident') <$> lookupSymbol ident
-valOperand (ANF.Var (ANF.VCons (ANF.Typed _ (DataConInfo _ con)))) = packConstructor con Nothing
+valOperand (ANF.Var (ANF.VCons (ANF.Typed _ (DataConInfo _ con)))) = maybePackConstructor con Nothing
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
 
-packConstructor :: DataConstructor -> Maybe ANF.Val -> BlockGen Operand
-packConstructor con mArg = do
-  let (ConstructorIndex intIndex) = dataConstructorIndex con
-  case tyConInfoTypeRep (dataConstructorType con) of
-    EnumRep intBits -> pure $ ConstantOperand $ C.Int intBits (fromIntegral intIndex)
-    TaggedUnionRep structName intBits -> do
-      let structName' = textToName structName
+maybePackConstructor :: DataConstructor -> Maybe ANF.Val -> BlockGen Operand
+maybePackConstructor con mArg =
+  case dataConstructorType con of
+    EnumType intBits -> do
+      let (ConstructorIndex intIndex) = dataConstructorIndex con
+      pure $ ConstantOperand $ C.Int intBits (fromIntegral intIndex)
+    TaggedUnionType structName intBits -> packConstructor con mArg structName intBits
+    _ -> error $ "TODO: maybePackConstructor " ++ show con
 
-      -- Allocate struct
-      allocName <- freshUnName
-      let allocOp = LocalReference (PointerType (NamedTypeReference structName') (AddrSpace 0)) allocName
-      addInstruction $ allocName := Alloca (NamedTypeReference structName') Nothing 0 []
+packConstructor :: DataConstructor -> Maybe ANF.Val -> Text -> Word32 -> BlockGen Operand
+packConstructor con mArg structName intBits = do
+  let
+    (ConstructorIndex intIndex) = dataConstructorIndex con
+    structName' = textToName structName
 
-      -- Set the tag
-      tagPtrName <- freshUnName
-      let
-        tagPtrOp = LocalReference (PointerType (IntegerType 32) (AddrSpace 0)) tagPtrName
-        tagOp = ConstantOperand $ C.Int intBits (fromIntegral intIndex)
-      addInstruction $ tagPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex 0] []
-      addInstruction $ Do $ Store False tagPtrOp tagOp Nothing 0 []
+  -- Allocate struct
+  allocName <- freshUnName
+  let allocOp = LocalReference (LLVM.PointerType (NamedTypeReference structName') (AddrSpace 0)) allocName
+  addInstruction $ allocName := Alloca (NamedTypeReference structName') Nothing 0 []
 
-      -- Set data
-      for_ mArg $ \arg -> do
-        argOp <- valOperand arg
-        argOp' <- maybeConvertPointer argOp (PointerType (IntegerType 64) (AddrSpace 0))
-        dataPtrName <- freshUnName
-        let dataPtrOp = LocalReference (PointerType (PointerType (IntegerType 64) (AddrSpace 0)) (AddrSpace 0)) dataPtrName
-        addInstruction $ dataPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex 1] []
-        addInstruction $ Do $ Store False dataPtrOp argOp' Nothing 0 []
+  -- Set the tag
+  tagPtrName <- freshUnName
+  let
+    tagPtrOp = LocalReference (LLVM.PointerType (IntegerType 32) (AddrSpace 0)) tagPtrName
+    tagOp = ConstantOperand $ C.Int intBits (fromIntegral intIndex)
+  addInstruction $ tagPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex 0] []
+  addInstruction $ Do $ Store False tagPtrOp tagOp Nothing 0 []
 
-      -- Return pointer
-      pure allocOp
+  -- Set data
+  for_ mArg $ \arg -> do
+    argOp <- valOperand arg
+    argOp' <- maybeConvertPointer argOp (LLVM.PointerType (IntegerType 64) (AddrSpace 0))
+    dataPtrName <- freshUnName
+    let dataPtrOp = LocalReference (LLVM.PointerType (LLVM.PointerType (IntegerType 64) (AddrSpace 0)) (AddrSpace 0)) dataPtrName
+    addInstruction $ dataPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex 1] []
+    addInstruction $ Do $ Store False dataPtrOp argOp' Nothing 0 []
 
-unpackConstructor :: Operand -> TyConInfo -> BlockGen (Operand, Maybe Operand)
-unpackConstructor conOp tyCon =
-  case tyConInfoTypeRep tyCon of
-    EnumRep _ -> pure (conOp, Nothing)
-    TaggedUnionRep _ bits -> do
-      -- Unpack tag
-      tagPtrName <- freshUnName
-      tagOpName <- freshUnName
-      let
-        tagPtrOp = LocalReference (PointerType (IntegerType 32) (AddrSpace 0)) tagPtrName
-        tagOp = LocalReference (IntegerType bits) tagOpName
-      addInstruction $ tagPtrName := GetElementPtr False conOp [gepIndex 0, gepIndex 0] []
-      addInstruction $ tagOpName := Load False tagPtrOp Nothing 0 []
+  -- Return pointer
+  pure allocOp
 
-      -- Compute pointer to tagged union value
-      dataPtrName <- freshUnName
-      let
-        dataPtrOp = LocalReference (PointerType (PointerType (IntegerType 64) (AddrSpace 0)) (AddrSpace 0)) dataPtrName
-      addInstruction $ dataPtrName := GetElementPtr False conOp [gepIndex 0, gepIndex 1] []
+unpackConstructor :: Operand -> Word32 -> BlockGen (Operand, Maybe Operand)
+unpackConstructor conOp bits = do
+  -- Unpack tag
+  tagPtrName <- freshUnName
+  tagOpName <- freshUnName
+  let
+    tagPtrOp = LocalReference (LLVM.PointerType (IntegerType 32) (AddrSpace 0)) tagPtrName
+    tagOp = LocalReference (IntegerType bits) tagOpName
+  addInstruction $ tagPtrName := GetElementPtr False conOp [gepIndex 0, gepIndex 0] []
+  addInstruction $ tagOpName := Load False tagPtrOp Nothing 0 []
 
-      -- Load value from pointer
-      dataName <- freshUnName
-      let
-        dataOp = LocalReference (PointerType (IntegerType 64) (AddrSpace 0)) dataName
-      addInstruction $ dataName := Load False dataPtrOp Nothing 0 []
+  -- Compute pointer to tagged union value
+  dataPtrName <- freshUnName
+  let
+    dataPtrOp = LocalReference (LLVM.PointerType (LLVM.PointerType (IntegerType 64) (AddrSpace 0)) (AddrSpace 0)) dataPtrName
+  addInstruction $ dataPtrName := GetElementPtr False conOp [gepIndex 0, gepIndex 1] []
 
-      pure (tagOp, Just dataOp)
+  -- Load value from pointer
+  dataName <- freshUnName
+  let
+    dataOp = LocalReference (LLVM.PointerType (IntegerType 64) (AddrSpace 0)) dataName
+  addInstruction $ dataName := Load False dataPtrOp Nothing 0 []
+
+  pure (tagOp, Just dataOp)
 
 primitiveFunctionInstruction
   :: PrimitiveFunction
@@ -300,47 +304,18 @@ primitiveFunctionInstruction (PrimitiveFunction primFuncName _ _ _) argumentOper
         PrimDoubleToInt -> FPToUI op (IntegerType 64) []
   in instruction
 
-typeToNonEmpty :: ANF.Type -> NonEmpty ANF.Type
-typeToNonEmpty (t1 `ANF.TyFun` t2) = NE.cons t1 (typeToNonEmpty t2)
-typeToNonEmpty ty = ty :| []
-
--- TODO: Add tests for this
 llvmType :: ANF.Type -> LLVM.Type
-llvmType ty = go (typeToNonEmpty ty)
- where
-  go :: NonEmpty ANF.Type -> LLVM.Type
-  go (ty' :| []) =
-    case ty' of
-      ANF.TyCon tyCon ->
-        case llvmPrimitiveType tyCon of
-          Just prim -> prim
-          Nothing ->
-            case tyConInfoTypeRep tyCon of
-              EnumRep intBits -> IntegerType intBits
-              TaggedUnionRep structName _ ->
-                PointerType (NamedTypeReference (textToName structName)) (AddrSpace 0)
-      ANF.TyVar _ -> PointerType (IntegerType 64) (AddrSpace 0)
-      ANF.TyFun{} -> mkFunctionType ty
-  go _ = mkFunctionType ty
-
--- | Convert from an Amy primitive type to an LLVM type
-llvmPrimitiveType :: TyConInfo -> Maybe LLVM.Type
-llvmPrimitiveType (TyConInfo _ id' _)
-  | id' == intTyConId = Just (IntegerType 64)
-  | id' == doubleTyConId = Just (FloatingPointType DoubleFP)
-  | otherwise = Nothing
- where
-  intTyConId = primTyConId intTyCon
-  doubleTyConId = primTyConId doubleTyCon
-
-mkFunctionType :: ANF.Type -> LLVM.Type
-mkFunctionType ty =
-  PointerType
+llvmType PrimIntType = IntegerType 64
+llvmType PrimDoubleType = FloatingPointType DoubleFP
+llvmType (ANF.PointerType ty) = LLVM.PointerType (llvmType ty) (AddrSpace 0)
+llvmType OpaquePointerType = LLVM.PointerType (IntegerType 64) (AddrSpace 0)
+llvmType (FuncType argTys retTy) =
+  LLVM.PointerType
   FunctionType
-  { resultType = llvmType $ NE.last ts
-  , argumentTypes = llvmType <$> NE.init ts
+  { resultType = llvmType retTy
+  , argumentTypes = llvmType <$> argTys
   , isVarArg = False
   }
   (AddrSpace 0)
- where
-  ts = typeToNonEmpty ty
+llvmType (EnumType intBits) = IntegerType intBits
+llvmType (TaggedUnionType structName _) = LLVM.PointerType (NamedTypeReference (textToName structName)) (AddrSpace 0)
