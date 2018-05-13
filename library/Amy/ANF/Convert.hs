@@ -13,7 +13,6 @@ import Data.Text (Text)
 
 import Amy.ANF.AST as ANF
 import Amy.ANF.Monad
-import Amy.ANF.TypeRep
 import Amy.Core.AST as C
 import Amy.Prim
 
@@ -39,14 +38,14 @@ convertExtern (C.Extern name ty) = ANF.Extern (convertIdent True name) <$> conve
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANFConvert ANF.TypeDeclaration
 convertTypeDeclaration (C.TypeDeclaration tyConInfo con) = do
-  ty <- convertTyConInfo tyConInfo
+  ty <- getTyConInfoType tyConInfo
   con' <- traverse convertDataConstructor con
   pure $ ANF.TypeDeclaration (C.tyConInfoText tyConInfo) ty con'
 
 convertDataConstructor :: C.DataConstructor -> ANFConvert ANF.DataConstructor
 convertDataConstructor (C.DataConstructor conName id' mTyArg tyCon span' index) = do
-  mTyArg' <- traverse convertTyConInfo mTyArg
-  tyCon' <- convertTyConInfo tyCon
+  mTyArg' <- traverse getTyConInfoType mTyArg
+  tyCon' <- getTyConInfoType tyCon
   pure
     ANF.DataConstructor
     { ANF.dataConstructorName = conName
@@ -76,20 +75,10 @@ convertType ty = go (typeToNonEmpty ty)
   go :: NonEmpty C.Type -> ANFConvert ANF.Type
   go (ty' :| []) =
     case ty' of
-      C.TyCon info -> convertTyConInfo info
+      C.TyCon info -> getTyConInfoType info
       C.TyVar _ -> pure OpaquePointerType
       C.TyFun{} -> mkFunctionType ty
   go _ = mkFunctionType ty
-
-convertTyConInfo :: C.TyConInfo -> ANFConvert ANF.Type
-convertTyConInfo info =
-  case maybePrimitiveType info of
-    Just prim -> pure prim
-    Nothing -> do
-      typeRep' <- getTyConInfoTypeRep info
-      case typeRep' of
-        EnumRep intBits -> pure $ EnumType intBits
-        TaggedUnionRep structName intBits -> pure $ TaggedUnionType structName intBits
 
 mkFunctionType :: C.Type -> ANFConvert ANF.Type
 mkFunctionType ty = do
@@ -102,15 +91,6 @@ mkFunctionType ty = do
 typeToNonEmpty :: C.Type -> NonEmpty C.Type
 typeToNonEmpty (t1 `C.TyFun` t2) = NE.cons t1 (typeToNonEmpty t2)
 typeToNonEmpty ty = ty :| []
-
-maybePrimitiveType :: C.TyConInfo -> Maybe ANF.Type
-maybePrimitiveType (C.TyConInfo _ id')
-  | id' == intTyConId = Just PrimIntType
-  | id' == doubleTyConId = Just PrimDoubleType
-  | otherwise = Nothing
- where
-  intTyConId = primTyConId intTyCon
-  doubleTyConId = primTyConId doubleTyCon
 
 convertTypedIdent :: C.Typed C.Ident -> ANFConvert (ANF.Typed ANF.Ident)
 convertTypedIdent (C.Typed ty arg) = do

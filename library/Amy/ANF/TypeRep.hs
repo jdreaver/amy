@@ -1,15 +1,16 @@
 {-# LANGUAGE MultiWayIf #-}
 
 module Amy.ANF.TypeRep
-  ( TypeRep(..)
-  , typeRep
+  ( typeRep
   ) where
 
 import Data.Maybe (isNothing)
 import Data.Text (Text)
 import GHC.Word (Word32)
 
+import Amy.ANF.AST as ANF
 import Amy.Core.AST as C
+import Amy.Prim
 
 -- | Describes how an Amy type is represented in LLVM.
 data TypeRep
@@ -21,14 +22,17 @@ data TypeRep
   deriving (Show, Eq, Ord)
 
 -- | Decide how we are going to compile a type declaration.
-typeRep :: TypeDeclaration -> TypeRep
-typeRep (TypeDeclaration tyName constructors) =
-  -- Check if we can do an enum. This is when all constructors have no
-  -- arguments.
-  if all (isNothing . dataConstructorArgument) constructors
-  then EnumRep wordSize
-  -- Can't do an enum. We'll have to use tagged pairs.
-  else TaggedUnionRep (tyConInfoText tyName) wordSize
+typeRep :: C.TypeDeclaration -> ANF.Type
+typeRep (C.TypeDeclaration tyName constructors) =
+  case maybePrimitiveType tyName of
+    Just prim -> prim
+    Nothing ->
+      -- Check if we can do an enum. This is when all constructors have no
+      -- arguments.
+      if all (isNothing . C.dataConstructorArgument) constructors
+      then EnumType wordSize
+      -- Can't do an enum. We'll have to use tagged pairs.
+      else TaggedUnionType (tyConInfoText tyName) wordSize
  where
   -- Pick a proper integer size
   wordSize :: Word32
@@ -36,3 +40,12 @@ typeRep (TypeDeclaration tyName constructors) =
    if | length constructors <= 2 -> 1
       | length constructors < (2 :: Int) ^ (8 :: Int) -> 8
       | otherwise -> 32
+
+maybePrimitiveType :: C.TyConInfo -> Maybe ANF.Type
+maybePrimitiveType (C.TyConInfo _ id')
+  | id' == intTyConId = Just PrimIntType
+  | id' == doubleTyConId = Just PrimDoubleType
+  | otherwise = Nothing
+ where
+  intTyConId = primTyConId intTyCon
+  doubleTyConId = primTyConId doubleTyCon
