@@ -170,12 +170,6 @@ normalizeName name expr c = do
   exprType <- convertType $ expressionType expr
   mkNormalizeLet name expr' exprType c
 
--- normalizeDataCon :: C.Typed C.DataConInfo -> ANF.Expr
--- normalizeDataCon (C.Typed ty info) = do
---   con' <- convertDataConInfo con
---   ty' <- convertType ty
---   mkNormalizeLet name (ANF.ECons $ ANF.App (ANF.Typed ty' con') [] ty') ty' c
-
 mkNormalizeLet :: Text -> ANF.Expr -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 mkNormalizeLet name expr exprType c = do
   newIdent <- freshIdent name
