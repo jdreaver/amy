@@ -23,12 +23,12 @@ entry:
   ]
 
 case.default.ret:                                 ; preds = %entry
-  %res34 = sub i64 %x, 1
+  %res34 = sub i64 %c31, 1
   %1 = call i64 @fib(i64 %res34)
   %2 = alloca i64
   store i64 %1, i64* %2
   %res35 = load i64, i64* %2
-  %res36 = sub i64 %x, 2
+  %res36 = sub i64 %c31, 2
   %3 = call i64 @fib(i64 %res36)
   %4 = alloca i64
   store i64 %3, i64* %4
