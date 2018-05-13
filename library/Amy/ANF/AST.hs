@@ -16,6 +16,7 @@ module Amy.ANF.AST
   , Pattern(..)
   , PatCons(..)
   , App(..)
+  , ConApp(..)
 
   , Ident(..)
   , Type(..)
@@ -78,6 +79,7 @@ data DataConInfo
 data Val
   = Var !(Typed Ident)
   | Lit !Literal
+  | ConEnum !Word32 !DataConInfo
   deriving (Show, Eq)
 
 data Expr
@@ -85,7 +87,7 @@ data Expr
   | ELetVal !LetVal
   | ECase !Case
   | EApp !(App (Typed Ident))
-  | ECons !(App (Typed DataConInfo))
+  | EConApp !ConApp
   | EPrimOp !(App PrimitiveFunction)
   deriving (Show, Eq)
 
@@ -134,6 +136,14 @@ data App f
   { appFunction :: !f
   , appArgs :: ![Val]
   , appReturnType :: !Type
+  } deriving (Show, Eq)
+
+data ConApp
+  = ConApp
+  { conAppCon :: !DataConInfo
+  , conAppArg :: !(Maybe Val)
+  , conAppTaggedUnionName :: !Text
+  , conAppTaggedUnionTagBits :: !Word32
   } deriving (Show, Eq)
 
 -- | An identifier from source code

@@ -191,14 +191,8 @@ codegenExpr' name' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnT
       callName <- freshUnName
       addInstruction $ callName := callInstruction
       maybeConvertPointer (Just name') (LocalReference returnTyLLVM' callName) returnTyLLVM
-codegenExpr' name' (ANF.ECons app@(ANF.App (ANF.Typed _ (DataConInfo _ con)) args' _)) = do
-  let
-    mArg =
-      case args' of
-        [] -> Nothing
-        [x] -> Just x
-        _ -> error $ "Found too many arguments in ECons " ++ show app
-  maybePackConstructor name' con mArg
+codegenExpr' name' (ANF.EConApp (ANF.ConApp (DataConInfo _ con) mArg structName intBits)) =
+  packConstructor name' con mArg structName intBits
 codegenExpr' name' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   argOps <- traverse valOperand args'
   addInstruction $ name' := primitiveFunctionInstruction prim argOps
@@ -220,18 +214,10 @@ valOperand (ANF.Var (ANF.Typed ty ident)) =
         let ty' = llvmType ty
         pure $ LocalReference ty' ident'
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
-
-maybePackConstructor :: Name -> DataConstructor -> Maybe ANF.Val -> BlockGen Operand
-maybePackConstructor name' con mArg =
-  case dataConstructorType con of
-    EnumType intBits -> do
-      let
-        (ConstructorIndex intIndex) = dataConstructorIndex con
-        op = ConstantOperand $ C.Int intBits (fromIntegral intIndex)
-      bindOpToName name' op
-      pure op
-    TaggedUnionType structName intBits -> packConstructor name' con mArg structName intBits
-    _ -> error $ "TODO: maybePackConstructor " ++ show con
+valOperand (ANF.ConEnum intBits (DataConInfo _ con)) =
+  let
+    (ConstructorIndex intIndex) = dataConstructorIndex con
+  in pure $ ConstantOperand $ C.Int intBits (fromIntegral intIndex)
 
 packConstructor :: Name -> DataConstructor -> Maybe ANF.Val -> Text -> Word32 -> BlockGen Operand
 packConstructor name' con mArg structName intBits = do

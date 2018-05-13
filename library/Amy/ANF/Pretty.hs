@@ -6,6 +6,7 @@ module Amy.ANF.Pretty
   ) where
 
 import Data.Foldable (toList)
+import Data.Maybe (maybeToList)
 
 import Amy.ANF.AST
 import Amy.Literal
@@ -45,6 +46,7 @@ prettyIdent (Ident name _ _) = pretty name
 prettyVal :: Val -> Doc ann
 prettyVal (Var (Typed _ ident)) = prettyIdent ident
 prettyVal (Lit lit) = pretty $ showLiteral lit
+prettyVal (ConEnum _ con) = pretty (dataConstructorName $ dataConInfoCons con)
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (EVal val) = prettyVal val
@@ -63,8 +65,8 @@ prettyExpr (ELetVal (LetVal bindings body)) =
   prettyLetVal (prettyLetValBinding <$> bindings) (prettyExpr body)
 prettyExpr (EApp (App (Typed _ ident) args _)) =
   "$call" <+> prettyIdent ident <+> list (prettyVal <$> args)
-prettyExpr (ECons (App (Typed _ info) args _)) =
-  "$mkCon" <+> pretty (dataConstructorName $ dataConInfoCons info) <+> list (prettyVal <$> args)
+prettyExpr (EConApp (ConApp info mArg _ _)) =
+  "$mkCon" <+> pretty (dataConstructorName $ dataConInfoCons info) <+> list (prettyVal <$> maybeToList mArg)
 prettyExpr (EPrimOp (App (PrimitiveFunction _ name _ _) args _)) =
   "$primOp" <+> pretty name <+> list (prettyVal <$> args)
 

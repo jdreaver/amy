@@ -119,14 +119,22 @@ normalizeExpr name (C.EApp (C.App func args retTy)) =
   normalizeList (normalizeName name) (toList args) $ \argVals -> do
   retTy' <- convertType retTy
   case func of
-    C.EVar (C.VCons (C.Typed ty con)) -> do
+    C.EVar (C.VCons (C.Typed _ con)) -> do
       con' <- convertDataConInfo con
-      ty' <- convertType ty
-      pure $ ANF.ECons $ ANF.App (ANF.Typed ty' con') argVals retTy'
+      let
+        mArg =
+          case argVals of
+            [] -> Nothing
+            [x] -> Just x
+            _ -> error $ "Tried to create ConApp node, but incorrect number of args " ++ show func
+      case retTy' of
+        TaggedUnionType structName intBits -> pure $ ANF.EConApp $ ANF.ConApp con' mArg structName intBits
+        _ -> error $ "Invalid type for ConApp " ++ show retTy'
     _ ->
       normalizeName name func $ \funcVal ->
         case funcVal of
           ANF.Lit lit -> error $ "Encountered lit function application " ++ show lit
+          ANF.ConEnum _ con -> error $ "Encountered con enum function application " ++ show con
           ANF.Var (tyIdent@(ANF.Typed _ ident)) ->
             case Map.lookup (ANF.identId ident) primitiveFunctionsById of
               -- Primitive operation
@@ -152,11 +160,21 @@ normalizeName name (C.EVar var) c =
     C.VCons (C.Typed ty con) -> do
       con' <- convertDataConInfo con
       ty' <- convertType ty
-      mkNormalizeLet name (ANF.ECons $ ANF.App (ANF.Typed ty' con') [] ty') ty' c
+      case ty' of
+        EnumType intBits -> c $ ConEnum intBits con'
+        TaggedUnionType structName intBits ->
+          mkNormalizeLet name (ANF.EConApp $ ANF.ConApp con' Nothing structName intBits) ty' c
+        _ -> error $ "Invalid type for constructor in normalizeName " ++ show ty'
 normalizeName name expr c = do
   expr' <- normalizeExpr name expr
   exprType <- convertType $ expressionType expr
   mkNormalizeLet name expr' exprType c
+
+-- normalizeDataCon :: C.Typed C.DataConInfo -> ANF.Expr
+-- normalizeDataCon (C.Typed ty info) = do
+--   con' <- convertDataConInfo con
+--   ty' <- convertType ty
+--   mkNormalizeLet name (ANF.ECons $ ANF.App (ANF.Typed ty' con') [] ty') ty' c
 
 mkNormalizeLet :: Text -> ANF.Expr -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 mkNormalizeLet name expr exprType c = do

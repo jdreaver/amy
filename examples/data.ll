@@ -17,41 +17,38 @@ entry:
   store i64* %2, i64** %3
   %4 = alloca i8
   store i8 1, i8* %4
-  %y52 = load i8, i8* %4
-  %5 = alloca i8
-  store i8 %y52, i8* %5
-  %y = load i8, i8* %5
-  %6 = getelementptr %MySum, %MySum* %x, i32 0, i32 0
-  %7 = load i8, i8* %6
-  %8 = getelementptr %MySum, %MySum* %x, i32 0, i32 1
-  %9 = load i64*, i64** %8
-  switch i8 %7, label %case.0.ret [
+  %y = load i8, i8* %4
+  %5 = getelementptr %MySum, %MySum* %x, i32 0, i32 0
+  %6 = load i8, i8* %5
+  %7 = getelementptr %MySum, %MySum* %x, i32 0, i32 1
+  %8 = load i64*, i64** %7
+  switch i8 %6, label %case.0.ret [
     i8 0, label %case.0.ret
     i8 1, label %case.1.ret
     i8 2, label %case.2.ret
   ]
 
 case.0.ret:                                       ; preds = %entry, %entry
-  %_u47 = load i64, i64* %9
-  %10 = alloca i64
-  store i64 0, i64* %10
-  %11 = load i64, i64* %10
+  %_u47 = load i64, i64* %8
+  %9 = alloca i64
+  store i64 0, i64* %9
+  %10 = load i64, i64* %9
   br label %case.end.ret
 
 case.1.ret:                                       ; preds = %entry
-  %12 = bitcast i64* %9 to double*
-  %_u48 = load double, double* %12
-  %13 = call i64 @f(double %_u48, i8 %y)
+  %11 = bitcast i64* %8 to double*
+  %_u48 = load double, double* %11
+  %12 = call i64 @f(double %_u48, i8 %y)
   br label %case.end.ret
 
 case.2.ret:                                       ; preds = %entry
-  %14 = alloca i64
-  store i64 1, i64* %14
-  %15 = load i64, i64* %14
+  %13 = alloca i64
+  store i64 1, i64* %13
+  %14 = load i64, i64* %13
   br label %case.end.ret
 
 case.end.ret:                                     ; preds = %case.2.ret, %case.1.ret, %case.0.ret
-  %ret = phi i64 [ %11, %case.0.ret ], [ %13, %case.1.ret ], [ %15, %case.2.ret ]
+  %ret = phi i64 [ %10, %case.0.ret ], [ %12, %case.1.ret ], [ %14, %case.2.ret ]
   ret i64 %ret
 }
 
