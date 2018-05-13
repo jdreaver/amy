@@ -3,6 +3,7 @@
 module Amy.Codegen.TypeConversion
   ( maybeConvertPointer
   , loadPointerToType
+  , operandType
   ) where
 
 import LLVM.AST

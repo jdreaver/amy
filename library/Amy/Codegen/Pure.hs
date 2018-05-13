@@ -106,9 +106,10 @@ codegenExpr' (ANF.EVal val) = valOperand val
 codegenExpr' (ANF.ELetVal (ANF.LetVal bindings expr)) = do
   for_ bindings $ \(ANF.LetValBinding ident _ body) -> do
     op <- codegenExpr' body
-    addSymbolToTable ident op
+    -- TODO: Pass in ident instead of binding afterwards
+    bindOpToName (identToName ident) op
   codegenExpr' expr
-codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = do
+codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy bindingIdent) _ _ _)) = do
   caseId <- freshId
   let
     mkCaseName nameBase = stringToName $ nameBase ++ show caseId
@@ -117,6 +118,8 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = 
 
   -- Generate the switch statement
   scrutineeOp <- valOperand scrutinee
+  -- TODO: Pass in ident instead of binding afterwards
+  bindOpToName (identToName bindingIdent) scrutineeOp
 
   -- Extract tag from scrutinee op if we have to
   (switchOp, mArgOp) <-
@@ -137,8 +140,7 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = 
       finalBlockName <- currentBlockName
       terminateBlock (Do $ Br endBlockName []) nextBlockName
       pure (op, finalBlockName)
-    generateCaseDefaultBlock (CaseDefaultBlock expr _ nextBlockName (Typed _ ident)) = do
-      addSymbolToTable ident scrutineeOp
+    generateCaseDefaultBlock (CaseDefaultBlock expr _ nextBlockName) =
       generateBlockExpr expr nextBlockName
     generateCaseLiteralBlock (CaseLiteralBlock expr _ nextBlockName _ mBind) = do
       for_ mBind $ \(Typed ty ident) -> do
@@ -146,7 +148,8 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = 
         let
           argOp = fromMaybe (error "Can't extract argument for tagged union") mArgOp
         dataOp <- maybeConvertPointer argOp $ llvmType ty
-        addSymbolToTable ident dataOp
+        -- TODO: Pass in ident instead of binding afterwards
+        bindOpToName (identToName ident) dataOp
       generateBlockExpr expr nextBlockName
 
   mDefaultOpAndBlock <- traverse generateCaseDefaultBlock mDefaultBlock
@@ -196,6 +199,12 @@ codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   let returnTy' = llvmType returnTy
   pure $ LocalReference returnTy' opName
 
+-- codegenBindingExpression :: Name -> Expr -> BlockGen ()
+-- codegenBindingExpression name' (ANF.EVal val) = do
+--   op <- valOperand val
+--   addInstruction $ name' := Alloca (operandType op) Nothing 0 []
+--   undefined
+
 gepIndex :: Integer -> Operand
 gepIndex i = ConstantOperand $ C.Int 32 i
 
@@ -209,9 +218,18 @@ valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
         pure $ ConstantOperand $ C.GlobalReference (llvmType ty) ident'
       _ -> do
         let ty' = llvmType ty
-        fromMaybe (LocalReference ty' ident') <$> lookupSymbol ident
+        pure $ LocalReference ty' ident'
 valOperand (ANF.Var (ANF.VCons (ANF.Typed _ (DataConInfo _ con)))) = maybePackConstructor con Nothing
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
+
+bindOpToName :: Name -> Operand -> BlockGen ()
+bindOpToName name' op = do
+  storeName <- freshUnName
+  let
+    storeOp = LocalReference (LLVM.PointerType (operandType op) (AddrSpace 0)) storeName
+  addInstruction $ storeName := Alloca (operandType op) Nothing 0 []
+  addInstruction $ Do $ Store False storeOp op Nothing 0 []
+  addInstruction $ name' := Load False storeOp Nothing 0 []
 
 maybePackConstructor :: DataConstructor -> Maybe ANF.Val -> BlockGen Operand
 maybePackConstructor con mArg =

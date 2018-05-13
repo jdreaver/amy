@@ -13,15 +13,21 @@ entry:
   %4 = load double, double* %3
   %5 = alloca double
   store double %4, double* %5
-  %6 = bitcast double* %5 to i64*
-  %7 = alloca double
-  store double 5.100000e+00, double* %7
-  %8 = bitcast double* %7 to i64*
-  %9 = call i64* @const(i64* %6, i64* %8)
-  %10 = bitcast i64* %9 to double*
-  %11 = load double, double* %10
-  %12 = fptoui double %11 to i64
-  ret i64 %12
+  %res38 = load double, double* %5
+  %6 = alloca double
+  store double %res38, double* %6
+  %7 = bitcast double* %6 to i64*
+  %8 = alloca double
+  store double 5.100000e+00, double* %8
+  %9 = bitcast double* %8 to i64*
+  %10 = call i64* @const(i64* %7, i64* %9)
+  %11 = bitcast i64* %10 to double*
+  %12 = load double, double* %11
+  %13 = alloca double
+  store double %12, double* %13
+  %res39 = load double, double* %13
+  %14 = fptoui double %res39 to i64
+  ret i64 %14
 }
 
 define private i64* @id(i64* %x) {

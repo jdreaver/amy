@@ -11,8 +11,6 @@ module Amy.Codegen.Monad
   , addInstruction
   , terminateBlock
   , currentBlockName
-  , addSymbolToTable
-  , lookupSymbol
   , freshId
   , freshUnName
   , topLevelType
@@ -46,14 +44,13 @@ newtype BlockGen a = BlockGen (StateT BlockGenState CodeGen a)
 
 runBlockGen :: BlockGen Operand -> CodeGen [BasicBlock]
 runBlockGen (BlockGen action) = do
-  (operand, BlockGenState lastBlock blockStack _ _) <- runStateT action (blockGenState "entry")
+  (operand, BlockGenState lastBlock blockStack _) <- runStateT action (blockGenState "entry")
   pure $ reverse $ makeBasicBlock lastBlock (Do $ Ret (Just operand) []) : blockStack
 
 data BlockGenState
   = BlockGenState
   { blockGenStateCurrentBlock :: !PartialBlock
   , blockGenStateBlockStack :: ![BasicBlock]
-  , blockGenStateSymbolTable :: !(Map Ident Operand)
     -- TOOD: We need to make sure this last ID is higher than the max ID from
     -- the ANF AST. We also need to share this last ID across BlockGen
     -- invocations from different functions.
@@ -61,7 +58,7 @@ data BlockGenState
   } deriving (Show, Eq)
 
 blockGenState :: LLVM.Name -> BlockGenState
-blockGenState name' = BlockGenState (partialBlock name') [] Map.empty 0
+blockGenState name' = BlockGenState (partialBlock name') [] 0
 
 -- | In-progress 'BasicBlock' without terminator
 data PartialBlock
@@ -85,7 +82,7 @@ addInstruction instr =
 terminateBlock :: Named Terminator -> LLVM.Name -> BlockGen ()
 terminateBlock term newName =
   modify'
-  (\s@(BlockGenState current stack _ _ ) ->
+  (\s@(BlockGenState current stack _ ) ->
      s
      { blockGenStateCurrentBlock = partialBlock newName
      , blockGenStateBlockStack = makeBasicBlock current term : stack
@@ -94,13 +91,6 @@ terminateBlock term newName =
 
 currentBlockName :: BlockGen LLVM.Name
 currentBlockName = gets (partialBlockName . blockGenStateCurrentBlock)
-
-addSymbolToTable :: Ident -> Operand -> BlockGen ()
-addSymbolToTable ident op = modify' (\s -> s { blockGenStateSymbolTable = Map.insert ident op (blockGenStateSymbolTable s) })
-
-lookupSymbol :: Ident -> BlockGen (Maybe Operand)
-lookupSymbol ident =
-  Map.lookup ident <$> gets blockGenStateSymbolTable
 
 freshId :: BlockGen Word
 freshId = do
