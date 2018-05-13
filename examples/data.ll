@@ -45,15 +45,12 @@ case.1.ret:                                       ; preds = %entry
   %13 = bitcast i64* %10 to double*
   %_u48 = load double, double* %13
   %14 = call i64 @f(double %_u48, i8 %y)
-  %15 = alloca i64
-  store i64 %14, i64* %15
-  %16 = load i64, i64* %15
   br label %case.end.ret
 
 case.2.ret:                                       ; preds = %entry
-  %17 = alloca i64
-  store i64 1, i64* %17
-  %18 = load i64, i64* %17
+  %15 = alloca i64
+  store i64 1, i64* %15
+  %16 = load i64, i64* %15
   br label %case.end.ret
 
 case.end.ret:                                     ; preds = %case.2.ret, %case.1.ret, %case.0.ret

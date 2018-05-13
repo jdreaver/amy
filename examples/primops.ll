@@ -8,15 +8,9 @@ entry:
   %0 = alloca i64
   store i64 2, i64* %0
   %x = load i64, i64* %0
-  %1 = call i64 @f(i64 %x)
-  %2 = alloca i64
-  store i64 %1, i64* %2
-  %res34 = load i64, i64* %2
-  %3 = call i64 @f(i64 %res34)
-  %4 = alloca i64
-  store i64 %3, i64* %4
-  %ret = load i64, i64* %4
-  ret i64 %3
+  %res34 = call i64 @f(i64 %x)
+  %ret = call i64 @f(i64 %res34)
+  ret i64 %ret
 }
 
 define private i64 @f(i64 %x) {

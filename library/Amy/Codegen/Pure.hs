@@ -180,16 +180,18 @@ codegenExpr' name' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnT
     maybeConvertPointer Nothing originalOp $ llvmType argTy
 
   -- Add call instruction
-  callName <- freshUnName
-  addInstruction $ callName := Call Nothing CC.C [] (Right funcOperand) ((\arg -> (arg, [])) <$> argOps) [] []
-
-  -- Return operand, maybe converting it too
   let
+    callInstruction = Call Nothing CC.C [] (Right funcOperand) ((\arg -> (arg, [])) <$> argOps) [] []
     returnTyLLVM = llvmType returnTy
     returnTyLLVM' = llvmType returnTy'
-  -- TODO: Figure out a priori if we need to convert the result. If we don't,
-  -- then we can bind the name directly.
-  maybeConvertPointer (Just name') (LocalReference returnTyLLVM' callName) returnTyLLVM
+  if returnTyLLVM == returnTyLLVM'
+    then do
+      addInstruction $ name' := callInstruction
+      pure $ LocalReference returnTyLLVM' name'
+    else do
+      callName <- freshUnName
+      addInstruction $ callName := callInstruction
+      maybeConvertPointer (Just name') (LocalReference returnTyLLVM' callName) returnTyLLVM
 codegenExpr' name' (ANF.ECons app@(ANF.App (ANF.Typed _ (DataConInfo _ con)) args' _)) = do
   let
     mArg =
