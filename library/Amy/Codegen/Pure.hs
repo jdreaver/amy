@@ -134,8 +134,15 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
   -- block that needs it? I feel like extracting it here is a bit funny.
   (switchOp, mArgOp) <-
     case bindingTy of
+      PrimIntType -> pure (scrutineeOp, Nothing)
+      EnumType _ -> pure (scrutineeOp, Nothing)
       TaggedUnionType _ bits -> unpackConstructor scrutineeOp bits
-      _ -> pure (scrutineeOp, Nothing)
+      -- TODO: Proper codegen for case expressions that can't be represented as
+      -- switches, like doubles and strings. We'll need to generated a sequence
+      -- of comparisons. Using a switch statement is really an optimization for
+      -- integers and sum types.
+      _ -> error $ "Cannot generate switch expression for doubles" ++ show bindingTy
+
 
   let
     switchNames = (\(CaseLiteralBlock _ switchName _ constant _) -> (constant, switchName)) <$> literalBlocks
