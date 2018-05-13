@@ -29,7 +29,7 @@ entry:
   %0 = alloca i64*
   store i64* %x, i64** %0
   %ret = load i64*, i64** %0
-  ret i64* %x
+  ret i64* %ret
 }
 
 define private i64* @const(i64* %x, i64* %y) {
@@ -37,6 +37,6 @@ entry:
   %0 = alloca i64*
   store i64* %x, i64** %0
   %ret = load i64*, i64** %0
-  ret i64* %x
+  ret i64* %ret
 }
 

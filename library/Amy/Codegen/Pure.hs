@@ -107,7 +107,7 @@ codegenExpr' :: Name -> ANF.Expr -> BlockGen Operand
 codegenExpr' name' (ANF.EVal val) = do
   op <- valOperand val
   bindOpToName name' op
-  pure op
+  pure (LocalReference (operandType op) name')
 codegenExpr' name' (ANF.ELetVal (ANF.LetVal bindings expr)) = do
   for_ bindings $ \(ANF.LetValBinding ident _ body) ->
     codegenExpr' (identToName ident) body
@@ -145,7 +145,7 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
       -- expression, so we need to get the "actual" block name.
       finalBlockName <- currentBlockName
       terminateBlock (Do $ Br endBlockName []) nextBlockName
-      pure (op, finalBlockName)
+      pure (LocalReference (operandType op) exprName, finalBlockName)
     generateCaseDefaultBlock (CaseDefaultBlock expr _ nextBlockName) =
       generateBlockExpr expr nextBlockName
     generateCaseLiteralBlock (CaseLiteralBlock expr _ nextBlockName _ mBind) = do
@@ -163,9 +163,8 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
   let
     endTy = llvmType endType
     allOpsAndBlocks = maybe id (:) mDefaultOpAndBlock matchOpsAndBlocks
-    endOpRef = LocalReference endTy name'
   addInstruction $ name' := Phi endTy allOpsAndBlocks []
-  pure endOpRef
+  pure $ LocalReference endTy name'
 codegenExpr' name' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = do
   ty <- fromMaybe originalTy <$> topLevelType ident
   funcOperand <- valOperand (ANF.Var $ ANF.Typed ty ident)

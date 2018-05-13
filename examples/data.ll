@@ -54,7 +54,7 @@ case.2.ret:                                       ; preds = %entry
   br label %case.end.ret
 
 case.end.ret:                                     ; preds = %case.2.ret, %case.1.ret, %case.0.ret
-  %ret = phi i64 [ 0, %case.0.ret ], [ %14, %case.1.ret ], [ 1, %case.2.ret ]
+  %ret = phi i64 [ %12, %case.0.ret ], [ %14, %case.1.ret ], [ %16, %case.2.ret ]
   ret i64 %ret
 }
 
@@ -86,7 +86,7 @@ case.2.ret:                                       ; preds = %entry
   br label %case.end.ret
 
 case.end.ret:                                     ; preds = %case.2.ret, %case.1.ret, %case.0.ret
-  %ret = phi i64 [ 2, %case.0.ret ], [ %3, %case.1.ret ], [ 3, %case.2.ret ]
+  %ret = phi i64 [ %2, %case.0.ret ], [ %3, %case.1.ret ], [ %5, %case.2.ret ]
   ret i64 %ret
 }
 

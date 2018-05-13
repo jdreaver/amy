@@ -63,7 +63,7 @@ case.1.ret:                                       ; preds = %entry
   br label %case.end.ret
 
 case.end.ret:                                     ; preds = %case.1.ret, %case.0.ret
-  %ret = phi i64 [ %2, %case.0.ret ], [ %res42, %case.1.ret ]
+  %ret = phi i64 [ %2, %case.0.ret ], [ %4, %case.1.ret ]
   ret i64 %ret
 }
 
@@ -72,6 +72,6 @@ entry:
   %0 = alloca i64
   store i64 300, i64* %0
   %ret = load i64, i64* %0
-  ret i64 300
+  ret i64 %ret
 }
 
