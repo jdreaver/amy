@@ -168,7 +168,7 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
   pure endOpRef
 codegenExpr' name' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = do
   ty <- fromMaybe originalTy <$> topLevelType ident
-  funcOperand <- valOperand (ANF.Var $ ANF.VVal $ ANF.Typed ty ident)
+  funcOperand <- valOperand (ANF.Var $ ANF.Typed ty ident)
   let
     (argTys', returnTy') =
       case ty of
@@ -197,7 +197,7 @@ codegenExpr' name' (ANF.ECons app@(ANF.App (ANF.Typed _ (DataConInfo _ con)) arg
         [] -> Nothing
         [x] -> Just x
         _ -> error $ "Found too many arguments in ECons " ++ show app
-  maybePackConstructor (Just name') con mArg
+  maybePackConstructor name' con mArg
 codegenExpr' name' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   argOps <- traverse valOperand args'
   addInstruction $ name' := primitiveFunctionInstruction prim argOps
@@ -208,7 +208,7 @@ gepIndex :: Integer -> Operand
 gepIndex i = ConstantOperand $ C.Int 32 i
 
 valOperand :: ANF.Val -> BlockGen Operand
-valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
+valOperand (ANF.Var (ANF.Typed ty ident)) =
   let
     ident' = identToName ident
   in
@@ -218,31 +218,29 @@ valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
       _ -> do
         let ty' = llvmType ty
         pure $ LocalReference ty' ident'
-valOperand (ANF.Var (ANF.VCons (ANF.Typed _ (DataConInfo _ con)))) = maybePackConstructor Nothing con Nothing
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
 
-maybePackConstructor :: Maybe Name -> DataConstructor -> Maybe ANF.Val -> BlockGen Operand
-maybePackConstructor mName con mArg =
+maybePackConstructor :: Name -> DataConstructor -> Maybe ANF.Val -> BlockGen Operand
+maybePackConstructor name' con mArg =
   case dataConstructorType con of
     EnumType intBits -> do
       let
         (ConstructorIndex intIndex) = dataConstructorIndex con
         op = ConstantOperand $ C.Int intBits (fromIntegral intIndex)
-      for_ mName $ \name' -> bindOpToName name' op
+      bindOpToName name' op
       pure op
-    TaggedUnionType structName intBits -> packConstructor mName con mArg structName intBits
+    TaggedUnionType structName intBits -> packConstructor name' con mArg structName intBits
     _ -> error $ "TODO: maybePackConstructor " ++ show con
 
-packConstructor :: Maybe Name -> DataConstructor -> Maybe ANF.Val -> Text -> Word32 -> BlockGen Operand
-packConstructor mName con mArg structName intBits = do
+packConstructor :: Name -> DataConstructor -> Maybe ANF.Val -> Text -> Word32 -> BlockGen Operand
+packConstructor name' con mArg structName intBits = do
   let
     (ConstructorIndex intIndex) = dataConstructorIndex con
     structName' = textToName structName
 
   -- Allocate struct
-  allocName <- maybe freshUnName pure mName
-  let allocOp = LocalReference (LLVM.PointerType (NamedTypeReference structName') (AddrSpace 0)) allocName
-  addInstruction $ allocName := Alloca (NamedTypeReference structName') Nothing 0 []
+  let allocOp = LocalReference (LLVM.PointerType (NamedTypeReference structName') (AddrSpace 0)) name'
+  addInstruction $ name' := Alloca (NamedTypeReference structName') Nothing 0 []
 
   -- Set the tag
   tagPtrName <- freshUnName

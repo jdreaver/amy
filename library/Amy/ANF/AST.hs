@@ -8,7 +8,6 @@ module Amy.ANF.AST
   , DataConstructor(..)
   , DataConInfo(..)
   , Val(..)
-  , Var(..)
   , Expr(..)
   , LetVal(..)
   , LetValBinding(..)
@@ -77,13 +76,8 @@ data DataConInfo
   } deriving (Show, Eq)
 
 data Val
-  = Var !Var
+  = Var !(Typed Ident)
   | Lit !Literal
-  deriving (Show, Eq)
-
-data Var
-  = VVal !(Typed Ident)
-  | VCons !(Typed DataConInfo)
   deriving (Show, Eq)
 
 data Expr

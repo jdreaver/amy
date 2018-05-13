@@ -114,22 +114,25 @@ normalizeExpr name expr@(C.ECase (C.Case scrutinee bind matches defaultExpr)) =
 normalizeExpr name (C.ELet (C.Let bindings expr)) = do
   bindings' <- traverse normalizeLetBinding bindings
   expr' <- normalizeExpr name expr
-  pure $ ANF.ELetVal $ ANF.LetVal bindings' expr'
+  pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal bindings' expr'
 normalizeExpr name (C.EApp (C.App func args retTy)) =
-  normalizeList (normalizeName name) (toList args) $ \argVals ->
-  normalizeName name func $ \funcVal -> do
-    retTy' <- convertType retTy
-    case funcVal of
-      ANF.Lit lit -> error $ "Encountered lit function application " ++ show lit
-      ANF.Var (ANF.VVal tyIdent@(ANF.Typed _ ident)) ->
-        case Map.lookup (ANF.identId ident) primitiveFunctionsById of
-          -- Primitive operation
-          Just prim -> pure $ ANF.EPrimOp $ ANF.App prim argVals retTy'
-          -- Default, just a function call
-          Nothing -> pure $ ANF.EApp $ ANF.App tyIdent argVals retTy'
-      ANF.Var (ANF.VCons con) ->
-        -- Default, just a function call
-        pure $ ANF.ECons $ ANF.App con argVals retTy'
+  normalizeList (normalizeName name) (toList args) $ \argVals -> do
+  retTy' <- convertType retTy
+  case func of
+    C.EVar (C.VCons (C.Typed ty con)) -> do
+      con' <- convertDataConInfo con
+      ty' <- convertType ty
+      pure $ ANF.ECons $ ANF.App (ANF.Typed ty' con') argVals retTy'
+    _ ->
+      normalizeName name func $ \funcVal ->
+        case funcVal of
+          ANF.Lit lit -> error $ "Encountered lit function application " ++ show lit
+          ANF.Var (tyIdent@(ANF.Typed _ ident)) ->
+            case Map.lookup (ANF.identId ident) primitiveFunctionsById of
+              -- Primitive operation
+              Just prim -> pure $ ANF.EPrimOp $ ANF.App prim argVals retTy'
+              -- Default, just a function call
+              Nothing -> pure $ ANF.EApp $ ANF.App tyIdent argVals retTy'
 normalizeExpr name (C.EParens expr) = normalizeExpr name expr
 
 normalizeName :: Text -> C.Expr -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
@@ -142,14 +145,14 @@ normalizeName name (C.EVar var) c =
         -- Top-level values need to be first called as functions
         (ANF.Typed ty (ANF.Ident _ _ True)) ->
           case ty of
-            FuncType{} -> c $ ANF.Var (ANF.VVal ident')
+            FuncType{} -> c $ ANF.Var ident'
             _ -> mkNormalizeLet name (ANF.EApp $ ANF.App ident' [] ty) ty c
         -- Not a top-level value, just return
-        _ -> c $ ANF.Var (ANF.VVal ident')
-    C.VCons (C.Typed ty cons) -> do
-      cons' <- convertDataConInfo cons
+        _ -> c $ ANF.Var ident'
+    C.VCons (C.Typed ty con) -> do
+      con' <- convertDataConInfo con
       ty' <- convertType ty
-      c $ ANF.Var (ANF.VCons (ANF.Typed ty' cons'))
+      mkNormalizeLet name (ANF.ECons $ ANF.App (ANF.Typed ty' con') [] ty') ty' c
 normalizeName name expr c = do
   expr' <- normalizeExpr name expr
   exprType <- convertType $ expressionType expr
@@ -158,7 +161,7 @@ normalizeName name expr c = do
 mkNormalizeLet :: Text -> ANF.Expr -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 mkNormalizeLet name expr exprType c = do
   newIdent <- freshIdent name
-  body <- c $ ANF.Var (ANF.VVal $ ANF.Typed exprType newIdent)
+  body <- c $ ANF.Var (ANF.Typed exprType newIdent)
   pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal [ANF.LetValBinding newIdent exprType expr] body
 
 normalizeBinding :: Maybe Text -> C.Binding -> ANFConvert ANF.Binding

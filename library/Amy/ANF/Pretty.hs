@@ -43,12 +43,8 @@ prettyIdent :: Ident -> Doc ann
 prettyIdent (Ident name _ _) = pretty name
 
 prettyVal :: Val -> Doc ann
-prettyVal (Var var) = prettyVar var
+prettyVal (Var (Typed _ ident)) = prettyIdent ident
 prettyVal (Lit lit) = pretty $ showLiteral lit
-
-prettyVar :: Var -> Doc ann
-prettyVar (VVal (Typed _ var)) = prettyIdent var
-prettyVar (VCons (Typed _ cons)) = pretty . dataConstructorName . dataConInfoCons $ cons
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (EVal val) = prettyVal val
@@ -65,11 +61,12 @@ prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault _)) =
       Just def -> [("__DEFAULT", prettyExpr def)]
 prettyExpr (ELetVal (LetVal bindings body)) =
   prettyLetVal (prettyLetValBinding <$> bindings) (prettyExpr body)
-prettyExpr (EApp (App (Typed _ ident) args _)) = sep $ prettyIdent ident : (prettyVal <$> args)
+prettyExpr (EApp (App (Typed _ ident) args _)) =
+  "$call" <+> prettyIdent ident <+> list (prettyVal <$> args)
 prettyExpr (ECons (App (Typed _ info) args _)) =
-  sep $ pretty (dataConstructorName $ dataConInfoCons info) : (prettyVal <$> args)
+  "$mkCon" <+> pretty (dataConstructorName $ dataConInfoCons info) <+> list (prettyVal <$> args)
 prettyExpr (EPrimOp (App (PrimitiveFunction _ name _ _) args _)) =
-  sep $ pretty name : (prettyVal <$> args)
+  "$primOp" <+> pretty name <+> list (prettyVal <$> args)
 
 prettyLetValBinding :: LetValBinding -> Doc ann
 prettyLetValBinding (LetValBinding ident ty body) =
