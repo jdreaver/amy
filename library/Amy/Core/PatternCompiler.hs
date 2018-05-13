@@ -73,9 +73,9 @@ data CaseExpr con
 -- constructor.
 data Clause con =
   Clause
-    !(Con con) -- ^ Constructor for the clause
-    ![Typed Ident] -- ^ Variables to bind the constructor arguments to
-    !(CaseExpr con) -- ^ Expression for the clause
+    !(Con con) -- Constructor for the clause
+    ![Typed Ident] -- Variables to bind the constructor arguments to
+    !(CaseExpr con) -- Expression for the clause
   deriving (Show, Eq)
 
 freshVar :: Desugar Ident
