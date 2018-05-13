@@ -10,8 +10,8 @@ module Amy.ANF.AST
   , Val(..)
   , Var(..)
   , Expr(..)
-  , Let(..)
-  , LetBinding(..)
+  , LetVal(..)
+  , LetValBinding(..)
   , Case(..)
   , Match(..)
   , Pattern(..)
@@ -88,24 +88,24 @@ data Var
 
 data Expr
   = EVal !Val
-  | ELet !Let
+  | ELetVal !LetVal
   | ECase !Case
   | EApp !(App (Typed Ident))
   | ECons !(App (Typed DataConInfo))
   | EPrimOp !(App PrimitiveFunction)
   deriving (Show, Eq)
 
-data Let
-  = Let
-  { letBindings :: ![LetBinding]
-  , letExpression :: !Expr
+data LetVal
+  = LetVal
+  { letValBindings :: ![LetValBinding]
+  , letValExpression :: !Expr
   } deriving (Show, Eq)
 
-data LetBinding
-  = LetBinding
-  { letBindingName :: !Ident
-  , letBindingType :: !Type
-  , letBindingBody :: !Expr
+data LetValBinding
+  = LetValBinding
+  { letValBindingName :: !Ident
+  , letValBindingType :: !Type
+  , letValBindingBody :: !Expr
   } deriving (Show, Eq)
 
 data Case

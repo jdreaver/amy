@@ -114,7 +114,7 @@ normalizeExpr name expr@(C.ECase (C.Case scrutinee bind matches defaultExpr)) =
 normalizeExpr name (C.ELet (C.Let bindings expr)) = do
   bindings' <- traverse normalizeLetBinding bindings
   expr' <- normalizeExpr name expr
-  pure $ ANF.ELet $ ANF.Let bindings' expr'
+  pure $ ANF.ELetVal $ ANF.LetVal bindings' expr'
 normalizeExpr name (C.EApp (C.App func args retTy)) =
   normalizeList (normalizeName name) (toList args) $ \argVals ->
   normalizeName name func $ \funcVal -> do
@@ -159,7 +159,7 @@ mkNormalizeLet :: Text -> ANF.Expr -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Exp
 mkNormalizeLet name expr exprType c = do
   newIdent <- freshIdent name
   body <- c $ ANF.Var (ANF.VVal $ ANF.Typed exprType newIdent)
-  pure $ ANF.ELet $ ANF.Let [ANF.LetBinding newIdent exprType expr] body
+  pure $ ANF.ELetVal $ ANF.LetVal [ANF.LetValBinding newIdent exprType expr] body
 
 normalizeBinding :: Maybe Text -> C.Binding -> ANFConvert ANF.Binding
 normalizeBinding mName (C.Binding ident@(C.Ident name _) _ args retTy body) = do
@@ -172,12 +172,12 @@ normalizeBinding mName (C.Binding ident@(C.Ident name _) _ args retTy body) = do
   retTy' <- convertType retTy
   pure $ ANF.Binding ident' args' retTy' body'
 
-normalizeLetBinding :: C.Binding -> ANFConvert ANF.LetBinding
+normalizeLetBinding :: C.Binding -> ANFConvert ANF.LetValBinding
 normalizeLetBinding (C.Binding ident@(C.Ident name _) (C.Forall _ ty) [] _ body) = do
   body' <- normalizeExpr name body
   ty' <- convertType ty
   ident' <- convertIdent' ident
-  pure $ ANF.LetBinding ident' ty' body'
+  pure $ ANF.LetValBinding ident' ty' body'
 normalizeLetBinding bind@C.Binding{} =
   error $ "Encountered let binding with arguments. Functions not allowed in ANF. " ++ show bind
 

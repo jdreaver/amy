@@ -21,6 +21,7 @@ module Amy.Pretty
   , prettyIf
   , prettyCase
   , prettyLet
+  , prettyLetVal
   , prettyBinding
   , prettyBindingType
   , prettyBindingScheme
@@ -29,6 +30,7 @@ module Amy.Pretty
   , prettyDataConstructor
   ) where
 
+import Data.Maybe (fromMaybe)
 import Data.Text.Prettyprint.Doc as X
 
 --
@@ -103,8 +105,14 @@ prettyCase scrutinee mBinder matches =
   matches' = uncurry prettyMatch <$> matches
 
 prettyLet :: [Doc ann] -> Doc ann -> Doc ann
-prettyLet bindings body =
-  "let" <>
+prettyLet = prettyLet' Nothing
+
+prettyLetVal :: [Doc ann] -> Doc ann -> Doc ann
+prettyLetVal = prettyLet' (Just "val")
+
+prettyLet' :: Maybe (Doc ann) -> [Doc ann] -> Doc ann -> Doc ann
+prettyLet' mSuffix bindings body =
+  "let" <> fromMaybe mempty mSuffix <>
   line <>
   indent 2 (vcatHardLines bindings) <>
   line <>

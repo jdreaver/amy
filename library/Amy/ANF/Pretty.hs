@@ -63,16 +63,16 @@ prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault _)) =
     case mDefault of
       Nothing -> []
       Just def -> [("__DEFAULT", prettyExpr def)]
-prettyExpr (ELet (Let bindings body)) =
-  prettyLet (prettyLetBinding <$> bindings) (prettyExpr body)
+prettyExpr (ELetVal (LetVal bindings body)) =
+  prettyLetVal (prettyLetValBinding <$> bindings) (prettyExpr body)
 prettyExpr (EApp (App (Typed _ ident) args _)) = sep $ prettyIdent ident : (prettyVal <$> args)
 prettyExpr (ECons (App (Typed _ info) args _)) =
   sep $ pretty (dataConstructorName $ dataConInfoCons info) : (prettyVal <$> args)
 prettyExpr (EPrimOp (App (PrimitiveFunction _ name _ _) args _)) =
   sep $ pretty name : (prettyVal <$> args)
 
-prettyLetBinding :: LetBinding -> Doc ann
-prettyLetBinding (LetBinding ident ty body) =
+prettyLetValBinding :: LetValBinding -> Doc ann
+prettyLetValBinding (LetValBinding ident ty body) =
   prettyBindingType (prettyIdent ident) (mkPrettyType ty) <>
   hardline <>
   prettyBinding (prettyIdent ident) [] (prettyExpr body)

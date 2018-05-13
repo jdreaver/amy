@@ -103,8 +103,8 @@ codegenExpr expr = runBlockGen $ codegenExpr' expr
 
 codegenExpr' :: ANF.Expr -> BlockGen Operand
 codegenExpr' (ANF.EVal val) = valOperand val
-codegenExpr' (ANF.ELet (ANF.Let bindings expr)) = do
-  for_ bindings $ \(ANF.LetBinding ident _ body) -> do
+codegenExpr' (ANF.ELetVal (ANF.LetVal bindings expr)) = do
+  for_ bindings $ \(ANF.LetValBinding ident _ body) -> do
     op <- codegenExpr' body
     addSymbolToTable ident op
   codegenExpr' expr
