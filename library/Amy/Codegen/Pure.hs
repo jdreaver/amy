@@ -106,8 +106,9 @@ codegenExpr expr = runBlockGen $ codegenExpr' (textToName "ret") expr
 codegenExpr' :: Name -> ANF.Expr -> BlockGen Operand
 codegenExpr' name' (ANF.EVal val) = do
   -- If we get here that means the inliner probably didn't do its job very
-  -- well, and there is a primitive value being used as a top-level expression.
-  -- No worries, LLVM will most certainly remove these redundant instructions.
+  -- well, and there is a primitive value being used by itself in an
+  -- expression. No worries, LLVM will most certainly remove these redundant
+  -- instructions.
   op <- valOperand val
   bindOpToName name' op
   pure (LocalReference (operandType op) name')
@@ -145,8 +146,9 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
     generateBlockExpr expr nextBlockName = do
       exprName <- freshUnName
       op <- codegenExpr' exprName expr
-      -- N.B. The block name could have changed while generating the
-      -- expression, so we need to get the "actual" block name.
+      -- N.B. The current block name could have changed while generating the
+      -- expression, so we need to fetch it and return it instead of the
+      -- original block name.
       finalBlockName <- currentBlockName
       terminateBlock (Do $ Br endBlockName []) nextBlockName
       pure (LocalReference (operandType op) exprName, finalBlockName)
@@ -155,7 +157,7 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
       generateBlockExpr expr nextBlockName
     generateCaseLiteralBlock (CaseLiteralBlock expr _ nextBlockName _ mBind) = do
       for_ mBind $ \(Typed ty ident) -> do
-        -- Convert constructor argument and add to symbol table
+        -- Convert constructor argument
         let
           argOp = fromMaybe (error "Can't extract argument for tagged union") mArgOp
         maybeConvertPointer (Just $ identToName ident) argOp $ llvmType ty
@@ -208,16 +210,10 @@ gepIndex :: Integer -> Operand
 gepIndex i = ConstantOperand $ C.Int 32 i
 
 valOperand :: ANF.Val -> BlockGen Operand
+valOperand (ANF.Var (ANF.Typed ty ident@(ANF.Ident _ _ True))) =
+  pure $ ConstantOperand $ C.GlobalReference (llvmType ty) (identToName ident)
 valOperand (ANF.Var (ANF.Typed ty ident)) =
-  let
-    ident' = identToName ident
-  in
-    case ident of
-      (ANF.Ident _ _ True) ->
-        pure $ ConstantOperand $ C.GlobalReference (llvmType ty) ident'
-      _ -> do
-        let ty' = llvmType ty
-        pure $ LocalReference ty' ident'
+  pure $ LocalReference (llvmType ty) (identToName ident)
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
 valOperand (ANF.ConEnum intBits (DataConInfo _ con)) =
   let
