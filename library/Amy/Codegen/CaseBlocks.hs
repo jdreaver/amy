@@ -41,7 +41,6 @@ data CaseDefaultBlock
 data CaseEndBlock
   = CaseEndBlock
   { caseEndBlockName :: !Name
-  , caseEndBlockOperandName :: !Name
   , caseEndBlockType :: !ANF.Type
   } deriving (Show, Eq)
 
@@ -51,7 +50,6 @@ caseBlocks mkBlockName (Case _ _ matches mDefault ty) =
     -- Compute names for everything
     defaultBlockName = mkBlockName "case.default."
     endBlockName = mkBlockName "case.end."
-    endOpName = mkBlockName "end."
     literalBlockNames = mkBlockName . (\i -> "case." ++ i ++ ".") . show <$> [0 .. (length matches - 1)]
     nextLiteralBlockNames = drop 1 literalBlockNames ++ [endBlockName]
 
@@ -94,7 +92,6 @@ caseBlocks mkBlockName (Case _ _ matches mDefault ty) =
     endBlock =
       CaseEndBlock
       { caseEndBlockName = endBlockName
-      , caseEndBlockOperandName = endOpName
       , caseEndBlockType = ty
       }
   in
