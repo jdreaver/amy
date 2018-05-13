@@ -159,7 +159,7 @@ mkNormalizeLet :: Text -> ANF.Expr -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Exp
 mkNormalizeLet name expr exprType c = do
   newIdent <- freshIdent name
   body <- c $ ANF.Var (ANF.VVal $ ANF.Typed exprType newIdent)
-  pure $ ANF.ELetVal $ ANF.LetVal [ANF.LetValBinding newIdent exprType expr] body
+  pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal [ANF.LetValBinding newIdent exprType expr] body
 
 normalizeBinding :: Maybe Text -> C.Binding -> ANFConvert ANF.Binding
 normalizeBinding mName (C.Binding ident@(C.Ident name _) _ args retTy body) = do
@@ -200,3 +200,63 @@ normalizeList :: (Monad m) => (a -> (b -> m c) -> m c) -> [a] -> ([b] -> m c) ->
 normalizeList _ [] c = c []
 normalizeList norm (x:xs) c =
   norm x $ \v -> normalizeList norm xs $ \vs -> c (v:vs)
+
+-- | ANF conversion produces a lot of nested and adjacent letval expressions.
+-- This function cleans them up into a single letval. Note that bindings in a
+-- single letval expression are non-recursive, and order matters, so there
+-- isn't a risk of accidentally introducing recursion by reordering them, as
+-- long as they are in the correct order.
+--
+-- Nested letvals get turned "inside out":
+--
+-- @
+--    letval
+--      x2 =
+--        letval
+--          x1 = 2
+--        in x1 + 2
+--      ...
+-- @
+--
+-- @
+--    letval
+--      x1 = 2
+--      x2 = x1 + x2
+--      ...
+-- @
+--
+-- Adjacent letvals get concatenated:
+--
+-- @
+--    letval
+--      x1 = 1
+--    in
+--      letval
+--        x2 = 2
+--        x3 = 3
+--      in x1 + x2 + x3
+-- @
+--
+-- @
+--    letval
+--      x1 = 1
+--      x2 = 2
+--      x3 = 3
+--    in x1 + x2 + x3
+-- @
+collapseLetVals :: ANF.LetVal -> ANF.LetVal
+collapseLetVals (ANF.LetVal bindings body) =
+  let
+    bindings' = concatMap collapseLetValBinding bindings
+  in
+    case body of
+      ANF.ELetVal (ANF.LetVal bodyBindings bodyExpr) ->
+        ANF.LetVal (bindings' ++ bodyBindings) bodyExpr
+      _ -> ANF.LetVal bindings' body
+
+-- | Utility function for 'collapseLetVals' that does the "turning inside out"
+-- on bindings.
+collapseLetValBinding :: ANF.LetValBinding -> [ANF.LetValBinding]
+collapseLetValBinding (ANF.LetValBinding ident ty (ANF.ELetVal (ANF.LetVal bodyBindings bodyExpr))) =
+  bodyBindings ++ [ANF.LetValBinding ident ty bodyExpr]
+collapseLetValBinding binding = [binding]
