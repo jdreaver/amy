@@ -6,6 +6,8 @@ module Amy.Codegen.Pure
   ( codegenModule
   ) where
 
+import qualified Data.ByteString.Char8 as BS8
+import qualified Data.ByteString.Short as BSS
 import Data.Foldable (for_)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
@@ -99,54 +101,66 @@ codegenTopLevelBinding binding = do
     }
 
 codegenExpr :: ANF.Expr -> CodeGen [BasicBlock]
-codegenExpr expr = runBlockGen $ codegenExpr' expr
+codegenExpr expr = runBlockGen $ codegenExpr' (textToName "ret") expr
 
-codegenExpr' :: ANF.Expr -> BlockGen Operand
-codegenExpr' (ANF.EVal val) = valOperand val
-codegenExpr' (ANF.ELetVal (ANF.LetVal bindings expr)) = do
-  for_ bindings $ \(ANF.LetValBinding ident _ body) -> do
-    op <- codegenExpr' body
-    addSymbolToTable ident op
-  codegenExpr' expr
-codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = do
-  caseId <- freshId
+codegenExpr' :: Name -> ANF.Expr -> BlockGen Operand
+codegenExpr' name' (ANF.EVal val) = do
+  -- If we get here that means the inliner probably didn't do its job very
+  -- well, and there is a primitive value being used by itself in an
+  -- expression. No worries, LLVM will most certainly remove these redundant
+  -- instructions.
+  op <- valOperand val
+  bindOpToName name' op
+  pure (LocalReference (operandType op) name')
+codegenExpr' name' (ANF.ELetVal (ANF.LetVal bindings expr)) = do
+  for_ bindings $ \(ANF.LetValBinding ident _ body) ->
+    codegenExpr' (identToName ident) body
+  codegenExpr' name' expr
+codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy bindingIdent) _ _ _)) = do
   let
-    mkCaseName nameBase = stringToName $ nameBase ++ show caseId
+    nameAsString =
+      case name' of
+        Name s -> s
+        UnName i -> BSS.toShort $ BS8.pack $ show i
+    mkCaseName nameBase = Name $ BSS.toShort (BS8.pack nameBase) <> nameAsString
     (CaseBlocks switchDefaultBlockName literalBlocks mDefaultBlock endBlock) = caseBlocks mkCaseName case'
-    (CaseEndBlock endBlockName endOpName endType) = endBlock
+    (CaseEndBlock endBlockName endType) = endBlock
 
   -- Generate the switch statement
   scrutineeOp <- valOperand scrutinee
 
   -- Extract tag from scrutinee op if we have to
+  -- TODO: Should we extract the argument once here or extract it in every
+  -- block that needs it? I feel like extracting it here is a bit funny.
   (switchOp, mArgOp) <-
     case bindingTy of
       TaggedUnionType _ bits -> unpackConstructor scrutineeOp bits
       _ -> pure (scrutineeOp, Nothing)
 
   let
-    switchNames = (\(CaseLiteralBlock _ name' _ constant _) -> (constant, name')) <$> literalBlocks
+    switchNames = (\(CaseLiteralBlock _ switchName _ constant _) -> (constant, switchName)) <$> literalBlocks
   terminateBlock (Do $ Switch switchOp switchDefaultBlockName switchNames []) switchDefaultBlockName
 
   -- Generate case blocks
   let
     generateBlockExpr expr nextBlockName = do
-      op <- codegenExpr' expr
-      -- N.B. The block name could have changed while generating the
-      -- expression, so we need to get the "actual" block name.
+      exprName <- freshUnName
+      op <- codegenExpr' exprName expr
+      -- N.B. The current block name could have changed while generating the
+      -- expression, so we need to fetch it and return it instead of the
+      -- original block name.
       finalBlockName <- currentBlockName
       terminateBlock (Do $ Br endBlockName []) nextBlockName
-      pure (op, finalBlockName)
-    generateCaseDefaultBlock (CaseDefaultBlock expr _ nextBlockName (Typed _ ident)) = do
-      addSymbolToTable ident scrutineeOp
+      pure (LocalReference (operandType op) exprName, finalBlockName)
+    generateCaseDefaultBlock (CaseDefaultBlock expr _ nextBlockName) = do
+      bindOpToName (identToName bindingIdent) scrutineeOp
       generateBlockExpr expr nextBlockName
     generateCaseLiteralBlock (CaseLiteralBlock expr _ nextBlockName _ mBind) = do
       for_ mBind $ \(Typed ty ident) -> do
-        -- Convert constructor argument and add to symbol table
+        -- Convert constructor argument
         let
           argOp = fromMaybe (error "Can't extract argument for tagged union") mArgOp
-        dataOp <- maybeConvertPointer argOp $ llvmType ty
-        addSymbolToTable ident dataOp
+        maybeConvertPointer (Just $ identToName ident) argOp $ llvmType ty
       generateBlockExpr expr nextBlockName
 
   mDefaultOpAndBlock <- traverse generateCaseDefaultBlock mDefaultBlock
@@ -156,12 +170,11 @@ codegenExpr' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy _) _ _ _)) = 
   let
     endTy = llvmType endType
     allOpsAndBlocks = maybe id (:) mDefaultOpAndBlock matchOpsAndBlocks
-    endOpRef = LocalReference endTy endOpName
-  addInstruction $ endOpName := Phi endTy allOpsAndBlocks []
-  pure endOpRef
-codegenExpr' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = do
+  addInstruction $ name' := Phi endTy allOpsAndBlocks []
+  pure $ LocalReference endTy name'
+codegenExpr' name' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = do
   ty <- fromMaybe originalTy <$> topLevelType ident
-  funcOperand <- valOperand (ANF.Var $ ANF.VVal $ ANF.Typed ty ident)
+  funcOperand <- valOperand (ANF.Var $ ANF.Typed ty ident)
   let
     (argTys', returnTy') =
       case ty of
@@ -170,68 +183,52 @@ codegenExpr' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = 
   -- Convert arguments to pointers if we have to
   argOps <- for (zip args' argTys') $ \(arg, argTy) -> do
     originalOp <- valOperand arg
-    maybeConvertPointer originalOp $ llvmType argTy
+    maybeConvertPointer Nothing originalOp $ llvmType argTy
 
   -- Add call instruction
-  opName <- freshUnName
-  addInstruction $ opName := Call Nothing CC.C [] (Right funcOperand) ((\arg -> (arg, [])) <$> argOps) [] []
-
-  -- Return operand, maybe converting it too
   let
+    callInstruction = Call Nothing CC.C [] (Right funcOperand) ((\arg -> (arg, [])) <$> argOps) [] []
     returnTyLLVM = llvmType returnTy
     returnTyLLVM' = llvmType returnTy'
-  maybeConvertPointer (LocalReference returnTyLLVM' opName) returnTyLLVM
-codegenExpr' (ANF.ECons app@(ANF.App (ANF.Typed _ (DataConInfo _ con)) args' _)) = do
-  let
-    mArg =
-      case args' of
-        [] -> Nothing
-        [x] -> Just x
-        _ -> error $ "Found too many arguments in ECons " ++ show app
-  maybePackConstructor con mArg
-codegenExpr' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
-  opName <- freshUnName
+  if returnTyLLVM == returnTyLLVM'
+    then do
+      addInstruction $ name' := callInstruction
+      pure $ LocalReference returnTyLLVM' name'
+    else do
+      callName <- freshUnName
+      addInstruction $ callName := callInstruction
+      maybeConvertPointer (Just name') (LocalReference returnTyLLVM' callName) returnTyLLVM
+codegenExpr' name' (ANF.EConApp (ANF.ConApp (DataConInfo _ con) mArg structName intBits)) =
+  packConstructor name' con mArg structName intBits
+codegenExpr' name' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   argOps <- traverse valOperand args'
-  addInstruction $ opName := primitiveFunctionInstruction prim argOps
+  addInstruction $ name' := primitiveFunctionInstruction prim argOps
   let returnTy' = llvmType returnTy
-  pure $ LocalReference returnTy' opName
+  pure $ LocalReference returnTy' name'
 
 gepIndex :: Integer -> Operand
 gepIndex i = ConstantOperand $ C.Int 32 i
 
 valOperand :: ANF.Val -> BlockGen Operand
-valOperand (ANF.Var (ANF.VVal (ANF.Typed ty ident))) =
-  let
-    ident' = identToName ident
-  in
-    case ident of
-      (ANF.Ident _ _ True) ->
-        pure $ ConstantOperand $ C.GlobalReference (llvmType ty) ident'
-      _ -> do
-        let ty' = llvmType ty
-        fromMaybe (LocalReference ty' ident') <$> lookupSymbol ident
-valOperand (ANF.Var (ANF.VCons (ANF.Typed _ (DataConInfo _ con)))) = maybePackConstructor con Nothing
+valOperand (ANF.Var (ANF.Typed ty ident@(ANF.Ident _ _ True))) =
+  pure $ ConstantOperand $ C.GlobalReference (llvmType ty) (identToName ident)
+valOperand (ANF.Var (ANF.Typed ty ident)) =
+  pure $ LocalReference (llvmType ty) (identToName ident)
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
+valOperand (ANF.ConEnum intBits (DataConInfo _ con)) =
+  let
+    (ConstructorIndex intIndex) = dataConstructorIndex con
+  in pure $ ConstantOperand $ C.Int intBits (fromIntegral intIndex)
 
-maybePackConstructor :: DataConstructor -> Maybe ANF.Val -> BlockGen Operand
-maybePackConstructor con mArg =
-  case dataConstructorType con of
-    EnumType intBits -> do
-      let (ConstructorIndex intIndex) = dataConstructorIndex con
-      pure $ ConstantOperand $ C.Int intBits (fromIntegral intIndex)
-    TaggedUnionType structName intBits -> packConstructor con mArg structName intBits
-    _ -> error $ "TODO: maybePackConstructor " ++ show con
-
-packConstructor :: DataConstructor -> Maybe ANF.Val -> Text -> Word32 -> BlockGen Operand
-packConstructor con mArg structName intBits = do
+packConstructor :: Name -> DataConstructor -> Maybe ANF.Val -> Text -> Word32 -> BlockGen Operand
+packConstructor name' con mArg structName intBits = do
   let
     (ConstructorIndex intIndex) = dataConstructorIndex con
     structName' = textToName structName
 
   -- Allocate struct
-  allocName <- freshUnName
-  let allocOp = LocalReference (LLVM.PointerType (NamedTypeReference structName') (AddrSpace 0)) allocName
-  addInstruction $ allocName := Alloca (NamedTypeReference structName') Nothing 0 []
+  let allocOp = LocalReference (LLVM.PointerType (NamedTypeReference structName') (AddrSpace 0)) name'
+  addInstruction $ name' := Alloca (NamedTypeReference structName') Nothing 0 []
 
   -- Set the tag
   tagPtrName <- freshUnName
@@ -244,7 +241,7 @@ packConstructor con mArg structName intBits = do
   -- Set data
   for_ mArg $ \arg -> do
     argOp <- valOperand arg
-    argOp' <- maybeConvertPointer argOp (LLVM.PointerType (IntegerType 64) (AddrSpace 0))
+    argOp' <- maybeConvertPointer Nothing argOp (LLVM.PointerType (IntegerType 64) (AddrSpace 0))
     dataPtrName <- freshUnName
     let dataPtrOp = LocalReference (LLVM.PointerType (LLVM.PointerType (IntegerType 64) (AddrSpace 0)) (AddrSpace 0)) dataPtrName
     addInstruction $ dataPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex 1] []

@@ -10,27 +10,33 @@ entry:
   %1 = bitcast double* %0 to i64*
   %2 = call i64* @id(i64* %1)
   %3 = bitcast i64* %2 to double*
-  %4 = load double, double* %3
-  %5 = alloca double
-  store double %4, double* %5
-  %6 = bitcast double* %5 to i64*
-  %7 = alloca double
-  store double 5.100000e+00, double* %7
-  %8 = bitcast double* %7 to i64*
-  %9 = call i64* @const(i64* %6, i64* %8)
-  %10 = bitcast i64* %9 to double*
-  %11 = load double, double* %10
-  %12 = fptoui double %11 to i64
-  ret i64 %12
+  %res38 = load double, double* %3
+  %4 = alloca double
+  store double %res38, double* %4
+  %5 = bitcast double* %4 to i64*
+  %6 = alloca double
+  store double 5.100000e+00, double* %6
+  %7 = bitcast double* %6 to i64*
+  %8 = call i64* @const(i64* %5, i64* %7)
+  %9 = bitcast i64* %8 to double*
+  %res39 = load double, double* %9
+  %ret = fptoui double %res39 to i64
+  ret i64 %ret
 }
 
 define private i64* @id(i64* %x) {
 entry:
-  ret i64* %x
+  %0 = alloca i64*
+  store i64* %x, i64** %0
+  %ret = load i64*, i64** %0
+  ret i64* %ret
 }
 
 define private i64* @const(i64* %x, i64* %y) {
 entry:
-  ret i64* %x
+  %0 = alloca i64*
+  store i64* %x, i64** %0
+  %ret = load i64*, i64** %0
+  ret i64* %ret
 }
 

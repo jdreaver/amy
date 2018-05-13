@@ -3,8 +3,11 @@
 module Amy.Codegen.TypeConversion
   ( maybeConvertPointer
   , loadPointerToType
+  , operandType
+  , bindOpToName
   ) where
 
+import Data.Foldable (for_)
 import LLVM.AST
 import LLVM.AST.AddrSpace
 import qualified LLVM.AST.Constant as C
@@ -12,15 +15,17 @@ import LLVM.AST.Float as F
 
 import Amy.Codegen.Monad
 
-maybeConvertPointer :: Operand -> Type -> BlockGen Operand
-maybeConvertPointer op targetTy =
+maybeConvertPointer :: Maybe Name -> Operand -> Type -> BlockGen Operand
+maybeConvertPointer mName op targetTy =
   if operandType op == targetTy
-  then pure op
+  then do
+    for_ mName $ \name' -> bindOpToName name' op
+    pure op
   else
     case (operandType op, targetTy) of
-      (PointerType _ _, PointerType _ _) -> maybeBitcast targetTy op
-      (_, PointerType _ _) -> allocOp op >>= maybeBitcast targetTy
-      (PointerType _ _, _) -> maybeBitcast (PointerType targetTy (AddrSpace 0)) op >>= loadPointerToType targetTy
+      (PointerType _ _, PointerType _ _) -> maybeBitcast mName targetTy op
+      (_, PointerType _ _) -> allocOp op >>= maybeBitcast mName targetTy
+      (PointerType _ _, _) -> maybeBitcast Nothing (PointerType targetTy (AddrSpace 0)) op >>= loadPointerToType mName targetTy
       (_, _) -> error $ "Failed to maybeConvertToPointer " ++ show (op, targetTy)
 
 allocOp :: Operand -> BlockGen Operand
@@ -34,20 +39,22 @@ allocOp op = do
   addInstruction $ Do $ Store False storeOp op Nothing 0 []
   pure storeOp
 
-loadPointerToType :: Type -> Operand -> BlockGen Operand
-loadPointerToType targetTy op = do
-  resultName <- freshUnName
+loadPointerToType :: Maybe Name -> Type -> Operand -> BlockGen Operand
+loadPointerToType mName targetTy op = do
+  resultName <- maybe freshUnName pure mName
   let resultOp = LocalReference targetTy resultName
   addInstruction $ resultName := Load False op Nothing 0 []
   pure resultOp
 
-maybeBitcast :: Type -> Operand -> BlockGen Operand
-maybeBitcast ty op =
+maybeBitcast :: Maybe Name -> Type -> Operand -> BlockGen Operand
+maybeBitcast mName ty op =
   -- Bitcast if we have to
   if operandType op == ty
-  then pure op
+  then do
+    for_ mName $ \name' -> bindOpToName name' op
+    pure op
   else do
-   ptrName <- freshUnName
+   ptrName <- maybe freshUnName pure mName
    let ptrOp = LocalReference ty ptrName
    addInstruction $ ptrName := BitCast op ty []
    pure ptrOp
@@ -84,3 +91,12 @@ someFloatType =
 --     FP128FP -> 128
 --     X86_FP80FP -> 80
 --     PPC_FP128FP -> 128
+
+bindOpToName :: Name -> Operand -> BlockGen ()
+bindOpToName name' op = do
+  storeName <- freshUnName
+  let
+    storeOp = LocalReference (PointerType (operandType op) (AddrSpace 0)) storeName
+  addInstruction $ storeName := Alloca (operandType op) Nothing 0 []
+  addInstruction $ Do $ Store False storeOp op Nothing 0 []
+  addInstruction $ name' := Load False storeOp Nothing 0 []

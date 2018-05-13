@@ -36,23 +36,20 @@ data CaseDefaultBlock
   { caseDefaultBlockExpr :: !Expr
   , caseDefaultBlockName :: !Name
   , caseDefaultBlockNextName :: !Name
-  , caseDefaultBlockIdent :: !(Typed Ident)
   } deriving (Show, Eq)
 
 data CaseEndBlock
   = CaseEndBlock
   { caseEndBlockName :: !Name
-  , caseEndBlockOperandName :: !Name
   , caseEndBlockType :: !ANF.Type
   } deriving (Show, Eq)
 
 caseBlocks :: (String -> Name) -> Case -> CaseBlocks
-caseBlocks mkBlockName (Case _ bind matches mDefault ty) =
+caseBlocks mkBlockName (Case _ _ matches mDefault ty) =
   let
     -- Compute names for everything
     defaultBlockName = mkBlockName "case.default."
     endBlockName = mkBlockName "case.end."
-    endOpName = mkBlockName "end."
     literalBlockNames = mkBlockName . (\i -> "case." ++ i ++ ".") . show <$> [0 .. (length matches - 1)]
     nextLiteralBlockNames = drop 1 literalBlockNames ++ [endBlockName]
 
@@ -66,7 +63,6 @@ caseBlocks mkBlockName (Case _ bind matches mDefault ty) =
       { caseDefaultBlockExpr = expr
       , caseDefaultBlockName = defaultBlockName
       , caseDefaultBlockNextName = defaultBlockNextName
-      , caseDefaultBlockIdent = bind
       }
     defaultBlock = mkDefaultBlock <$> mDefault
     switchDefaultBlockName =
@@ -96,7 +92,6 @@ caseBlocks mkBlockName (Case _ bind matches mDefault ty) =
     endBlock =
       CaseEndBlock
       { caseEndBlockName = endBlockName
-      , caseEndBlockOperandName = endOpName
       , caseEndBlockType = ty
       }
   in
