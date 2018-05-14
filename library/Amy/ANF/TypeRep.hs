@@ -42,7 +42,7 @@ typeRep (C.TypeDeclaration tyName constructors) =
       | otherwise -> 32
 
 maybePrimitiveType :: C.TyConInfo -> Maybe ANF.Type
-maybePrimitiveType (C.TyConInfo _ id')
+maybePrimitiveType (C.TyConInfo _ id' _)
   | id' == intTyConId = Just PrimIntType
   | id' == doubleTyConId = Just PrimDoubleType
   | otherwise = Nothing

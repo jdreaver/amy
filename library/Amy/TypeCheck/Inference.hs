@@ -82,7 +82,7 @@ freshTypeVariable :: Inference T.Type
 freshTypeVariable = do
   modify' (+ 1)
   id' <- get
-  pure $ T.TyVar (T.TyVarInfo ("t" <> pack (show id')) id' TyVarGenerated)
+  pure $ T.TyVar (T.TyVarInfo ("t" <> pack (show id')) id' KStar TyVarGenerated)
 
 -- | Extends the current typing environment with a list of names and schemes
 -- for those names.
@@ -124,7 +124,7 @@ normalize body =
  where
   letterMap =
     Map.fromList
-    $ (\(var@(T.TyVarInfo _ id' _), letter) -> (var, T.TyVarInfo letter id' TyVarNotGenerated))
+    $ (\(var@(T.TyVarInfo _ id' _ _), letter) -> (var, T.TyVarInfo letter id' KStar TyVarNotGenerated))
     <$> zip (Set.toList $ freeTypeVariables body) letters
 
   normtype (T.TyFun a b) = T.TyFun (normtype a) (normtype b)
@@ -425,8 +425,8 @@ solver (su, cs) =
 
 unifies :: T.Type -> T.Type -> Solve Subst
 unifies t1 t2 | t1 == t2 = return emptySubst
-unifies (T.TyVar v@(T.TyVarInfo _ _ TyVarGenerated)) t = v `bind` t
-unifies t (T.TyVar v@(T.TyVarInfo _ _ TyVarGenerated)) = v `bind` t
+unifies (T.TyVar v@(T.TyVarInfo _ _ _ TyVarGenerated)) t = v `bind` t
+unifies t (T.TyVar v@(T.TyVarInfo _ _ _ TyVarGenerated)) = v `bind` t
 unifies (T.TyFun t1 t2) (T.TyFun t3 t4) = do
   su1 <- unifies t1 t3
   su2 <- unifies (substituteType su1 t2) (substituteType su1 t4)
@@ -436,6 +436,7 @@ unifies t1 t2 = throwError $ UnificationFail t1 t2
 bind ::  T.TyVarInfo -> T.Type -> Solve Subst
 bind a t
   | t == T.TyVar a = return emptySubst
+  | T.tyVarInfoKind a /= typeKind t = throwError $ KindMismatch a t
   | occursCheck a t = throwError $ InfiniteType a t
   | otherwise = return (singletonSubst a t)
 
@@ -551,7 +552,7 @@ convertType (R.TyVar info) = T.TyVar (convertTyVarInfo info)
 convertType (R.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
 
 convertTyConInfo :: R.TyConInfo -> T.TyConInfo
-convertTyConInfo (R.TyConInfo name' _ id') = T.TyConInfo name' id'
+convertTyConInfo (R.TyConInfo name' _ id') = T.TyConInfo name' id' KStar
 
 convertTyVarInfo :: R.TyVarInfo -> T.TyVarInfo
-convertTyVarInfo (R.TyVarInfo name' id' _) = T.TyVarInfo name' id' TyVarNotGenerated
+convertTyVarInfo (R.TyVarInfo name' id' _) = T.TyVarInfo name' id' KStar TyVarNotGenerated

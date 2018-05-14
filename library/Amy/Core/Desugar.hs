@@ -122,13 +122,13 @@ desugarType (T.TyVar info) = C.TyVar (desugarTyVarInfo info)
 desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)
 
 desugarTyConInfo :: T.TyConInfo -> C.TyConInfo
-desugarTyConInfo (T.TyConInfo name id') = C.TyConInfo name id'
+desugarTyConInfo (T.TyConInfo name id' kind) = C.TyConInfo name id' kind
 
 desugarTyVarInfo :: T.TyVarInfo -> C.TyVarInfo
-desugarTyVarInfo ty@(T.TyVarInfo name id' gen) =
+desugarTyVarInfo ty@(T.TyVarInfo name id' kind gen) =
   case gen of
     TyVarGenerated -> error $ "Found generated type name, bad! " ++ show ty
-    TyVarNotGenerated -> C.TyVarInfo name id'
+    TyVarNotGenerated -> C.TyVarInfo name id' kind
 
 --
 -- Case Expressions

@@ -15,10 +15,10 @@ mkPrettyType (TyVar name) = PTyDoc $ prettyTyVarInfo name
 mkPrettyType (TyFun ty1 ty2) = PTyFun (mkPrettyType ty1) (mkPrettyType ty2)
 
 prettyTyConInfo :: TyConInfo -> Doc ann
-prettyTyConInfo (TyConInfo name _) = pretty name
+prettyTyConInfo (TyConInfo name _ _) = pretty name
 
 prettyTyVarInfo :: TyVarInfo -> Doc ann
-prettyTyVarInfo (TyVarInfo name _ _) = pretty name
+prettyTyVarInfo (TyVarInfo name _ _ _) = pretty name
 
 mkPrettyScheme :: Scheme -> PrettyScheme ann
 mkPrettyScheme (Forall vars ty) = PForall (prettyTyVarInfo <$> vars) (mkPrettyType ty)

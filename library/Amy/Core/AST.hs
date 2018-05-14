@@ -30,12 +30,14 @@ module Amy.Core.AST
     -- Re-export
   , Literal(..)
   , module Amy.ASTCommon
+  , module Amy.Kind
   ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 
 import Amy.ASTCommon
+import Amy.Kind
 import Amy.Literal
 import Amy.Prim
 
@@ -226,15 +228,17 @@ data TyConInfo
   = TyConInfo
   { tyConInfoText :: !Text
   , tyConInfoId :: !Int
+  , tyConInfoKind :: !Kind
   } deriving (Show, Eq, Ord)
 
 fromPrimTyCon :: PrimTyCon -> TyConInfo
-fromPrimTyCon (PrimTyCon name id') = TyConInfo name id'
+fromPrimTyCon (PrimTyCon name id') = TyConInfo name id' KStar
 
 data TyVarInfo
   = TyVarInfo
   { tyVarInfoName :: !Text
   , tyVarInfoId :: !Int
+  , tyVarInfoKind :: !Kind
   } deriving (Show, Eq, Ord)
 
 data Scheme

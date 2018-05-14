@@ -32,7 +32,8 @@ data Error
   -- Type checker
   -- TODO: Add source spans here
   | UnificationFail !T.Type !T.Type
-  | InfiniteType T.TyVarInfo !T.Type
+  | KindMismatch !T.TyVarInfo !T.Type
+  | InfiniteType !T.TyVarInfo !T.Type
   | UnboundVariable !T.Ident
   | UnboundConstructor !T.DataConstructor
 
@@ -62,6 +63,7 @@ errorLocation e =
     NonIdentifierName (Located s _) -> Just s
 
     UnificationFail{} -> Nothing
+    KindMismatch{} -> Nothing
     InfiniteType{} -> Nothing
     UnboundVariable{} -> Nothing
     UnboundConstructor{} -> Nothing

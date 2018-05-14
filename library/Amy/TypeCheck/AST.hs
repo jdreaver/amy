@@ -29,18 +29,21 @@ module Amy.TypeCheck.AST
   , fromPrimTyCon
   , TyVarInfo(..)
   , TyVarGenerated(..)
+  , typeKind
   , Scheme(..)
   , Typed(..)
 
     -- Re-export
   , Literal(..)
   , module Amy.ASTCommon
+  , module Amy.Kind
   ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 
 import Amy.ASTCommon
+import Amy.Kind
 import Amy.Literal
 import Amy.Prim
 
@@ -204,15 +207,17 @@ data TyConInfo
   = TyConInfo
   { tyConInfoText :: !Text
   , tyConInfoId :: !Int
+  , tyConInfoKind :: !Kind
   } deriving (Show, Eq, Ord)
 
 fromPrimTyCon :: PrimTyCon -> TyConInfo
-fromPrimTyCon (PrimTyCon name id') = TyConInfo name id'
+fromPrimTyCon (PrimTyCon name id') = TyConInfo name id' KStar
 
 data TyVarInfo
   = TyVarInfo
   { tyVarInfoName :: !Text
   , tyVarInfoId :: !Int
+  , tyVarInfoKind :: !Kind
   , tyVarInfoGenerated :: !TyVarGenerated
   } deriving (Show, Eq, Ord)
 
@@ -220,6 +225,11 @@ data TyVarGenerated
   = TyVarGenerated
   | TyVarNotGenerated
   deriving (Show, Eq, Ord)
+
+typeKind :: Type -> Kind
+typeKind (TyCon info) = tyConInfoKind info
+typeKind (TyVar var) = tyVarInfoKind var
+typeKind (TyFun _ _) = KStar
 
 data Scheme
   = Forall ![TyVarInfo] Type
