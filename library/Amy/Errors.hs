@@ -24,6 +24,7 @@ data Error
   | UnknownVariable !(Located Text)
   | VariableShadowed !(Located Text) !(Located R.Ident)
   | DuplicateDataConstructorName !(Located Text) !R.DataConstructor
+  | DuplicateTypeVariable !R.TyVarInfo !R.TyVarInfo
   | TypeConstructorAlreadyExists !(Located Text) !R.TyConInfo
   | UnknownTypeConstructor !(Located Text)
   | UnknownTypeVariable !(Located Text)
@@ -57,6 +58,7 @@ errorLocation e =
     UnknownVariable (Located s _) -> Just s
     VariableShadowed (Located s _) _ -> Just s
     DuplicateDataConstructorName (Located s _) _ -> Just s
+    DuplicateTypeVariable (R.TyVarInfo _ _ s) _ -> Just s
     TypeConstructorAlreadyExists (Located s _) _ -> Just s
     UnknownTypeConstructor (Located s _) -> Just s
     UnknownTypeVariable (Located s _) -> Just s

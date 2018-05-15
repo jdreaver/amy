@@ -134,7 +134,7 @@ lookupValueInScopeOrError name@(Located span' name') =
 
 addDataConstructorToScope
   :: Located Text
-  -> Maybe (Validation [Error] R.TyConInfo)
+  -> Maybe (Validation [Error] R.DataConArg)
   -> Validation [Error] R.TyConInfo
   -> ConstructorSpan
   -> ConstructorIndex

@@ -8,6 +8,7 @@ module Amy.Renamer.AST
   , fromPrimTypeDef
   , DataConstructor(..)
   , DataConInfo(..)
+  , DataConArg(..)
   , Expr(..)
   , Var(..)
   , If(..)
@@ -69,22 +70,28 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConInfo
+  , typeDeclarationTyVars :: ![TyVarInfo]
   , typeDeclarationConstructors :: ![DataConstructor]
   } deriving (Show, Eq)
 
 fromPrimTypeDef :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
-  TypeDeclaration (fromPrimTyCon tyCon) (fromPrimDataCon <$> dataCons)
+  TypeDeclaration (fromPrimTyCon tyCon) [] (fromPrimDataCon <$> dataCons)
 
 data DataConstructor
   = DataConstructor
   { dataConstructorName :: !(Located Text)
   , dataConstructorId :: !Int
-  , dataConstructorArgument :: !(Maybe TyConInfo)
+  , dataConstructorArgument :: !(Maybe DataConArg)
   , dataConstructorType :: !TyConInfo
   , dataConstructorSpan :: !ConstructorSpan
   , dataConstructorIndex :: !ConstructorIndex
   } deriving (Show, Eq)
+
+data DataConArg
+  = TyConArg !TyConInfo
+  | TyVarArg !TyVarInfo
+  deriving (Show, Eq)
 
 fromPrimDataCon :: PrimDataCon -> DataConstructor
 fromPrimDataCon (PrimDataCon name id' ty span' index) =
