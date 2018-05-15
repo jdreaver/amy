@@ -6,7 +6,6 @@ module Amy.TypeCheck.Inference
   ( inferModule
   , inferTopLevel
   , TyEnv
-  , emptyEnv
   ) where
 
 import Control.Monad.Except
@@ -40,9 +39,6 @@ data TyEnv
   { identTypes :: Map T.Ident T.Scheme
   } deriving (Show, Eq)
 
-emptyEnv :: TyEnv
-emptyEnv = TyEnv Map.empty
-
 extendEnvIdent :: TyEnv -> (T.Ident, T.Scheme) -> TyEnv
 extendEnvIdent env (x, s) =
   env
@@ -52,17 +48,8 @@ extendEnvIdent env (x, s) =
 extendEnvIdentList :: TyEnv -> [(T.Ident, T.Scheme)] -> TyEnv
 extendEnvIdentList = foldl' extendEnvIdent
 
--- removeEnv :: TyEnv -> Name -> TyEnv
--- removeEnv (TyEnv env) var = TyEnv (Map.delete var env)
-
 lookupEnvIdent :: T.Ident -> TyEnv -> Maybe T.Scheme
 lookupEnvIdent key = Map.lookup key . identTypes
-
--- mergeEnv :: TyEnv -> TyEnv -> TyEnv
--- mergeEnv (TyEnv a) (TyEnv b) = TyEnv (Map.union a b)
-
--- mergeEnvs :: [TyEnv] -> TyEnv
--- mergeEnvs = foldl' mergeEnv emptyEnv
 
 --
 -- Inference Monad
