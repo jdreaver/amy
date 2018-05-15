@@ -19,7 +19,6 @@ module Amy.Syntax.Parser
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
-import Data.Text (Text)
 import Text.Megaparsec
 import Text.Megaparsec.Expr
 
@@ -68,19 +67,25 @@ parseScheme = do
   ty <- parseType <?> "type"
   pure $ Forall (fromMaybe [] vars) ty
 
-parseSchemeVars :: AmyParser [Located Text]
+parseSchemeVars :: AmyParser [TyVarInfo]
 parseSchemeVars = do
   forall
-  vars <- many identifier
+  vars <- many tyVarInfo
   dot
   pure vars
 
 parseType :: AmyParser Type
 parseType = makeExprParser term table
  where
-  tVar = (TyCon <$> typeIdentifier) <|> (TyVar <$> identifier)
+  tVar = (TyCon <$> tyConInfo) <|> (TyVar <$> tyVarInfo)
   table = [[InfixR (TyFun <$ typeSeparatorArrow)]]
   term = parens parseType <|> tVar
+
+tyConInfo :: AmyParser TyConInfo
+tyConInfo = TyConInfo <$> typeIdentifier
+
+tyVarInfo :: AmyParser TyVarInfo
+tyVarInfo = TyVarInfo <$> identifier
 
 binding :: AmyParser Binding
 binding = do
@@ -97,7 +102,7 @@ binding = do
 
 typeDeclaration :: AmyParser TypeDeclaration
 typeDeclaration = do
-  tyName <- typeIdentifier
+  tyName <- tyConInfo
   equals' <- optional $ equals <* spaceConsumerNewlines
   constructors <-
     case equals' of
@@ -112,7 +117,7 @@ typeDeclaration = do
 dataConstructor :: AmyParser DataConstructor
 dataConstructor = do
   dataCon <- dataConstructorName'
-  mArg <- optional typeIdentifier
+  mArg <- optional tyConInfo
   pure
     DataConstructor
     { dataConstructorName = dataCon

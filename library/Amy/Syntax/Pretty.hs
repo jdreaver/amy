@@ -12,12 +12,12 @@ import Amy.Pretty
 import Amy.Syntax.AST
 
 mkPrettyType :: Type -> PrettyType ann
-mkPrettyType (TyCon (Located _ var)) = PTyDoc $ pretty var
-mkPrettyType (TyVar (Located _ var)) = PTyDoc $ pretty var
+mkPrettyType (TyCon (TyConInfo (Located _ var))) = PTyDoc $ pretty var
+mkPrettyType (TyVar (TyVarInfo (Located _ var))) = PTyDoc $ pretty var
 mkPrettyType (TyFun ty1 ty2) = PTyFun (mkPrettyType ty1) (mkPrettyType ty2)
 
 mkPrettyScheme :: Scheme -> PrettyScheme ann
-mkPrettyScheme (Forall vars ty) = PForall (pretty . locatedValue <$> vars) (mkPrettyType ty)
+mkPrettyScheme (Forall vars ty) = PForall (pretty . locatedValue . unTyVarInfo <$> vars) (mkPrettyType ty)
 
 prettyModule :: Module -> Doc ann
 prettyModule (Module decls) = vcatTwoHardLines (prettyDeclaration <$> decls)
@@ -27,11 +27,11 @@ prettyDeclaration (DeclBinding binding) = prettyBinding' binding
 prettyDeclaration (DeclBindingType bindingTy) = prettyBindingType' bindingTy
 prettyDeclaration (DeclExtern (Extern (Located _ name) ty)) =
   prettyExtern (pretty name) (mkPrettyType ty)
-prettyDeclaration (DeclType (TypeDeclaration (Located _ tyName) cons)) =
+prettyDeclaration (DeclType (TypeDeclaration (TyConInfo (Located _ tyName)) cons)) =
   prettyTypeDeclaration (pretty tyName) (prettyConstructor <$> cons)
  where
   prettyConstructor (DataConstructor (Located _ conName) mArg) =
-    prettyDataConstructor (pretty conName) (pretty . locatedValue <$> mArg)
+    prettyDataConstructor (pretty conName) (pretty . locatedValue . unTyConInfo <$> mArg)
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding (Located _ name) args body) =
