@@ -90,7 +90,7 @@ primitiveTypeDeclNames =
 
 primitiveTypeNames :: Map Text R.TyConInfo
 primitiveTypeNames =
-  Map.fromList $ (\tyCon -> (tyConInfoText tyCon, tyCon)) <$> allPrimTyCons
+  Map.fromList $ (\tyCon -> (R.tyConInfoName tyCon, tyCon)) <$> allPrimTyCons
 
 primitiveDataConNames :: Map Text R.DataConstructor
 primitiveDataConNames =
@@ -134,7 +134,7 @@ lookupValueInScopeOrError name@(Located span' name') =
 
 addDataConstructorToScope
   :: Located Text
-  -> Maybe (Validation [Error] R.DataConArg)
+  -> Maybe (Validation [Error] R.TyArg)
   -> Validation [Error] R.TyConInfo
   -> ConstructorSpan
   -> ConstructorIndex
@@ -165,23 +165,36 @@ lookupDataConstructorInScopeOrError name@(Located _ name') =
   maybe (Failure [UnknownVariable name]) Success <$> lookupDataConstructorInScope name'
 
 addTypeConstructorToScope :: S.TyConInfo -> Renamer (Validation [Error] R.TyConInfo)
-addTypeConstructorToScope info@(S.TyConInfo lname@(Located span' name)) = do
+addTypeConstructorToScope info@(S.TyConInfo name tyArgs span') = do
   nameId <- freshId
+
+  -- Rename ty args and make sure there aren't duplicate names
+  tyArgs' <- for tyArgs $ \arg ->
+    case arg of
+      S.TyConArg arg' -> pure $ Failure [TypeConstructorDefinitionContainsTyCon arg']
+      S.TyVarArg (S.TyVarInfo (Located argSpan argName)) -> do
+        id' <- freshId
+        pure $ Success $ R.TyVarArg $ R.TyVarInfo argName id' argSpan
   let
-    info' = R.TyConInfo name (Just span') nameId
+    info' =
+      R.TyConInfo
+      <$> pure name
+      <*> pure nameId
+      <*> sequenceA tyArgs'
+      <*> pure (Just span')
   mExistingName <- lookupTypeConstructorInScope info
   case mExistingName of
-    Just existingName -> pure $ Failure [TypeConstructorAlreadyExists lname existingName]
-    Nothing -> do
-      modify' (\s -> s { renamerStateTypeConstructorsInScope = Map.insert name info' (renamerStateTypeConstructorsInScope s) })
-      pure $ Success info'
+    Just existingName -> pure $ Failure [TypeConstructorAlreadyExists (Located span' name) existingName]
+    Nothing -> for info' $ \info'' -> do
+      modify' (\s -> s { renamerStateTypeConstructorsInScope = Map.insert name info'' (renamerStateTypeConstructorsInScope s) })
+      pure info''
 
 lookupTypeConstructorInScope :: S.TyConInfo -> Renamer (Maybe R.TyConInfo)
-lookupTypeConstructorInScope (S.TyConInfo (Located _ name)) = Map.lookup name <$> gets renamerStateTypeConstructorsInScope
+lookupTypeConstructorInScope (S.TyConInfo name _ _) = Map.lookup name <$> gets renamerStateTypeConstructorsInScope
 
 lookupTypeConstructorInScopeOrError :: S.TyConInfo -> Renamer (Validation [Error] R.TyConInfo)
-lookupTypeConstructorInScopeOrError info@(S.TyConInfo name) =
-  maybe (Failure [UnknownTypeConstructor name]) Success <$> lookupTypeConstructorInScope info
+lookupTypeConstructorInScopeOrError info@(S.TyConInfo name _ span') =
+  maybe (Failure [UnknownTypeConstructor (Located span' name)]) Success <$> lookupTypeConstructorInScope info
 
 addTypeDeclarationToScope :: R.TypeDeclaration -> Renamer R.TypeDeclaration
 addTypeDeclarationToScope decl = do

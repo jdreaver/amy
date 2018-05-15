@@ -150,7 +150,7 @@ convertExtern :: R.Extern -> T.Extern
 convertExtern (R.Extern (Located _ name) ty) = T.Extern (convertIdent name) (convertType ty)
 
 convertTypeDeclaration :: R.TypeDeclaration -> T.TypeDeclaration
-convertTypeDeclaration (R.TypeDeclaration tyName _ cons) =
+convertTypeDeclaration (R.TypeDeclaration tyName cons) =
   T.TypeDeclaration (convertTyConInfo tyName) (convertDataConstructor <$> cons)
 
 convertDataConstructor :: R.DataConstructor -> T.DataConstructor
@@ -158,15 +158,15 @@ convertDataConstructor (R.DataConstructor (Located _ conName) id' mTyArg tyName 
   T.DataConstructor
   { T.dataConstructorName = conName
   , T.dataConstructorId = id'
-  , T.dataConstructorArgument = convertDataConArg <$> mTyArg
+  , T.dataConstructorArgument = convertTyArg <$> mTyArg
   , T.dataConstructorType = convertTyConInfo tyName
   , T.dataConstructorSpan = span'
   , T.dataConstructorIndex = index
   }
 
-convertDataConArg :: R.DataConArg -> T.TyConInfo
-convertDataConArg (R.TyConArg info) = convertTyConInfo info
-convertDataConArg (R.TyVarArg info) = error $ "Can't handle data constructor tyvar args yet " ++ show info
+convertTyArg :: R.TyArg -> T.TyConInfo
+convertTyArg (R.TyConArg info) = convertTyConInfo info
+convertTyArg (R.TyVarArg info) = error $ "Can't handle data constructor tyvar args yet " ++ show info
 
 convertDataConInfo :: R.DataConInfo -> T.DataConInfo
 convertDataConInfo (R.DataConInfo tyDecl dataCon) =
@@ -543,7 +543,8 @@ convertType (R.TyVar info) = T.TyVar (convertTyVarInfo info)
 convertType (R.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
 
 convertTyConInfo :: R.TyConInfo -> T.TyConInfo
-convertTyConInfo (R.TyConInfo name' _ id') = T.TyConInfo name' id' KStar
+convertTyConInfo (R.TyConInfo name' id' [] _) = T.TyConInfo name' id' KStar
+convertTyConInfo _ = error "Can't handle type arguments yet"
 
 convertTyVarInfo :: R.TyVarInfo -> T.TyVarInfo
 convertTyVarInfo (R.TyVarInfo name' id' _) = T.TyVarInfo name' id' KStar TyVarNotGenerated

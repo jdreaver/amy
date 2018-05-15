@@ -53,14 +53,14 @@ spec = do
         `shouldParse`
         Extern
           (Located (SourceSpan "" 1 8 1 8) "f")
-          (TyCon (TyConInfo $ Located (SourceSpan "" 1 13 1 15) "Int"))
+          (TyCon (TyConInfo "Int" [] (SourceSpan "" 1 13 1 15)))
       parse' externDecl "extern f :: Int -> Double"
         `shouldParse`
         Extern
           (Located (SourceSpan "" 1 8 1 8) "f")
-          ( TyCon (TyConInfo $ Located (SourceSpan "" 1 13 1 15) "Int")
+          ( TyCon (TyConInfo "Int" [] (SourceSpan "" 1 13 1 15))
             `TyFun`
-            TyCon (TyConInfo $ Located (SourceSpan "" 1 20 1 25) "Double")
+            TyCon (TyConInfo "Double" [] (SourceSpan "" 1 20 1 25))
           )
 
   describe "bindingType" $ do
@@ -69,15 +69,15 @@ spec = do
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
-          (Forall [] $ TyCon (TyConInfo $ Located (SourceSpan "" 1 6 1 8) "Int"))
+          (Forall [] $ TyCon (TyConInfo "Int" [] (SourceSpan "" 1 6 1 8)))
       parse' bindingType "f :: Int -> Double"
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
           ( Forall [] $
-            TyCon (TyConInfo $ Located (SourceSpan "" 1 6 1 8) "Int")
+            TyCon (TyConInfo "Int" [] (SourceSpan "" 1 6 1 8))
             `TyFun`
-            TyCon (TyConInfo $ Located (SourceSpan "" 1 13 1 18) "Double")
+            TyCon (TyConInfo "Double" [] (SourceSpan "" 1 13 1 18))
           )
 
     it "parses polymorphic types" $ do
@@ -102,50 +102,50 @@ spec = do
 
   describe "parseType" $ do
     it "handles simple types" $ do
-      parse' parseType "A" `shouldParse` TyCon (TyConInfo $ Located (SourceSpan "" 1 1 1 1) "A")
+      parse' parseType "A" `shouldParse` TyCon (TyConInfo "A" [] (SourceSpan "" 1 1 1 1))
       parse' parseType "A -> B"
         `shouldParse` (
-          TyCon (TyConInfo $ Located (SourceSpan "" 1 1 1 1) "A")
+          TyCon (TyConInfo "A" [] (SourceSpan "" 1 1 1 1))
           `TyFun`
-          TyCon (TyConInfo $ Located (SourceSpan "" 1 6 1 6) "B")
+          TyCon (TyConInfo "B" [] (SourceSpan "" 1 6 1 6))
         )
       parse' parseType "A -> B -> C"
         `shouldParse` (
-          TyCon (TyConInfo $ Located (SourceSpan "" 1 1 1 1) "A")
+          TyCon (TyConInfo "A" [] (SourceSpan "" 1 1 1 1))
           `TyFun`
-          TyCon (TyConInfo $ Located (SourceSpan "" 1 6 1 6) "B")
+          TyCon (TyConInfo "B" [] (SourceSpan "" 1 6 1 6))
           `TyFun`
-          TyCon (TyConInfo $ Located (SourceSpan "" 1 11 1 11) "C")
+          TyCon (TyConInfo "C" [] (SourceSpan "" 1 11 1 11))
         )
 
     it "handles parens" $ do
-      parse' parseType "(A)" `shouldParse` TyCon (TyConInfo $ Located (SourceSpan "" 1 2 1 2) "A")
-      parse' parseType "((X))" `shouldParse` TyCon (TyConInfo $ Located (SourceSpan "" 1 3 1 3) "X")
+      parse' parseType "(A)" `shouldParse` TyCon (TyConInfo "A" [] (SourceSpan "" 1 2 1 2))
+      parse' parseType "((X))" `shouldParse` TyCon (TyConInfo "X" [] (SourceSpan "" 1 3 1 3))
       parse' parseType "((A)) -> ((B))"
         `shouldParse` (
-          TyCon (TyConInfo $ Located (SourceSpan "" 1 3 1 3) "A")
+          TyCon (TyConInfo "A" [] (SourceSpan "" 1 3 1 3))
           `TyFun`
-          TyCon (TyConInfo $ Located (SourceSpan "" 1 12 1 12) "B")
+          TyCon (TyConInfo "B" [] (SourceSpan "" 1 12 1 12))
         )
       parse' parseType "(A -> B) -> C"
         `shouldParse` (
-          ( TyCon (TyConInfo $ Located (SourceSpan "" 1 2 1 2) "A")
+          ( TyCon (TyConInfo "A" [] (SourceSpan "" 1 2 1 2))
             `TyFun`
-            TyCon (TyConInfo $ Located (SourceSpan "" 1 7 1 7) "B")
+            TyCon (TyConInfo "B" [] (SourceSpan "" 1 7 1 7))
           )
           `TyFun`
-          TyCon (TyConInfo $ Located (SourceSpan "" 1 13 1 13) "C")
+          TyCon (TyConInfo "C" [] (SourceSpan "" 1 13 1 13))
         )
       parse' parseType "A -> (B -> C) -> D"
         `shouldParse` (
-          TyCon (TyConInfo $ Located (SourceSpan "" 1 1 1 1) "A")
+          TyCon (TyConInfo "A" [] (SourceSpan "" 1 1 1 1))
           `TyFun`
-          ( TyCon (TyConInfo $ Located (SourceSpan "" 1 7 1 7) "B")
+          ( TyCon (TyConInfo "B" [] (SourceSpan "" 1 7 1 7))
             `TyFun`
-             TyCon (TyConInfo $ Located (SourceSpan "" 1 12 1 12) "C")
+             TyCon (TyConInfo "C" [] (SourceSpan "" 1 12 1 12))
           )
           `TyFun`
-          TyCon (TyConInfo $ Located (SourceSpan "" 1 18 1 18) "D")
+          TyCon (TyConInfo "D" [] (SourceSpan "" 1 18 1 18))
         )
 
     it "should fail gracefully without infinite loops" $ do

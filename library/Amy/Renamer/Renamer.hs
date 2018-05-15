@@ -4,8 +4,7 @@ module Amy.Renamer.Renamer
   ( rename
   ) where
 
-import Data.Either (rights)
-import Data.List (find, foldl')
+import Data.List (find)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
@@ -45,26 +44,17 @@ rename' (S.Module declarations) = do
     <*> pure maxId
 
 renameTypeDeclaration :: S.TypeDeclaration -> Renamer (Validation [Error] R.TypeDeclaration)
-renameTypeDeclaration (S.TypeDeclaration tyName tyVars constructors) = do
+renameTypeDeclaration (S.TypeDeclaration tyName constructors) = do
   -- Rename type name
   tyName' <- addTypeConstructorToScope tyName
   let
     span' = ConstructorSpan $ length constructors
     indexes = ConstructorIndex <$> [0..]
+    tyVars = R.tyConInfoArgs <$> tyName'
+    getTyVarArg (R.TyConArg _) = Nothing
+    getTyVarArg (R.TyVarArg info) = Just info
 
-  -- Rename type variables and ensure they are unique
-  tyVars' <- for tyVars $ \(S.TyVarInfo (Located s v)) -> do
-    id' <- freshId
-    pure $ R.TyVarInfo v id' s
-  let
-    checkTyVarDuplicates :: [Validation [Error] R.TyVarInfo] -> R.TyVarInfo -> [Validation [Error] R.TyVarInfo]
-    checkTyVarDuplicates previousVars var =
-      let successes = rights $ toEither <$> previousVars
-      in case find ((== R.tyVarInfoName var) . R.tyVarInfoName) successes of
-        Nothing -> previousVars ++ [Success var]
-        Just prev -> previousVars ++ [Failure [DuplicateTypeVariable var prev]]
-    tyVars'' :: [Validation [Error] R.TyVarInfo]
-    tyVars'' = foldl' checkTyVarDuplicates [] tyVars'
+  -- TODO: Check for duplicate type variables
 
   -- Rename data constructors
   constructors' <- for (zip indexes constructors) $ \(i, S.DataConstructor name mArgTy) -> do
@@ -72,14 +62,14 @@ renameTypeDeclaration (S.TypeDeclaration tyName tyVars constructors) = do
       case argTy of
         S.TyConArg tyCon -> fmap R.TyConArg <$> lookupTypeConstructorInScopeOrError tyCon
         S.TyVarArg (S.TyVarInfo tyVar) ->
-          case find ((== locatedValue tyVar) . R.tyVarInfoName) tyVars' of
-            Just var -> pure $ Success $ R.TyVarArg var
-            Nothing -> pure $ Failure [UnknownTypeVariable tyVar]
+          pure $ tyVars `bindValidation` \tyVars' ->
+            case find ((== locatedValue tyVar) . R.tyVarInfoName) (mapMaybe getTyVarArg tyVars') of
+              Just var -> Success $ R.TyVarArg var
+              Nothing -> Failure [UnknownTypeVariable tyVar]
     addDataConstructorToScope name mArgTy' tyName' span' i
   traverse addTypeDeclarationToScope
     $ R.TypeDeclaration
     <$> tyName'
-    <*> sequenceA tyVars''
     <*> sequenceA constructors'
 
 renameExtern :: S.Extern -> Renamer (Validation [Error] R.Extern)

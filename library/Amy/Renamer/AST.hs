@@ -8,7 +8,6 @@ module Amy.Renamer.AST
   , fromPrimTypeDef
   , DataConstructor(..)
   , DataConInfo(..)
-  , DataConArg(..)
   , Expr(..)
   , Var(..)
   , If(..)
@@ -23,6 +22,7 @@ module Amy.Renamer.AST
   , Type(..)
   , TyConInfo(..)
   , TyVarInfo(..)
+  , TyArg(..)
   , Scheme(..)
 
     -- Re-export
@@ -70,28 +70,22 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConInfo
-  , typeDeclarationTyVars :: ![TyVarInfo]
   , typeDeclarationConstructors :: ![DataConstructor]
   } deriving (Show, Eq)
 
 fromPrimTypeDef :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
-  TypeDeclaration (fromPrimTyCon tyCon) [] (fromPrimDataCon <$> dataCons)
+  TypeDeclaration (fromPrimTyCon tyCon) (fromPrimDataCon <$> dataCons)
 
 data DataConstructor
   = DataConstructor
   { dataConstructorName :: !(Located Text)
   , dataConstructorId :: !Int
-  , dataConstructorArgument :: !(Maybe DataConArg)
+  , dataConstructorArgument :: !(Maybe TyArg)
   , dataConstructorType :: !TyConInfo
   , dataConstructorSpan :: !ConstructorSpan
   , dataConstructorIndex :: !ConstructorIndex
   } deriving (Show, Eq)
-
-data DataConArg
-  = TyConArg !TyConInfo
-  | TyVarArg !TyVarInfo
-  deriving (Show, Eq)
 
 fromPrimDataCon :: PrimDataCon -> DataConstructor
 fromPrimDataCon (PrimDataCon name id' ty span' index) =
@@ -180,20 +174,26 @@ infixr 0 `TyFun`
 
 data TyConInfo
   = TyConInfo
-  { tyConInfoText :: !Text
-  , tyConInfoLocation :: !(Maybe SourceSpan)
+  { tyConInfoName :: !Text
   , tyConInfoId :: !Int
+  , tyConInfoArgs :: ![TyArg]
+  , tyConInfoLocation :: !(Maybe SourceSpan)
   } deriving (Show, Eq, Ord)
 
 fromPrimTyCon :: PrimTyCon -> TyConInfo
-fromPrimTyCon (PrimTyCon name id') = TyConInfo name Nothing id'
+fromPrimTyCon (PrimTyCon name id') = TyConInfo name id' [] Nothing
 
 data TyVarInfo
   = TyVarInfo
   { tyVarInfoName :: !Text
   , tyVarInfoId :: !Int
   , tyVarInfoLocation :: !SourceSpan
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
+
+data TyArg
+  = TyConArg !TyConInfo
+  | TyVarArg !TyVarInfo
+  deriving (Show, Eq, Ord)
 
 data Scheme
   = Forall ![TyVarInfo] Type

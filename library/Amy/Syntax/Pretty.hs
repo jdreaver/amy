@@ -17,7 +17,9 @@ mkPrettyType (TyVar info) = PTyDoc $ prettyTyVarInfo info
 mkPrettyType (TyFun ty1 ty2) = PTyFun (mkPrettyType ty1) (mkPrettyType ty2)
 
 prettyTyConInfo :: TyConInfo -> Doc ann
-prettyTyConInfo (TyConInfo (Located _ name)) = pretty name
+prettyTyConInfo (TyConInfo name args _) = pretty name <> args'
+ where
+  args' = if null args then mempty else sep (prettyTyArg <$> args)
 
 prettyTyVarInfo :: TyVarInfo -> Doc ann
 prettyTyVarInfo (TyVarInfo (Located _ name)) = pretty name
@@ -33,15 +35,15 @@ prettyDeclaration (DeclBinding binding) = prettyBinding' binding
 prettyDeclaration (DeclBindingType bindingTy) = prettyBindingType' bindingTy
 prettyDeclaration (DeclExtern (Extern (Located _ name) ty)) =
   prettyExtern (pretty name) (mkPrettyType ty)
-prettyDeclaration (DeclType (TypeDeclaration (TyConInfo (Located _ tyName)) tyVars cons)) =
-  prettyTypeDeclaration (pretty tyName) (prettyTyVarInfo <$> tyVars) (prettyConstructor <$> cons)
+prettyDeclaration (DeclType (TypeDeclaration info cons)) =
+  prettyTypeDeclaration (prettyTyConInfo info) (prettyConstructor <$> cons)
  where
   prettyConstructor (DataConstructor (Located _ conName) mArg) =
-    prettyDataConstructor (pretty conName) (prettyDataConArg <$> mArg)
+    prettyDataConstructor (pretty conName) (prettyTyArg <$> mArg)
 
-prettyDataConArg :: DataConArg -> Doc ann
-prettyDataConArg (TyConArg info) = prettyTyConInfo info
-prettyDataConArg (TyVarArg info) = prettyTyVarInfo info
+prettyTyArg :: TyArg -> Doc ann
+prettyTyArg (TyConArg info) = prettyTyConInfo info
+prettyTyArg (TyVarArg info) = prettyTyVarInfo info
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding (Located _ name) args body) =

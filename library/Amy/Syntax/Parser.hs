@@ -82,10 +82,21 @@ parseType = makeExprParser term table
   term = parens parseType <|> tVar
 
 tyConInfo :: AmyParser TyConInfo
-tyConInfo = TyConInfo <$> typeIdentifier
+tyConInfo = do
+  Located span' name <- typeIdentifier
+  args <- many tyArg
+  pure
+    TyConInfo
+    { tyConInfoName = name
+    , tyConInfoArgs = args
+    , tyConInfoLocation = span'
+    }
 
 tyVarInfo :: AmyParser TyVarInfo
 tyVarInfo = TyVarInfo <$> identifier
+
+tyArg :: AmyParser TyArg
+tyArg = (TyConArg <$> tyConInfo) <|> (TyVarArg <$> tyVarInfo)
 
 binding :: AmyParser Binding
 binding = do
@@ -103,7 +114,6 @@ binding = do
 typeDeclaration :: AmyParser TypeDeclaration
 typeDeclaration = do
   tyName <- tyConInfo
-  tyVars <- many $ tyVarInfo <* spaceConsumer
   equals' <- optional $ equals <* spaceConsumerNewlines
   constructors <-
     case equals' of
@@ -112,14 +122,13 @@ typeDeclaration = do
   pure
     TypeDeclaration
     { typeDeclarationTypeName = tyName
-    , typeDeclarationTyVars = tyVars
     , typeDeclarationConstructors = constructors
     }
 
 dataConstructor :: AmyParser DataConstructor
 dataConstructor = do
   dataCon <- dataConstructorName'
-  mArg <- optional $ (TyConArg <$> tyConInfo) <|> (TyVarArg <$> tyVarInfo)
+  mArg <- optional tyArg
   pure
     DataConstructor
     { dataConstructorName = dataCon
