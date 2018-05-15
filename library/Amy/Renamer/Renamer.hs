@@ -8,6 +8,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
+import Data.Traversable (for)
 import Data.Validation
 
 import Amy.Errors
@@ -46,11 +47,10 @@ renameTypeDeclaration (S.TypeDeclaration tyName constructors) = do
   let
     span' = ConstructorSpan $ length constructors
     indexes = ConstructorIndex <$> [0..]
-  constructors' <-
-    traverse
-    (\(i, S.DataConstructor name mArgTy) -> addDataConstructorToScope name mArgTy tyName' span' i)
-    $ zip indexes constructors
-  addTypeDeclarationToScope
+  constructors' <- for (zip indexes constructors) $ \(i, S.DataConstructor name mArgTy) -> do
+    mArgTy' <- traverse lookupTypeConstructorInScopeOrError mArgTy
+    addDataConstructorToScope name mArgTy' tyName' span' i
+  traverse addTypeDeclarationToScope
     $ R.TypeDeclaration
     <$> tyName'
     <*> sequenceA constructors'
@@ -59,10 +59,10 @@ renameExtern :: S.Extern -> Renamer (Validation [Error] R.Extern)
 renameExtern extern = do
   name' <- addValueToScope (S.externName extern)
   type' <- renameType (S.externType extern)
-  pure $
-    R.Extern
-      <$> name'
-      <*> type'
+  pure
+    $ R.Extern
+    <$> name'
+    <*> type'
 
 renameBindingGroup :: [S.Binding] -> [S.BindingType] -> Renamer (Validation [Error] [R.Binding])
 renameBindingGroup bindings bindingTypes = do
@@ -82,17 +82,12 @@ renameBinding
   -> S.Binding
   -> Renamer (Validation [Error] R.Binding)
 renameBinding typeMap name binding = withNewScope $ do -- Begin new scope
-  let
-    name' =
-      case name of
-        (Success (Located l ident)) -> pure (Located l ident)
-        Failure f -> Failure f
   type' <- traverse renameScheme $ Map.lookup (locatedValue $ S.bindingName binding) typeMap
   args <- traverse addValueToScope (S.bindingArgs binding)
   body <- renameExpression (S.bindingBody binding)
   pure $
     R.Binding
-    <$> name'
+    <$> name
     <*> sequenceA type'
     <*> sequenceA args
     <*> body
