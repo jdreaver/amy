@@ -132,8 +132,8 @@ prettyBindingScheme name scheme = name <+> "::" <+> prettyScheme scheme
 prettyExtern :: Doc ann -> PrettyType ann -> Doc ann
 prettyExtern name ty = "extern" <+> prettyBindingType name ty
 
-prettyTypeDeclaration :: Doc ann -> [Doc ann] -> Doc ann
-prettyTypeDeclaration tyName dataCons = tyName <>
+prettyTypeDeclaration :: Doc ann -> [Doc ann] -> [Doc ann] -> Doc ann
+prettyTypeDeclaration tyName tyVars dataCons = tyName <> sep ((space <>) <$> tyVars) <>
   case dataCons of
     [] -> mempty
     _ -> space <> "=" <+> concatWith (\l r -> l <+> "|" <+> r) dataCons

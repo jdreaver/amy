@@ -103,6 +103,7 @@ binding = do
 typeDeclaration :: AmyParser TypeDeclaration
 typeDeclaration = do
   tyName <- tyConInfo
+  tyVars <- many $ tyVarInfo <* spaceConsumer
   equals' <- optional $ equals <* spaceConsumerNewlines
   constructors <-
     case equals' of
@@ -111,13 +112,14 @@ typeDeclaration = do
   pure
     TypeDeclaration
     { typeDeclarationTypeName = tyName
+    , typeDeclarationTyVars = tyVars
     , typeDeclarationConstructors = constructors
     }
 
 dataConstructor :: AmyParser DataConstructor
 dataConstructor = do
   dataCon <- dataConstructorName'
-  mArg <- optional tyConInfo
+  mArg <- optional $ (TyConArg <$> tyConInfo) <|> (TyVarArg <$> tyVarInfo)
   pure
     DataConstructor
     { dataConstructorName = dataCon

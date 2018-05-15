@@ -12,6 +12,7 @@ module Amy.Syntax.AST
   , Extern(..)
   , TypeDeclaration(..)
   , DataConstructor(..)
+  , DataConArg(..)
   , Expr(..)
   , Var(..)
   , If(..)
@@ -96,14 +97,20 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConInfo
+  , typeDeclarationTyVars :: ![TyVarInfo]
   , typeDeclarationConstructors :: ![DataConstructor]
   } deriving (Show, Eq)
 
 data DataConstructor
   = DataConstructor
   { dataConstructorName :: !(Located Text)
-  , dataConstructorArgument :: !(Maybe TyConInfo)
+  , dataConstructorArgument :: !(Maybe DataConArg)
   } deriving (Show, Eq)
+
+data DataConArg
+  = TyConArg !TyConInfo
+  | TyVarArg !TyVarInfo
+  deriving (Show, Eq)
 
 data Expr
   = ELit !(Located Literal)

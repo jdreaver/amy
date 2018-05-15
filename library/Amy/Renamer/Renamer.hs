@@ -4,6 +4,7 @@ module Amy.Renamer.Renamer
   ( rename
   ) where
 
+import Control.Monad (unless)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
@@ -42,13 +43,18 @@ rename' (S.Module declarations) = do
     <*> pure maxId
 
 renameTypeDeclaration :: S.TypeDeclaration -> Renamer (Validation [Error] R.TypeDeclaration)
-renameTypeDeclaration (S.TypeDeclaration tyName constructors) = do
+renameTypeDeclaration decl@(S.TypeDeclaration tyName tyVars constructors) = do
   tyName' <- addTypeConstructorToScope tyName
   let
     span' = ConstructorSpan $ length constructors
     indexes = ConstructorIndex <$> [0..]
+  unless (null tyVars) $
+    error $ "Can't handle type variables yet! " ++ show decl
   constructors' <- for (zip indexes constructors) $ \(i, S.DataConstructor name mArgTy) -> do
-    mArgTy' <- traverse lookupTypeConstructorInScopeOrError mArgTy
+    mArgTy' <- for mArgTy $ \argTy ->
+      case argTy of
+        TyConArg tyCon -> lookupTypeConstructorInScopeOrError tyCon
+        TyVarArg _ -> error "Can't handle tyvar args yet"
     addDataConstructorToScope name mArgTy' tyName' span' i
   traverse addTypeDeclarationToScope
     $ R.TypeDeclaration
