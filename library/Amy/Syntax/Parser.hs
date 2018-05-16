@@ -77,14 +77,14 @@ parseSchemeVars = do
 parseType :: AmyParser Type
 parseType = makeExprParser term table
  where
-  tVar = (TyCon <$> tyConInfo) <|> (TyVar <$> tyVarInfo)
+  tVar = (TyCon <$> tyConInfo True) <|> (TyVar <$> tyVarInfo)
   table = [[InfixR (TyFun <$ typeSeparatorArrow)]]
   term = parens parseType <|> tVar
 
-tyConInfo :: AmyParser TyConInfo
-tyConInfo = do
+tyConInfo :: Bool -> AmyParser TyConInfo
+tyConInfo allowArgs = do
   Located span' name <- typeIdentifier
-  args <- many tyArg
+  args <- if allowArgs then many tyArg else pure []
   pure
     TyConInfo
     { tyConInfoName = name
@@ -96,7 +96,7 @@ tyVarInfo :: AmyParser TyVarInfo
 tyVarInfo = TyVarInfo <$> identifier
 
 tyArg :: AmyParser TyArg
-tyArg = (TyConArg <$> tyConInfo) <|> (TyVarArg <$> tyVarInfo)
+tyArg = (TyConArg <$> tyConInfo False) <|> (TyVarArg <$> tyVarInfo)
 
 binding :: AmyParser Binding
 binding = do
@@ -113,7 +113,7 @@ binding = do
 
 typeDeclaration :: AmyParser TypeDeclaration
 typeDeclaration = do
-  tyName <- tyConInfo
+  tyName <- tyConInfo True
   equals' <- optional $ equals <* spaceConsumerNewlines
   constructors <-
     case equals' of
@@ -138,18 +138,18 @@ dataConstructor = do
 expression :: AmyParser Expr
 expression = do
   -- Parse a NonEmpty list of expressions separated by spaces.
-  expressions <- lineFold expression'
+  f :| args <- lineFold expression'
 
   pure $
-    case expressions of
+    case NE.nonEmpty args of
       -- Just a simple expression
-      expr :| [] -> expr
+      Nothing -> f
       -- We must have a function application
-      f :| args ->
+      Just args' ->
         EApp
         App
         { appFunction = f
-        , appArgs = NE.fromList args
+        , appArgs = args'
         }
 
 -- | Parses any expression except function application. This is needed to avoid
