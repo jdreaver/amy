@@ -8,7 +8,7 @@ main =
 
 f :: forall o. MyType Int o
 f =
-  case MyType 1 of
+  case MyType 42 of
     MyType i -> MyType i
     B j -> B j
 

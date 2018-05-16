@@ -151,9 +151,7 @@ convertPattern (T.PCons (T.PatCons info mArg _)) =
   let
     info' = desugarDataConInfo info
     argPats = convertPattern <$> maybeToList mArg
-    tyArgToType (C.TyConArg con) = C.TyCon con
-    tyArgToType (C.TyVarArg var) = C.TyVar var
-    argTys = tyArgToType <$> maybeToList (C.dataConstructorArgument (C.dataConInfoCons info'))
+    argTys = maybeToList $ desugarType . patternType <$> mArg
     (ConstructorSpan span') = C.dataConstructorSpan $ C.dataConInfoCons info'
   in PC.PCon (PC.Con info' argTys span') argPats
 convertPattern (T.PParens pat) = convertPattern pat
