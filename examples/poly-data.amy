@@ -6,7 +6,6 @@ f =
     MyType i -> MyType i
     B j -> B j
 
-
 g :: forall c d. c -> MyType c d
 g x = MyType x
 
