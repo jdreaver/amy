@@ -426,10 +426,9 @@ unifies (T.TyFun t1 t2) (T.TyFun t3 t4) = do
   su1 <- unifies t1 t3
   su2 <- unifies (substituteType su1 t2) (substituteType su1 t4)
   pure (su2 `composeSubst` su1)
-unifies t1@(T.TyCon (T.TyConInfo _ id1 args1 _)) t2@(T.TyCon (T.TyConInfo _ id2 args2 _)) =
-  if id1 /= id2 || length args1 /= length args2
-  then throwError $ UnificationFail t1 t2
-  else unifyMany (argToType <$> args1) (argToType <$> args2)
+unifies (T.TyCon (T.TyConInfo _ id1 args1 _)) (T.TyCon (T.TyConInfo _ id2 args2 _))
+  | id1 == id2 && length args1 == length args2 =
+    unifyMany (argToType <$> args1) (argToType <$> args2)
  where
   argToType (T.TyConArg info) = T.TyCon info
   argToType (T.TyVarArg info) = T.TyVar info
