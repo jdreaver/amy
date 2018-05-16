@@ -1,0 +1,14 @@
+MyType x y = MyType x | B y
+
+f :: forall o. MyType Int o
+f =
+  case MyType 1 of
+    MyType i -> MyType i
+    B j -> B j
+
+
+g :: forall c d. c -> MyType c d
+g x = MyType x
+
+h :: forall a. MyType a Int
+h = B 1

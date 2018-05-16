@@ -111,8 +111,7 @@ normalize body =
  where
   letterMap =
     Map.fromList
-    $ (\(var@(T.TyVarInfo _ id' _ _), letter) -> (var, T.TyVarInfo letter id' KStar TyVarNotGenerated))
-    <$> zip (Set.toList $ freeTypeVariables body) letters
+    $ replaceGensWithLetters (Set.toList $ freeTypeVariables body) letters
 
   normtype (T.TyFun a b) = T.TyFun (normtype a) (normtype b)
   normtype (T.TyCon a) = T.TyCon a
@@ -123,6 +122,14 @@ normalize body =
 
 letters :: [Text]
 letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
+
+replaceGensWithLetters :: [T.TyVarInfo] -> [Text] -> [(T.TyVarInfo, T.TyVarInfo)]
+replaceGensWithLetters _ [] = error "Ran out of letters, how???"
+replaceGensWithLetters [] _ = []
+replaceGensWithLetters (var@(T.TyVarInfo _ id' _ TyVarGenerated):vars) (l:ls) =
+  (var, T.TyVarInfo l id' KStar TyVarNotGenerated) : replaceGensWithLetters vars ls
+replaceGensWithLetters (var@(T.TyVarInfo _ _ _ TyVarNotGenerated):vars) ls =
+  (var, var) : replaceGensWithLetters vars ls
 
 -- | A 'Constraint' is a statement that two types should be equal.
 newtype Constraint = Constraint { unConstraint :: (T.Type, T.Type) }
