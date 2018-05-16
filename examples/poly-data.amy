@@ -1,5 +1,11 @@
 MyType x y = MyType x | B y
 
+main :: Int
+main =
+  case f of
+    MyType i -> i
+    B x -> 2
+
 f :: forall o. MyType Int o
 f =
   case MyType 1 of
