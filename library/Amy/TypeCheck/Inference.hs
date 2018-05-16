@@ -202,7 +202,7 @@ inferTopLevel maxId env bindings = do
           (T.Forall _ ty) = T.bindingType binding
           (scheme', letterSubst) = normalize ty
           binding' = binding { T.bindingType = scheme' }
-          subst' = composeSubst subst letterSubst
+          subst' = composeSubst letterSubst subst
         in substituteBinding subst' binding'
   pure (bindings'', maxId')
 
