@@ -19,7 +19,7 @@ mkPrettyType (TyFun ty1 ty2) = PTyFun (mkPrettyType ty1) (mkPrettyType ty2)
 prettyTyConInfo :: TyConInfo -> Doc ann
 prettyTyConInfo (TyConInfo name args _) = pretty name <> args'
  where
-  args' = if null args then mempty else sep (prettyTyArg <$> args)
+  args' = if null args then mempty else space <> sep (prettyTyArg <$> args)
 
 prettyTyVarInfo :: TyVarInfo -> Doc ann
 prettyTyVarInfo (TyVarInfo (Located _ name)) = pretty name

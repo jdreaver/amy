@@ -164,20 +164,24 @@ convertDataConstructor (R.DataConstructor (Located _ conName) id' mTyArg tyName 
   , T.dataConstructorIndex = index
   }
 
-convertTyArg :: R.TyArg -> T.TyConInfo
-convertTyArg (R.TyConArg info) = convertTyConInfo info
-convertTyArg (R.TyVarArg info) = error $ "Can't handle data constructor tyvar args yet " ++ show info
+convertTyArg :: R.TyArg -> T.TyArg
+convertTyArg (R.TyConArg info) = T.TyConArg $ convertTyConInfo info
+convertTyArg (R.TyVarArg info) = T.TyVarArg $ convertTyVarInfo info
 
 convertDataConInfo :: R.DataConInfo -> T.DataConInfo
 convertDataConInfo (R.DataConInfo tyDecl dataCon) =
   T.DataConInfo (convertTypeDeclaration tyDecl) (convertDataConstructor dataCon)
 
 dataConstructorScheme :: T.DataConstructor -> T.Scheme
-dataConstructorScheme (T.DataConstructor _ _ mTyArg tyName _ _) = T.Forall [] ty
+dataConstructorScheme (T.DataConstructor _ _ mTyArg tyName _ _) = T.Forall tyVars ty
  where
+  getTyVar (T.TyVarArg var) = var
+  getTyVar (T.TyConArg _) = error "Encountered TyCon in type arguments"
+  tyVars = getTyVar <$> T.tyConInfoArgs tyName
   ty =
     case mTyArg of
-      Just tyArg -> T.TyCon tyArg `T.TyFun` T.TyCon tyName
+      Just (T.TyConArg tyCon) -> T.TyCon tyCon `T.TyFun` T.TyCon tyName
+      Just (T.TyVarArg tyVar) -> T.TyVar tyVar `T.TyFun` T.TyCon tyName
       Nothing -> T.TyCon tyName
 
 primitiveFunctionScheme :: PrimitiveFunction -> (T.Ident, T.Scheme)
@@ -199,7 +203,7 @@ inferTopLevel maxId env bindings = do
           (scheme', letterSubst) = normalize ty
           binding' = binding { T.bindingType = scheme' }
           subst' = composeSubst subst letterSubst
-        in substituteTBinding subst' binding'
+        in substituteBinding subst' binding'
   pure (bindings'', maxId')
 
 -- | Infer a group of bindings.
@@ -427,7 +431,7 @@ unifies t1 t2 = throwError $ UnificationFail t1 t2
 bind ::  T.TyVarInfo -> T.Type -> Solve Subst
 bind a t
   | t == T.TyVar a = return emptySubst
-  | T.tyVarInfoKind a /= typeKind t = throwError $ KindMismatch a t
+  -- | T.tyVarInfoKind a /= typeKind t = throwError $ KindMismatch a t -- TODO: Check kinds
   | occursCheck a t = throwError $ InfiniteType a t
   | otherwise = return (singletonSubst a t)
 
@@ -457,8 +461,24 @@ substituteScheme (Subst subst) (T.Forall vars ty) = T.Forall vars $ substituteTy
 
 substituteType :: Subst -> T.Type -> T.Type
 substituteType (Subst subst) t@(T.TyVar var) = Map.findWithDefault t var subst
-substituteType _ (T.TyCon a) = T.TyCon a
-substituteType s (t1 `T.TyFun` t2) = substituteType s t1 `T.TyFun` substituteType s t2
+substituteType subst (T.TyCon con) = T.TyCon $ substituteTyCon subst con
+substituteType subst (t1 `T.TyFun` t2) = substituteType subst t1 `T.TyFun` substituteType subst t2
+
+substituteTyCon :: Subst -> T.TyConInfo -> T.TyConInfo
+substituteTyCon subst (T.TyConInfo name id' args kind) = T.TyConInfo name id' (substituteTyArg subst <$> args) kind
+
+substituteTyArg :: Subst -> T.TyArg -> T.TyArg
+substituteTyArg subst (T.TyConArg con) = T.TyConArg $ substituteTyCon subst con
+substituteTyArg (Subst subst) (T.TyVarArg var) =
+  case Map.lookup var subst of
+    Nothing -> T.TyVarArg var
+    Just (T.TyVar var') -> T.TyVarArg var'
+    Just (T.TyCon con ) -> T.TyConArg con
+    Just t -> error $ "Invalid TyArg substitution " ++ show (var, t)
+
+substituteTypeDeclaration :: Subst -> T.TypeDeclaration -> T.TypeDeclaration
+substituteTypeDeclaration subst (T.TypeDeclaration tyCon cons) =
+  T.TypeDeclaration (substituteTyCon subst tyCon) (substituteDataConstructor subst <$> cons)
 
 substituteTyped :: Subst -> T.Typed a -> T.Typed a
 substituteTyped subst (T.Typed ty x) = T.Typed (substituteType subst ty) x
@@ -471,13 +491,14 @@ substituteEnv subst (TyEnv identTys) =
   TyEnv
     (Map.map (substituteScheme subst) identTys)
 
-substituteTBinding :: Subst -> T.Binding -> T.Binding
-substituteTBinding subst binding =
-  binding
-  { T.bindingType = substituteScheme subst (T.bindingType binding)
-  , T.bindingArgs = substituteTyped subst <$> T.bindingArgs binding
-  , T.bindingReturnType = substituteType subst (T.bindingReturnType binding)
-  , T.bindingBody = substituteTExpr subst (T.bindingBody binding)
+substituteBinding :: Subst -> T.Binding -> T.Binding
+substituteBinding subst (T.Binding name ty args retTy body) =
+  T.Binding
+  { T.bindingName = name
+  , T.bindingType = substituteScheme subst ty
+  , T.bindingArgs = substituteTyped subst <$> args
+  , T.bindingReturnType = substituteType subst retTy
+  , T.bindingBody = substituteTExpr subst body
   }
 
 substituteTExpr :: Subst -> T.Expr -> T.Expr
@@ -486,16 +507,24 @@ substituteTExpr subst (T.EVar var) =
   T.EVar $
     case var of
       T.VVal var' -> T.VVal $ substituteTyped subst var'
-      T.VCons (T.Typed ty cons) -> T.VCons (T.Typed (substituteType subst ty) cons)
+      T.VCons (T.Typed ty cons) -> T.VCons (T.Typed (substituteType subst ty) (substituteDataConInfo subst cons))
 substituteTExpr subst (T.EIf (T.If pred' then' else')) =
   T.EIf (T.If (substituteTExpr subst pred') (substituteTExpr subst then') (substituteTExpr subst else'))
 substituteTExpr subst (T.ECase (T.Case scrutinee matches)) =
   T.ECase (T.Case (substituteTExpr subst scrutinee) (substituteTMatch subst <$> matches))
 substituteTExpr subst (T.ELet (T.Let bindings expr)) =
-  T.ELet (T.Let (substituteTBinding subst <$> bindings) (substituteTExpr subst expr))
+  T.ELet (T.Let (substituteBinding subst <$> bindings) (substituteTExpr subst expr))
 substituteTExpr subst (T.EApp (T.App func args returnType)) =
   T.EApp (T.App (substituteTExpr subst func) (substituteTExpr subst <$> args) (substituteType subst returnType))
 substituteTExpr subst (T.EParens expr) = T.EParens (substituteTExpr subst expr)
+
+substituteDataConInfo :: Subst -> T.DataConInfo -> T.DataConInfo
+substituteDataConInfo subst (T.DataConInfo decl con) =
+  T.DataConInfo (substituteTypeDeclaration subst decl) (substituteDataConstructor subst con)
+
+substituteDataConstructor :: Subst -> T.DataConstructor -> T.DataConstructor
+substituteDataConstructor subst (T.DataConstructor name id' mArg ty span' index) =
+  T.DataConstructor name id' (substituteTyArg subst <$> mArg) (substituteTyCon subst ty) span' index
 
 substituteTMatch :: Subst -> T.Match -> T.Match
 substituteTMatch subst (T.Match pat body) =
@@ -504,11 +533,12 @@ substituteTMatch subst (T.Match pat body) =
 substituteTPattern :: Subst -> T.Pattern -> T.Pattern
 substituteTPattern _ pat@(T.PLit _) = pat
 substituteTPattern subst (T.PVar var) = T.PVar $ substituteTyped subst var
-substituteTPattern subst (T.PCons (T.PatCons cons mArg retTy)) =
+substituteTPattern subst (T.PCons (T.PatCons con mArg retTy)) =
   let
+    con' = substituteDataConInfo subst con
     mArg' = substituteTPattern subst <$> mArg
     retTy' = substituteType subst retTy
-  in T.PCons (T.PatCons cons mArg' retTy')
+  in T.PCons (T.PatCons con' mArg' retTy')
 substituteTPattern subst (T.PParens pat) = T.PParens (substituteTPattern subst pat)
 
 --
@@ -516,9 +546,16 @@ substituteTPattern subst (T.PParens pat) = T.PParens (substituteTPattern subst p
 --
 
 freeTypeVariables :: T.Type -> Set T.TyVarInfo
-freeTypeVariables T.TyCon{} = Set.empty
+freeTypeVariables (T.TyCon info) = freeTyConInfoTypeVariables info
 freeTypeVariables (T.TyVar var) = Set.singleton var
 freeTypeVariables (t1 `T.TyFun` t2) = freeTypeVariables t1 `Set.union` freeTypeVariables t2
+
+freeTyConInfoTypeVariables :: T.TyConInfo -> Set T.TyVarInfo
+freeTyConInfoTypeVariables (T.TyConInfo _ _ args _) = Set.unions $ freeTyArgTypeVariables <$> args
+
+freeTyArgTypeVariables :: T.TyArg -> Set T.TyVarInfo
+freeTyArgTypeVariables (T.TyConArg info) = freeTyConInfoTypeVariables info
+freeTyArgTypeVariables (T.TyVarArg var) = Set.singleton var
 
 freeSchemeTypeVariables :: T.Scheme -> Set T.TyVarInfo
 freeSchemeTypeVariables (T.Forall tvs t) = freeTypeVariables t `Set.difference` Set.fromList tvs
@@ -543,8 +580,12 @@ convertType (R.TyVar info) = T.TyVar (convertTyVarInfo info)
 convertType (R.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
 
 convertTyConInfo :: R.TyConInfo -> T.TyConInfo
-convertTyConInfo (R.TyConInfo name' id' [] _) = T.TyConInfo name' id' KStar
-convertTyConInfo _ = error "Can't handle type arguments yet"
+convertTyConInfo (R.TyConInfo name' id' args _) = T.TyConInfo name' id' (convertTyArg <$> args) kind
+ where
+  -- Our kind inference is really simple. We don't have higher-kinded types so
+  -- we just count the number of type variables and make a * for each one, plus
+  -- a * for the type constructor. Easy!
+  kind = foldr1 KFun $ const KStar <$> [0..length args]
 
 convertTyVarInfo :: R.TyVarInfo -> T.TyVarInfo
 convertTyVarInfo (R.TyVarInfo name' id' _) = T.TyVarInfo name' id' KStar TyVarNotGenerated

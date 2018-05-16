@@ -35,11 +35,15 @@ desugarDataConstructor (T.DataConstructor conName id' mTyArg tyCon span' index) 
   C.DataConstructor
   { C.dataConstructorName = conName
   , C.dataConstructorId = id'
-  , C.dataConstructorArgument = desugarTyConInfo <$> mTyArg
+  , C.dataConstructorArgument = desugarTyArg <$> mTyArg
   , C.dataConstructorType = desugarTyConInfo tyCon
   , C.dataConstructorSpan = span'
   , C.dataConstructorIndex = index
   }
+
+desugarTyArg :: T.TyArg -> C.TyArg
+desugarTyArg (T.TyConArg info) = C.TyConArg (desugarTyConInfo info)
+desugarTyArg (T.TyVarArg info) = C.TyVarArg (desugarTyVarInfo info)
 
 desugarDataConInfo :: T.DataConInfo -> C.DataConInfo
 desugarDataConInfo (T.DataConInfo typeDecl dataCon) =
@@ -122,7 +126,7 @@ desugarType (T.TyVar info) = C.TyVar (desugarTyVarInfo info)
 desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)
 
 desugarTyConInfo :: T.TyConInfo -> C.TyConInfo
-desugarTyConInfo (T.TyConInfo name id' kind) = C.TyConInfo name id' kind
+desugarTyConInfo (T.TyConInfo name id' args kind) = C.TyConInfo name id' (desugarTyArg <$> args) kind
 
 desugarTyVarInfo :: T.TyVarInfo -> C.TyVarInfo
 desugarTyVarInfo ty@(T.TyVarInfo name id' kind gen) =
@@ -150,7 +154,9 @@ convertPattern (T.PCons (T.PatCons info mArg _)) =
   let
     info' = desugarDataConInfo info
     argPats = convertPattern <$> maybeToList mArg
-    argTys = C.TyCon <$> maybeToList (C.dataConstructorArgument (C.dataConInfoCons info'))
+    tyArgToType (C.TyConArg con) = C.TyCon con
+    tyArgToType (C.TyVarArg var) = C.TyVar var
+    argTys = tyArgToType <$> maybeToList (C.dataConstructorArgument (C.dataConInfoCons info'))
     (ConstructorSpan span') = C.dataConstructorSpan $ C.dataConInfoCons info'
   in PC.PCon (PC.Con info' argTys span') argPats
 convertPattern (T.PParens pat) = convertPattern pat

@@ -17,7 +17,9 @@ mkPrettyType (TyVar name) = PTyDoc $ prettyTyVarInfo name
 mkPrettyType (TyFun ty1 ty2) = PTyFun (mkPrettyType ty1) (mkPrettyType ty2)
 
 prettyTyConInfo :: TyConInfo -> Doc ann
-prettyTyConInfo (TyConInfo name _ _) = pretty name
+prettyTyConInfo (TyConInfo name _ args _) = pretty name <> args'
+ where
+  args' = if null args then mempty else space <> sep (prettyTyArg <$> args)
 
 prettyTyVarInfo :: TyVarInfo -> Doc ann
 prettyTyVarInfo (TyVarInfo name _ _) = pretty name
@@ -41,7 +43,11 @@ prettyTypeDeclaration' (TypeDeclaration tyName cons) =
    prettyTypeDeclaration (prettyTyConInfo tyName) (prettyConstructor <$> cons)
  where
   prettyConstructor (DataConstructor conName _ mArg _ _ _) =
-    prettyDataConstructor (pretty conName) (prettyTyConInfo <$> mArg)
+    prettyDataConstructor (pretty conName) (prettyTyArg <$> mArg)
+
+prettyTyArg :: TyArg -> Doc ann
+prettyTyArg (TyConArg info) = prettyTyConInfo info
+prettyTyArg (TyVarArg info) = prettyTyVarInfo info
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding ident scheme args _ body) =

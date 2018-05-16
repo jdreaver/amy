@@ -29,6 +29,7 @@ module Amy.TypeCheck.AST
   , fromPrimTyCon
   , TyVarInfo(..)
   , TyVarGenerated(..)
+  , TyArg(..)
   , typeKind
   , Scheme(..)
   , Typed(..)
@@ -90,7 +91,7 @@ data DataConstructor
   = DataConstructor
   { dataConstructorName :: !Text
   , dataConstructorId :: !Int
-  , dataConstructorArgument :: !(Maybe TyConInfo)
+  , dataConstructorArgument :: !(Maybe TyArg)
   , dataConstructorType :: !TyConInfo
   , dataConstructorSpan :: !ConstructorSpan
   , dataConstructorIndex :: !ConstructorIndex
@@ -205,13 +206,14 @@ infixr 0 `TyFun`
 
 data TyConInfo
   = TyConInfo
-  { tyConInfoText :: !Text
+  { tyConInfoName :: !Text
   , tyConInfoId :: !Int
+  , tyConInfoArgs :: ![TyArg]
   , tyConInfoKind :: !Kind
   } deriving (Show, Eq, Ord)
 
 fromPrimTyCon :: PrimTyCon -> TyConInfo
-fromPrimTyCon (PrimTyCon name id') = TyConInfo name id' KStar
+fromPrimTyCon (PrimTyCon name id') = TyConInfo name id' [] KStar
 
 data TyVarInfo
   = TyVarInfo
@@ -224,6 +226,11 @@ data TyVarInfo
 data TyVarGenerated
   = TyVarGenerated
   | TyVarNotGenerated
+  deriving (Show, Eq, Ord)
+
+data TyArg
+  = TyConArg !TyConInfo
+  | TyVarArg !TyVarInfo
   deriving (Show, Eq, Ord)
 
 typeKind :: Type -> Kind
