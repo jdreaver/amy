@@ -90,4 +90,5 @@ prettyVar (VCons (Typed _ cons)) = pretty . dataConstructorName . dataConInfoCon
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PLit lit) = pretty $ showLiteral lit
 prettyPattern (PCons (PatCons cons mArg _)) =
-  pretty (dataConstructorName $ dataConInfoCons cons) <> maybe mempty (\(Typed _ arg) -> space <> prettyIdent arg) mArg
+  pretty (dataConstructorName $ dataConInfoCons cons)
+  <> maybe mempty (\(Typed ty arg) -> space <> parens (prettyIdent arg <+> "::" <+> prettyType (mkPrettyType ty))) mArg
