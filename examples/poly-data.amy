@@ -1,19 +1,19 @@
-MyType x y = MyType x | B y
+Either a b = Left a | Right b
 
 main :: Int
 main =
   case f of
-    MyType i -> i
-    B x -> 2
+    Left i -> i
+    Right x -> 2
 
-f :: forall o. MyType Int o
+f :: forall b. Either Int b
 f =
-  case MyType 42 of
-    MyType i -> MyType i
-    B j -> B j
+  case Left 42 of
+    Left i -> Left i
+    Right j -> Right j
 
-g :: forall c d. c -> MyType c d
-g x = MyType x
+g :: forall c d. c -> Either c d
+g x = Left x
 
-h :: forall a. MyType a Int
-h = B 1
+h :: forall a. Either a Int
+h = Right 1
