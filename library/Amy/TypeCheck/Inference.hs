@@ -65,11 +65,11 @@ newtype Inference a = Inference (ReaderT TyEnv (StateT Int (Except Error)) a)
 runInference :: Int -> TyEnv -> Inference a -> Either Error (a, Int)
 runInference maxId env (Inference action) = runExcept $ runStateT (runReaderT action env) (maxId + 1)
 
-freshTypeVariable :: Inference T.Type
-freshTypeVariable = do
+freshTypeVariable :: Kind -> Inference T.Type
+freshTypeVariable kind = do
   modify' (+ 1)
   id' <- get
-  pure $ T.TyVar (T.TyVarInfo ("t" <> pack (show id')) id' KStar TyVarGenerated)
+  pure $ T.TyVar (T.TyVarInfo ("t" <> pack (show id')) id' kind TyVarGenerated)
 
 -- | Extends the current typing environment with a list of names and schemes
 -- for those names.
@@ -87,7 +87,7 @@ lookupEnvIdentM name = do
 -- constraints with the type variables and not worry about name collisions.
 instantiate :: T.Scheme -> Inference T.Type
 instantiate (T.Forall as t) = do
-  as' <- traverse (const freshTypeVariable) as
+  as' <- traverse (\v -> freshTypeVariable (T.tyVarInfoKind v)) as
   let s = Subst $ Map.fromList $ zip as as'
   return $ substituteType s t
 
@@ -244,7 +244,7 @@ generateBindingScheme :: R.Binding -> Inference T.Scheme
 generateBindingScheme binding =
   maybe
     -- No explicit type annotation, generate a type variable
-    (T.Forall [] <$> freshTypeVariable)
+    (T.Forall [] <$> freshTypeVariable KStar)
     -- There is an explicit type annotation. Use it.
     (pure . convertScheme)
     (R.bindingType binding)
@@ -264,7 +264,7 @@ solveBindingConstraints env bindingsInference = do
 
 inferBinding :: R.Binding -> Inference (T.Binding, [Constraint])
 inferBinding (R.Binding (Located _ name) _ args body) = do
-  argsAndTyVars <- traverse (\(Located _ arg) -> (convertIdent arg,) <$> freshTypeVariable) args
+  argsAndTyVars <- traverse (\(Located _ arg) -> (convertIdent arg,) <$> freshTypeVariable KStar) args
   let argsAndSchemes = (\(arg, t) -> (arg, T.Forall [] t)) <$> argsAndTyVars
   (body', bodyCons) <- extendEnvIdentM argsAndSchemes $ inferExpr body
   let
@@ -337,7 +337,7 @@ inferExpr (R.ELet (R.Let bindings expression)) = do
 inferExpr (R.EApp (R.App func args)) = do
   (func', funcConstraints) <- inferExpr func
   (args', argConstraints) <- NE.unzip <$> traverse inferExpr args
-  tyVar <- freshTypeVariable
+  tyVar <- freshTypeVariable KStar
   let
     argTypes = NE.toList $ expressionType <$> args'
     newConstraint = Constraint (expressionType func', foldr1 T.TyFun (argTypes ++ [tyVar]))
@@ -362,7 +362,7 @@ inferMatch (R.Match pat body) = do
 inferPattern :: R.Pattern -> Inference (T.Pattern, [Constraint])
 inferPattern (R.PLit (Located _ lit)) = pure (T.PLit lit, [])
 inferPattern (R.PVar (Located _ ident)) = do
-  tvar <- freshTypeVariable
+  tvar <- freshTypeVariable KStar
   pure (T.PVar $ T.Typed tvar (convertIdent ident), [])
 inferPattern (R.PCons (R.PatCons cons mArg)) = do
   let cons' = convertDataConInfo cons
@@ -372,7 +372,7 @@ inferPattern (R.PCons (R.PatCons cons mArg)) = do
     Just arg -> do
       (arg', argCons) <- inferPattern arg
       let argTy = patternType arg'
-      retTy <- freshTypeVariable
+      retTy <- freshTypeVariable KStar
       let constraint = Constraint (argTy `T.TyFun` retTy, consTy)
       pure
         ( T.PCons $ T.PatCons cons' (Just arg') retTy
