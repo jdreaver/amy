@@ -7,7 +7,8 @@ module Amy.Codegen.TypeConversion
   , bindOpToName
   ) where
 
-import Data.Foldable (for_)
+import Data.Maybe (fromMaybe)
+import Data.Traversable (for)
 import LLVM.AST
 import LLVM.AST.AddrSpace
 import qualified LLVM.AST.Constant as C
@@ -18,9 +19,8 @@ import Amy.Codegen.Monad
 maybeConvertPointer :: Maybe Name -> Operand -> Type -> BlockGen Operand
 maybeConvertPointer mName op targetTy =
   if operandType op == targetTy
-  then do
-    for_ mName $ \name' -> bindOpToName name' op
-    pure op
+  then
+    fromMaybe op <$> for mName (\name' -> bindOpToName name' op)
   else
     case (operandType op, targetTy) of
       (PointerType _ _, PointerType _ _) -> maybeBitcast mName targetTy op
@@ -50,9 +50,8 @@ maybeBitcast :: Maybe Name -> Type -> Operand -> BlockGen Operand
 maybeBitcast mName ty op =
   -- Bitcast if we have to
   if operandType op == ty
-  then do
-    for_ mName $ \name' -> bindOpToName name' op
-    pure op
+  then
+    fromMaybe op <$> for mName (\name' -> bindOpToName name' op)
   else do
    ptrName <- maybe freshUnName pure mName
    let ptrOp = LocalReference ty ptrName
@@ -92,7 +91,7 @@ someFloatType =
 --     X86_FP80FP -> 80
 --     PPC_FP128FP -> 128
 
-bindOpToName :: Name -> Operand -> BlockGen ()
+bindOpToName :: Name -> Operand -> BlockGen Operand
 bindOpToName name' op = do
   storeName <- freshUnName
   let
@@ -100,3 +99,4 @@ bindOpToName name' op = do
   addInstruction $ storeName := Alloca (operandType op) Nothing 0 []
   addInstruction $ Do $ Store False storeOp op Nothing 0 []
   addInstruction $ name' := Load False storeOp Nothing 0 []
+  pure $ LocalReference (operandType op) name'
