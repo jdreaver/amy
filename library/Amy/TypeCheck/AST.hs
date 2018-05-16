@@ -234,7 +234,10 @@ data TyArg
   deriving (Show, Eq, Ord)
 
 typeKind :: Type -> Kind
-typeKind (TyCon info) = tyConInfoKind info
+typeKind (TyCon info) =
+  case tyConInfoKind info of
+    KStar -> KStar
+    KFun k _ -> k
 typeKind (TyVar var) = tyVarInfoKind var
 typeKind (TyFun _ _) = KStar
 

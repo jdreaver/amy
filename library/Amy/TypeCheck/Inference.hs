@@ -445,8 +445,7 @@ unifyMany t1 t2 = error $ "unifyMany lists different length " ++ show (t1, t2)
 bind ::  T.TyVarInfo -> T.Type -> Solve Subst
 bind a t
   | t == T.TyVar a = return emptySubst
-  -- TODO: Check kinds
-  -- | T.tyVarInfoKind a /= typeKind t = throwError $ KindMismatch a t
+  | T.tyVarInfoKind a /= typeKind t = throwError $ KindMismatch a t
   | occursCheck a t = throwError $ InfiniteType a t
   | otherwise = return (singletonSubst a t)
 
