@@ -193,8 +193,21 @@ lookupTypeConstructorInScope :: S.TyConInfo -> Renamer (Maybe R.TyConInfo)
 lookupTypeConstructorInScope (S.TyConInfo name _ _) = Map.lookup name <$> gets renamerStateTypeConstructorsInScope
 
 lookupTypeConstructorInScopeOrError :: S.TyConInfo -> Renamer (Validation [Error] R.TyConInfo)
-lookupTypeConstructorInScopeOrError info@(S.TyConInfo name _ span') =
-  maybe (Failure [UnknownTypeConstructor (Located span' name)]) Success <$> lookupTypeConstructorInScope info
+lookupTypeConstructorInScopeOrError info@(S.TyConInfo name args span') = do
+  mTyCon <- lookupTypeConstructorInScope info
+  case mTyCon of
+    Nothing -> pure $ Failure [UnknownTypeConstructor (Located span' name)]
+    Just (R.TyConInfo name' id' _ span'') -> do
+      args' <- for args $ \arg ->
+        case arg of
+          S.TyConArg info' -> fmap R.TyConArg <$> lookupTypeConstructorInScopeOrError info'
+          S.TyVarArg info' -> fmap R.TyVarArg <$> lookupTypeVariableInScopeOrError info'
+      pure $
+        R.TyConInfo
+        <$> pure name'
+        <*> pure id'
+        <*> sequenceA args'
+        <*> pure span''
 
 addTypeDeclarationToScope :: R.TypeDeclaration -> Renamer R.TypeDeclaration
 addTypeDeclarationToScope decl = do
