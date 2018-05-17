@@ -113,7 +113,7 @@ binding = do
 
 typeDeclaration :: AmyParser TypeDeclaration
 typeDeclaration = do
-  tyName <- tyConInfo True
+  tyName <- tyConDefinition
   equals' <- optional $ equals <* spaceConsumerNewlines
   constructors <-
     case equals' of
@@ -123,6 +123,17 @@ typeDeclaration = do
     TypeDeclaration
     { typeDeclarationTypeName = tyName
     , typeDeclarationConstructors = constructors
+    }
+
+tyConDefinition :: AmyParser TyConDefinition
+tyConDefinition = do
+  Located span' name <- typeIdentifier
+  args <- many tyVarInfo
+  pure
+    TyConDefinition
+    { tyConDefinitionName = name
+    , tyConDefinitionArgs = args
+    , tyConDefinitionLocation = span'
     }
 
 dataConstructor :: AmyParser DataConstructor

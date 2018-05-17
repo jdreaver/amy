@@ -36,10 +36,15 @@ prettyDeclaration (DeclBindingType bindingTy) = prettyBindingType' bindingTy
 prettyDeclaration (DeclExtern (Extern (Located _ name) ty)) =
   prettyExtern (pretty name) (mkPrettyType ty)
 prettyDeclaration (DeclType (TypeDeclaration info cons)) =
-  prettyTypeDeclaration (prettyTyConInfo info) (prettyConstructor <$> cons)
+  prettyTypeDeclaration (prettyTyConDefinition info) (prettyConstructor <$> cons)
  where
   prettyConstructor (DataConstructor (Located _ conName) mArg) =
     prettyDataConstructor (pretty conName) (prettyTyArg <$> mArg)
+
+prettyTyConDefinition :: TyConDefinition -> Doc ann
+prettyTyConDefinition (TyConDefinition name args _) = pretty name <> args'
+ where
+  args' = if null args then mempty else space <> sep (prettyTyVarInfo <$> args)
 
 prettyTyArg :: TyArg -> Doc ann
 prettyTyArg (TyConArg info) = prettyTyConInfo info

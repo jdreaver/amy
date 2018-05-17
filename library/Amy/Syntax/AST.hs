@@ -11,6 +11,7 @@ module Amy.Syntax.AST
   , BindingType(..)
   , Extern(..)
   , TypeDeclaration(..)
+  , TyConDefinition(..)
   , DataConstructor(..)
   , Expr(..)
   , Var(..)
@@ -96,8 +97,15 @@ data Extern
 
 data TypeDeclaration
   = TypeDeclaration
-  { typeDeclarationTypeName :: !TyConInfo
+  { typeDeclarationTypeName :: !TyConDefinition
   , typeDeclarationConstructors :: ![DataConstructor]
+  } deriving (Show, Eq)
+
+data TyConDefinition
+  = TyConDefinition
+  { tyConDefinitionName :: !Text
+  , tyConDefinitionArgs :: ![TyVarInfo]
+  , tyConDefinitionLocation :: !SourceSpan
   } deriving (Show, Eq)
 
 data DataConstructor

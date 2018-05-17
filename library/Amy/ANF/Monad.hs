@@ -9,6 +9,7 @@ module Amy.ANF.Monad
   , anfConvertState
   , freshId
   , freshIdent
+  , getTyConDefinitionType
   , getTyConInfoType
   , isIdentTopLevel
   ) where
@@ -44,7 +45,7 @@ anfConvertRead :: [C.Ident] -> [C.TypeDeclaration] -> ANFConvertRead
 anfConvertRead topLevelNames typeDeclarations =
   let
     allTypeDecls = typeDeclarations ++ (fromPrimTypeDefinition <$> allPrimTypeDefinitions)
-    typeRepMap = Map.fromList $ (\t -> (C.tyConInfoId $ C.typeDeclarationTypeName t, typeRep t)) <$> allTypeDecls
+    typeRepMap = Map.fromList $ (\t -> (C.tyConDefinitionId $ C.typeDeclarationTypeName t, typeRep t)) <$> allTypeDecls
   in
     ANFConvertRead
     { anfConvertReadTypeReps = typeRepMap
@@ -68,6 +69,11 @@ freshIdent :: Text -> ANFConvert ANF.Ident
 freshIdent t = do
   id' <- freshId
   pure $ ANF.Ident (t <> pack (show id')) id' False
+
+getTyConDefinitionType :: C.TyConDefinition -> ANFConvert ANF.Type
+getTyConDefinitionType tyCon = fromMaybe err . Map.lookup (tyConDefinitionId tyCon) <$> asks anfConvertReadTypeReps
+  where
+   err = error $ "Couldn't find TypeCompilationMethod of TyConDefinition " ++ show tyCon
 
 getTyConInfoType :: C.TyConInfo -> ANFConvert ANF.Type
 getTyConInfoType tyCon = fromMaybe err . Map.lookup (tyConInfoId tyCon) <$> asks anfConvertReadTypeReps

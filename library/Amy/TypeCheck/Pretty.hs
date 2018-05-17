@@ -43,10 +43,15 @@ prettyExtern' (Extern name ty) =
 
 prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
 prettyTypeDeclaration' (TypeDeclaration tyName cons) =
-   prettyTypeDeclaration (prettyTyConInfo tyName) (prettyConstructor <$> cons)
+   prettyTypeDeclaration (prettyTyConDefinition tyName) (prettyConstructor <$> cons)
  where
   prettyConstructor (DataConstructor conName _ mArg _ _ _) =
     prettyDataConstructor (pretty conName) (prettyTyArg <$> mArg)
+
+prettyTyConDefinition :: TyConDefinition -> Doc ann
+prettyTyConDefinition (TyConDefinition name _ args _) = pretty name <> args'
+ where
+  args' = if null args then mempty else space <> sep (prettyTyVarInfo <$> args)
 
 prettyTyArg :: TyArg -> Doc ann
 prettyTyArg (TyConArg info) = prettyTyConInfo info

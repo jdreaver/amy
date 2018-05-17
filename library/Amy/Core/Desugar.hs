@@ -28,7 +28,7 @@ desugarExtern (T.Extern ident ty) =
 
 desugarTypeDeclaration :: T.TypeDeclaration -> C.TypeDeclaration
 desugarTypeDeclaration (T.TypeDeclaration tyName cons) =
-  C.TypeDeclaration (desugarTyConInfo tyName) (desugarDataConstructor <$> cons)
+  C.TypeDeclaration (desugarTyConDefinition tyName) (desugarDataConstructor <$> cons)
 
 desugarDataConstructor :: T.DataConstructor -> C.DataConstructor
 desugarDataConstructor (T.DataConstructor conName id' mTyArg tyCon span' index) =
@@ -124,6 +124,9 @@ desugarType :: T.Type -> C.Type
 desugarType (T.TyCon info) = C.TyCon (desugarTyConInfo info)
 desugarType (T.TyVar info) = C.TyVar (desugarTyVarInfo info)
 desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)
+
+desugarTyConDefinition :: T.TyConDefinition -> C.TyConDefinition
+desugarTyConDefinition (T.TyConDefinition name id' args kind) = C.TyConDefinition name id' (desugarTyVarInfo <$> args) kind
 
 desugarTyConInfo :: T.TyConInfo -> C.TyConInfo
 desugarTyConInfo (T.TyConInfo name id' args kind) = C.TyConInfo name id' (desugarTyArg <$> args) kind

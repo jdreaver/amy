@@ -5,6 +5,8 @@ module Amy.Renamer.AST
   , Binding(..)
   , Extern(..)
   , TypeDeclaration(..)
+  , TyConDefinition(..)
+  , tyConDefinitionToInfo
   , fromPrimTypeDef
   , DataConstructor(..)
   , DataConInfo(..)
@@ -69,13 +71,27 @@ data Extern
 
 data TypeDeclaration
   = TypeDeclaration
-  { typeDeclarationTypeName :: !TyConInfo
+  { typeDeclarationTypeName :: !TyConDefinition
   , typeDeclarationConstructors :: ![DataConstructor]
   } deriving (Show, Eq)
 
+data TyConDefinition
+  = TyConDefinition
+  { tyConDefinitionName :: !Text
+  , tyConDefinitionId :: !Int
+  , tyConDefinitionArgs :: ![TyVarInfo]
+  , tyConDefinitionLocation :: !(Maybe SourceSpan)
+  } deriving (Show, Eq)
+
+tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
+tyConDefinitionToInfo (TyConDefinition name' id' args span') = TyConInfo name' id' (TyVarArg <$> args) span'
+
+fromPrimTyDef :: PrimTyCon -> TyConDefinition
+fromPrimTyDef (PrimTyCon name id') = TyConDefinition name id' [] Nothing
+
 fromPrimTypeDef :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
-  TypeDeclaration (fromPrimTyCon tyCon) (fromPrimDataCon <$> dataCons)
+  TypeDeclaration (fromPrimTyDef tyCon) (fromPrimDataCon <$> dataCons)
 
 data DataConstructor
   = DataConstructor

@@ -5,6 +5,7 @@ module Amy.Core.AST
   , Binding(..)
   , Extern(..)
   , TypeDeclaration(..)
+  , TyConDefinition(..)
   , fromPrimTypeDefinition
   , DataConstructor(..)
   , DataConInfo(..)
@@ -70,13 +71,24 @@ data Extern
 
 data TypeDeclaration
   = TypeDeclaration
-  { typeDeclarationTypeName :: !TyConInfo
+  { typeDeclarationTypeName :: !TyConDefinition
   , typeDeclarationConstructors :: ![DataConstructor]
   } deriving (Show, Eq, Ord)
 
+data TyConDefinition
+  = TyConDefinition
+  { tyConDefinitionName :: !Text
+  , tyConDefinitionId :: !Int
+  , tyConDefinitionArgs :: ![TyVarInfo]
+  , tyConDefinitionKind :: !Kind
+  } deriving (Show, Eq, Ord)
+
+definitionFromPrimTyCon :: PrimTyCon -> TyConDefinition
+definitionFromPrimTyCon (PrimTyCon name id') = TyConDefinition name id' [] KStar
+
 fromPrimTypeDefinition :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDefinition (PrimTypeDefinition tyName cons) =
-  TypeDeclaration (fromPrimTyCon tyName) (fromPrimDataCon <$> cons)
+  TypeDeclaration (definitionFromPrimTyCon tyName) (fromPrimDataCon <$> cons)
 
 data DataConstructor
   = DataConstructor

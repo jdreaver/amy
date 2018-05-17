@@ -158,7 +158,7 @@ convertExtern (R.Extern (Located _ name) ty) = T.Extern (convertIdent name) (con
 
 convertTypeDeclaration :: R.TypeDeclaration -> T.TypeDeclaration
 convertTypeDeclaration (R.TypeDeclaration tyName cons) =
-  T.TypeDeclaration (convertTyConInfo tyName) (convertDataConstructor <$> cons)
+  T.TypeDeclaration (convertTyConDefinition tyName) (convertDataConstructor <$> cons)
 
 convertDataConstructor :: R.DataConstructor -> T.DataConstructor
 convertDataConstructor (R.DataConstructor (Located _ conName) id' mTyArg tyName span' index) =
@@ -482,14 +482,14 @@ substituteScheme (Subst subst) (T.Forall vars ty) = T.Forall vars $ substituteTy
 
 substituteType :: Subst -> T.Type -> T.Type
 substituteType (Subst subst) t@(T.TyVar var) = Map.findWithDefault t var subst
-substituteType subst (T.TyCon con) = T.TyCon $ substituteTyCon subst con
+substituteType subst (T.TyCon con) = T.TyCon $ substituteTyConInfo subst con
 substituteType subst (t1 `T.TyFun` t2) = substituteType subst t1 `T.TyFun` substituteType subst t2
 
-substituteTyCon :: Subst -> T.TyConInfo -> T.TyConInfo
-substituteTyCon subst (T.TyConInfo name id' args kind) = T.TyConInfo name id' (substituteTyArg subst <$> args) kind
+substituteTyConInfo :: Subst -> T.TyConInfo -> T.TyConInfo
+substituteTyConInfo subst (T.TyConInfo name id' args kind) = T.TyConInfo name id' (substituteTyArg subst <$> args) kind
 
 substituteTyArg :: Subst -> T.TyArg -> T.TyArg
-substituteTyArg subst (T.TyConArg con) = T.TyConArg $ substituteTyCon subst con
+substituteTyArg subst (T.TyConArg con) = T.TyConArg $ substituteTyConInfo subst con
 substituteTyArg (Subst subst) (T.TyVarArg var) =
   case Map.lookup var subst of
     Nothing -> T.TyVarArg var
@@ -498,8 +498,8 @@ substituteTyArg (Subst subst) (T.TyVarArg var) =
     Just t -> error $ "Invalid TyArg substitution " ++ show (var, t)
 
 substituteTypeDeclaration :: Subst -> T.TypeDeclaration -> T.TypeDeclaration
-substituteTypeDeclaration subst (T.TypeDeclaration tyCon cons) =
-  T.TypeDeclaration (substituteTyCon subst tyCon) (substituteDataConstructor subst <$> cons)
+substituteTypeDeclaration subst (T.TypeDeclaration tyDef cons) =
+  T.TypeDeclaration tyDef (substituteDataConstructor subst <$> cons)
 
 substituteTyped :: Subst -> T.Typed a -> T.Typed a
 substituteTyped subst (T.Typed ty x) = T.Typed (substituteType subst ty) x
@@ -545,7 +545,7 @@ substituteDataConInfo subst (T.DataConInfo decl con) =
 
 substituteDataConstructor :: Subst -> T.DataConstructor -> T.DataConstructor
 substituteDataConstructor subst (T.DataConstructor name id' mArg ty span' index) =
-  T.DataConstructor name id' (substituteTyArg subst <$> mArg) (substituteTyCon subst ty) span' index
+  T.DataConstructor name id' (substituteTyArg subst <$> mArg) (substituteTyConInfo subst ty) span' index
 
 substituteTMatch :: Subst -> T.Match -> T.Match
 substituteTMatch subst (T.Match pat body) =
@@ -599,6 +599,14 @@ convertType :: R.Type -> T.Type
 convertType (R.TyCon info) = T.TyCon (convertTyConInfo info)
 convertType (R.TyVar info) = T.TyVar (convertTyVarInfo info)
 convertType (R.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
+
+convertTyConDefinition :: R.TyConDefinition -> T.TyConDefinition
+convertTyConDefinition (R.TyConDefinition name' id' args _) = T.TyConDefinition name' id' (convertTyVarInfo <$> args) kind
+ where
+  -- Our kind inference is really simple. We don't have higher-kinded types so
+  -- we just count the number of type variables and make a * for each one, plus
+  -- a * for the type constructor. Easy!
+  kind = foldr1 KFun $ const KStar <$> [0..length args]
 
 convertTyConInfo :: R.TyConInfo -> T.TyConInfo
 convertTyConInfo (R.TyConInfo name' id' args _) = T.TyConInfo name' id' (convertTyArg <$> args) kind

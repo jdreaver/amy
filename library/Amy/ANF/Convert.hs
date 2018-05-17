@@ -37,10 +37,10 @@ convertExtern :: C.Extern -> ANFConvert ANF.Extern
 convertExtern (C.Extern name ty) = ANF.Extern (convertIdent True name) <$> convertType ty
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANFConvert ANF.TypeDeclaration
-convertTypeDeclaration (C.TypeDeclaration tyConInfo con) = do
-  ty <- getTyConInfoType tyConInfo
+convertTypeDeclaration (C.TypeDeclaration tyConDef con) = do
+  ty <- getTyConDefinitionType tyConDef
   con' <- traverse convertDataConstructor con
-  pure $ ANF.TypeDeclaration (C.tyConInfoName tyConInfo) ty con'
+  pure $ ANF.TypeDeclaration (C.tyConDefinitionName tyConDef) ty con'
 
 convertDataConstructor :: C.DataConstructor -> ANFConvert ANF.DataConstructor
 convertDataConstructor (C.DataConstructor conName id' mTyArg tyCon span' index) = do
