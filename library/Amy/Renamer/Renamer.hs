@@ -50,27 +50,30 @@ renameTypeDeclaration (S.TypeDeclaration tyName constructors) = do
   let
     span' = ConstructorSpan $ length constructors
     indexes = ConstructorIndex <$> [0..]
-    tyVars = R.tyConInfoArgs <$> tyName'
-    getTyVarArg (R.TyConArg _) = Nothing
-    getTyVarArg (R.TyVarArg info) = Just info
 
-  -- TODO: Check for duplicate type variables
+  liftValidation tyName' $ \tyName'' -> do
+    let
+      tyVars = R.tyConInfoArgs tyName''
+      getTyVarArg (R.TyConArg _) = Nothing
+      getTyVarArg (R.TyVarArg info) = Just info
+    -- TODO: Check for duplicate type variables
 
-  -- Rename data constructors
-  constructors' <- for (zip indexes constructors) $ \(i, S.DataConstructor name mArgTy) -> do
-    mArgTy' <- for mArgTy $ \argTy ->
-      case argTy of
-        S.TyConArg tyCon -> fmap R.TyConArg <$> lookupTypeConstructorInScopeOrError tyCon
-        S.TyVarArg (S.TyVarInfo tyVar) ->
-          pure $ tyVars `bindValidation` \tyVars' ->
-            case find ((== locatedValue tyVar) . R.tyVarInfoName) (mapMaybe getTyVarArg tyVars') of
-              Just var -> Success $ R.TyVarArg var
-              Nothing -> Failure [UnknownTypeVariable tyVar]
-    addDataConstructorToScope name mArgTy' tyName' span' i
-  traverse addTypeDeclarationToScope
-    $ R.TypeDeclaration
-    <$> tyName'
-    <*> sequenceA constructors'
+    -- Rename data constructors
+    constructors' <- for (zip indexes constructors) $ \(i, S.DataConstructor name mArgTy) -> do
+      mArgTy' <- for mArgTy $ \argTy ->
+        case argTy of
+          S.TyConArg tyCon -> fmap R.TyConArg <$> lookupTypeConstructorInScopeOrError tyCon
+          S.TyVarArg (S.TyVarInfo tyVar) ->
+            pure $
+              case find ((== locatedValue tyVar) . R.tyVarInfoName) (mapMaybe getTyVarArg tyVars) of
+                Just var -> Success $ R.TyVarArg var
+                Nothing -> Failure [UnknownTypeVariable tyVar]
+      liftValidation (sequenceA mArgTy') $ \mArgTy'' ->
+        addDataConstructorToScope name mArgTy'' tyName'' span' i
+    traverse addTypeDeclarationToScope
+      $ R.TypeDeclaration
+      <$> pure tyName''
+      <*> sequenceA constructors'
 
 renameExtern :: S.Extern -> Renamer (Validation [Error] R.Extern)
 renameExtern extern = do

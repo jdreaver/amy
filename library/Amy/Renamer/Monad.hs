@@ -31,6 +31,9 @@ module Amy.Renamer.Monad
 
     -- * Scoping
   , withNewScope
+
+    -- * validation helpers
+  , liftValidation
   ) where
 
 import Control.Monad.State.Strict
@@ -134,8 +137,8 @@ lookupValueInScopeOrError name@(Located span' name') =
 
 addDataConstructorToScope
   :: Located Text
-  -> Maybe (Validation [Error] R.TyArg)
-  -> Validation [Error] R.TyConInfo
+  -> Maybe R.TyArg
+  -> R.TyConInfo
   -> ConstructorSpan
   -> ConstructorIndex
   -> Renamer (Validation [Error] R.DataConstructor)
@@ -143,19 +146,20 @@ addDataConstructorToScope lname@(Located _ name) mArgTy tyCon span' index = do
   nameId <- freshId
   mExistingName <- lookupDataConstructorInScope name
   let
-    cons =
+    con =
       R.DataConstructor
-      <$> pure lname
-      <*> pure nameId
-      <*> sequenceA mArgTy
-      <*> tyCon
-      <*> pure span'
-      <*> pure index
+      { R.dataConstructorName = lname
+      , R.dataConstructorId = nameId
+      , R.dataConstructorArgument = mArgTy
+      , R.dataConstructorType = tyCon
+      , R.dataConstructorSpan = span'
+      , R.dataConstructorIndex = index
+      }
   case mExistingName of
     Just existingName -> pure $ Failure [DuplicateDataConstructorName lname existingName]
-    Nothing -> for cons $ \cons' -> do
-      modify' (\s -> s { renamerStateDataConstructorsInScope = Map.insert name cons' (renamerStateDataConstructorsInScope s) })
-      pure cons'
+    Nothing -> do
+      modify' (\s -> s { renamerStateDataConstructorsInScope = Map.insert name con (renamerStateDataConstructorsInScope s) })
+      pure $ Success con
 
 lookupDataConstructorInScope :: Text -> Renamer (Maybe R.DataConstructor)
 lookupDataConstructorInScope name = Map.lookup name <$> gets renamerStateDataConstructorsInScope
@@ -264,3 +268,9 @@ withNewScope action = do
       }
     )
   pure result
+
+liftValidation :: (Applicative f) => Validation err a -> (a -> f (Validation err b)) -> f (Validation err b)
+liftValidation x f =
+  case x of
+    Failure err -> pure $ Failure err
+    Success x' -> f x'
