@@ -7,9 +7,9 @@ module Amy.Renamer.Renamer
 import Data.List (find)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (mapMaybe)
+import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text (Text)
-import Data.Traversable (for)
+import Data.Traversable (for, mapAccumL)
 import Data.Validation
 
 import Amy.Errors
@@ -45,17 +45,16 @@ rename' (S.Module declarations) = do
 
 renameTypeDeclaration :: S.TypeDeclaration -> Renamer (Validation [Error] R.TypeDeclaration)
 renameTypeDeclaration (S.TypeDeclaration tyDef constructors) = do
-  -- Renamer tyVars
   -- Rename type name
   tyDef' <- addTypeDefinitionToScope tyDef
   let
     span' = ConstructorSpan $ length constructors
     indexes = ConstructorIndex <$> [0..]
 
+  -- Check for duplicate type variables
   liftValidation tyDef' $ \tyDef'' -> do
     let
       tyVars = R.tyConDefinitionArgs tyDef''
-    -- TODO: Check for duplicate type variables
 
     -- Rename data constructors
     constructors' <- for (zip indexes constructors) $ \(i, S.DataConstructor name mArgTy) -> do
@@ -69,10 +68,25 @@ renameTypeDeclaration (S.TypeDeclaration tyDef constructors) = do
                 Nothing -> Failure [UnknownTypeVariable tyVar]
       liftValidation (sequenceA mArgTy') $ \mArgTy'' ->
         addDataConstructorToScope name mArgTy'' tyDef'' span' i
-    traverse addTypeDeclarationToScope
-      $ R.TypeDeclaration
-      <$> pure tyDef''
-      <*> sequenceA constructors'
+    let
+      decl =
+        R.TypeDeclaration
+        <$> pure tyDef''
+        <*> sequenceA constructors'
+
+    traverse addTypeDeclarationToScope (decl <* checkForDuplicateTypeVariables tyVars)
+
+checkForDuplicateTypeVariables :: [R.TyVarInfo] -> Validation [Error] ()
+checkForDuplicateTypeVariables tyVars = if null dups then Success () else Failure dups
+ where
+  checkDup :: R.TyVarInfo -> [R.TyVarInfo] -> Maybe Error
+  checkDup var@(R.TyVarInfo name _ span') prev =
+    case find ((== R.tyVarInfoName var) . R.tyVarInfoName) prev of
+      Just (R.TyVarInfo dupName _ dupSpan) -> Just (DuplicateTypeVariable (Located span' name) (Located dupSpan dupName))
+      Nothing -> Nothing
+  dups :: [Error]
+  dups = catMaybes $ snd $ mapAccumL (\prev var -> (var:prev, checkDup var prev)) [] tyVars
+
 
 renameExtern :: S.Extern -> Renamer (Validation [Error] R.Extern)
 renameExtern extern = do
