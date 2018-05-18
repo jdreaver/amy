@@ -4,6 +4,7 @@ dependencies:
   - base
   - bytestring
   - containers
+  - groom
   - llvm-hs
   - llvm-hs-pretty
   - llvm-hs-pure

@@ -9,6 +9,7 @@ module Amy.Errors
 import Data.Text (Text)
 import Data.Void (Void)
 import LLVM.AST (Operand)
+import Text.Groom
 import Text.Megaparsec
 
 import Amy.ANF.AST as ANF
@@ -85,4 +86,4 @@ errorLocation e =
 
 showError :: Error -> String
 showError (ParserError err) = parseErrorPretty err
-showError err = show err
+showError err = groom err
