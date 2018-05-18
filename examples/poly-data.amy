@@ -4,7 +4,10 @@ main :: Int
 main =
   case f of
     Left i -> i
-    Right x -> 2
+    Right x -> case h of
+                 Left j -> j
+                 (Right (Left l)) -> l
+                 (Right (Right m)) -> x
 
 f :: forall b. Either Int b
 f =
@@ -15,5 +18,5 @@ f =
 g :: forall c d. c -> Either c d
 g x = Left x
 
-h :: forall a. Either a Int
-h = Right 1
+h :: forall a. Either a (Either a Int)
+h = Right (Right 1)

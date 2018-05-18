@@ -427,6 +427,8 @@ solver (su, cs) =
 
 unifies :: T.Type -> T.Type -> Solve Subst
 unifies t1 t2 | t1 == t2 = return emptySubst
+unifies (T.TyTerm (T.TyParens tp)) t = unifies (T.TyTerm tp) t
+unifies t (T.TyTerm (T.TyParens tp)) = unifies t (T.TyTerm tp)
 unifies (T.TyTerm (T.TyVar v@(T.TyVarInfo _ _ _ TyVarGenerated))) t = v `bind` t
 unifies t (T.TyTerm (T.TyVar v@(T.TyVarInfo _ _ _ TyVarGenerated))) = v `bind` t
 unifies (T.TyFun t1 t2) (T.TyFun t3 t4) = do
