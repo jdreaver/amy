@@ -12,9 +12,17 @@ import Amy.Pretty
 import Amy.Syntax.AST
 
 mkPrettyType :: Type -> PrettyType ann
-mkPrettyType (TyCon (TyConInfo (Located _ var))) = PTyDoc $ pretty var
-mkPrettyType (TyVar (TyVarInfo (Located _ var))) = PTyDoc $ pretty var
+mkPrettyType (TyCon info) = PTyDoc $ prettyTyConInfo info
+mkPrettyType (TyVar info) = PTyDoc $ prettyTyVarInfo info
 mkPrettyType (TyFun ty1 ty2) = PTyFun (mkPrettyType ty1) (mkPrettyType ty2)
+
+prettyTyConInfo :: TyConInfo -> Doc ann
+prettyTyConInfo (TyConInfo name args _) = pretty name <> args'
+ where
+  args' = if null args then mempty else space <> sep (prettyTyArg <$> args)
+
+prettyTyVarInfo :: TyVarInfo -> Doc ann
+prettyTyVarInfo (TyVarInfo (Located _ name)) = pretty name
 
 mkPrettyScheme :: Scheme -> PrettyScheme ann
 mkPrettyScheme (Forall vars ty) = PForall (pretty . locatedValue . unTyVarInfo <$> vars) (mkPrettyType ty)
@@ -27,11 +35,20 @@ prettyDeclaration (DeclBinding binding) = prettyBinding' binding
 prettyDeclaration (DeclBindingType bindingTy) = prettyBindingType' bindingTy
 prettyDeclaration (DeclExtern (Extern (Located _ name) ty)) =
   prettyExtern (pretty name) (mkPrettyType ty)
-prettyDeclaration (DeclType (TypeDeclaration (TyConInfo (Located _ tyName)) cons)) =
-  prettyTypeDeclaration (pretty tyName) (prettyConstructor <$> cons)
+prettyDeclaration (DeclType (TypeDeclaration info cons)) =
+  prettyTypeDeclaration (prettyTyConDefinition info) (prettyConstructor <$> cons)
  where
   prettyConstructor (DataConstructor (Located _ conName) mArg) =
-    prettyDataConstructor (pretty conName) (pretty . locatedValue . unTyConInfo <$> mArg)
+    prettyDataConstructor (pretty conName) (prettyTyArg <$> mArg)
+
+prettyTyConDefinition :: TyConDefinition -> Doc ann
+prettyTyConDefinition (TyConDefinition name args _) = pretty name <> args'
+ where
+  args' = if null args then mempty else space <> sep (prettyTyVarInfo <$> args)
+
+prettyTyArg :: TyArg -> Doc ann
+prettyTyArg (TyConArg info) = prettyTyConInfo info
+prettyTyArg (TyVarArg info) = prettyTyVarInfo info
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding (Located _ name) args body) =

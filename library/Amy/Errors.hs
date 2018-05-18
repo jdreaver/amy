@@ -13,7 +13,7 @@ import Text.Megaparsec
 
 import Amy.ANF.AST as ANF
 import Amy.Renamer.AST as R
-import Amy.Syntax.Located
+import Amy.Syntax.AST as S
 import Amy.TypeCheck.AST as T
 
 data Error
@@ -23,7 +23,9 @@ data Error
   -- Renamer
   | UnknownVariable !(Located Text)
   | VariableShadowed !(Located Text) !(Located R.Ident)
+  | TypeConstructorDefinitionContainsTyCon !S.TyConInfo
   | DuplicateDataConstructorName !(Located Text) !R.DataConstructor
+  | DuplicateTypeVariable !(Located Text) !(Located Text)
   | TypeConstructorAlreadyExists !(Located Text) !R.TyConInfo
   | UnknownTypeConstructor !(Located Text)
   | UnknownTypeVariable !(Located Text)
@@ -56,7 +58,9 @@ errorLocation e =
     ParserError{} -> Nothing
     UnknownVariable (Located s _) -> Just s
     VariableShadowed (Located s _) _ -> Just s
+    TypeConstructorDefinitionContainsTyCon (S.TyConInfo _ _ s) -> Just s
     DuplicateDataConstructorName (Located s _) _ -> Just s
+    DuplicateTypeVariable (Located s _) _ -> Just s
     TypeConstructorAlreadyExists (Located s _) _ -> Just s
     UnknownTypeConstructor (Located s _) -> Just s
     UnknownTypeVariable (Located s _) -> Just s

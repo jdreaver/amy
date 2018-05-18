@@ -7,6 +7,7 @@ module Amy.TypeCheck.AST
   , Binding(..)
   , Extern(..)
   , TypeDeclaration(..)
+  , TyConDefinition(..)
   , fromPrimTypeDef
   , DataConstructor(..)
   , fromPrimDataCon
@@ -29,6 +30,7 @@ module Amy.TypeCheck.AST
   , fromPrimTyCon
   , TyVarInfo(..)
   , TyVarGenerated(..)
+  , TyArg(..)
   , typeKind
   , Scheme(..)
   , Typed(..)
@@ -78,19 +80,33 @@ data Extern
 
 data TypeDeclaration
   = TypeDeclaration
-  { typeDeclarationTypeName :: !TyConInfo
+  { typeDeclarationTypeName :: !TyConDefinition
   , typeDeclarationConstructors :: ![DataConstructor]
   } deriving (Show, Eq, Ord)
 
+data TyConDefinition
+  = TyConDefinition
+  { tyConDefinitionName :: !Text
+  , tyConDefinitionId :: !Int
+  , tyConDefinitionArgs :: ![TyVarInfo]
+  , tyConDefinitionKind :: !Kind
+  } deriving (Show, Eq, Ord)
+
+tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
+tyConDefinitionToInfo tyDef@(TyConDefinition name' id' args _) = TyConInfo name' id' (TyVarArg <$> args) tyDef
+
+fromPrimTyDef :: PrimTyCon -> TyConDefinition
+fromPrimTyDef (PrimTyCon name id') = TyConDefinition name id' [] KStar
+
 fromPrimTypeDef :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
-  TypeDeclaration (fromPrimTyCon tyCon) (fromPrimDataCon <$> dataCons)
+  TypeDeclaration (fromPrimTyDef tyCon) (fromPrimDataCon <$> dataCons)
 
 data DataConstructor
   = DataConstructor
   { dataConstructorName :: !Text
   , dataConstructorId :: !Int
-  , dataConstructorArgument :: !(Maybe TyConInfo)
+  , dataConstructorArgument :: !(Maybe TyArg)
   , dataConstructorType :: !TyConInfo
   , dataConstructorSpan :: !ConstructorSpan
   , dataConstructorIndex :: !ConstructorIndex
@@ -205,13 +221,14 @@ infixr 0 `TyFun`
 
 data TyConInfo
   = TyConInfo
-  { tyConInfoText :: !Text
+  { tyConInfoName :: !Text
   , tyConInfoId :: !Int
-  , tyConInfoKind :: !Kind
+  , tyConInfoArgs :: ![TyArg]
+  , tyConInfoDefinition :: !TyConDefinition
   } deriving (Show, Eq, Ord)
 
 fromPrimTyCon :: PrimTyCon -> TyConInfo
-fromPrimTyCon (PrimTyCon name id') = TyConInfo name id' KStar
+fromPrimTyCon = tyConDefinitionToInfo . fromPrimTyDef
 
 data TyVarInfo
   = TyVarInfo
@@ -226,8 +243,16 @@ data TyVarGenerated
   | TyVarNotGenerated
   deriving (Show, Eq, Ord)
 
+data TyArg
+  = TyConArg !TyConInfo
+  | TyVarArg !TyVarInfo
+  deriving (Show, Eq, Ord)
+
 typeKind :: Type -> Kind
-typeKind (TyCon info) = tyConInfoKind info
+typeKind (TyCon info) =
+  case tyConDefinitionKind (tyConInfoDefinition info) of
+    KStar -> KStar
+    KFun k _ -> k
 typeKind (TyVar var) = tyVarInfoKind var
 typeKind (TyFun _ _) = KStar
 

@@ -17,7 +17,9 @@ mkPrettyType (TyVar name) = PTyDoc $ prettyTyVarInfo name
 mkPrettyType (TyFun ty1 ty2) = PTyFun (mkPrettyType ty1) (mkPrettyType ty2)
 
 prettyTyConInfo :: TyConInfo -> Doc ann
-prettyTyConInfo (TyConInfo name _ _) = pretty name
+prettyTyConInfo (TyConInfo name _ args _) = pretty name <> args'
+ where
+  args' = if null args then mempty else space <> sep (prettyTyArg <$> args)
 
 prettyTyVarInfo :: TyVarInfo -> Doc ann
 prettyTyVarInfo (TyVarInfo name _ _) = pretty name
@@ -38,10 +40,19 @@ prettyExtern' (Extern name ty) =
 
 prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
 prettyTypeDeclaration' (TypeDeclaration tyName cons) =
-   prettyTypeDeclaration (prettyTyConInfo tyName) (prettyConstructor <$> cons)
+   prettyTypeDeclaration (prettyTyConDefinition tyName) (prettyConstructor <$> cons)
  where
   prettyConstructor (DataConstructor conName _ mArg _ _ _) =
-    prettyDataConstructor (pretty conName) (prettyTyConInfo <$> mArg)
+    prettyDataConstructor (pretty conName) (prettyTyArg <$> mArg)
+
+prettyTyConDefinition :: TyConDefinition -> Doc ann
+prettyTyConDefinition (TyConDefinition name _ args _) = pretty name <> args'
+ where
+  args' = if null args then mempty else space <> sep (prettyTyVarInfo <$> args)
+
+prettyTyArg :: TyArg -> Doc ann
+prettyTyArg (TyConArg info) = prettyTyConInfo info
+prettyTyArg (TyVarArg info) = prettyTyVarInfo info
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding ident scheme args _ body) =
@@ -84,4 +95,5 @@ prettyVar (VCons (Typed _ cons)) = pretty . dataConstructorName . dataConInfoCon
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PLit lit) = pretty $ showLiteral lit
 prettyPattern (PCons (PatCons cons mArg _)) =
-  pretty (dataConstructorName $ dataConInfoCons cons) <> maybe mempty (\(Typed _ arg) -> space <> prettyIdent arg) mArg
+  pretty (dataConstructorName $ dataConInfoCons cons)
+  <> maybe mempty (\(Typed ty arg) -> space <> parens (prettyIdent arg <+> "::" <+> prettyType (mkPrettyType ty))) mArg

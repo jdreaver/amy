@@ -5,6 +5,8 @@ module Amy.Renamer.AST
   , Binding(..)
   , Extern(..)
   , TypeDeclaration(..)
+  , TyConDefinition(..)
+  , tyConDefinitionToInfo
   , fromPrimTypeDef
   , DataConstructor(..)
   , DataConInfo(..)
@@ -22,6 +24,7 @@ module Amy.Renamer.AST
   , Type(..)
   , TyConInfo(..)
   , TyVarInfo(..)
+  , TyArg(..)
   , Scheme(..)
 
     -- Re-export
@@ -68,19 +71,33 @@ data Extern
 
 data TypeDeclaration
   = TypeDeclaration
-  { typeDeclarationTypeName :: !TyConInfo
+  { typeDeclarationTypeName :: !TyConDefinition
   , typeDeclarationConstructors :: ![DataConstructor]
   } deriving (Show, Eq)
 
+data TyConDefinition
+  = TyConDefinition
+  { tyConDefinitionName :: !Text
+  , tyConDefinitionId :: !Int
+  , tyConDefinitionArgs :: ![TyVarInfo]
+  , tyConDefinitionLocation :: !(Maybe SourceSpan)
+  } deriving (Show, Eq, Ord)
+
+tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
+tyConDefinitionToInfo tyDef@(TyConDefinition name' id' args span') = TyConInfo name' id' (TyVarArg <$> args) tyDef span'
+
+fromPrimTyDef :: PrimTyCon -> TyConDefinition
+fromPrimTyDef (PrimTyCon name id') = TyConDefinition name id' [] Nothing
+
 fromPrimTypeDef :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
-  TypeDeclaration (fromPrimTyCon tyCon) (fromPrimDataCon <$> dataCons)
+  TypeDeclaration (fromPrimTyDef tyCon) (fromPrimDataCon <$> dataCons)
 
 data DataConstructor
   = DataConstructor
   { dataConstructorName :: !(Located Text)
   , dataConstructorId :: !Int
-  , dataConstructorArgument :: !(Maybe TyConInfo)
+  , dataConstructorArgument :: !(Maybe TyArg)
   , dataConstructorType :: !TyConInfo
   , dataConstructorSpan :: !ConstructorSpan
   , dataConstructorIndex :: !ConstructorIndex
@@ -173,20 +190,27 @@ infixr 0 `TyFun`
 
 data TyConInfo
   = TyConInfo
-  { tyConInfoText :: !Text
-  , tyConInfoLocation :: !(Maybe SourceSpan)
+  { tyConInfoName :: !Text
   , tyConInfoId :: !Int
+  , tyConInfoArgs :: ![TyArg]
+  , tyConDefinition :: !TyConDefinition
+  , tyConInfoLocation :: !(Maybe SourceSpan)
   } deriving (Show, Eq, Ord)
 
 fromPrimTyCon :: PrimTyCon -> TyConInfo
-fromPrimTyCon (PrimTyCon name id') = TyConInfo name Nothing id'
+fromPrimTyCon = tyConDefinitionToInfo . fromPrimTyDef
 
 data TyVarInfo
   = TyVarInfo
   { tyVarInfoName :: !Text
   , tyVarInfoId :: !Int
   , tyVarInfoLocation :: !SourceSpan
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
+
+data TyArg
+  = TyConArg !TyConInfo
+  | TyVarArg !TyVarInfo
+  deriving (Show, Eq, Ord)
 
 data Scheme
   = Forall ![TyVarInfo] Type

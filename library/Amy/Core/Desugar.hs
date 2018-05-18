@@ -28,18 +28,22 @@ desugarExtern (T.Extern ident ty) =
 
 desugarTypeDeclaration :: T.TypeDeclaration -> C.TypeDeclaration
 desugarTypeDeclaration (T.TypeDeclaration tyName cons) =
-  C.TypeDeclaration (desugarTyConInfo tyName) (desugarDataConstructor <$> cons)
+  C.TypeDeclaration (desugarTyConDefinition tyName) (desugarDataConstructor <$> cons)
 
 desugarDataConstructor :: T.DataConstructor -> C.DataConstructor
 desugarDataConstructor (T.DataConstructor conName id' mTyArg tyCon span' index) =
   C.DataConstructor
   { C.dataConstructorName = conName
   , C.dataConstructorId = id'
-  , C.dataConstructorArgument = desugarTyConInfo <$> mTyArg
+  , C.dataConstructorArgument = desugarTyArg <$> mTyArg
   , C.dataConstructorType = desugarTyConInfo tyCon
   , C.dataConstructorSpan = span'
   , C.dataConstructorIndex = index
   }
+
+desugarTyArg :: T.TyArg -> C.TyArg
+desugarTyArg (T.TyConArg info) = C.TyConArg (desugarTyConInfo info)
+desugarTyArg (T.TyVarArg info) = C.TyVarArg (desugarTyVarInfo info)
 
 desugarDataConInfo :: T.DataConInfo -> C.DataConInfo
 desugarDataConInfo (T.DataConInfo typeDecl dataCon) =
@@ -121,14 +125,14 @@ desugarType (T.TyCon info) = C.TyCon (desugarTyConInfo info)
 desugarType (T.TyVar info) = C.TyVar (desugarTyVarInfo info)
 desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)
 
+desugarTyConDefinition :: T.TyConDefinition -> C.TyConDefinition
+desugarTyConDefinition (T.TyConDefinition name id' args kind) = C.TyConDefinition name id' (desugarTyVarInfo <$> args) kind
+
 desugarTyConInfo :: T.TyConInfo -> C.TyConInfo
-desugarTyConInfo (T.TyConInfo name id' kind) = C.TyConInfo name id' kind
+desugarTyConInfo (T.TyConInfo name id' args tyDef) = C.TyConInfo name id' (desugarTyArg <$> args) (desugarTyConDefinition tyDef)
 
 desugarTyVarInfo :: T.TyVarInfo -> C.TyVarInfo
-desugarTyVarInfo ty@(T.TyVarInfo name id' kind gen) =
-  case gen of
-    TyVarGenerated -> error $ "Found generated type name, bad! " ++ show ty
-    TyVarNotGenerated -> C.TyVarInfo name id' kind
+desugarTyVarInfo (T.TyVarInfo name id' kind _) = C.TyVarInfo name id' kind
 
 --
 -- Case Expressions
@@ -150,7 +154,7 @@ convertPattern (T.PCons (T.PatCons info mArg _)) =
   let
     info' = desugarDataConInfo info
     argPats = convertPattern <$> maybeToList mArg
-    argTys = C.TyCon <$> maybeToList (C.dataConstructorArgument (C.dataConInfoCons info'))
+    argTys = maybeToList $ desugarType . patternType <$> mArg
     (ConstructorSpan span') = C.dataConstructorSpan $ C.dataConInfoCons info'
   in PC.PCon (PC.Con info' argTys span') argPats
 convertPattern (T.PParens pat) = convertPattern pat

@@ -37,14 +37,14 @@ convertExtern :: C.Extern -> ANFConvert ANF.Extern
 convertExtern (C.Extern name ty) = ANF.Extern (convertIdent True name) <$> convertType ty
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANFConvert ANF.TypeDeclaration
-convertTypeDeclaration (C.TypeDeclaration tyConInfo con) = do
-  ty <- getTyConInfoType tyConInfo
+convertTypeDeclaration (C.TypeDeclaration tyConDef con) = do
+  ty <- getTyConDefinitionType tyConDef
   con' <- traverse convertDataConstructor con
-  pure $ ANF.TypeDeclaration (C.tyConInfoText tyConInfo) ty con'
+  pure $ ANF.TypeDeclaration (C.tyConDefinitionName tyConDef) ty con'
 
 convertDataConstructor :: C.DataConstructor -> ANFConvert ANF.DataConstructor
 convertDataConstructor (C.DataConstructor conName id' mTyArg tyCon span' index) = do
-  mTyArg' <- traverse getTyConInfoType mTyArg
+  mTyArg' <- traverse convertTyArg mTyArg
   tyCon' <- getTyConInfoType tyCon
   pure
     ANF.DataConstructor
@@ -55,6 +55,10 @@ convertDataConstructor (C.DataConstructor conName id' mTyArg tyCon span' index) 
     , ANF.dataConstructorSpan = span'
     , ANF.dataConstructorIndex = index
     }
+
+convertTyArg :: C.TyArg -> ANFConvert ANF.Type
+convertTyArg (C.TyConArg con) = getTyConInfoType con
+convertTyArg (C.TyVarArg _) = pure OpaquePointerType
 
 convertDataConInfo :: C.DataConInfo -> ANFConvert ANF.DataConInfo
 convertDataConInfo (C.DataConInfo typeDecl dataCon) = do

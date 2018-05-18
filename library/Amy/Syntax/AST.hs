@@ -11,6 +11,7 @@ module Amy.Syntax.AST
   , BindingType(..)
   , Extern(..)
   , TypeDeclaration(..)
+  , TyConDefinition(..)
   , DataConstructor(..)
   , Expr(..)
   , Var(..)
@@ -27,6 +28,7 @@ module Amy.Syntax.AST
   , Type(..)
   , TyConInfo(..)
   , TyVarInfo(..)
+  , TyArg(..)
   , Scheme(..)
 
     -- Re-export
@@ -95,14 +97,21 @@ data Extern
 
 data TypeDeclaration
   = TypeDeclaration
-  { typeDeclarationTypeName :: !TyConInfo
+  { typeDeclarationTypeName :: !TyConDefinition
   , typeDeclarationConstructors :: ![DataConstructor]
+  } deriving (Show, Eq)
+
+data TyConDefinition
+  = TyConDefinition
+  { tyConDefinitionName :: !Text
+  , tyConDefinitionArgs :: ![TyVarInfo]
+  , tyConDefinitionLocation :: !SourceSpan
   } deriving (Show, Eq)
 
 data DataConstructor
   = DataConstructor
   { dataConstructorName :: !(Located Text)
-  , dataConstructorArgument :: !(Maybe TyConInfo)
+  , dataConstructorArgument :: !(Maybe TyArg)
   } deriving (Show, Eq)
 
 data Expr
@@ -186,7 +195,16 @@ data Type
 
 infixr 0 `TyFun`
 
-newtype TyConInfo = TyConInfo { unTyConInfo :: Located Text }
+data TyConInfo
+  = TyConInfo
+  { tyConInfoName :: !Text
+  , tyConInfoArgs :: ![TyArg]
+  , tyConInfoLocation :: !SourceSpan
+  } deriving (Show, Eq)
+
+data TyArg
+  = TyConArg !TyConInfo
+  | TyVarArg !TyVarInfo
   deriving (Show, Eq)
 
 newtype TyVarInfo = TyVarInfo { unTyVarInfo :: Located Text }

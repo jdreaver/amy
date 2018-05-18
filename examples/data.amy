@@ -6,6 +6,8 @@ MySum = MySumA Int | MySumB Double | MySumC
 
 EmptyType
 
+Nat = Zero | Suc Nat
+
 main :: Int
 main =
   let
@@ -13,11 +15,12 @@ main =
     x = MySumB 7.8
     y :: MyEnum
     y = MyEnumB
+    z = Suc (Suc Zero)
   in
     case x of
       MySumA x' -> 0
       MySumB x' -> f x' y
-      MySumC -> 1
+      MySumC -> countNat z
 
 f :: Double -> MyEnum -> Int
 f x enum =
@@ -25,3 +28,9 @@ f x enum =
     MyEnumA -> 2
     MyEnumB -> doubleToInt# x
     MyEnumC -> 3
+
+countNat :: Nat -> Int
+countNat n =
+  case n of
+    Zero -> 0
+    Suc n' -> iAdd# 1 (countNat n')

@@ -1,0 +1,19 @@
+Either a b = Left a | Right b
+
+main :: Int
+main =
+  case f of
+    Left i -> i
+    Right x -> 2
+
+f :: forall b. Either Int b
+f =
+  case Left 42 of
+    Left i -> Left i
+    Right j -> Right j
+
+g :: forall c d. c -> Either c d
+g x = Left x
+
+h :: forall a. Either a Int
+h = Right 1

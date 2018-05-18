@@ -4,11 +4,12 @@ module Amy.Renamer.Renamer
   ( rename
   ) where
 
+import Data.List (find)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (mapMaybe)
+import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text (Text)
-import Data.Traversable (for)
+import Data.Traversable (for, mapAccumL)
 import Data.Validation
 
 import Amy.Errors
@@ -23,6 +24,7 @@ rename ast = toEither . runRenamer emptyRenamerState $ rename' ast
 rename' :: S.Module -> Renamer (Validation [Error] R.Module)
 rename' (S.Module declarations) = do
   -- Rename type declarations
+  -- TODO: Add all type names to scope before renaming each declaration
   typeDeclarations <- traverse renameTypeDeclaration (mapMaybe declType declarations)
 
   -- Rename extern declarations
@@ -42,18 +44,49 @@ rename' (S.Module declarations) = do
     <*> pure maxId
 
 renameTypeDeclaration :: S.TypeDeclaration -> Renamer (Validation [Error] R.TypeDeclaration)
-renameTypeDeclaration (S.TypeDeclaration tyName constructors) = do
-  tyName' <- addTypeConstructorToScope tyName
+renameTypeDeclaration (S.TypeDeclaration tyDef constructors) = do
+  -- Rename type name
+  tyDef' <- addTypeDefinitionToScope tyDef
   let
     span' = ConstructorSpan $ length constructors
     indexes = ConstructorIndex <$> [0..]
-  constructors' <- for (zip indexes constructors) $ \(i, S.DataConstructor name mArgTy) -> do
-    mArgTy' <- traverse lookupTypeConstructorInScopeOrError mArgTy
-    addDataConstructorToScope name mArgTy' tyName' span' i
-  traverse addTypeDeclarationToScope
-    $ R.TypeDeclaration
-    <$> tyName'
-    <*> sequenceA constructors'
+
+  liftValidation tyDef' $ \tyDef'' -> do
+    let
+      tyVars = R.tyConDefinitionArgs tyDef''
+
+    -- Rename data constructors
+    constructors' <- for (zip indexes constructors) $ \(i, S.DataConstructor name mArgTy) -> do
+      mArgTy' <- for mArgTy $ \argTy ->
+        case argTy of
+          S.TyConArg tyCon -> fmap R.TyConArg <$> lookupTypeConstructorInScopeOrError tyCon
+          S.TyVarArg (S.TyVarInfo tyVar) ->
+            -- Find the constructor's type variable argument corresponding to
+            -- this type variable
+            let mTyVar = find ((== locatedValue tyVar) . R.tyVarInfoName) tyVars
+            in pure $ maybe (Failure [UnknownTypeVariable tyVar]) (Success . R.TyVarArg) mTyVar
+      liftValidation (sequenceA mArgTy') $ \mArgTy'' ->
+        addDataConstructorToScope name mArgTy'' tyDef'' span' i
+    let
+      decl =
+        R.TypeDeclaration
+        <$> pure tyDef''
+        <*> sequenceA constructors'
+
+    traverse addTypeDeclarationToScope (decl <* checkForDuplicateTypeVariables tyVars)
+
+-- | We don't allow duplicate type variables in type definitions, like if we
+-- said @Either a a = ...@
+checkForDuplicateTypeVariables :: [R.TyVarInfo] -> Validation [Error] ()
+checkForDuplicateTypeVariables tyVars = if null dups then Success () else Failure dups
+ where
+  checkDup :: R.TyVarInfo -> [R.TyVarInfo] -> Maybe Error
+  checkDup var@(R.TyVarInfo name _ span') prev =
+    case find ((== R.tyVarInfoName var) . R.tyVarInfoName) prev of
+      Just (R.TyVarInfo dupName _ dupSpan) -> Just (DuplicateTypeVariable (Located span' name) (Located dupSpan dupName))
+      Nothing -> Nothing
+  dups :: [Error]
+  dups = catMaybes $ snd $ mapAccumL (\prev var -> (var:prev, checkDup var prev)) [] tyVars
 
 renameExtern :: S.Extern -> Renamer (Validation [Error] R.Extern)
 renameExtern extern = do

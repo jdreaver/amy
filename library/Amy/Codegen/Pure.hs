@@ -104,14 +104,12 @@ codegenExpr :: ANF.Expr -> CodeGen [BasicBlock]
 codegenExpr expr = runBlockGen $ codegenExpr' (textToName "ret") expr
 
 codegenExpr' :: Name -> ANF.Expr -> BlockGen Operand
-codegenExpr' name' (ANF.EVal val) = do
+codegenExpr' name' (ANF.EVal val) =
   -- If we get here that means the inliner probably didn't do its job very
   -- well, and there is a primitive value being used by itself in an
   -- expression. No worries, LLVM will most certainly remove these redundant
   -- instructions.
-  op <- valOperand val
-  bindOpToName name' op
-  pure (LocalReference (operandType op) name')
+  bindOpToName name' =<< valOperand val
 codegenExpr' name' (ANF.ELetVal (ANF.LetVal bindings expr)) = do
   for_ bindings $ \(ANF.LetValBinding ident _ body) ->
     codegenExpr' (identToName ident) body
@@ -160,7 +158,7 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
       terminateBlock (Do $ Br endBlockName []) nextBlockName
       pure (LocalReference (operandType op) exprName, finalBlockName)
     generateCaseDefaultBlock (CaseDefaultBlock expr _ nextBlockName) = do
-      bindOpToName (identToName bindingIdent) scrutineeOp
+      _ <- bindOpToName (identToName bindingIdent) scrutineeOp
       generateBlockExpr expr nextBlockName
     generateCaseLiteralBlock (CaseLiteralBlock expr _ nextBlockName _ mBind) = do
       for_ mBind $ \(Typed ty ident) -> do

@@ -77,15 +77,26 @@ parseSchemeVars = do
 parseType :: AmyParser Type
 parseType = makeExprParser term table
  where
-  tVar = (TyCon <$> tyConInfo) <|> (TyVar <$> tyVarInfo)
+  tVar = (TyCon <$> tyConInfo True) <|> (TyVar <$> tyVarInfo)
   table = [[InfixR (TyFun <$ typeSeparatorArrow)]]
   term = parens parseType <|> tVar
 
-tyConInfo :: AmyParser TyConInfo
-tyConInfo = TyConInfo <$> typeIdentifier
+tyConInfo :: Bool -> AmyParser TyConInfo
+tyConInfo allowArgs = do
+  Located span' name <- typeIdentifier
+  args <- if allowArgs then many tyArg else pure []
+  pure
+    TyConInfo
+    { tyConInfoName = name
+    , tyConInfoArgs = args
+    , tyConInfoLocation = span'
+    }
 
 tyVarInfo :: AmyParser TyVarInfo
 tyVarInfo = TyVarInfo <$> identifier
+
+tyArg :: AmyParser TyArg
+tyArg = (TyConArg <$> tyConInfo False) <|> (TyVarArg <$> tyVarInfo)
 
 binding :: AmyParser Binding
 binding = do
@@ -102,7 +113,7 @@ binding = do
 
 typeDeclaration :: AmyParser TypeDeclaration
 typeDeclaration = do
-  tyName <- tyConInfo
+  tyName <- tyConDefinition
   equals' <- optional $ equals <* spaceConsumerNewlines
   constructors <-
     case equals' of
@@ -114,10 +125,21 @@ typeDeclaration = do
     , typeDeclarationConstructors = constructors
     }
 
+tyConDefinition :: AmyParser TyConDefinition
+tyConDefinition = do
+  Located span' name <- typeIdentifier
+  args <- many tyVarInfo
+  pure
+    TyConDefinition
+    { tyConDefinitionName = name
+    , tyConDefinitionArgs = args
+    , tyConDefinitionLocation = span'
+    }
+
 dataConstructor :: AmyParser DataConstructor
 dataConstructor = do
   dataCon <- dataConstructorName'
-  mArg <- optional tyConInfo
+  mArg <- optional tyArg
   pure
     DataConstructor
     { dataConstructorName = dataCon
@@ -127,18 +149,18 @@ dataConstructor = do
 expression :: AmyParser Expr
 expression = do
   -- Parse a NonEmpty list of expressions separated by spaces.
-  expressions <- lineFold expression'
+  f :| args <- lineFold expression'
 
   pure $
-    case expressions of
+    case NE.nonEmpty args of
       -- Just a simple expression
-      expr :| [] -> expr
+      Nothing -> f
       -- We must have a function application
-      f :| args ->
+      Just args' ->
         EApp
         App
         { appFunction = f
-        , appArgs = NE.fromList args
+        , appArgs = args'
         }
 
 -- | Parses any expression except function application. This is needed to avoid

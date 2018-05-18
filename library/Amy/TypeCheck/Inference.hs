@@ -6,7 +6,6 @@ module Amy.TypeCheck.Inference
   ( inferModule
   , inferTopLevel
   , TyEnv
-  , emptyEnv
   ) where
 
 import Control.Monad.Except
@@ -40,9 +39,6 @@ data TyEnv
   { identTypes :: Map T.Ident T.Scheme
   } deriving (Show, Eq)
 
-emptyEnv :: TyEnv
-emptyEnv = TyEnv Map.empty
-
 extendEnvIdent :: TyEnv -> (T.Ident, T.Scheme) -> TyEnv
 extendEnvIdent env (x, s) =
   env
@@ -52,17 +48,8 @@ extendEnvIdent env (x, s) =
 extendEnvIdentList :: TyEnv -> [(T.Ident, T.Scheme)] -> TyEnv
 extendEnvIdentList = foldl' extendEnvIdent
 
--- removeEnv :: TyEnv -> Name -> TyEnv
--- removeEnv (TyEnv env) var = TyEnv (Map.delete var env)
-
 lookupEnvIdent :: T.Ident -> TyEnv -> Maybe T.Scheme
 lookupEnvIdent key = Map.lookup key . identTypes
-
--- mergeEnv :: TyEnv -> TyEnv -> TyEnv
--- mergeEnv (TyEnv a) (TyEnv b) = TyEnv (Map.union a b)
-
--- mergeEnvs :: [TyEnv] -> TyEnv
--- mergeEnvs = foldl' mergeEnv emptyEnv
 
 --
 -- Inference Monad
@@ -78,11 +65,11 @@ newtype Inference a = Inference (ReaderT TyEnv (StateT Int (Except Error)) a)
 runInference :: Int -> TyEnv -> Inference a -> Either Error (a, Int)
 runInference maxId env (Inference action) = runExcept $ runStateT (runReaderT action env) (maxId + 1)
 
-freshTypeVariable :: Inference T.Type
-freshTypeVariable = do
+freshTypeVariable :: Kind -> Inference T.Type
+freshTypeVariable kind = do
   modify' (+ 1)
   id' <- get
-  pure $ T.TyVar (T.TyVarInfo ("t" <> pack (show id')) id' KStar TyVarGenerated)
+  pure $ T.TyVar (T.TyVarInfo ("t" <> pack (show id')) id' kind TyVarGenerated)
 
 -- | Extends the current typing environment with a list of names and schemes
 -- for those names.
@@ -100,7 +87,7 @@ lookupEnvIdentM name = do
 -- constraints with the type variables and not worry about name collisions.
 instantiate :: T.Scheme -> Inference T.Type
 instantiate (T.Forall as t) = do
-  as' <- traverse (const freshTypeVariable) as
+  as' <- traverse (\v -> freshTypeVariable (T.tyVarInfoKind v)) as
   let s = Subst $ Map.fromList $ zip as as'
   return $ substituteType s t
 
@@ -124,8 +111,7 @@ normalize body =
  where
   letterMap =
     Map.fromList
-    $ (\(var@(T.TyVarInfo _ id' _ _), letter) -> (var, T.TyVarInfo letter id' KStar TyVarNotGenerated))
-    <$> zip (Set.toList $ freeTypeVariables body) letters
+    $ replaceGensWithLetters (Set.toList $ freeTypeVariables body) letters
 
   normtype (T.TyFun a b) = T.TyFun (normtype a) (normtype b)
   normtype (T.TyCon a) = T.TyCon a
@@ -136,6 +122,14 @@ normalize body =
 
 letters :: [Text]
 letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
+
+replaceGensWithLetters :: [T.TyVarInfo] -> [Text] -> [(T.TyVarInfo, T.TyVarInfo)]
+replaceGensWithLetters _ [] = error "Ran out of letters, how???"
+replaceGensWithLetters [] _ = []
+replaceGensWithLetters (var@(T.TyVarInfo _ id' _ TyVarGenerated):vars) (l:ls) =
+  (var, T.TyVarInfo l id' KStar TyVarNotGenerated) : replaceGensWithLetters vars ls
+replaceGensWithLetters (var@(T.TyVarInfo _ _ _ TyVarNotGenerated):vars) ls =
+  (var, var) : replaceGensWithLetters vars ls
 
 -- | A 'Constraint' is a statement that two types should be equal.
 newtype Constraint = Constraint { unConstraint :: (T.Type, T.Type) }
@@ -164,29 +158,37 @@ convertExtern (R.Extern (Located _ name) ty) = T.Extern (convertIdent name) (con
 
 convertTypeDeclaration :: R.TypeDeclaration -> T.TypeDeclaration
 convertTypeDeclaration (R.TypeDeclaration tyName cons) =
-  T.TypeDeclaration (convertTyConInfo tyName) (convertDataConstructor <$> cons)
+  T.TypeDeclaration (convertTyConDefinition tyName) (convertDataConstructor <$> cons)
 
 convertDataConstructor :: R.DataConstructor -> T.DataConstructor
 convertDataConstructor (R.DataConstructor (Located _ conName) id' mTyArg tyName span' index) =
   T.DataConstructor
   { T.dataConstructorName = conName
   , T.dataConstructorId = id'
-  , T.dataConstructorArgument = convertTyConInfo <$> mTyArg
+  , T.dataConstructorArgument = convertTyArg <$> mTyArg
   , T.dataConstructorType = convertTyConInfo tyName
   , T.dataConstructorSpan = span'
   , T.dataConstructorIndex = index
   }
+
+convertTyArg :: R.TyArg -> T.TyArg
+convertTyArg (R.TyConArg info) = T.TyConArg $ convertTyConInfo info
+convertTyArg (R.TyVarArg info) = T.TyVarArg $ convertTyVarInfo info
 
 convertDataConInfo :: R.DataConInfo -> T.DataConInfo
 convertDataConInfo (R.DataConInfo tyDecl dataCon) =
   T.DataConInfo (convertTypeDeclaration tyDecl) (convertDataConstructor dataCon)
 
 dataConstructorScheme :: T.DataConstructor -> T.Scheme
-dataConstructorScheme (T.DataConstructor _ _ mTyArg tyName _ _) = T.Forall [] ty
+dataConstructorScheme (T.DataConstructor _ _ mTyArg tyName _ _) = T.Forall tyVars ty
  where
+  getTyVar (T.TyVarArg var) = var
+  getTyVar (T.TyConArg _) = error "Encountered TyCon in type arguments"
+  tyVars = getTyVar <$> T.tyConInfoArgs tyName
   ty =
     case mTyArg of
-      Just tyArg -> T.TyCon tyArg `T.TyFun` T.TyCon tyName
+      Just (T.TyConArg tyCon) -> T.TyCon tyCon `T.TyFun` T.TyCon tyName
+      Just (T.TyVarArg tyVar) -> T.TyVar tyVar `T.TyFun` T.TyCon tyName
       Nothing -> T.TyCon tyName
 
 primitiveFunctionScheme :: PrimitiveFunction -> (T.Ident, T.Scheme)
@@ -207,8 +209,8 @@ inferTopLevel maxId env bindings = do
           (T.Forall _ ty) = T.bindingType binding
           (scheme', letterSubst) = normalize ty
           binding' = binding { T.bindingType = scheme' }
-          subst' = composeSubst subst letterSubst
-        in substituteTBinding subst' binding'
+          subst' = composeSubst letterSubst subst
+        in substituteBinding subst' binding'
   pure (bindings'', maxId')
 
 -- | Infer a group of bindings.
@@ -249,7 +251,7 @@ generateBindingScheme :: R.Binding -> Inference T.Scheme
 generateBindingScheme binding =
   maybe
     -- No explicit type annotation, generate a type variable
-    (T.Forall [] <$> freshTypeVariable)
+    (T.Forall [] <$> freshTypeVariable KStar)
     -- There is an explicit type annotation. Use it.
     (pure . convertScheme)
     (R.bindingType binding)
@@ -269,7 +271,7 @@ solveBindingConstraints env bindingsInference = do
 
 inferBinding :: R.Binding -> Inference (T.Binding, [Constraint])
 inferBinding (R.Binding (Located _ name) _ args body) = do
-  argsAndTyVars <- traverse (\(Located _ arg) -> (convertIdent arg,) <$> freshTypeVariable) args
+  argsAndTyVars <- traverse (\(Located _ arg) -> (convertIdent arg,) <$> freshTypeVariable KStar) args
   let argsAndSchemes = (\(arg, t) -> (arg, T.Forall [] t)) <$> argsAndTyVars
   (body', bodyCons) <- extendEnvIdentM argsAndSchemes $ inferExpr body
   let
@@ -342,7 +344,7 @@ inferExpr (R.ELet (R.Let bindings expression)) = do
 inferExpr (R.EApp (R.App func args)) = do
   (func', funcConstraints) <- inferExpr func
   (args', argConstraints) <- NE.unzip <$> traverse inferExpr args
-  tyVar <- freshTypeVariable
+  tyVar <- freshTypeVariable KStar
   let
     argTypes = NE.toList $ expressionType <$> args'
     newConstraint = Constraint (expressionType func', foldr1 T.TyFun (argTypes ++ [tyVar]))
@@ -367,7 +369,7 @@ inferMatch (R.Match pat body) = do
 inferPattern :: R.Pattern -> Inference (T.Pattern, [Constraint])
 inferPattern (R.PLit (Located _ lit)) = pure (T.PLit lit, [])
 inferPattern (R.PVar (Located _ ident)) = do
-  tvar <- freshTypeVariable
+  tvar <- freshTypeVariable KStar
   pure (T.PVar $ T.Typed tvar (convertIdent ident), [])
 inferPattern (R.PCons (R.PatCons cons mArg)) = do
   let cons' = convertDataConInfo cons
@@ -377,7 +379,7 @@ inferPattern (R.PCons (R.PatCons cons mArg)) = do
     Just arg -> do
       (arg', argCons) <- inferPattern arg
       let argTy = patternType arg'
-      retTy <- freshTypeVariable
+      retTy <- freshTypeVariable KStar
       let constraint = Constraint (argTy `T.TyFun` retTy, consTy)
       pure
         ( T.PCons $ T.PatCons cons' (Just arg') retTy
@@ -431,7 +433,21 @@ unifies (T.TyFun t1 t2) (T.TyFun t3 t4) = do
   su1 <- unifies t1 t3
   su2 <- unifies (substituteType su1 t2) (substituteType su1 t4)
   pure (su2 `composeSubst` su1)
+unifies (T.TyCon (T.TyConInfo _ id1 args1 _)) (T.TyCon (T.TyConInfo _ id2 args2 _))
+  | id1 == id2 && length args1 == length args2 =
+    unifyMany (argToType <$> args1) (argToType <$> args2)
+ where
+  argToType (T.TyConArg info) = T.TyCon info
+  argToType (T.TyVarArg info) = T.TyVar info
 unifies t1 t2 = throwError $ UnificationFail t1 t2
+
+unifyMany :: [T.Type] -> [T.Type] -> Solve Subst
+unifyMany [] [] = return emptySubst
+unifyMany (t1 : ts1) (t2 : ts2) = do
+  su1 <- unifies t1 t2
+  su2 <- unifyMany (substituteType su1 <$> ts1) (substituteType su1 <$> ts2)
+  return (su2 `composeSubst` su1)
+unifyMany t1 t2 = error $ "unifyMany lists different length " ++ show (t1, t2)
 
 bind ::  T.TyVarInfo -> T.Type -> Solve Subst
 bind a t
@@ -466,8 +482,24 @@ substituteScheme (Subst subst) (T.Forall vars ty) = T.Forall vars $ substituteTy
 
 substituteType :: Subst -> T.Type -> T.Type
 substituteType (Subst subst) t@(T.TyVar var) = Map.findWithDefault t var subst
-substituteType _ (T.TyCon a) = T.TyCon a
-substituteType s (t1 `T.TyFun` t2) = substituteType s t1 `T.TyFun` substituteType s t2
+substituteType subst (T.TyCon con) = T.TyCon $ substituteTyConInfo subst con
+substituteType subst (t1 `T.TyFun` t2) = substituteType subst t1 `T.TyFun` substituteType subst t2
+
+substituteTyConInfo :: Subst -> T.TyConInfo -> T.TyConInfo
+substituteTyConInfo subst (T.TyConInfo name id' args tyDef) = T.TyConInfo name id' (substituteTyArg subst <$> args) tyDef
+
+substituteTyArg :: Subst -> T.TyArg -> T.TyArg
+substituteTyArg subst (T.TyConArg con) = T.TyConArg $ substituteTyConInfo subst con
+substituteTyArg (Subst subst) (T.TyVarArg var) =
+  case Map.lookup var subst of
+    Nothing -> T.TyVarArg var
+    Just (T.TyVar var') -> T.TyVarArg var'
+    Just (T.TyCon con ) -> T.TyConArg con
+    Just t -> error $ "Invalid TyArg substitution " ++ show (var, t)
+
+substituteTypeDeclaration :: Subst -> T.TypeDeclaration -> T.TypeDeclaration
+substituteTypeDeclaration subst (T.TypeDeclaration tyDef cons) =
+  T.TypeDeclaration tyDef (substituteDataConstructor subst <$> cons)
 
 substituteTyped :: Subst -> T.Typed a -> T.Typed a
 substituteTyped subst (T.Typed ty x) = T.Typed (substituteType subst ty) x
@@ -480,13 +512,14 @@ substituteEnv subst (TyEnv identTys) =
   TyEnv
     (Map.map (substituteScheme subst) identTys)
 
-substituteTBinding :: Subst -> T.Binding -> T.Binding
-substituteTBinding subst binding =
-  binding
-  { T.bindingType = substituteScheme subst (T.bindingType binding)
-  , T.bindingArgs = substituteTyped subst <$> T.bindingArgs binding
-  , T.bindingReturnType = substituteType subst (T.bindingReturnType binding)
-  , T.bindingBody = substituteTExpr subst (T.bindingBody binding)
+substituteBinding :: Subst -> T.Binding -> T.Binding
+substituteBinding subst (T.Binding name ty args retTy body) =
+  T.Binding
+  { T.bindingName = name
+  , T.bindingType = substituteScheme subst ty
+  , T.bindingArgs = substituteTyped subst <$> args
+  , T.bindingReturnType = substituteType subst retTy
+  , T.bindingBody = substituteTExpr subst body
   }
 
 substituteTExpr :: Subst -> T.Expr -> T.Expr
@@ -495,16 +528,24 @@ substituteTExpr subst (T.EVar var) =
   T.EVar $
     case var of
       T.VVal var' -> T.VVal $ substituteTyped subst var'
-      T.VCons (T.Typed ty cons) -> T.VCons (T.Typed (substituteType subst ty) cons)
+      T.VCons (T.Typed ty cons) -> T.VCons (T.Typed (substituteType subst ty) (substituteDataConInfo subst cons))
 substituteTExpr subst (T.EIf (T.If pred' then' else')) =
   T.EIf (T.If (substituteTExpr subst pred') (substituteTExpr subst then') (substituteTExpr subst else'))
 substituteTExpr subst (T.ECase (T.Case scrutinee matches)) =
   T.ECase (T.Case (substituteTExpr subst scrutinee) (substituteTMatch subst <$> matches))
 substituteTExpr subst (T.ELet (T.Let bindings expr)) =
-  T.ELet (T.Let (substituteTBinding subst <$> bindings) (substituteTExpr subst expr))
+  T.ELet (T.Let (substituteBinding subst <$> bindings) (substituteTExpr subst expr))
 substituteTExpr subst (T.EApp (T.App func args returnType)) =
   T.EApp (T.App (substituteTExpr subst func) (substituteTExpr subst <$> args) (substituteType subst returnType))
 substituteTExpr subst (T.EParens expr) = T.EParens (substituteTExpr subst expr)
+
+substituteDataConInfo :: Subst -> T.DataConInfo -> T.DataConInfo
+substituteDataConInfo subst (T.DataConInfo decl con) =
+  T.DataConInfo (substituteTypeDeclaration subst decl) (substituteDataConstructor subst con)
+
+substituteDataConstructor :: Subst -> T.DataConstructor -> T.DataConstructor
+substituteDataConstructor subst (T.DataConstructor name id' mArg ty span' index) =
+  T.DataConstructor name id' (substituteTyArg subst <$> mArg) (substituteTyConInfo subst ty) span' index
 
 substituteTMatch :: Subst -> T.Match -> T.Match
 substituteTMatch subst (T.Match pat body) =
@@ -513,11 +554,12 @@ substituteTMatch subst (T.Match pat body) =
 substituteTPattern :: Subst -> T.Pattern -> T.Pattern
 substituteTPattern _ pat@(T.PLit _) = pat
 substituteTPattern subst (T.PVar var) = T.PVar $ substituteTyped subst var
-substituteTPattern subst (T.PCons (T.PatCons cons mArg retTy)) =
+substituteTPattern subst (T.PCons (T.PatCons con mArg retTy)) =
   let
+    con' = substituteDataConInfo subst con
     mArg' = substituteTPattern subst <$> mArg
     retTy' = substituteType subst retTy
-  in T.PCons (T.PatCons cons mArg' retTy')
+  in T.PCons (T.PatCons con' mArg' retTy')
 substituteTPattern subst (T.PParens pat) = T.PParens (substituteTPattern subst pat)
 
 --
@@ -525,9 +567,16 @@ substituteTPattern subst (T.PParens pat) = T.PParens (substituteTPattern subst p
 --
 
 freeTypeVariables :: T.Type -> Set T.TyVarInfo
-freeTypeVariables T.TyCon{} = Set.empty
+freeTypeVariables (T.TyCon info) = freeTyConInfoTypeVariables info
 freeTypeVariables (T.TyVar var) = Set.singleton var
 freeTypeVariables (t1 `T.TyFun` t2) = freeTypeVariables t1 `Set.union` freeTypeVariables t2
+
+freeTyConInfoTypeVariables :: T.TyConInfo -> Set T.TyVarInfo
+freeTyConInfoTypeVariables (T.TyConInfo _ _ args _) = Set.unions $ freeTyArgTypeVariables <$> args
+
+freeTyArgTypeVariables :: T.TyArg -> Set T.TyVarInfo
+freeTyArgTypeVariables (T.TyConArg info) = freeTyConInfoTypeVariables info
+freeTyArgTypeVariables (T.TyVarArg var) = Set.singleton var
 
 freeSchemeTypeVariables :: T.Scheme -> Set T.TyVarInfo
 freeSchemeTypeVariables (T.Forall tvs t) = freeTypeVariables t `Set.difference` Set.fromList tvs
@@ -551,8 +600,16 @@ convertType (R.TyCon info) = T.TyCon (convertTyConInfo info)
 convertType (R.TyVar info) = T.TyVar (convertTyVarInfo info)
 convertType (R.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
 
+convertTyConDefinition :: R.TyConDefinition -> T.TyConDefinition
+convertTyConDefinition (R.TyConDefinition name' id' args _) = T.TyConDefinition name' id' (convertTyVarInfo <$> args) kind
+ where
+  -- Our kind inference is really simple. We don't have higher-kinded types so
+  -- we just count the number of type variables and make a * for each one, plus
+  -- a * for the type constructor. Easy!
+  kind = foldr1 KFun $ const KStar <$> [0..length args]
+
 convertTyConInfo :: R.TyConInfo -> T.TyConInfo
-convertTyConInfo (R.TyConInfo name' _ id') = T.TyConInfo name' id' KStar
+convertTyConInfo (R.TyConInfo name' id' args tyDef _) = T.TyConInfo name' id' (convertTyArg <$> args) (convertTyConDefinition tyDef)
 
 convertTyVarInfo :: R.TyVarInfo -> T.TyVarInfo
 convertTyVarInfo (R.TyVarInfo name' id' _) = T.TyVarInfo name' id' KStar TyVarNotGenerated
