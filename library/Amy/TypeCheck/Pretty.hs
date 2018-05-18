@@ -26,7 +26,12 @@ prettyTypeTerm (TyParens t) = parens (prettyTypeTerm t)
 prettyTyConInfo :: TyConInfo -> Doc ann
 prettyTyConInfo (TyConInfo name _ args _) = pretty name <> args'
  where
-  args' = if null args then mempty else space <> sep (prettyTypeTerm <$> args)
+  args' = if null args then mempty else space <> sep (prettyArg <$> args)
+  prettyArg arg = parensIf (isConWithArgs arg) $ prettyTypeTerm arg
+
+isConWithArgs :: TypeTerm -> Bool
+isConWithArgs (TyCon (TyConInfo _ _ args _)) = not (null args)
+isConWithArgs _ = False
 
 prettyTyVarInfo :: TyVarInfo -> Doc ann
 prettyTyVarInfo (TyVarInfo name _ _ _) = pretty name
