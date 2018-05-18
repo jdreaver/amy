@@ -61,10 +61,10 @@ renameTypeDeclaration (S.TypeDeclaration tyDef constructors) = do
         case argTy of
           S.TyConArg tyCon -> fmap R.TyConArg <$> lookupTypeConstructorInScopeOrError tyCon
           S.TyVarArg (S.TyVarInfo tyVar) ->
-            pure $
-              case find ((== locatedValue tyVar) . R.tyVarInfoName) tyVars of
-                Just var -> Success $ R.TyVarArg var
-                Nothing -> Failure [UnknownTypeVariable tyVar]
+            -- Find the constructor's type variable argument corresponding to
+            -- this type variable
+            let mTyVar = find ((== locatedValue tyVar) . R.tyVarInfoName) tyVars
+            in pure $ maybe (Failure [UnknownTypeVariable tyVar]) (Success . R.TyVarArg) mTyVar
       liftValidation (sequenceA mArgTy') $ \mArgTy'' ->
         addDataConstructorToScope name mArgTy'' tyDef'' span' i
     let
@@ -75,6 +75,8 @@ renameTypeDeclaration (S.TypeDeclaration tyDef constructors) = do
 
     traverse addTypeDeclarationToScope (decl <* checkForDuplicateTypeVariables tyVars)
 
+-- | We don't allow duplicate type variables in type definitions, like if we
+-- said @Either a a = ...@
 checkForDuplicateTypeVariables :: [R.TyVarInfo] -> Validation [Error] ()
 checkForDuplicateTypeVariables tyVars = if null dups then Success () else Failure dups
  where
@@ -85,7 +87,6 @@ checkForDuplicateTypeVariables tyVars = if null dups then Success () else Failur
       Nothing -> Nothing
   dups :: [Error]
   dups = catMaybes $ snd $ mapAccumL (\prev var -> (var:prev, checkDup var prev)) [] tyVars
-
 
 renameExtern :: S.Extern -> Renamer (Validation [Error] R.Extern)
 renameExtern extern = do
