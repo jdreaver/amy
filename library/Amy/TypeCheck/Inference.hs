@@ -486,7 +486,7 @@ substituteType subst (T.TyCon con) = T.TyCon $ substituteTyConInfo subst con
 substituteType subst (t1 `T.TyFun` t2) = substituteType subst t1 `T.TyFun` substituteType subst t2
 
 substituteTyConInfo :: Subst -> T.TyConInfo -> T.TyConInfo
-substituteTyConInfo subst (T.TyConInfo name id' args kind) = T.TyConInfo name id' (substituteTyArg subst <$> args) kind
+substituteTyConInfo subst (T.TyConInfo name id' args tyDef) = T.TyConInfo name id' (substituteTyArg subst <$> args) tyDef
 
 substituteTyArg :: Subst -> T.TyArg -> T.TyArg
 substituteTyArg subst (T.TyConArg con) = T.TyConArg $ substituteTyConInfo subst con
@@ -609,12 +609,7 @@ convertTyConDefinition (R.TyConDefinition name' id' args _) = T.TyConDefinition 
   kind = foldr1 KFun $ const KStar <$> [0..length args]
 
 convertTyConInfo :: R.TyConInfo -> T.TyConInfo
-convertTyConInfo (R.TyConInfo name' id' args _) = T.TyConInfo name' id' (convertTyArg <$> args) kind
- where
-  -- Our kind inference is really simple. We don't have higher-kinded types so
-  -- we just count the number of type variables and make a * for each one, plus
-  -- a * for the type constructor. Easy!
-  kind = foldr1 KFun $ const KStar <$> [0..length args]
+convertTyConInfo (R.TyConInfo name' id' args tyDef _) = T.TyConInfo name' id' (convertTyArg <$> args) (convertTyConDefinition tyDef)
 
 convertTyVarInfo :: R.TyVarInfo -> T.TyVarInfo
 convertTyVarInfo (R.TyVarInfo name' id' _) = T.TyVarInfo name' id' KStar TyVarNotGenerated

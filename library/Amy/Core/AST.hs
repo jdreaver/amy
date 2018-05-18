@@ -83,12 +83,15 @@ data TyConDefinition
   , tyConDefinitionKind :: !Kind
   } deriving (Show, Eq, Ord)
 
-definitionFromPrimTyCon :: PrimTyCon -> TyConDefinition
-definitionFromPrimTyCon (PrimTyCon name id') = TyConDefinition name id' [] KStar
+tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
+tyConDefinitionToInfo tyDef@(TyConDefinition name' id' args _) = TyConInfo name' id' (TyVarArg <$> args) tyDef
+
+fromPrimTyDef :: PrimTyCon -> TyConDefinition
+fromPrimTyDef (PrimTyCon name id') = TyConDefinition name id' [] KStar
 
 fromPrimTypeDefinition :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDefinition (PrimTypeDefinition tyName cons) =
-  TypeDeclaration (definitionFromPrimTyCon tyName) (fromPrimDataCon <$> cons)
+  TypeDeclaration (fromPrimTyDef tyName) (fromPrimDataCon <$> cons)
 
 data DataConstructor
   = DataConstructor
@@ -242,11 +245,11 @@ data TyConInfo
   { tyConInfoName :: !Text
   , tyConInfoId :: !Int
   , tyConInfoArgs :: ![TyArg]
-  , tyConInfoKind :: !Kind
+  , tyConInfoDefinition :: !TyConDefinition
   } deriving (Show, Eq, Ord)
 
 fromPrimTyCon :: PrimTyCon -> TyConInfo
-fromPrimTyCon (PrimTyCon name id') = TyConInfo name id' [] KStar
+fromPrimTyCon = tyConDefinitionToInfo . fromPrimTyDef
 
 data TyVarInfo
   = TyVarInfo

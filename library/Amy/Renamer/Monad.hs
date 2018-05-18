@@ -199,7 +199,7 @@ lookupTypeConstructorInScopeOrError (S.TyConInfo name args span') = do
   mTyCon <- lookupTypeConstructorInScope name
   case mTyCon of
     Nothing -> pure $ Failure [UnknownTypeConstructor (Located span' name)]
-    Just (R.TyConInfo name' id' _ span'') -> do
+    Just (R.TyConInfo name' id' _ tyDef span'') -> do
       args' <- for args $ \arg ->
         case arg of
           S.TyConArg info' -> fmap R.TyConArg <$> lookupTypeConstructorInScopeOrError info'
@@ -209,6 +209,7 @@ lookupTypeConstructorInScopeOrError (S.TyConInfo name args span') = do
         <$> pure name'
         <*> pure id'
         <*> sequenceA args'
+        <*> pure tyDef
         <*> pure span''
 
 addTypeDeclarationToScope :: R.TypeDeclaration -> Renamer R.TypeDeclaration
