@@ -51,7 +51,6 @@ renameTypeDeclaration (S.TypeDeclaration tyDef constructors) = do
     span' = ConstructorSpan $ length constructors
     indexes = ConstructorIndex <$> [0..]
 
-  -- Check for duplicate type variables
   liftValidation tyDef' $ \tyDef'' -> do
     let
       tyVars = R.tyConDefinitionArgs tyDef''
