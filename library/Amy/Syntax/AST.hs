@@ -25,10 +25,10 @@ module Amy.Syntax.AST
   , letBindingType
   , LetBinding(..)
   , App(..)
+  , TypeTerm(..)
   , Type(..)
   , TyConInfo(..)
   , TyVarInfo(..)
-  , TyArg(..)
   , Scheme(..)
 
     -- Re-export
@@ -111,7 +111,7 @@ data TyConDefinition
 data DataConstructor
   = DataConstructor
   { dataConstructorName :: !(Located Text)
-  , dataConstructorArgument :: !(Maybe TyArg)
+  , dataConstructorArgument :: !(Maybe TypeTerm)
   } deriving (Show, Eq)
 
 data Expr
@@ -187,9 +187,14 @@ data App
   , appArgs :: !(NonEmpty Expr)
   } deriving (Show, Eq)
 
-data Type
+data TypeTerm
   = TyCon !TyConInfo
   | TyVar !TyVarInfo
+  | TyParens !TypeTerm
+  deriving (Show, Eq)
+
+data Type
+  = TyTerm !TypeTerm
   | TyFun !Type !Type
   deriving (Show, Eq)
 
@@ -198,17 +203,12 @@ infixr 0 `TyFun`
 data TyConInfo
   = TyConInfo
   { tyConInfoName :: !Text
-  , tyConInfoArgs :: ![TyArg]
+  , tyConInfoArgs :: ![TypeTerm]
   , tyConInfoLocation :: !SourceSpan
   } deriving (Show, Eq)
 
-data TyArg
-  = TyConArg !TyConInfo
-  | TyVarArg !TyVarInfo
-  deriving (Show, Eq)
-
 newtype TyVarInfo = TyVarInfo { unTyVarInfo :: Located Text }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 data Scheme
   = Forall ![TyVarInfo] Type

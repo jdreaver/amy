@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module Amy.Syntax.Parser
   ( parseModule
 
@@ -6,6 +8,7 @@ module Amy.Syntax.Parser
   , bindingType
   , parseScheme
   , parseType
+  , typeTerm
   , binding
   , expression
   , expression'
@@ -16,9 +19,11 @@ module Amy.Syntax.Parser
   , literal
   ) where
 
+import qualified Control.Applicative.Combinators.NonEmpty as CNE
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
+import qualified Data.Set as Set
 import Text.Megaparsec
 import Text.Megaparsec.Expr
 
@@ -77,26 +82,46 @@ parseSchemeVars = do
 parseType :: AmyParser Type
 parseType = makeExprParser term table
  where
-  tVar = (TyCon <$> tyConInfo True) <|> (TyVar <$> tyVarInfo)
   table = [[InfixR (TyFun <$ typeSeparatorArrow)]]
-  term = parens parseType <|> tVar
+  term = parens parseType <|> (TyTerm <$> typeTerm)
 
-tyConInfo :: Bool -> AmyParser TyConInfo
-tyConInfo allowArgs = do
+typeTerm :: AmyParser TypeTerm
+typeTerm = do
+  con :| rest <- CNE.sepBy1 typeTerm' spaceConsumer
+  process con rest
+ where
+  mkError = fancyFailure . Set.singleton . ErrorFail
+  process (TyCon (TyConInfo con _ span')) args = pure $ TyCon $ TyConInfo con args span'
+  process (TyVar var) [] = pure $ TyVar var
+  process t@(TyVar _) args = mkError $ "type variable with arguments encountered (no higher-kinded types allowed): " ++ show (t, args)
+  process (TyParens t) [] = pure $ TyParens t
+  process t@(TyParens _) args = mkError $ "type parens with arguments encountered (no higher-kinded types allowed): " ++ show (t, args)
+
+-- data TyVarWithArgs = TyVarWithArgs TyVarInfo
+--   deriving (Show, Eq, Ord)
+
+-- instance ShowErrorComponent TyVarWithArgs where
+--   showErrorComponent (TyVarWithArgs info) =
+--     "type variable with arguments encountered (no higher-kinded types allowed): " ++ show info
+
+typeTerm' :: AmyParser TypeTerm
+typeTerm' =
+  (TyParens <$> parens typeTerm <?> "type parens")
+  <|> (TyVar <$> tyVarInfo <?> "type variable")
+  <|> (TyCon <$> tyConInfoNoArgs <?> "type constructor")
+
+tyConInfoNoArgs :: AmyParser TyConInfo
+tyConInfoNoArgs = do
   Located span' name <- typeIdentifier
-  args <- if allowArgs then many tyArg else pure []
   pure
     TyConInfo
     { tyConInfoName = name
-    , tyConInfoArgs = args
+    , tyConInfoArgs = []
     , tyConInfoLocation = span'
     }
 
 tyVarInfo :: AmyParser TyVarInfo
 tyVarInfo = TyVarInfo <$> identifier
-
-tyArg :: AmyParser TyArg
-tyArg = (TyConArg <$> tyConInfo False) <|> (TyVarArg <$> tyVarInfo)
 
 binding :: AmyParser Binding
 binding = do
@@ -139,7 +164,7 @@ tyConDefinition = do
 dataConstructor :: AmyParser DataConstructor
 dataConstructor = do
   dataCon <- dataConstructorName'
-  mArg <- optional tyArg
+  mArg <- optional typeTerm
   pure
     DataConstructor
     { dataConstructorName = dataCon

@@ -25,12 +25,12 @@ module Amy.TypeCheck.AST
   , patternType
 
   , Ident(..)
+  , TypeTerm(..)
   , Type(..)
   , TyConInfo(..)
   , fromPrimTyCon
   , TyVarInfo(..)
   , TyVarGenerated(..)
-  , TyArg(..)
   , typeKind
   , Scheme(..)
   , Typed(..)
@@ -93,7 +93,7 @@ data TyConDefinition
   } deriving (Show, Eq, Ord)
 
 tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
-tyConDefinitionToInfo tyDef@(TyConDefinition name' id' args _) = TyConInfo name' id' (TyVarArg <$> args) tyDef
+tyConDefinitionToInfo tyDef@(TyConDefinition name' id' args _) = TyConInfo name' id' (TyVar <$> args) tyDef
 
 fromPrimTyDef :: PrimTyCon -> TyConDefinition
 fromPrimTyDef (PrimTyCon name id') = TyConDefinition name id' [] KStar
@@ -106,7 +106,7 @@ data DataConstructor
   = DataConstructor
   { dataConstructorName :: !Text
   , dataConstructorId :: !Int
-  , dataConstructorArgument :: !(Maybe TyArg)
+  , dataConstructorArgument :: !(Maybe TypeTerm)
   , dataConstructorType :: !TyConInfo
   , dataConstructorSpan :: !ConstructorSpan
   , dataConstructorIndex :: !ConstructorIndex
@@ -185,7 +185,7 @@ data App
   } deriving (Show, Eq)
 
 literalType' :: Literal -> Type
-literalType' lit = TyCon $ fromPrimTyCon $ literalType lit
+literalType' lit = TyTerm $ TyCon $ fromPrimTyCon $ literalType lit
 
 expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType' lit
@@ -211,9 +211,14 @@ data Ident
   , identId :: !Int
   } deriving (Show, Eq, Ord)
 
-data Type
+data TypeTerm
   = TyCon !TyConInfo
   | TyVar !TyVarInfo
+  | TyParens !TypeTerm
+  deriving (Show, Eq, Ord)
+
+data Type
+  = TyTerm !TypeTerm
   | TyFun !Type !Type
   deriving (Show, Eq, Ord)
 
@@ -223,7 +228,7 @@ data TyConInfo
   = TyConInfo
   { tyConInfoName :: !Text
   , tyConInfoId :: !Int
-  , tyConInfoArgs :: ![TyArg]
+  , tyConInfoArgs :: ![TypeTerm]
   , tyConInfoDefinition :: !TyConDefinition
   } deriving (Show, Eq, Ord)
 
@@ -243,18 +248,17 @@ data TyVarGenerated
   | TyVarNotGenerated
   deriving (Show, Eq, Ord)
 
-data TyArg
-  = TyConArg !TyConInfo
-  | TyVarArg !TyVarInfo
-  deriving (Show, Eq, Ord)
-
 typeKind :: Type -> Kind
-typeKind (TyCon info) =
+typeKind (TyTerm term) = typeTermKind term
+typeKind (TyFun _ _) = KStar
+
+typeTermKind :: TypeTerm -> Kind
+typeTermKind (TyCon info) =
   case tyConDefinitionKind (tyConInfoDefinition info) of
     KStar -> KStar
     KFun k _ -> k
-typeKind (TyVar var) = tyVarInfoKind var
-typeKind (TyFun _ _) = KStar
+typeTermKind (TyVar var) = tyVarInfoKind var
+typeTermKind (TyParens t) = typeTermKind t
 
 data Scheme
   = Forall ![TyVarInfo] Type

@@ -21,10 +21,10 @@ module Amy.Renamer.AST
   , App(..)
 
   , Ident(..)
+  , TypeTerm(..)
   , Type(..)
   , TyConInfo(..)
   , TyVarInfo(..)
-  , TyArg(..)
   , Scheme(..)
 
     -- Re-export
@@ -84,7 +84,7 @@ data TyConDefinition
   } deriving (Show, Eq, Ord)
 
 tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
-tyConDefinitionToInfo tyDef@(TyConDefinition name' id' args span') = TyConInfo name' id' (TyVarArg <$> args) tyDef span'
+tyConDefinitionToInfo tyDef@(TyConDefinition name' id' args span') = TyConInfo name' id' (TyVar <$> args) tyDef span'
 
 fromPrimTyDef :: PrimTyCon -> TyConDefinition
 fromPrimTyDef (PrimTyCon name id') = TyConDefinition name id' [] Nothing
@@ -97,7 +97,7 @@ data DataConstructor
   = DataConstructor
   { dataConstructorName :: !(Located Text)
   , dataConstructorId :: !Int
-  , dataConstructorArgument :: !(Maybe TyArg)
+  , dataConstructorArgument :: !(Maybe TypeTerm)
   , dataConstructorType :: !TyConInfo
   , dataConstructorSpan :: !ConstructorSpan
   , dataConstructorIndex :: !ConstructorIndex
@@ -180,9 +180,14 @@ data Ident
   , identId :: !Int
   } deriving (Show, Eq, Ord)
 
-data Type
+data TypeTerm
   = TyCon !TyConInfo
   | TyVar !TyVarInfo
+  | TyParens !TypeTerm
+  deriving (Show, Eq, Ord)
+
+data Type
+  = TyTerm !TypeTerm
   | TyFun !Type !Type
   deriving (Show, Eq)
 
@@ -192,7 +197,7 @@ data TyConInfo
   = TyConInfo
   { tyConInfoName :: !Text
   , tyConInfoId :: !Int
-  , tyConInfoArgs :: ![TyArg]
+  , tyConInfoArgs :: ![TypeTerm]
   , tyConDefinition :: !TyConDefinition
   , tyConInfoLocation :: !(Maybe SourceSpan)
   } deriving (Show, Eq, Ord)
@@ -206,11 +211,6 @@ data TyVarInfo
   , tyVarInfoId :: !Int
   , tyVarInfoLocation :: !SourceSpan
   } deriving (Show, Eq, Ord)
-
-data TyArg
-  = TyConArg !TyConInfo
-  | TyVarArg !TyVarInfo
-  deriving (Show, Eq, Ord)
 
 data Scheme
   = Forall ![TyVarInfo] Type

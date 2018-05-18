@@ -19,6 +19,7 @@ module Amy.Renamer.Monad
   , addTypeDefinitionToScope
   , lookupTypeConstructorInScope
   , lookupTypeConstructorInScopeOrError
+  , lookupTypeTerm
 
     -- * Type Declarations and DataConInfo
   , addTypeDeclarationToScope
@@ -137,7 +138,7 @@ lookupValueInScopeOrError name@(Located span' name') =
 
 addDataConstructorToScope
   :: Located Text
-  -> Maybe R.TyArg
+  -> Maybe R.TypeTerm
   -> R.TyConDefinition
   -> ConstructorSpan
   -> ConstructorIndex
@@ -200,10 +201,7 @@ lookupTypeConstructorInScopeOrError (S.TyConInfo name args span') = do
   case mTyCon of
     Nothing -> pure $ Failure [UnknownTypeConstructor (Located span' name)]
     Just (R.TyConInfo name' id' _ tyDef span'') -> do
-      args' <- for args $ \arg ->
-        case arg of
-          S.TyConArg info' -> fmap R.TyConArg <$> lookupTypeConstructorInScopeOrError info'
-          S.TyVarArg info' -> fmap R.TyVarArg <$> lookupTypeVariableInScopeOrError info'
+      args' <- traverse lookupTypeTerm args
       pure $
         R.TyConInfo
         <$> pure name'
@@ -211,6 +209,11 @@ lookupTypeConstructorInScopeOrError (S.TyConInfo name args span') = do
         <*> sequenceA args'
         <*> pure tyDef
         <*> pure span''
+
+lookupTypeTerm :: S.TypeTerm -> Renamer (Validation [Error] R.TypeTerm)
+lookupTypeTerm (S.TyCon info) = fmap R.TyCon <$> lookupTypeConstructorInScopeOrError info
+lookupTypeTerm (S.TyVar info) = fmap R.TyVar <$> lookupTypeVariableInScopeOrError info
+lookupTypeTerm (S.TyParens t) = fmap R.TyParens <$> lookupTypeTerm t
 
 addTypeDeclarationToScope :: R.TypeDeclaration -> Renamer R.TypeDeclaration
 addTypeDeclarationToScope decl = do

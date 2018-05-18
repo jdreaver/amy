@@ -12,7 +12,7 @@ data Located a
   = Located
   { locatedSpan :: !SourceSpan
   , locatedValue :: !a
-  } deriving (Show, Eq, Functor, Foldable, Traversable)
+  } deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 -- | A file path along with a start and end 'SourcePos'.
 data SourceSpan

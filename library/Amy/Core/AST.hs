@@ -22,8 +22,8 @@ module Amy.Core.AST
 
   , Ident(..)
   , substExpr
+  , TypeTerm(..)
   , Type(..)
-  , TyArg(..)
   , TyConInfo(..)
   , TyVarInfo(..)
   , Scheme(..)
@@ -84,7 +84,7 @@ data TyConDefinition
   } deriving (Show, Eq, Ord)
 
 tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
-tyConDefinitionToInfo tyDef@(TyConDefinition name' id' args _) = TyConInfo name' id' (TyVarArg <$> args) tyDef
+tyConDefinitionToInfo tyDef@(TyConDefinition name' id' args _) = TyConInfo name' id' (TyVar <$> args) tyDef
 
 fromPrimTyDef :: PrimTyCon -> TyConDefinition
 fromPrimTyDef (PrimTyCon name id') = TyConDefinition name id' [] KStar
@@ -97,7 +97,7 @@ data DataConstructor
   = DataConstructor
   { dataConstructorName :: !Text
   , dataConstructorId :: !Int
-  , dataConstructorArgument :: !(Maybe TyArg)
+  , dataConstructorArgument :: !(Maybe TypeTerm)
   , dataConstructorType :: !TyConInfo
   , dataConstructorSpan :: !ConstructorSpan
   , dataConstructorIndex :: !ConstructorIndex
@@ -174,7 +174,7 @@ data App
   } deriving (Show, Eq)
 
 literalType' :: Literal -> Type
-literalType' lit = TyCon $ fromPrimTyCon $ literalType lit
+literalType' lit = TyTerm $ TyCon $ fromPrimTyCon $ literalType lit
 
 expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType' lit
@@ -232,9 +232,13 @@ data ConstructorName
   , constructorNameId :: !Int
   } deriving (Show, Eq, Ord)
 
-data Type
+data TypeTerm
   = TyCon !TyConInfo
   | TyVar !TyVarInfo
+  deriving (Show, Eq, Ord)
+
+data Type
+  = TyTerm !TypeTerm
   | TyFun !Type !Type
   deriving (Show, Eq, Ord)
 
@@ -244,7 +248,7 @@ data TyConInfo
   = TyConInfo
   { tyConInfoName :: !Text
   , tyConInfoId :: !Int
-  , tyConInfoArgs :: ![TyArg]
+  , tyConInfoArgs :: ![TypeTerm]
   , tyConInfoDefinition :: !TyConDefinition
   } deriving (Show, Eq, Ord)
 
@@ -257,11 +261,6 @@ data TyVarInfo
   , tyVarInfoId :: !Int
   , tyVarInfoKind :: !Kind
   } deriving (Show, Eq, Ord)
-
-data TyArg
-  = TyConArg !TyConInfo
-  | TyVarArg !TyVarInfo
-  deriving (Show, Eq, Ord)
 
 data Scheme
   = Forall ![TyVarInfo] Type

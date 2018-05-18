@@ -57,14 +57,15 @@ renameTypeDeclaration (S.TypeDeclaration tyDef constructors) = do
 
     -- Rename data constructors
     constructors' <- for (zip indexes constructors) $ \(i, S.DataConstructor name mArgTy) -> do
-      mArgTy' <- for mArgTy $ \argTy ->
-        case argTy of
-          S.TyConArg tyCon -> fmap R.TyConArg <$> lookupTypeConstructorInScopeOrError tyCon
-          S.TyVarArg (S.TyVarInfo tyVar) ->
-            -- Find the constructor's type variable argument corresponding to
-            -- this type variable
-            let mTyVar = find ((== locatedValue tyVar) . R.tyVarInfoName) tyVars
-            in pure $ maybe (Failure [UnknownTypeVariable tyVar]) (Success . R.TyVarArg) mTyVar
+      let
+        renameArg (S.TyCon tyCon) = fmap R.TyCon <$> lookupTypeConstructorInScopeOrError tyCon
+        renameArg (S.TyVar (S.TyVarInfo tyVar)) =
+          -- Find the constructor's type variable argument corresponding to
+          -- this type variable
+          let mTyVar = find ((== locatedValue tyVar) . R.tyVarInfoName) tyVars
+          in pure $ maybe (Failure [UnknownTypeVariable tyVar]) (Success . R.TyVar) mTyVar
+        renameArg (S.TyParens t) = fmap R.TyParens <$> renameArg t
+      mArgTy' <- traverse renameArg mArgTy
       liftValidation (sequenceA mArgTy') $ \mArgTy'' ->
         addDataConstructorToScope name mArgTy'' tyDef'' span' i
     let
@@ -135,8 +136,7 @@ renameScheme (S.Forall vars ty) = do
     <*> ty'
 
 renameType :: S.Type -> Renamer (Validation [Error] R.Type)
-renameType (S.TyCon name) = fmap R.TyCon <$> lookupTypeConstructorInScopeOrError name
-renameType (S.TyVar name) = fmap R.TyVar <$> lookupTypeVariableInScopeOrError name
+renameType (S.TyTerm term) = fmap R.TyTerm <$> lookupTypeTerm term
 renameType (S.TyFun ty1 ty2) = do
   ty1' <- renameType ty1
   ty2' <- renameType ty2

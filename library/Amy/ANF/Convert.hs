@@ -44,7 +44,7 @@ convertTypeDeclaration (C.TypeDeclaration tyConDef con) = do
 
 convertDataConstructor :: C.DataConstructor -> ANFConvert ANF.DataConstructor
 convertDataConstructor (C.DataConstructor conName id' mTyArg tyCon span' index) = do
-  mTyArg' <- traverse convertTyArg mTyArg
+  mTyArg' <- traverse convertTypeTerm mTyArg
   tyCon' <- getTyConInfoType tyCon
   pure
     ANF.DataConstructor
@@ -55,10 +55,6 @@ convertDataConstructor (C.DataConstructor conName id' mTyArg tyCon span' index) 
     , ANF.dataConstructorSpan = span'
     , ANF.dataConstructorIndex = index
     }
-
-convertTyArg :: C.TyArg -> ANFConvert ANF.Type
-convertTyArg (C.TyConArg con) = getTyConInfoType con
-convertTyArg (C.TyVarArg _) = pure OpaquePointerType
 
 convertDataConInfo :: C.DataConInfo -> ANFConvert ANF.DataConInfo
 convertDataConInfo (C.DataConInfo typeDecl dataCon) = do
@@ -79,10 +75,13 @@ convertType ty = go (typeToNonEmpty ty)
   go :: NonEmpty C.Type -> ANFConvert ANF.Type
   go (ty' :| []) =
     case ty' of
-      C.TyCon info -> getTyConInfoType info
-      C.TyVar _ -> pure OpaquePointerType
+      C.TyTerm t -> convertTypeTerm t
       C.TyFun{} -> mkFunctionType ty
   go _ = mkFunctionType ty
+
+convertTypeTerm :: C.TypeTerm -> ANFConvert ANF.Type
+convertTypeTerm (C.TyCon con) = getTyConInfoType con
+convertTypeTerm (C.TyVar _) = pure OpaquePointerType
 
 mkFunctionType :: C.Type -> ANFConvert ANF.Type
 mkFunctionType ty = do

@@ -12,14 +12,18 @@ import Amy.Pretty
 import Amy.Syntax.AST
 
 mkPrettyType :: Type -> PrettyType ann
-mkPrettyType (TyCon info) = PTyDoc $ prettyTyConInfo info
-mkPrettyType (TyVar info) = PTyDoc $ prettyTyVarInfo info
+mkPrettyType (TyTerm t) = PTyDoc $ prettyTypeTerm t
 mkPrettyType (TyFun ty1 ty2) = PTyFun (mkPrettyType ty1) (mkPrettyType ty2)
+
+prettyTypeTerm :: TypeTerm -> Doc ann
+prettyTypeTerm (TyCon con) = prettyTyConInfo con
+prettyTypeTerm (TyVar var) = prettyTyVarInfo var
+prettyTypeTerm (TyParens t) = parens (prettyTypeTerm t)
 
 prettyTyConInfo :: TyConInfo -> Doc ann
 prettyTyConInfo (TyConInfo name args _) = pretty name <> args'
  where
-  args' = if null args then mempty else space <> sep (prettyTyArg <$> args)
+  args' = if null args then mempty else space <> sep (prettyTypeTerm <$> args)
 
 prettyTyVarInfo :: TyVarInfo -> Doc ann
 prettyTyVarInfo (TyVarInfo (Located _ name)) = pretty name
@@ -39,16 +43,12 @@ prettyDeclaration (DeclType (TypeDeclaration info cons)) =
   prettyTypeDeclaration (prettyTyConDefinition info) (prettyConstructor <$> cons)
  where
   prettyConstructor (DataConstructor (Located _ conName) mArg) =
-    prettyDataConstructor (pretty conName) (prettyTyArg <$> mArg)
+    prettyDataConstructor (pretty conName) (prettyTypeTerm <$> mArg)
 
 prettyTyConDefinition :: TyConDefinition -> Doc ann
 prettyTyConDefinition (TyConDefinition name args _) = pretty name <> args'
  where
   args' = if null args then mempty else space <> sep (prettyTyVarInfo <$> args)
-
-prettyTyArg :: TyArg -> Doc ann
-prettyTyArg (TyConArg info) = prettyTyConInfo info
-prettyTyArg (TyVarArg info) = prettyTyVarInfo info
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding (Located _ name) args body) =

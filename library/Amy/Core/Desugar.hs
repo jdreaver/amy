@@ -35,15 +35,11 @@ desugarDataConstructor (T.DataConstructor conName id' mTyArg tyCon span' index) 
   C.DataConstructor
   { C.dataConstructorName = conName
   , C.dataConstructorId = id'
-  , C.dataConstructorArgument = desugarTyArg <$> mTyArg
+  , C.dataConstructorArgument = desugarTypeTerm <$> mTyArg
   , C.dataConstructorType = desugarTyConInfo tyCon
   , C.dataConstructorSpan = span'
   , C.dataConstructorIndex = index
   }
-
-desugarTyArg :: T.TyArg -> C.TyArg
-desugarTyArg (T.TyConArg info) = C.TyConArg (desugarTyConInfo info)
-desugarTyArg (T.TyVarArg info) = C.TyVarArg (desugarTyVarInfo info)
 
 desugarDataConInfo :: T.DataConInfo -> C.DataConInfo
 desugarDataConInfo (T.DataConInfo typeDecl dataCon) =
@@ -88,7 +84,7 @@ desugarExpr (T.ECase (T.Case scrutinee matches)) = do
 desugarExpr (T.EIf (T.If pred' then' else')) =
   let
     boolTyDef = fromPrimTypeDef boolTypeDefinition
-    boolTyCon' = T.TyCon $ T.fromPrimTyCon boolTyCon
+    boolTyCon' = T.TyTerm $ T.TyCon $ T.fromPrimTyCon boolTyCon
     mkBoolPatCons cons =
       T.PatCons (T.DataConInfo boolTyDef $ T.fromPrimDataCon cons) Nothing boolTyCon'
     matches =
@@ -121,15 +117,19 @@ desugarScheme :: T.Scheme -> C.Scheme
 desugarScheme (T.Forall vars ty) = C.Forall (desugarTyVarInfo <$> vars) (desugarType ty)
 
 desugarType :: T.Type -> C.Type
-desugarType (T.TyCon info) = C.TyCon (desugarTyConInfo info)
-desugarType (T.TyVar info) = C.TyVar (desugarTyVarInfo info)
+desugarType (T.TyTerm t) = C.TyTerm (desugarTypeTerm t)
 desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)
+
+desugarTypeTerm :: T.TypeTerm -> C.TypeTerm
+desugarTypeTerm (T.TyCon info) = C.TyCon (desugarTyConInfo info)
+desugarTypeTerm (T.TyVar info) = C.TyVar (desugarTyVarInfo info)
+desugarTypeTerm (T.TyParens t) = desugarTypeTerm t
 
 desugarTyConDefinition :: T.TyConDefinition -> C.TyConDefinition
 desugarTyConDefinition (T.TyConDefinition name id' args kind) = C.TyConDefinition name id' (desugarTyVarInfo <$> args) kind
 
 desugarTyConInfo :: T.TyConInfo -> C.TyConInfo
-desugarTyConInfo (T.TyConInfo name id' args tyDef) = C.TyConInfo name id' (desugarTyArg <$> args) (desugarTyConDefinition tyDef)
+desugarTyConInfo (T.TyConInfo name id' args tyDef) = C.TyConInfo name id' (desugarTypeTerm <$> args) (desugarTyConDefinition tyDef)
 
 desugarTyVarInfo :: T.TyVarInfo -> C.TyVarInfo
 desugarTyVarInfo (T.TyVarInfo name id' kind _) = C.TyVarInfo name id' kind
@@ -176,7 +176,7 @@ restoreClause clause@(PC.Clause (PC.ConLit _) _ _) =
   error $ "Encountered literal clause with arguments! " ++ show clause
 restoreClause (PC.Clause (PC.Con con _ _) args caseExpr) = do
   let
-    patTy = C.TyCon $ C.dataConstructorType $ C.dataConInfoCons con
+    patTy = C.TyTerm $ C.TyCon $ C.dataConstructorType $ C.dataConInfoCons con
     arg =
       case args of
         [] -> Nothing
