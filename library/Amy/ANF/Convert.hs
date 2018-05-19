@@ -39,21 +39,28 @@ convertExtern (C.Extern name ty) = ANF.Extern (convertIdent True name) <$> conve
 convertTypeDeclaration :: C.TypeDeclaration -> ANFConvert ANF.TypeDeclaration
 convertTypeDeclaration (C.TypeDeclaration tyConDef con) = do
   ty <- getTyConDefinitionType tyConDef
-  con' <- traverse convertDataConstructor con
+  con' <- traverse convertDataConDefinition con
   pure $ ANF.TypeDeclaration (C.tyConDefinitionName tyConDef) ty con'
 
-convertDataConstructor :: C.DataConstructor -> ANFConvert ANF.DataConstructor
-convertDataConstructor (C.DataConstructor conName id' mTyArg tyCon span' index) = do
+convertDataConDefinition :: C.DataConDefinition -> ANFConvert ANF.DataConDefinition
+convertDataConDefinition (C.DataConDefinition conName id' mTyArg) = do
   mTyArg' <- traverse convertTypeTerm mTyArg
-  tyCon' <- getTyConInfoType tyCon
   pure
-    ANF.DataConstructor
-    { ANF.dataConstructorName = conName
-    , ANF.dataConstructorId = id'
-    , ANF.dataConstructorArgument = mTyArg'
-    , ANF.dataConstructorType = tyCon'
-    , ANF.dataConstructorSpan = span'
-    , ANF.dataConstructorIndex = index
+    ANF.DataConDefinition
+    { ANF.dataConDefinitionName = conName
+    , ANF.dataConDefinitionId = id'
+    , ANF.dataConDefinitionArgument = mTyArg'
+    }
+
+convertDataCon :: C.DataCon -> ANFConvert ANF.DataCon
+convertDataCon con@(C.DataCon conName id') = do
+  (ty, index) <- getDataConInfo con
+  pure
+    ANF.DataCon
+    { ANF.dataConName = conName
+    , ANF.dataConId = id'
+    , ANF.dataConType = ty
+    , ANF.dataConIndex = index
     }
 
 convertIdent :: Bool -> C.Ident -> ANF.Ident
@@ -117,7 +124,7 @@ normalizeExpr name (C.EApp (C.App func args retTy)) =
   retTy' <- convertType retTy
   case func of
     C.EVar (C.VCons (C.Typed _ con)) -> do
-      con' <- convertDataConstructor con
+      con' <- convertDataCon con
       let
         mArg =
           case argVals of
@@ -155,7 +162,7 @@ normalizeName name (C.EVar var) c =
         -- Not a top-level value, just return
         _ -> c $ ANF.Var ident'
     C.VCons (C.Typed ty con) -> do
-      con' <- convertDataConstructor con
+      con' <- convertDataCon con
       ty' <- convertType ty
       case ty' of
         EnumType intBits -> c $ ConEnum intBits con'
@@ -202,7 +209,7 @@ normalizeMatch name (C.Match pat body) = do
 convertPattern :: C.Pattern -> ANFConvert ANF.Pattern
 convertPattern (C.PLit lit) = pure $ ANF.PLit lit
 convertPattern (C.PCons (C.PatCons cons mArg retTy)) = do
-  cons' <- convertDataConstructor cons
+  cons' <- convertDataCon cons
   mArg' <- traverse convertTypedIdent mArg
   retTy' <- convertType retTy
   pure $ ANF.PCons $ ANF.PatCons cons' mArg' retTy'

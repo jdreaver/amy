@@ -9,10 +9,13 @@ module Amy.TypeCheck.AST
   , TypeDeclaration(..)
   , TyConDefinition(..)
   , fromPrimTypeDef
-  , DataConstructor(..)
+  , tyConDefinitionToInfo
+  , DataConDefinition(..)
   , fromPrimDataCon
   , Expr(..)
   , Var(..)
+  , DataCon(..)
+  , dataConFromDefinition
   , If(..)
   , Case(..)
   , Match(..)
@@ -80,7 +83,7 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConDefinition
-  , typeDeclarationConstructors :: ![DataConstructor]
+  , typeDeclarationConstructors :: ![DataConDefinition]
   } deriving (Show, Eq, Ord)
 
 data TyConDefinition
@@ -101,19 +104,16 @@ fromPrimTypeDef :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
   TypeDeclaration (fromPrimTyDef tyCon) (fromPrimDataCon <$> dataCons)
 
-data DataConstructor
-  = DataConstructor
-  { dataConstructorName :: !Text
-  , dataConstructorId :: !Int
-  , dataConstructorArgument :: !(Maybe TypeTerm)
-  , dataConstructorType :: !TyConInfo
-  , dataConstructorSpan :: !ConstructorSpan
-  , dataConstructorIndex :: !ConstructorIndex
+data DataConDefinition
+  = DataConDefinition
+  { dataConDefinitionName :: !Text
+  , dataConDefinitionId :: !Int
+  , dataConDefinitionArgument :: !(Maybe TypeTerm)
   } deriving (Show, Eq, Ord)
 
-fromPrimDataCon :: PrimDataCon -> DataConstructor
-fromPrimDataCon (PrimDataCon name id' ty span' index) =
-  DataConstructor name id' Nothing (fromPrimTyCon ty) span' index
+fromPrimDataCon :: PrimDataCon -> DataConDefinition
+fromPrimDataCon (PrimDataCon name id' _ _ _) =
+  DataConDefinition name id' Nothing
 
 -- | A renamed 'Expr'
 data Expr
@@ -128,8 +128,17 @@ data Expr
 
 data Var
   = VVal !(Typed Ident)
-  | VCons !(Typed DataConstructor)
+  | VCons !(Typed DataCon)
   deriving (Show, Eq)
+
+data DataCon
+  = DataCon
+  { dataConName :: !Text
+  , dataConId :: !Int
+  } deriving (Show, Eq, Ord)
+
+dataConFromDefinition :: DataConDefinition -> DataCon
+dataConFromDefinition (DataConDefinition name id' _) = DataCon name id'
 
 data If
   = If
@@ -159,7 +168,7 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataConstructor
+  { patConsConstructor :: !DataCon
   , patConsArg :: !(Maybe Pattern)
   , patConsType :: !Type
   } deriving (Show, Eq)

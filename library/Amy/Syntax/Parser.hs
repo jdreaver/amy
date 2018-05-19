@@ -143,7 +143,7 @@ typeDeclaration = do
   constructors <-
     case equals' of
       Nothing -> pure []
-      Just _ -> dataConstructor `sepBy` (dataConstructorSep <* spaceConsumerNewlines)
+      Just _ -> dataConDefinition `sepBy` (dataConstructorSep <* spaceConsumerNewlines)
   pure
     TypeDeclaration
     { typeDeclarationTypeName = tyName
@@ -161,14 +161,14 @@ tyConDefinition = do
     , tyConDefinitionLocation = span'
     }
 
-dataConstructor :: AmyParser DataConstructor
-dataConstructor = do
+dataConDefinition :: AmyParser DataConDefinition
+dataConDefinition = do
   dataCon <- dataConstructorName'
   mArg <- optional typeTerm
   pure
-    DataConstructor
-    { dataConstructorName = dataCon
-    , dataConstructorArgument = mArg
+    DataConDefinition
+    { dataConDefinitionName = dataCon
+    , dataConDefinitionArgument = mArg
     }
 
 expression :: AmyParser Expr

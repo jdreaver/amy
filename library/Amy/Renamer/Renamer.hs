@@ -47,16 +47,13 @@ renameTypeDeclaration :: S.TypeDeclaration -> Renamer (Validation [Error] R.Type
 renameTypeDeclaration (S.TypeDeclaration tyDef constructors) = do
   -- Rename type name
   tyDef' <- addTypeDefinitionToScope tyDef
-  let
-    span' = ConstructorSpan $ length constructors
-    indexes = ConstructorIndex <$> [0..]
 
   liftValidation tyDef' $ \tyDef'' -> do
     let
       tyVars = R.tyConDefinitionArgs tyDef''
 
     -- Rename data constructors
-    constructors' <- for (zip indexes constructors) $ \(i, S.DataConstructor name mArgTy) -> do
+    constructors' <- for constructors $ \(S.DataConDefinition name mArgTy) -> do
       let
         renameArg (S.TyCon tyCon) = fmap R.TyCon <$> lookupTypeConstructorInScopeOrError tyCon
         renameArg (S.TyVar (S.TyVarInfo tyVar)) =
@@ -67,7 +64,7 @@ renameTypeDeclaration (S.TypeDeclaration tyDef constructors) = do
         renameArg (S.TyParens t) = fmap R.TyParens <$> renameArg t
       mArgTy' <- traverse renameArg mArgTy
       liftValidation (sequenceA mArgTy') $ \mArgTy'' ->
-        addDataConstructorToScope name mArgTy'' tyDef'' span' i
+        addDataConDefinitionToScope name mArgTy''
     let
       decl =
         R.TypeDeclaration
@@ -151,7 +148,7 @@ renameExpression (S.EVar var) =
   fmap (fmap R.EVar) $
     case var of
       S.VVal name -> fmap R.VVal <$> lookupValueInScopeOrError name
-      S.VCons name -> fmap R.VCons <$> lookupDataConstructorInScopeOrError name
+      S.VCons name -> fmap R.VCons <$> lookupDataConInScopeOrError name
 renameExpression (S.EIf (S.If predicate thenExpression elseExpression)) = do
   pred' <- renameExpression predicate
   then' <- renameExpression thenExpression
@@ -208,7 +205,7 @@ renamePattern (S.PVar var) = do
   var' <- addValueToScope var
   pure $ R.PVar <$> var'
 renamePattern (S.PCons (S.PatCons cons mArg)) = do
-  cons' <- lookupDataConstructorInScopeOrError cons
+  cons' <- lookupDataConInScopeOrError cons
   mArg' <- traverse renamePattern mArg
   pure $ fmap R.PCons $ R.PatCons <$> cons' <*> sequenceA mArg'
 renamePattern (S.PParens pat) = fmap R.PParens <$> renamePattern pat

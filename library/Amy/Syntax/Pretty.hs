@@ -42,7 +42,7 @@ prettyDeclaration (DeclExtern (Extern (Located _ name) ty)) =
 prettyDeclaration (DeclType (TypeDeclaration info cons)) =
   prettyTypeDeclaration (prettyTyConDefinition info) (prettyConstructor <$> cons)
  where
-  prettyConstructor (DataConstructor (Located _ conName) mArg) =
+  prettyConstructor (DataConDefinition (Located _ conName) mArg) =
     prettyDataConstructor (pretty conName) (prettyTypeTerm <$> mArg)
 
 prettyTyConDefinition :: TyConDefinition -> Doc ann

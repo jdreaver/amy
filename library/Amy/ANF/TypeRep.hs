@@ -29,7 +29,7 @@ typeRep (C.TypeDeclaration tyName constructors) =
     Nothing ->
       -- Check if we can do an enum. This is when all constructors have no
       -- arguments.
-      if all (isNothing . C.dataConstructorArgument) constructors
+      if all (isNothing . C.dataConDefinitionArgument) constructors
       then EnumType wordSize
       -- Can't do an enum. We'll have to use tagged pairs.
       else TaggedUnionType (tyConDefinitionName tyName) wordSize

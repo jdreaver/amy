@@ -108,11 +108,11 @@ literalConstant lit =
     LiteralInt i -> C.Int 64 (fromIntegral i)
     LiteralDouble x -> C.Float (F.Double x)
 
-constructorConstant :: DataConstructor -> C.Constant
+constructorConstant :: DataCon -> C.Constant
 constructorConstant con =
-  case dataConstructorType con of
+  case dataConType con of
     EnumType intBits -> C.Int intBits (fromIntegral i)
     TaggedUnionType _ intBits -> C.Int intBits (fromIntegral i)
     _ -> error $ "Invalid constructor type " ++ show con
  where
-  (ConstructorIndex i) = dataConstructorIndex con
+  (ConstructorIndex i) = dataConIndex con

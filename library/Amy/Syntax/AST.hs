@@ -12,7 +12,7 @@ module Amy.Syntax.AST
   , Extern(..)
   , TypeDeclaration(..)
   , TyConDefinition(..)
-  , DataConstructor(..)
+  , DataConDefinition(..)
   , Expr(..)
   , Var(..)
   , If(..)
@@ -98,7 +98,7 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConDefinition
-  , typeDeclarationConstructors :: ![DataConstructor]
+  , typeDeclarationConstructors :: ![DataConDefinition]
   } deriving (Show, Eq)
 
 data TyConDefinition
@@ -108,10 +108,10 @@ data TyConDefinition
   , tyConDefinitionLocation :: !SourceSpan
   } deriving (Show, Eq)
 
-data DataConstructor
-  = DataConstructor
-  { dataConstructorName :: !(Located Text)
-  , dataConstructorArgument :: !(Maybe TypeTerm)
+data DataConDefinition
+  = DataConDefinition
+  { dataConDefinitionName :: !(Located Text)
+  , dataConDefinitionArgument :: !(Maybe TypeTerm)
   } deriving (Show, Eq)
 
 data Expr

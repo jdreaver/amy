@@ -5,8 +5,9 @@ module Amy.ANF.AST
   , Binding(..)
   , Extern(..)
   , TypeDeclaration(..)
-  , DataConstructor(..)
+  , DataConDefinition(..)
   , Val(..)
+  , DataCon(..)
   , Expr(..)
   , LetVal(..)
   , LetValBinding(..)
@@ -56,24 +57,29 @@ data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !Text
   , typeDeclarationType :: !Type
-  , typeDeclarationConstructors :: ![DataConstructor]
+  , typeDeclarationConstructors :: ![DataConDefinition]
   } deriving (Show, Eq)
 
-data DataConstructor
-  = DataConstructor
-  { dataConstructorName :: !Text
-  , dataConstructorId :: !Int
-  , dataConstructorArgument :: !(Maybe Type)
-  , dataConstructorType :: !Type
-  , dataConstructorSpan :: !ConstructorSpan
-  , dataConstructorIndex :: !ConstructorIndex
+data DataConDefinition
+  = DataConDefinition
+  { dataConDefinitionName :: !Text
+  , dataConDefinitionId :: !Int
+  , dataConDefinitionArgument :: !(Maybe Type)
   } deriving (Show, Eq, Ord)
 
 data Val
   = Var !(Typed Ident)
   | Lit !Literal
-  | ConEnum !Word32 !DataConstructor
+  | ConEnum !Word32 !DataCon
   deriving (Show, Eq)
+
+data DataCon
+  = DataCon
+  { dataConName :: !Text
+  , dataConId :: !Int
+  , dataConType :: !Type
+  , dataConIndex :: !ConstructorIndex
+  } deriving (Show, Eq, Ord)
 
 data Expr
   = EVal !Val
@@ -119,7 +125,7 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataConstructor
+  { patConsConstructor :: !DataCon
   , patConsArg :: !(Maybe (Typed Ident))
   , patConsType :: !Type
   } deriving (Show, Eq)
@@ -133,7 +139,7 @@ data App f
 
 data ConApp
   = ConApp
-  { conAppCon :: !DataConstructor
+  { conAppCon :: !DataCon
   , conAppArg :: !(Maybe Val)
   , conAppTaggedUnionName :: !Text
   , conAppTaggedUnionTagBits :: !Word32

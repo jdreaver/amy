@@ -12,9 +12,9 @@ module Amy.Renamer.Monad
   , lookupValueInScopeOrError
 
     -- * Data Constructors
-  , addDataConstructorToScope
-  , lookupDataConstructorInScope
-  , lookupDataConstructorInScopeOrError
+  , addDataConDefinitionToScope
+  , lookupDataConDefinitionInScope
+  , lookupDataConInScopeOrError
 
     -- * Type Constructors
   , addTypeDefinitionToScope
@@ -62,7 +62,7 @@ data RenamerState
   { renamerStateLastId :: !Int
     -- ^ Last 'NameIntId' generated
   , renamerStateValuesInScope :: !(Map Text (Located Ident))
-  , renamerStateDataConstructorsInScope :: !(Map Text R.DataConstructor)
+  , renamerStateDataConDefinitionsInScope :: !(Map Text R.DataConDefinition)
   , renamerStateTypeConstructorsInScope :: !(Map Text R.TyConDefinition)
   , renamerStateTypeDeclarations :: !(Map Int R.TypeDeclaration)
   , renamerStateTypeVariablesInScope :: !(Map Text R.TyVarInfo)
@@ -73,7 +73,7 @@ emptyRenamerState =
   RenamerState
   { renamerStateLastId = maxPrimId + 1
   , renamerStateValuesInScope = primitiveFunctionNames
-  , renamerStateDataConstructorsInScope = primitiveDataConNames
+  , renamerStateDataConDefinitionsInScope = primitiveDataConNames
   , renamerStateTypeConstructorsInScope = primitiveTypeNames
   , renamerStateTypeDeclarations = primitiveTypeDeclNames
   , renamerStateTypeVariablesInScope = Map.empty
@@ -86,7 +86,7 @@ primitiveTypeDeclarations = fromPrimTypeDef <$> allPrimTypeDefinitions
 allPrimTyCons :: [R.TyConDefinition]
 allPrimTyCons = R.typeDeclarationTypeName <$> primitiveTypeDeclarations
 
-allPrimDataCons :: [R.DataConstructor]
+allPrimDataCons :: [R.DataConDefinition]
 allPrimDataCons = concatMap R.typeDeclarationConstructors primitiveTypeDeclarations
 
 primitiveTypeDeclNames :: Map Int R.TypeDeclaration
@@ -97,9 +97,9 @@ primitiveTypeNames :: Map Text R.TyConDefinition
 primitiveTypeNames =
   Map.fromList $ (\tyCon -> (R.tyConDefinitionName tyCon, tyCon)) <$> allPrimTyCons
 
-primitiveDataConNames :: Map Text R.DataConstructor
+primitiveDataConNames :: Map Text R.DataConDefinition
 primitiveDataConNames =
-  Map.fromList $ (\dataCon -> (locatedValue (R.dataConstructorName dataCon), dataCon)) <$> allPrimDataCons
+  Map.fromList $ (\dataCon -> (locatedValue (R.dataConDefinitionName dataCon), dataCon)) <$> allPrimDataCons
 
 primitiveFunctionNames :: Map Text (Located Ident)
 primitiveFunctionNames =
@@ -137,38 +137,34 @@ lookupValueInScopeOrError :: Located Text -> Renamer (Validation [Error] (Locate
 lookupValueInScopeOrError name@(Located span' name') =
   maybe (Failure [UnknownVariable name]) (\(Located _ ident) -> Success $ Located span' ident) <$> lookupValueInScope name'
 
-addDataConstructorToScope
+addDataConDefinitionToScope
   :: Located Text
   -> Maybe R.TypeTerm
-  -> R.TyConDefinition
-  -> ConstructorSpan
-  -> ConstructorIndex
-  -> Renamer (Validation [Error] R.DataConstructor)
-addDataConstructorToScope lname@(Located _ name) mArgTy tyCon span' index = do
+  -> Renamer (Validation [Error] R.DataConDefinition)
+addDataConDefinitionToScope lname@(Located _ name) mArgTy = do
   nameId <- freshId
-  mExistingName <- lookupDataConstructorInScope name
+  mExistingName <- lookupDataConDefinitionInScope name
   let
     con =
-      R.DataConstructor
-      { R.dataConstructorName = lname
-      , R.dataConstructorId = nameId
-      , R.dataConstructorArgument = mArgTy
-      , R.dataConstructorType = tyConDefinitionToInfo tyCon
-      , R.dataConstructorSpan = span'
-      , R.dataConstructorIndex = index
+      R.DataConDefinition
+      { R.dataConDefinitionName = lname
+      , R.dataConDefinitionId = nameId
+      , R.dataConDefinitionArgument = mArgTy
       }
   case mExistingName of
     Just existingName -> pure $ Failure [DuplicateDataConstructorName lname existingName]
     Nothing -> do
-      modify' (\s -> s { renamerStateDataConstructorsInScope = Map.insert name con (renamerStateDataConstructorsInScope s) })
+      modify' (\s -> s { renamerStateDataConDefinitionsInScope = Map.insert name con (renamerStateDataConDefinitionsInScope s) })
       pure $ Success con
 
-lookupDataConstructorInScope :: Text -> Renamer (Maybe R.DataConstructor)
-lookupDataConstructorInScope name = Map.lookup name <$> gets renamerStateDataConstructorsInScope
+lookupDataConDefinitionInScope :: Text -> Renamer (Maybe R.DataConDefinition)
+lookupDataConDefinitionInScope name = Map.lookup name <$> gets renamerStateDataConDefinitionsInScope
 
-lookupDataConstructorInScopeOrError :: Located Text -> Renamer (Validation [Error] R.DataConstructor)
-lookupDataConstructorInScopeOrError name@(Located _ name') =
-  maybe (Failure [UnknownVariable name]) Success <$> lookupDataConstructorInScope name'
+lookupDataConInScopeOrError :: Located Text -> Renamer (Validation [Error] R.DataCon)
+lookupDataConInScopeOrError name@(Located _ name') =
+  maybe (Failure [UnknownVariable name]) (Success . mkDataCon) <$> lookupDataConDefinitionInScope name'
+ where
+  mkDataCon (R.DataConDefinition name'' id' _) = R.DataCon name'' id'
 
 addTypeDefinitionToScope :: S.TyConDefinition -> Renamer (Validation [Error] R.TyConDefinition)
 addTypeDefinitionToScope (S.TyConDefinition name tyArgs span') = do
@@ -255,7 +251,7 @@ withNewScope action = do
   modify'
     (\s -> s
       { renamerStateValuesInScope = renamerStateValuesInScope originalState
-      , renamerStateDataConstructorsInScope = renamerStateDataConstructorsInScope originalState
+      , renamerStateDataConDefinitionsInScope = renamerStateDataConDefinitionsInScope originalState
       , renamerStateTypeConstructorsInScope = renamerStateTypeConstructorsInScope originalState
       , renamerStateTypeVariablesInScope = renamerStateTypeVariablesInScope originalState
       }

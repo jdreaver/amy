@@ -50,7 +50,7 @@ prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
 prettyTypeDeclaration' (TypeDeclaration tyName cons) =
    prettyTypeDeclaration (prettyTyConDefinition tyName) (prettyConstructor <$> cons)
  where
-  prettyConstructor (DataConstructor conName _ mArg _ _ _) =
+  prettyConstructor (DataConDefinition conName _ mArg) =
     prettyDataConstructor (pretty conName) (prettyTypeTerm <$> mArg)
 
 prettyTyConDefinition :: TyConDefinition -> Doc ann
@@ -94,10 +94,10 @@ prettyExpr (EParens expr) = parens $ prettyExpr expr
 
 prettyVar :: Var -> Doc ann
 prettyVar (VVal (Typed _ var)) = prettyIdent var
-prettyVar (VCons (Typed _ con)) = pretty $ dataConstructorName con
+prettyVar (VCons (Typed _ con)) = pretty $ dataConName con
 
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PLit lit) = pretty $ showLiteral lit
 prettyPattern (PCons (PatCons con mArg _)) =
-  pretty (dataConstructorName con)
+  pretty (dataConName con)
   <> maybe mempty (\(Typed ty arg) -> space <> parens (prettyIdent arg <+> "::" <+> prettyType (mkPrettyType ty))) mArg

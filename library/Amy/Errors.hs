@@ -25,7 +25,7 @@ data Error
   | UnknownVariable !(Located Text)
   | VariableShadowed !(Located Text) !(Located R.Ident)
   | TypeConstructorDefinitionContainsTyCon !S.TyConInfo
-  | DuplicateDataConstructorName !(Located Text) !R.DataConstructor
+  | DuplicateDataConstructorName !(Located Text) !R.DataConDefinition
   | DuplicateTypeVariable !(Located Text) !(Located Text)
   | TypeConstructorAlreadyExists !(Located Text) !R.TyConInfo
   | UnknownTypeConstructor !(Located Text)
@@ -38,7 +38,7 @@ data Error
   | KindMismatch !T.TyVarInfo !T.Type
   | InfiniteType !T.TyVarInfo !T.Type
   | UnboundVariable !T.Ident
-  | UnboundConstructor !T.DataConstructor
+  | UnboundConstructor !T.DataCon
 
   -- | BindingLacksTypeSignature !RBinding
   -- | TypeMismatch !(Type PrimitiveType) !(Type PrimitiveType)

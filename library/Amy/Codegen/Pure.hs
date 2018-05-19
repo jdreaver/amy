@@ -222,13 +222,13 @@ valOperand (ANF.Var (ANF.Typed ty ident)) =
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
 valOperand (ANF.ConEnum intBits con) =
   let
-    (ConstructorIndex intIndex) = dataConstructorIndex con
+    (ConstructorIndex intIndex) = dataConIndex con
   in pure $ ConstantOperand $ C.Int intBits (fromIntegral intIndex)
 
-packConstructor :: Name -> DataConstructor -> Maybe ANF.Val -> Text -> Word32 -> BlockGen Operand
+packConstructor :: Name -> DataCon -> Maybe ANF.Val -> Text -> Word32 -> BlockGen Operand
 packConstructor name' con mArg structName intBits = do
   let
-    (ConstructorIndex intIndex) = dataConstructorIndex con
+    (ConstructorIndex intIndex) = dataConIndex con
     structName' = textToName structName
 
   -- Allocate struct

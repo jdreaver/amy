@@ -8,9 +8,10 @@ module Amy.Renamer.AST
   , TyConDefinition(..)
   , tyConDefinitionToInfo
   , fromPrimTypeDef
-  , DataConstructor(..)
+  , DataConDefinition(..)
   , Expr(..)
   , Var(..)
+  , DataCon(..)
   , If(..)
   , Case(..)
   , Match(..)
@@ -71,7 +72,7 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConDefinition
-  , typeDeclarationConstructors :: ![DataConstructor]
+  , typeDeclarationConstructors :: ![DataConDefinition]
   } deriving (Show, Eq)
 
 data TyConDefinition
@@ -92,19 +93,16 @@ fromPrimTypeDef :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
   TypeDeclaration (fromPrimTyDef tyCon) (fromPrimDataCon <$> dataCons)
 
-data DataConstructor
-  = DataConstructor
-  { dataConstructorName :: !(Located Text)
-  , dataConstructorId :: !Int
-  , dataConstructorArgument :: !(Maybe TypeTerm)
-  , dataConstructorType :: !TyConInfo
-  , dataConstructorSpan :: !ConstructorSpan
-  , dataConstructorIndex :: !ConstructorIndex
+data DataConDefinition
+  = DataConDefinition
+  { dataConDefinitionName :: !(Located Text)
+  , dataConDefinitionId :: !Int
+  , dataConDefinitionArgument :: !(Maybe TypeTerm)
   } deriving (Show, Eq)
 
-fromPrimDataCon :: PrimDataCon -> DataConstructor
-fromPrimDataCon (PrimDataCon name id' ty span' index) =
-  DataConstructor (Located (SourceSpan "" 1 1 1 1) name) id' Nothing (fromPrimTyCon ty) span' index
+fromPrimDataCon :: PrimDataCon -> DataConDefinition
+fromPrimDataCon (PrimDataCon name id' _ _ _) =
+  DataConDefinition (Located (SourceSpan "" 1 1 1 1) name) id' Nothing
 
 -- | A renamed 'Expr'
 data Expr
@@ -119,8 +117,14 @@ data Expr
 
 data Var
   = VVal !(Located Ident)
-  | VCons !DataConstructor
+  | VCons !DataCon
   deriving (Show, Eq)
+
+data DataCon
+  = DataCon
+  { dataConName :: !(Located Text)
+  , dataConId :: !Int
+  } deriving (Show, Eq)
 
 data If
   = If
@@ -150,7 +154,7 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataConstructor
+  { patConsConstructor :: !DataCon
   , patConsArg :: !(Maybe Pattern)
   } deriving (Show, Eq)
 
@@ -193,9 +197,6 @@ data TyConInfo
   , tyConInfoArgs :: ![TypeTerm]
   , tyConInfoLocation :: !(Maybe SourceSpan)
   } deriving (Show, Eq, Ord)
-
-fromPrimTyCon :: PrimTyCon -> TyConInfo
-fromPrimTyCon = tyConDefinitionToInfo . fromPrimTyDef
 
 data TyVarInfo
   = TyVarInfo

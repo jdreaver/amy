@@ -11,6 +11,7 @@ module Amy.ANF.Monad
   , freshIdent
   , getTyConDefinitionType
   , getTyConInfoType
+  , getDataConInfo
   , isIdentTopLevel
   ) where
 
@@ -38,6 +39,7 @@ runANFConvert read' state' (ANFConvert action) = evalState (runReaderT action re
 data ANFConvertRead
   = ANFConvertRead
   { anfConvertReadTypeReps :: !(Map Int ANF.Type)
+  , anfConvertReadDataConInfos :: !(Map Int (ANF.Type, ConstructorIndex))
   , anfConvertReadTopLevelNames :: !(Set C.Ident)
   } deriving (Show, Eq)
 
@@ -46,11 +48,19 @@ anfConvertRead topLevelNames typeDeclarations =
   let
     allTypeDecls = typeDeclarations ++ (fromPrimTypeDefinition <$> allPrimTypeDefinitions)
     typeRepMap = Map.fromList $ (\t -> (C.tyConDefinitionId $ C.typeDeclarationTypeName t, typeRep t)) <$> allTypeDecls
+    dataConInfos = Map.fromList $ concatMap mkDataConInfo allTypeDecls
   in
     ANFConvertRead
     { anfConvertReadTypeReps = typeRepMap
+    , anfConvertReadDataConInfos = dataConInfos
     , anfConvertReadTopLevelNames = fromList topLevelNames
     }
+
+mkDataConInfo :: C.TypeDeclaration -> [(Int, (ANF.Type, ConstructorIndex))]
+mkDataConInfo decl@(C.TypeDeclaration _ cons) = mkInfo <$> zip cons [0..]
+ where
+  rep = typeRep decl
+  mkInfo (C.DataConDefinition _ id' _, index) = (id', (rep, ConstructorIndex index))
 
 data ANFConvertState
   = ANFConvertState
@@ -79,6 +89,11 @@ getTyConInfoType :: C.TyConInfo -> ANFConvert ANF.Type
 getTyConInfoType tyCon = fromMaybe err . Map.lookup (tyConInfoId tyCon) <$> asks anfConvertReadTypeReps
   where
    err = error $ "Couldn't find TypeCompilationMethod of TyConInfo " ++ show tyCon
+
+getDataConInfo :: C.DataCon -> ANFConvert (ANF.Type, ConstructorIndex)
+getDataConInfo con = fromMaybe err . Map.lookup (C.dataConId con) <$> asks anfConvertReadDataConInfos
+  where
+   err = error $ "Couldn't find TypeCompilationMethod of TyConDefinition " ++ show con
 
 isIdentTopLevel :: C.Ident -> ANFConvert Bool
 isIdentTopLevel ident = Set.member ident <$> asks anfConvertReadTopLevelNames

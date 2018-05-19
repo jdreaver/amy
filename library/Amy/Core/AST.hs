@@ -6,10 +6,12 @@ module Amy.Core.AST
   , Extern(..)
   , TypeDeclaration(..)
   , TyConDefinition(..)
+  , tyConDefinitionToInfo
   , fromPrimTypeDefinition
-  , DataConstructor(..)
+  , DataConDefinition(..)
   , Expr(..)
   , Var(..)
+  , DataCon(..)
   , If(..)
   , Case(..)
   , Match(..)
@@ -71,7 +73,7 @@ data Extern
 data TypeDeclaration
   = TypeDeclaration
   { typeDeclarationTypeName :: !TyConDefinition
-  , typeDeclarationConstructors :: ![DataConstructor]
+  , typeDeclarationConstructors :: ![DataConDefinition]
   } deriving (Show, Eq, Ord)
 
 data TyConDefinition
@@ -92,19 +94,16 @@ fromPrimTypeDefinition :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDefinition (PrimTypeDefinition tyName cons) =
   TypeDeclaration (fromPrimTyDef tyName) (fromPrimDataCon <$> cons)
 
-data DataConstructor
-  = DataConstructor
-  { dataConstructorName :: !Text
-  , dataConstructorId :: !Int
-  , dataConstructorArgument :: !(Maybe TypeTerm)
-  , dataConstructorType :: !TyConInfo
-  , dataConstructorSpan :: !ConstructorSpan
-  , dataConstructorIndex :: !ConstructorIndex
+data DataConDefinition
+  = DataConDefinition
+  { dataConDefinitionName :: !Text
+  , dataConDefinitionId :: !Int
+  , dataConDefinitionArgument :: !(Maybe TypeTerm)
   } deriving (Show, Eq, Ord)
 
-fromPrimDataCon :: PrimDataCon -> DataConstructor
-fromPrimDataCon (PrimDataCon name id' ty span' index) =
-  DataConstructor name id' Nothing (fromPrimTyCon ty) span' index
+fromPrimDataCon :: PrimDataCon -> DataConDefinition
+fromPrimDataCon (PrimDataCon name id' _ _ _) =
+  DataConDefinition name id' Nothing
 
 data Expr
   = ELit !Literal
@@ -117,8 +116,14 @@ data Expr
 
 data Var
   = VVal !(Typed Ident)
-  | VCons !(Typed DataConstructor)
+  | VCons !(Typed DataCon)
   deriving (Show, Eq)
+
+data DataCon
+  = DataCon
+  { dataConName :: !Text
+  , dataConId :: !Int
+  } deriving (Show, Eq, Ord)
 
 data If
   = If
@@ -148,7 +153,7 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataConstructor
+  { patConsConstructor :: !DataCon
   , patConsArg :: !(Maybe (Typed Ident))
   , patConsType :: !Type
   } deriving (Show, Eq)
