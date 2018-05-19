@@ -4,7 +4,7 @@ module Amy.Core.PatternCompilerSpec
   ( spec
   ) where
 
-import Data.Text (Text, pack)
+import Data.Text (pack)
 import qualified Data.List.NonEmpty as NE
 import Test.Hspec
 
@@ -31,10 +31,9 @@ xs = Typed boolTy "xs"
 ys = Typed boolTy "ys"
 
 match'
-  :: (Ord con)
-  => [Typed IdentName]
-  -> [Equation con]
-  -> CaseExpr con
+  :: [Typed IdentName]
+  -> [Equation]
+  -> CaseExpr
 match' vars eqs = runDesugar 0 [] $ match vars eqs
 
 boolTy :: Type
@@ -49,50 +48,50 @@ mkExpr [x'] = mkVal x'
 mkExpr (x':y':xs') = EApp (App (mkVal x') (NE.fromList $ mkVal <$> (y':xs')) boolTy)
 
 -- Bool type
-trueC, falseC :: Con Text
+trueC, falseC :: Con
 trueC = Con "True" [] 2
 falseC = Con "False" [] 2
 
-trueP :: InputPattern Text
+trueP :: InputPattern
 trueP = PCon trueC []
 
-falseP :: InputPattern Text
+falseP :: InputPattern
 falseP = PCon falseC []
 
 -- List type
-nilC, consC :: Con Text
+nilC, consC :: Con
 nilC = Con "Nil" [] 2
 consC = Con "Cons" [boolTy, boolTy] 2
 
-nilP :: InputPattern Text
+nilP :: InputPattern
 nilP = PCon nilC []
 
-consP :: InputPattern Text -> InputPattern Text -> InputPattern Text
+consP :: InputPattern -> InputPattern -> InputPattern
 consP x' y' = PCon consC [x', y']
 
 -- Newtype
-newtypeC :: Con Text
+newtypeC :: Con
 newtypeC = Con "MyNewtype" [boolTy] 1
 
-newtypeP :: InputPattern Text -> InputPattern Text
+newtypeP :: InputPattern -> InputPattern
 newtypeP pat = PCon newtypeC [pat]
 
 -- Literal
-intC :: Int -> Con Text
+intC :: Int -> Con
 intC = ConLit . LiteralInt
 
-intP :: Int -> InputPattern Text
+intP :: Int -> InputPattern
 intP i = PCon (intC i) []
 
 -- mappairs example from book
-mappairsEquations :: [Equation Text]
+mappairsEquations :: [Equation]
 mappairsEquations =
   [ ([PVar f, nilP, PVar ys], mkVal x)
   , ([PVar f, consP (PVar x) (PVar xs), nilP], mkVal y)
   , ([PVar f, consP (PVar x) (PVar xs), consP (PVar y) (PVar ys)], mkVal z)
   ]
 
-mappairsExpect :: CaseExpr Text
+mappairsExpect :: CaseExpr
 mappairsExpect =
   CaseExpr y
   [ Clause nilC [] (Expr $ mkVal x)
@@ -107,7 +106,7 @@ mappairsExpect =
   Nothing
 
 -- Example from Sestoft paper
-varC, lamC, appC, letC :: Con Text
+varC, lamC, appC, letC :: Con
 varC = Con "Var" [boolTy] 4
 lamC = Con "Lam" [boolTy, boolTy] 4
 appC = Con "App" [boolTy, boolTy] 4
@@ -116,7 +115,7 @@ letC = Con "Let" [boolTy, boolTy, boolTy] 4
 lamId :: Int -> Typed IdentName
 lamId i = mkIdent $ IdentName (pack $ show i)
 
-lamEquations :: [Equation Text]
+lamEquations :: [Equation]
 lamEquations =
   [ ([PCon varC [PVar x]], mkExpr [x, lamId 111])
   , ([PCon lamC [PVar x, PCon varC [PVar y]]], mkExpr [lamId 222])
@@ -165,7 +164,7 @@ lamEquations =
 --           App z v -> 999
 --           _ -> fail
 
-lamExpected :: CaseExpr Text
+lamExpected :: CaseExpr
 lamExpected =
   CaseExpr c
   [Clause varC [mkId 1] (Expr $ mkExpr [mkId 1, lamId 111]),
@@ -197,7 +196,7 @@ spec = do
   describe "compileMatch" $ do
 
     it "handles a simple variable case" $ do
-      match' [x] [([PVar x], mkVal x)] `shouldBe` (Expr (mkVal x) :: CaseExpr Text)
+      match' [x] [([PVar x], mkVal x)] `shouldBe` Expr (mkVal x)
 
     it "handles a single constructor case with a variable" $ do
       match' [x] [([newtypeP (PVar y)], mkVal x)]

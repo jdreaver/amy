@@ -131,13 +131,13 @@ desugarTyVarInfo (T.TyVarInfo name kind _) = C.TyVarInfo name kind
 -- future. However, I'm sure row types will be different enough that we might
 -- need the pattern compiler to specifically know about them.
 
-matchToEquation :: T.Match -> Desugar (PC.Equation DataConName)
+matchToEquation :: T.Match -> Desugar PC.Equation
 matchToEquation (T.Match pat body) = do
   pat' <- convertPattern pat
   body' <- desugarExpr body
   pure ([pat'], body')
 
-convertPattern :: T.Pattern -> Desugar (PC.InputPattern DataConName)
+convertPattern :: T.Pattern -> Desugar PC.InputPattern
 convertPattern (T.PLit lit) = pure $ PC.PCon (PC.ConLit lit) []
 convertPattern (T.PVar ident) = pure $ PC.PVar $ desugarTypedIdent ident
 convertPattern (T.PCons (T.PatCons con mArg _)) = do
@@ -149,7 +149,7 @@ convertPattern (T.PCons (T.PatCons con mArg _)) = do
   pure $ PC.PCon (PC.Con con argTys span') argPats
 convertPattern (T.PParens pat) = convertPattern pat
 
-restoreCaseExpr :: PC.CaseExpr DataConName -> Desugar C.Expr
+restoreCaseExpr :: PC.CaseExpr -> Desugar C.Expr
 restoreCaseExpr (PC.CaseExpr scrutinee clauses mDefault) = do
   let
     scrutinee' = C.EVar $ C.VVal scrutinee
@@ -159,7 +159,7 @@ restoreCaseExpr (PC.CaseExpr scrutinee clauses mDefault) = do
 restoreCaseExpr (PC.Expr expr) = pure expr
 restoreCaseExpr Error = error "Found inexhaustive pattern match"
 
-restoreClause :: PC.Clause DataConName -> Desugar C.Match
+restoreClause :: PC.Clause -> Desugar C.Match
 restoreClause (PC.Clause (PC.ConLit lit) [] caseExpr) =
   C.Match (C.PLit lit) <$> restoreCaseExpr caseExpr
 restoreClause clause@(PC.Clause (PC.ConLit _) _ _) =
