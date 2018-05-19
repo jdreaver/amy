@@ -56,12 +56,6 @@ convertDataConstructor (C.DataConstructor conName id' mTyArg tyCon span' index) 
     , ANF.dataConstructorIndex = index
     }
 
-convertDataConInfo :: C.DataConInfo -> ANFConvert ANF.DataConInfo
-convertDataConInfo (C.DataConInfo typeDecl dataCon) = do
-  typeDecl' <- convertTypeDeclaration typeDecl
-  dataCon' <- convertDataConstructor dataCon
-  pure $ ANF.DataConInfo typeDecl' dataCon'
-
 convertIdent :: Bool -> C.Ident -> ANF.Ident
 convertIdent isTopLevel (C.Ident name id') = ANF.Ident name id' isTopLevel
 
@@ -123,7 +117,7 @@ normalizeExpr name (C.EApp (C.App func args retTy)) =
   retTy' <- convertType retTy
   case func of
     C.EVar (C.VCons (C.Typed _ con)) -> do
-      con' <- convertDataConInfo con
+      con' <- convertDataConstructor con
       let
         mArg =
           case argVals of
@@ -161,7 +155,7 @@ normalizeName name (C.EVar var) c =
         -- Not a top-level value, just return
         _ -> c $ ANF.Var ident'
     C.VCons (C.Typed ty con) -> do
-      con' <- convertDataConInfo con
+      con' <- convertDataConstructor con
       ty' <- convertType ty
       case ty' of
         EnumType intBits -> c $ ConEnum intBits con'
@@ -208,7 +202,7 @@ normalizeMatch name (C.Match pat body) = do
 convertPattern :: C.Pattern -> ANFConvert ANF.Pattern
 convertPattern (C.PLit lit) = pure $ ANF.PLit lit
 convertPattern (C.PCons (C.PatCons cons mArg retTy)) = do
-  cons' <- convertDataConInfo cons
+  cons' <- convertDataConstructor cons
   mArg' <- traverse convertTypedIdent mArg
   retTy' <- convertType retTy
   pure $ ANF.PCons $ ANF.PatCons cons' mArg' retTy'

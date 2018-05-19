@@ -6,7 +6,6 @@ module Amy.ANF.AST
   , Extern(..)
   , TypeDeclaration(..)
   , DataConstructor(..)
-  , DataConInfo(..)
   , Val(..)
   , Expr(..)
   , LetVal(..)
@@ -70,16 +69,10 @@ data DataConstructor
   , dataConstructorIndex :: !ConstructorIndex
   } deriving (Show, Eq, Ord)
 
-data DataConInfo
-  = DataConInfo
-  { dataConInfoDefinition :: !TypeDeclaration
-  , dataConInfoCons :: !DataConstructor
-  } deriving (Show, Eq)
-
 data Val
   = Var !(Typed Ident)
   | Lit !Literal
-  | ConEnum !Word32 !DataConInfo
+  | ConEnum !Word32 !DataConstructor
   deriving (Show, Eq)
 
 data Expr
@@ -126,7 +119,7 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataConInfo
+  { patConsConstructor :: !DataConstructor
   , patConsArg :: !(Maybe (Typed Ident))
   , patConsType :: !Type
   } deriving (Show, Eq)
@@ -140,7 +133,7 @@ data App f
 
 data ConApp
   = ConApp
-  { conAppCon :: !DataConInfo
+  { conAppCon :: !DataConstructor
   , conAppArg :: !(Maybe Val)
   , conAppTaggedUnionName :: !Text
   , conAppTaggedUnionTagBits :: !Word32

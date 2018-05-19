@@ -77,7 +77,7 @@ caseBlocks mkBlockName (Case _ _ matches mDefault ty) =
         (constant, mBind) =
           case pat of
             PLit lit -> (literalConstant lit, Nothing)
-            PCons (PatCons (DataConInfo _ con) mArg _) -> (constructorConstant con, mArg)
+            PCons (PatCons con mArg _) -> (constructorConstant con, mArg)
       in
         CaseLiteralBlock
         { caseLiteralBlockExpr = expr

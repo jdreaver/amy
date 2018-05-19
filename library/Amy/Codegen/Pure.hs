@@ -203,7 +203,7 @@ codegenExpr' name' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnT
       callName <- freshUnName
       addInstruction $ callName := callInstruction
       maybeConvertPointer (Just name') (LocalReference returnTyLLVM' callName) returnTyLLVM
-codegenExpr' name' (ANF.EConApp (ANF.ConApp (DataConInfo _ con) mArg structName intBits)) =
+codegenExpr' name' (ANF.EConApp (ANF.ConApp con mArg structName intBits)) =
   packConstructor name' con mArg structName intBits
 codegenExpr' name' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
   argOps <- traverse valOperand args'
@@ -220,7 +220,7 @@ valOperand (ANF.Var (ANF.Typed ty ident@(ANF.Ident _ _ True))) =
 valOperand (ANF.Var (ANF.Typed ty ident)) =
   pure $ LocalReference (llvmType ty) (identToName ident)
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
-valOperand (ANF.ConEnum intBits (DataConInfo _ con)) =
+valOperand (ANF.ConEnum intBits con) =
   let
     (ConstructorIndex intIndex) = dataConstructorIndex con
   in pure $ ConstantOperand $ C.Int intBits (fromIntegral intIndex)

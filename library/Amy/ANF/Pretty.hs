@@ -46,7 +46,7 @@ prettyIdent (Ident name _ _) = pretty name
 prettyVal :: Val -> Doc ann
 prettyVal (Var (Typed _ ident)) = prettyIdent ident
 prettyVal (Lit lit) = pretty $ showLiteral lit
-prettyVal (ConEnum _ con) = pretty (dataConstructorName $ dataConInfoCons con)
+prettyVal (ConEnum _ con) = pretty (dataConstructorName con)
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (EVal val) = prettyVal val
@@ -66,7 +66,7 @@ prettyExpr (ELetVal (LetVal bindings body)) =
 prettyExpr (EApp (App (Typed _ ident) args _)) =
   "$call" <+> prettyIdent ident <+> list (prettyVal <$> args)
 prettyExpr (EConApp (ConApp info mArg _ _)) =
-  "$mkCon" <+> pretty (dataConstructorName $ dataConInfoCons info) <+> list (prettyVal <$> maybeToList mArg)
+  "$mkCon" <+> pretty (dataConstructorName info) <+> list (prettyVal <$> maybeToList mArg)
 prettyExpr (EPrimOp (App (PrimitiveFunction _ name _ _) args _)) =
   "$primOp" <+> pretty name <+> list (prettyVal <$> args)
 
@@ -78,6 +78,6 @@ prettyLetValBinding (LetValBinding ident ty body) =
 
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PLit lit) = pretty $ showLiteral lit
-prettyPattern (PCons (PatCons cons mArg _)) =
-  pretty (dataConstructorName $ dataConInfoCons cons)
+prettyPattern (PCons (PatCons con mArg _)) =
+  pretty (dataConstructorName con)
   <> maybe mempty (\(Typed ty arg) -> space <> parens (prettyIdent arg <+> "::" <+> prettyType (mkPrettyType ty))) mArg

@@ -14,6 +14,7 @@ module Amy.Renamer.Monad
     -- * Data Constructors
   , addDataConstructorToScope
   , lookupDataConstructorInScope
+  , lookupDataConstructorInScopeOrError
 
     -- * Type Constructors
   , addTypeDefinitionToScope
@@ -21,9 +22,9 @@ module Amy.Renamer.Monad
   , lookupTypeConstructorInScopeOrError
   , lookupTypeTerm
 
-    -- * Type Declarations and DataConInfo
+    -- * Type Declarations
   , addTypeDeclarationToScope
-  , lookupDataConInfoInScopeOrError
+  , lookupTypeDeclaration
 
     -- * Type Variables
   , addTypeVariableToScope
@@ -225,15 +226,6 @@ lookupTypeDeclaration info =
   fromMaybe (error $ "Couldn't find declaration for " ++ show info)
   . Map.lookup (R.tyConInfoId info)
   <$> gets renamerStateTypeDeclarations
-
-lookupDataConInfoInScopeOrError :: Located Text -> Renamer (Validation [Error] DataConInfo)
-lookupDataConInfoInScopeOrError dataCon = do
-  dataCon' <- lookupDataConstructorInScopeOrError dataCon
-  for dataCon' $ \dataCon'' -> do
-    typeDef <- lookupTypeDeclaration (dataConstructorType dataCon'')
-    DataConInfo
-      <$> pure typeDef
-      <*> pure dataCon''
 
 addTypeVariableToScope :: S.TyVarInfo -> Renamer (Validation [Error] R.TyVarInfo)
 addTypeVariableToScope info@(S.TyVarInfo (Located span' name)) = do

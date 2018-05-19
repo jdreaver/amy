@@ -41,10 +41,6 @@ desugarDataConstructor (T.DataConstructor conName id' mTyArg tyCon span' index) 
   , C.dataConstructorIndex = index
   }
 
-desugarDataConInfo :: T.DataConInfo -> C.DataConInfo
-desugarDataConInfo (T.DataConInfo typeDecl dataCon) =
-  C.DataConInfo (desugarTypeDeclaration typeDecl) (desugarDataConstructor dataCon)
-
 desugarBinding :: T.Binding -> Desugar C.Binding
 desugarBinding (T.Binding ident scheme args retTy body) =
   C.Binding
@@ -83,10 +79,9 @@ desugarExpr (T.ECase (T.Case scrutinee matches)) = do
 
 desugarExpr (T.EIf (T.If pred' then' else')) =
   let
-    boolTyDef = fromPrimTypeDef boolTypeDefinition
     boolTyCon' = T.TyTerm $ T.TyCon $ T.fromPrimTyCon boolTyCon
     mkBoolPatCons cons =
-      T.PatCons (T.DataConInfo boolTyDef $ T.fromPrimDataCon cons) Nothing boolTyCon'
+      T.PatCons (T.fromPrimDataCon cons) Nothing boolTyCon'
     matches =
       NE.fromList
       [ T.Match (T.PCons $ mkBoolPatCons trueDataCon) then'
@@ -105,7 +100,7 @@ desugarExpr (T.EParens expr) = C.EParens <$> desugarExpr expr
 
 desugarVar :: T.Var -> C.Var
 desugarVar (T.VVal ident) = C.VVal $ desugarTypedIdent ident
-desugarVar (T.VCons (T.Typed ty cons)) = C.VCons $ C.Typed (desugarType ty) (desugarDataConInfo cons)
+desugarVar (T.VCons (T.Typed ty cons)) = C.VCons $ C.Typed (desugarType ty) (desugarDataConstructor cons)
 
 desugarIdent :: T.Ident -> C.Ident
 desugarIdent (T.Ident name id') = C.Ident name id'
@@ -141,25 +136,25 @@ desugarTyVarInfo (T.TyVarInfo name id' kind _) = C.TyVarInfo name id' kind
 -- TODO: Just use the Core AST in the pattern compiler so we don't have to have
 -- all this silly conversion logic.
 
-matchToEquation :: T.Match -> Desugar (PC.Equation C.DataConInfo)
+matchToEquation :: T.Match -> Desugar (PC.Equation C.DataConstructor)
 matchToEquation (T.Match pat body) = do
   let pat' = convertPattern pat
   body' <- desugarExpr body
   pure ([pat'], body')
 
-convertPattern :: T.Pattern -> PC.InputPattern C.DataConInfo
+convertPattern :: T.Pattern -> PC.InputPattern C.DataConstructor
 convertPattern (T.PLit lit) = PC.PCon (PC.ConLit lit) []
 convertPattern (T.PVar ident) = PC.PVar $ desugarTypedIdent ident
-convertPattern (T.PCons (T.PatCons info mArg _)) =
+convertPattern (T.PCons (T.PatCons con mArg _)) =
   let
-    info' = desugarDataConInfo info
+    con' = desugarDataConstructor con
     argPats = convertPattern <$> maybeToList mArg
     argTys = maybeToList $ desugarType . patternType <$> mArg
-    (ConstructorSpan span') = C.dataConstructorSpan $ C.dataConInfoCons info'
-  in PC.PCon (PC.Con info' argTys span') argPats
+    (ConstructorSpan span') = C.dataConstructorSpan con'
+  in PC.PCon (PC.Con con' argTys span') argPats
 convertPattern (T.PParens pat) = convertPattern pat
 
-restoreCaseExpr :: PC.CaseExpr C.DataConInfo -> Desugar C.Expr
+restoreCaseExpr :: PC.CaseExpr C.DataConstructor -> Desugar C.Expr
 restoreCaseExpr (PC.CaseExpr scrutinee clauses mDefault) = do
   let
     scrutinee' = C.EVar $ C.VVal scrutinee
@@ -169,14 +164,14 @@ restoreCaseExpr (PC.CaseExpr scrutinee clauses mDefault) = do
 restoreCaseExpr (PC.Expr expr) = pure expr
 restoreCaseExpr Error = error "Found inexhaustive pattern match"
 
-restoreClause :: PC.Clause C.DataConInfo -> Desugar C.Match
+restoreClause :: PC.Clause C.DataConstructor -> Desugar C.Match
 restoreClause (PC.Clause (PC.ConLit lit) [] caseExpr) =
   C.Match (C.PLit lit) <$> restoreCaseExpr caseExpr
 restoreClause clause@(PC.Clause (PC.ConLit _) _ _) =
   error $ "Encountered literal clause with arguments! " ++ show clause
 restoreClause (PC.Clause (PC.Con con _ _) args caseExpr) = do
   let
-    patTy = C.TyTerm $ C.TyCon $ C.dataConstructorType $ C.dataConInfoCons con
+    patTy = C.TyTerm $ C.TyCon $ C.dataConstructorType con
     arg =
       case args of
         [] -> Nothing

@@ -9,7 +9,6 @@ module Amy.Renamer.AST
   , tyConDefinitionToInfo
   , fromPrimTypeDef
   , DataConstructor(..)
-  , DataConInfo(..)
   , Expr(..)
   , Var(..)
   , If(..)
@@ -107,12 +106,6 @@ fromPrimDataCon :: PrimDataCon -> DataConstructor
 fromPrimDataCon (PrimDataCon name id' ty span' index) =
   DataConstructor (Located (SourceSpan "" 1 1 1 1) name) id' Nothing (fromPrimTyCon ty) span' index
 
-data DataConInfo
-  = DataConInfo
-  { dataConInfoDefinition :: !TypeDeclaration
-  , dataConInfoCons :: !DataConstructor
-  } deriving (Show, Eq)
-
 -- | A renamed 'Expr'
 data Expr
   = ELit !(Located Literal)
@@ -126,7 +119,7 @@ data Expr
 
 data Var
   = VVal !(Located Ident)
-  | VCons !DataConInfo
+  | VCons !DataConstructor
   deriving (Show, Eq)
 
 data If
@@ -157,7 +150,7 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataConInfo
+  { patConsConstructor :: !DataConstructor
   , patConsArg :: !(Maybe Pattern)
   } deriving (Show, Eq)
 

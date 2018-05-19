@@ -151,7 +151,7 @@ renameExpression (S.EVar var) =
   fmap (fmap R.EVar) $
     case var of
       S.VVal name -> fmap R.VVal <$> lookupValueInScopeOrError name
-      S.VCons name -> fmap R.VCons <$> lookupDataConInfoInScopeOrError name
+      S.VCons name -> fmap R.VCons <$> lookupDataConstructorInScopeOrError name
 renameExpression (S.EIf (S.If predicate thenExpression elseExpression)) = do
   pred' <- renameExpression predicate
   then' <- renameExpression thenExpression
@@ -208,7 +208,7 @@ renamePattern (S.PVar var) = do
   var' <- addValueToScope var
   pure $ R.PVar <$> var'
 renamePattern (S.PCons (S.PatCons cons mArg)) = do
-  cons' <- lookupDataConInfoInScopeOrError cons
+  cons' <- lookupDataConstructorInScopeOrError cons
   mArg' <- traverse renamePattern mArg
   pure $ fmap R.PCons $ R.PatCons <$> cons' <*> sequenceA mArg'
 renamePattern (S.PParens pat) = fmap R.PParens <$> renamePattern pat

@@ -8,7 +8,6 @@ module Amy.Core.AST
   , TyConDefinition(..)
   , fromPrimTypeDefinition
   , DataConstructor(..)
-  , DataConInfo(..)
   , Expr(..)
   , Var(..)
   , If(..)
@@ -107,12 +106,6 @@ fromPrimDataCon :: PrimDataCon -> DataConstructor
 fromPrimDataCon (PrimDataCon name id' ty span' index) =
   DataConstructor name id' Nothing (fromPrimTyCon ty) span' index
 
-data DataConInfo
-  = DataConInfo
-  { dataConInfoDefinition :: !TypeDeclaration
-  , dataConInfoCons :: !DataConstructor
-  } deriving (Show, Eq, Ord)
-
 data Expr
   = ELit !Literal
   | EVar !Var
@@ -124,7 +117,7 @@ data Expr
 
 data Var
   = VVal !(Typed Ident)
-  | VCons !(Typed DataConInfo)
+  | VCons !(Typed DataConstructor)
   deriving (Show, Eq)
 
 data If
@@ -155,7 +148,7 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataConInfo
+  { patConsConstructor :: !DataConstructor
   , patConsArg :: !(Maybe (Typed Ident))
   , patConsType :: !Type
   } deriving (Show, Eq)

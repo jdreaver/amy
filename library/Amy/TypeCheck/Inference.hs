@@ -173,10 +173,6 @@ convertDataConstructor (R.DataConstructor (Located _ conName) id' mTyArg tyName 
   , T.dataConstructorIndex = index
   }
 
-convertDataConInfo :: R.DataConInfo -> T.DataConInfo
-convertDataConInfo (R.DataConInfo tyDecl dataCon) =
-  T.DataConInfo (convertTypeDeclaration tyDecl) (convertDataConstructor dataCon)
-
 dataConstructorScheme :: T.DataConstructor -> T.Scheme
 dataConstructorScheme (T.DataConstructor _ _ mTyArg tyName _ _) = T.Forall tyVars (mkTy mTyArg)
  where
@@ -299,10 +295,10 @@ inferExpr (R.EVar var) =
       let valVar' = convertIdent valVar
       t <- lookupEnvIdentM valVar'
       pure (T.EVar $ T.VVal (T.Typed t valVar'), [])
-    R.VCons cons -> do
-      let cons' = convertDataConInfo cons
-      t <- instantiate $ dataConstructorScheme $ T.dataConInfoCons cons'
-      pure (T.EVar $ T.VCons (T.Typed t cons'), [])
+    R.VCons con -> do
+      let con' = convertDataConstructor con
+      t <- instantiate $ dataConstructorScheme con'
+      pure (T.EVar $ T.VCons (T.Typed t con'), [])
 inferExpr (R.EIf (R.If pred' then' else')) = do
   (pred'', predCon) <- inferExpr pred'
   (then'', thenCon) <- inferExpr then'
@@ -371,24 +367,24 @@ inferPattern (R.PLit (Located _ lit)) = pure (T.PLit lit, [])
 inferPattern (R.PVar (Located _ ident)) = do
   tvar <- freshTypeVariable KStar
   pure (T.PVar $ T.Typed tvar (convertIdent ident), [])
-inferPattern (R.PCons (R.PatCons cons mArg)) = do
-  let cons' = convertDataConInfo cons
-  consTy <- instantiate $ dataConstructorScheme $ T.dataConInfoCons cons'
+inferPattern (R.PCons (R.PatCons con mArg)) = do
+  let con' = convertDataConstructor con
+  conTy <- instantiate $ dataConstructorScheme con'
   case mArg of
     -- Convert argument and add a constraint on argument plus constructor
     Just arg -> do
       (arg', argCons) <- inferPattern arg
       let argTy = patternType arg'
       retTy <- freshTypeVariable KStar
-      let constraint = Constraint (argTy `T.TyFun` retTy, consTy)
+      let constraint = Constraint (argTy `T.TyFun` retTy, conTy)
       pure
-        ( T.PCons $ T.PatCons cons' (Just arg') retTy
+        ( T.PCons $ T.PatCons con' (Just arg') retTy
         , argCons ++ [constraint]
         )
     -- No argument. The return type is just the data constructor type.
     Nothing ->
       pure
-        ( T.PCons $ T.PatCons cons' Nothing consTy
+        ( T.PCons $ T.PatCons con' Nothing conTy
         , []
         )
 inferPattern (R.PParens pat) = do
@@ -501,10 +497,6 @@ substituteTypeTermArg (Subst subst) (T.TyVar var) =
     Just (T.TyTerm (T.TyCon con )) -> T.TyCon con
     Just t -> error $ "Invalid TypeTerm argument substitution " ++ show (var, t)
 
-substituteTypeDeclaration :: Subst -> T.TypeDeclaration -> T.TypeDeclaration
-substituteTypeDeclaration subst (T.TypeDeclaration tyDef cons) =
-  T.TypeDeclaration tyDef (substituteDataConstructor subst <$> cons)
-
 substituteTyped :: Subst -> T.Typed a -> T.Typed a
 substituteTyped subst (T.Typed ty x) = T.Typed (substituteType subst ty) x
 
@@ -532,7 +524,7 @@ substituteTExpr subst (T.EVar var) =
   T.EVar $
     case var of
       T.VVal var' -> T.VVal $ substituteTyped subst var'
-      T.VCons (T.Typed ty cons) -> T.VCons (T.Typed (substituteType subst ty) (substituteDataConInfo subst cons))
+      T.VCons (T.Typed ty cons) -> T.VCons (T.Typed (substituteType subst ty) (substituteDataConstructor subst cons))
 substituteTExpr subst (T.EIf (T.If pred' then' else')) =
   T.EIf (T.If (substituteTExpr subst pred') (substituteTExpr subst then') (substituteTExpr subst else'))
 substituteTExpr subst (T.ECase (T.Case scrutinee matches)) =
@@ -542,10 +534,6 @@ substituteTExpr subst (T.ELet (T.Let bindings expr)) =
 substituteTExpr subst (T.EApp (T.App func args returnType)) =
   T.EApp (T.App (substituteTExpr subst func) (substituteTExpr subst <$> args) (substituteType subst returnType))
 substituteTExpr subst (T.EParens expr) = T.EParens (substituteTExpr subst expr)
-
-substituteDataConInfo :: Subst -> T.DataConInfo -> T.DataConInfo
-substituteDataConInfo subst (T.DataConInfo decl con) =
-  T.DataConInfo (substituteTypeDeclaration subst decl) (substituteDataConstructor subst con)
 
 substituteDataConstructor :: Subst -> T.DataConstructor -> T.DataConstructor
 substituteDataConstructor subst (T.DataConstructor name id' mArg ty span' index) =
@@ -560,7 +548,7 @@ substituteTPattern _ pat@(T.PLit _) = pat
 substituteTPattern subst (T.PVar var) = T.PVar $ substituteTyped subst var
 substituteTPattern subst (T.PCons (T.PatCons con mArg retTy)) =
   let
-    con' = substituteDataConInfo subst con
+    con' = substituteDataConstructor subst con
     mArg' = substituteTPattern subst <$> mArg
     retTy' = substituteType subst retTy
   in T.PCons (T.PatCons con' mArg' retTy')
