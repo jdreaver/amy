@@ -10,8 +10,7 @@
 
 module Amy.Prim
   ( -- * Types
-    maxPrimId
-  , PrimTypeDefinition(..)
+    PrimTypeDefinition(..)
   , PrimTyCon(..)
   , PrimDataCon(..)
   , allPrimTypeDefinitions
@@ -29,14 +28,13 @@ module Amy.Prim
   , PrimitiveFunctionName(..)
   , PrimitiveFunction(..)
   , allPrimitiveFunctions
-  , primitiveFunctionsById
+  , primitiveFunctionsByName
   ) where
 
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import Data.Tuple (swap)
 
 --
 -- Primitive Type ID Generation
@@ -62,36 +60,6 @@ showPrimDataCon :: PrimitiveDataCon -> Text
 showPrimDataCon TrueDataCon = "True"
 showPrimDataCon FalseDataCon = "False"
 
-allPrimitiveTypes :: [PrimitiveType]
-allPrimitiveTypes = [minBound..maxBound]
-
-allPrimitiveTypesAndIds :: [(Int, PrimitiveType)]
-allPrimitiveTypesAndIds = zip [0..] allPrimitiveTypes
-
-primitiveTypeIds :: Map PrimitiveType Int
-primitiveTypeIds = Map.fromList . fmap swap $ allPrimitiveTypesAndIds
-
-primitiveTypeId :: PrimitiveType -> Int
-primitiveTypeId = (Map.!) primitiveTypeIds
-
-maxPrimitiveTypeId :: Int
-maxPrimitiveTypeId = maximum . fmap fst $ allPrimitiveTypesAndIds
-
-allPrimitiveDataCons :: [PrimitiveDataCon]
-allPrimitiveDataCons = [minBound..maxBound]
-
-allPrimitiveDataConsAndIds :: [(Int, PrimitiveDataCon)]
-allPrimitiveDataConsAndIds = zip [maxPrimitiveTypeId + 1..] allPrimitiveDataCons
-
-primitiveDataConIds :: Map PrimitiveDataCon Int
-primitiveDataConIds = Map.fromList . fmap swap $ allPrimitiveDataConsAndIds
-
-primitiveDataConId :: PrimitiveDataCon -> Int
-primitiveDataConId = (Map.!) primitiveDataConIds
-
-maxPrimitiveDataConId :: Int
-maxPrimitiveDataConId = maximum . fmap fst $ allPrimitiveDataConsAndIds
-
 --
 -- Wired-in Type Definitions
 --
@@ -105,23 +73,20 @@ data PrimTypeDefinition
 data PrimTyCon
   = PrimTyCon
   { primTyConName :: !Text
-  , primTyConId :: !Int
   } deriving (Show, Eq)
 
 data PrimDataCon
   = PrimDataCon
   { primDataConName :: !Text
-  , primDataConId :: !Int
   } deriving (Show, Eq)
 
 mkPrimTypeDef :: PrimitiveType -> [PrimitiveDataCon] -> PrimTypeDefinition
 mkPrimTypeDef tyCon dataCons =
   let
-    tyCon' = PrimTyCon (showPrimType tyCon) (primitiveTypeId tyCon)
+    tyCon' = PrimTyCon (showPrimType tyCon)
     mkDataCon prim =
       PrimDataCon
       { primDataConName = showPrimDataCon prim
-      , primDataConId = primitiveDataConId prim
       }
     dataCons' = mkDataCon <$> dataCons
   in PrimTypeDefinition tyCon' dataCons'
@@ -182,12 +147,6 @@ data PrimitiveFunctionName
 allPrimitiveFunctionNames :: [PrimitiveFunctionName]
 allPrimitiveFunctionNames = [minBound..maxBound]
 
-allPrimitiveFunctionNamesAndIds :: [(Int, PrimitiveFunctionName)]
-allPrimitiveFunctionNamesAndIds = zip [maxPrimitiveDataConId + 1..] allPrimitiveFunctionNames
-
-maxPrimId :: Int
-maxPrimId = maximum . fmap fst $ allPrimitiveFunctionNamesAndIds
-
 showPrimitiveFunctionName :: PrimitiveFunctionName -> Text
 showPrimitiveFunctionName name =
   case name of
@@ -218,14 +177,15 @@ data PrimitiveFunction
   = PrimitiveFunction
   { primitiveFunctionName :: !PrimitiveFunctionName
   , primitiveFunctionNameText :: !Text
-  , primitiveFunctionId :: !Int
   , primitiveFunctionType :: !(NonEmpty PrimTyCon)
   } deriving (Show, Eq)
 
 allPrimitiveFunctions :: [PrimitiveFunction]
 allPrimitiveFunctions =
-  (\(id', prim) -> PrimitiveFunction prim (showPrimitiveFunctionName prim) id' (primitiveFunctionType' prim))
-  <$> allPrimitiveFunctionNamesAndIds
+  (\prim -> PrimitiveFunction prim (showPrimitiveFunctionName prim) (primitiveFunctionType' prim))
+  <$> allPrimitiveFunctionNames
 
-primitiveFunctionsById :: Map Int PrimitiveFunction
-primitiveFunctionsById = Map.fromList $ (\prim -> (primitiveFunctionId prim, prim)) <$> allPrimitiveFunctions
+primitiveFunctionsByName :: Map Text PrimitiveFunction
+primitiveFunctionsByName =
+  Map.fromList
+  $ (\prim -> (showPrimitiveFunctionName $ primitiveFunctionName prim, prim)) <$> allPrimitiveFunctions

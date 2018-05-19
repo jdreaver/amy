@@ -13,7 +13,7 @@ import LLVM.AST as LLVM
 import Amy.ANF.AST as ANF
 
 identToName :: ANF.Ident -> LLVM.Name
-identToName (ANF.Ident name' _ _) = textToName name'
+identToName (ANF.Ident name' _) = textToName name'
 
 textToName :: Text -> Name
 textToName = Name . BSS.toShort . encodeUtf8

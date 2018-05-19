@@ -7,10 +7,10 @@ source_filename = "<string>"
 
 define i64 @main() {
 entry:
-  %res107 = call %Either* @f()
-  %0 = getelementptr %Either, %Either* %res107, i32 0, i32 0
+  %res72 = call %Either* @f()
+  %0 = getelementptr %Either, %Either* %res72, i32 0, i32 0
   %1 = load i1, i1* %0
-  %2 = getelementptr %Either, %Either* %res107, i32 0, i32 1
+  %2 = getelementptr %Either, %Either* %res72, i32 0, i32 1
   %3 = load i64*, i64** %2
   switch i1 %1, label %case.0.ret [
     i1 false, label %case.0.ret
@@ -18,18 +18,18 @@ entry:
   ]
 
 case.0.ret:                                       ; preds = %entry, %entry
-  %_u100 = load i64, i64* %3
+  %_u65 = load i64, i64* %3
   %4 = alloca i64
-  store i64 %_u100, i64* %4
+  store i64 %_u65, i64* %4
   %5 = load i64, i64* %4
   br label %case.end.ret
 
 case.1.ret:                                       ; preds = %entry
-  %_u101 = load i64, i64* %3
-  %res108 = call %Either* @h()
-  %6 = getelementptr %Either, %Either* %res108, i32 0, i32 0
+  %_u66 = load i64, i64* %3
+  %res73 = call %Either* @h()
+  %6 = getelementptr %Either, %Either* %res73, i32 0, i32 0
   %7 = load i1, i1* %6
-  %8 = getelementptr %Either, %Either* %res108, i32 0, i32 1
+  %8 = getelementptr %Either, %Either* %res73, i32 0, i32 1
   %9 = load i64*, i64** %8
   switch i1 %7, label %case.0.6 [
     i1 false, label %case.0.6
@@ -37,17 +37,17 @@ case.1.ret:                                       ; preds = %entry
   ]
 
 case.0.6:                                         ; preds = %case.1.ret, %case.1.ret
-  %_u96 = load i64, i64* %9
+  %_u61 = load i64, i64* %9
   %10 = alloca i64
-  store i64 %_u96, i64* %10
+  store i64 %_u61, i64* %10
   %11 = load i64, i64* %10
   br label %case.end.6
 
 case.1.6:                                         ; preds = %case.1.ret
-  %_u97 = bitcast i64* %9 to %Either*
-  %12 = getelementptr %Either, %Either* %_u97, i32 0, i32 0
+  %_u62 = bitcast i64* %9 to %Either*
+  %12 = getelementptr %Either, %Either* %_u62, i32 0, i32 0
   %13 = load i1, i1* %12
-  %14 = getelementptr %Either, %Either* %_u97, i32 0, i32 1
+  %14 = getelementptr %Either, %Either* %_u62, i32 0, i32 1
   %15 = load i64*, i64** %14
   switch i1 %13, label %case.0.13 [
     i1 false, label %case.0.13
@@ -55,16 +55,16 @@ case.1.6:                                         ; preds = %case.1.ret
   ]
 
 case.0.13:                                        ; preds = %case.1.6, %case.1.6
-  %_u98 = load i64, i64* %15
+  %_u63 = load i64, i64* %15
   %16 = alloca i64
-  store i64 %_u98, i64* %16
+  store i64 %_u63, i64* %16
   %17 = load i64, i64* %16
   br label %case.end.13
 
 case.1.13:                                        ; preds = %case.1.6
-  %_u99 = load i64, i64* %15
+  %_u64 = load i64, i64* %15
   %18 = alloca i64
-  store i64 %_u101, i64* %18
+  store i64 %_u66, i64* %18
   %19 = load i64, i64* %18
   br label %case.end.13
 
@@ -83,16 +83,16 @@ case.end.ret:                                     ; preds = %case.end.6, %case.0
 
 define private %Either* @f() {
 entry:
-  %res109 = alloca %Either
-  %0 = getelementptr %Either, %Either* %res109, i32 0, i32 0
+  %res74 = alloca %Either
+  %0 = getelementptr %Either, %Either* %res74, i32 0, i32 0
   store i1 false, i1* %0
   %1 = alloca i64
   store i64 42, i64* %1
-  %2 = getelementptr %Either, %Either* %res109, i32 0, i32 1
+  %2 = getelementptr %Either, %Either* %res74, i32 0, i32 1
   store i64* %1, i64** %2
-  %3 = getelementptr %Either, %Either* %res109, i32 0, i32 0
+  %3 = getelementptr %Either, %Either* %res74, i32 0, i32 0
   %4 = load i1, i1* %3
-  %5 = getelementptr %Either, %Either* %res109, i32 0, i32 1
+  %5 = getelementptr %Either, %Either* %res74, i32 0, i32 1
   %6 = load i64*, i64** %5
   switch i1 %4, label %case.0.ret [
     i1 false, label %case.0.ret
@@ -100,12 +100,12 @@ entry:
   ]
 
 case.0.ret:                                       ; preds = %entry, %entry
-  %_u103 = load i64, i64* %6
+  %_u68 = load i64, i64* %6
   %7 = alloca %Either
   %8 = getelementptr %Either, %Either* %7, i32 0, i32 0
   store i1 false, i1* %8
   %9 = alloca i64
-  store i64 %_u103, i64* %9
+  store i64 %_u68, i64* %9
   %10 = getelementptr %Either, %Either* %7, i32 0, i32 1
   store i64* %9, i64** %10
   br label %case.end.ret
@@ -113,12 +113,12 @@ case.0.ret:                                       ; preds = %entry, %entry
 case.1.ret:                                       ; preds = %entry
   %11 = alloca i64*
   store i64* %6, i64** %11
-  %_u104 = load i64*, i64** %11
+  %_u69 = load i64*, i64** %11
   %12 = alloca %Either
   %13 = getelementptr %Either, %Either* %12, i32 0, i32 0
   store i1 true, i1* %13
   %14 = getelementptr %Either, %Either* %12, i32 0, i32 1
-  store i64* %_u104, i64** %14
+  store i64* %_u69, i64** %14
   br label %case.end.ret
 
 case.end.ret:                                     ; preds = %case.1.ret, %case.0.ret
@@ -138,17 +138,17 @@ entry:
 
 define private %Either* @h() {
 entry:
-  %res110 = alloca %Either
-  %0 = getelementptr %Either, %Either* %res110, i32 0, i32 0
+  %res75 = alloca %Either
+  %0 = getelementptr %Either, %Either* %res75, i32 0, i32 0
   store i1 true, i1* %0
   %1 = alloca i64
   store i64 1, i64* %1
-  %2 = getelementptr %Either, %Either* %res110, i32 0, i32 1
+  %2 = getelementptr %Either, %Either* %res75, i32 0, i32 1
   store i64* %1, i64** %2
   %ret = alloca %Either
   %3 = getelementptr %Either, %Either* %ret, i32 0, i32 0
   store i1 true, i1* %3
-  %4 = bitcast %Either* %res110 to i64*
+  %4 = bitcast %Either* %res75 to i64*
   %5 = getelementptr %Either, %Either* %ret, i32 0, i32 1
   store i64* %4, i64** %5
   ret %Either* %ret

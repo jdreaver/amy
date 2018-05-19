@@ -33,14 +33,14 @@ freshId = do
 freshIdent :: Text -> Desugar C.Ident
 freshIdent t = do
   id' <- freshId
-  pure $ C.Ident (t <> pack (show id')) id'
+  pure $ C.Ident (t <> pack (show id'))
 
 -- TODO: Compute this in the Renamer so we don't have to keep recomputing it
 -- here
 mkDataConTypes :: TypeDeclaration -> [(DataCon, (TypeDeclaration, DataConDefinition))]
 mkDataConTypes tyDecl@(TypeDeclaration _ dataConDefs) = mkDataConPair <$> dataConDefs
  where
-  mkDataConPair def@(DataConDefinition name id' _) = (DataCon name id', (tyDecl, def))
+  mkDataConPair def@(DataConDefinition name _) = (DataCon name, (tyDecl, def))
 
 lookupDataConType :: DataCon -> Desugar (TypeDeclaration, DataConDefinition)
 lookupDataConType con =

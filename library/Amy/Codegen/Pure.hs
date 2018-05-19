@@ -215,7 +215,7 @@ gepIndex :: Integer -> Operand
 gepIndex i = ConstantOperand $ C.Int 32 i
 
 valOperand :: ANF.Val -> BlockGen Operand
-valOperand (ANF.Var (ANF.Typed ty ident@(ANF.Ident _ _ True))) =
+valOperand (ANF.Var (ANF.Typed ty ident@(ANF.Ident _ True))) =
   pure $ ConstantOperand $ C.GlobalReference (llvmType ty) (identToName ident)
 valOperand (ANF.Var (ANF.Typed ty ident)) =
   pure $ LocalReference (llvmType ty) (identToName ident)
@@ -284,7 +284,7 @@ primitiveFunctionInstruction
   :: PrimitiveFunction
   -> [Operand]
   -> Instruction
-primitiveFunctionInstruction (PrimitiveFunction primFuncName _ _ _) argumentOperands =
+primitiveFunctionInstruction (PrimitiveFunction primFuncName _ _) argumentOperands =
   let
     -- TODO: Better error checking here if number of operands doesn't match
     -- expected number. However, this should be type checked, so a simple panic

@@ -89,16 +89,15 @@ data TypeDeclaration
 data TyConDefinition
   = TyConDefinition
   { tyConDefinitionName :: !Text
-  , tyConDefinitionId :: !Int
   , tyConDefinitionArgs :: ![TyVarInfo]
   , tyConDefinitionKind :: !Kind
   } deriving (Show, Eq, Ord)
 
 tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
-tyConDefinitionToInfo (TyConDefinition name' id' args kind) = TyConInfo name' id' (TyVar <$> args) kind
+tyConDefinitionToInfo (TyConDefinition name' args kind) = TyConInfo name' (TyVar <$> args) kind
 
 fromPrimTyDef :: PrimTyCon -> TyConDefinition
-fromPrimTyDef (PrimTyCon name id') = TyConDefinition name id' [] KStar
+fromPrimTyDef (PrimTyCon name) = TyConDefinition name [] KStar
 
 fromPrimTypeDef :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
@@ -107,13 +106,12 @@ fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
 data DataConDefinition
   = DataConDefinition
   { dataConDefinitionName :: !Text
-  , dataConDefinitionId :: !Int
   , dataConDefinitionArgument :: !(Maybe TypeTerm)
   } deriving (Show, Eq, Ord)
 
 fromPrimDataCon :: PrimDataCon -> DataConDefinition
-fromPrimDataCon (PrimDataCon name id') =
-  DataConDefinition name id' Nothing
+fromPrimDataCon (PrimDataCon name) =
+  DataConDefinition name Nothing
 
 -- | A renamed 'Expr'
 data Expr
@@ -134,11 +132,10 @@ data Var
 data DataCon
   = DataCon
   { dataConName :: !Text
-  , dataConId :: !Int
   } deriving (Show, Eq, Ord)
 
 dataConFromDefinition :: DataConDefinition -> DataCon
-dataConFromDefinition (DataConDefinition name id' _) = DataCon name id'
+dataConFromDefinition (DataConDefinition name _) = DataCon name
 
 data If
   = If
@@ -210,7 +207,6 @@ patternType (PParens pat) = patternType pat
 data Ident
   = Ident
   { identText :: !Text
-  , identId :: !Int
   } deriving (Show, Eq, Ord)
 
 data TypeTerm
@@ -229,7 +225,6 @@ infixr 0 `TyFun`
 data TyConInfo
   = TyConInfo
   { tyConInfoName :: !Text
-  , tyConInfoId :: !Int
   , tyConInfoArgs :: ![TypeTerm]
   , tyConInfoKind :: !Kind
   } deriving (Show, Eq, Ord)
@@ -240,7 +235,6 @@ fromPrimTyCon = tyConDefinitionToInfo . fromPrimTyDef
 data TyVarInfo
   = TyVarInfo
   { tyVarInfoName :: !Text
-  , tyVarInfoId :: !Int
   , tyVarInfoKind :: !Kind
   , tyVarInfoGenerated :: !TyVarGenerated
   } deriving (Show, Eq, Ord)

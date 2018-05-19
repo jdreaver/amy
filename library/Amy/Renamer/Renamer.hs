@@ -79,9 +79,9 @@ checkForDuplicateTypeVariables :: [R.TyVarInfo] -> Validation [Error] ()
 checkForDuplicateTypeVariables tyVars = if null dups then Success () else Failure dups
  where
   checkDup :: R.TyVarInfo -> [R.TyVarInfo] -> Maybe Error
-  checkDup var@(R.TyVarInfo name _ span') prev =
+  checkDup var@(R.TyVarInfo name span') prev =
     case find ((== R.tyVarInfoName var) . R.tyVarInfoName) prev of
-      Just (R.TyVarInfo dupName _ dupSpan) -> Just (DuplicateTypeVariable (Located span' name) (Located dupSpan dupName))
+      Just (R.TyVarInfo dupName dupSpan) -> Just (DuplicateTypeVariable (Located span' name) (Located dupSpan dupName))
       Nothing -> Nothing
   dups :: [Error]
   dups = catMaybes $ snd $ mapAccumL (\prev var -> (var:prev, checkDup var prev)) [] tyVars

@@ -43,32 +43,30 @@ convertTypeDeclaration (C.TypeDeclaration tyConDef con) = do
   pure $ ANF.TypeDeclaration (C.tyConDefinitionName tyConDef) ty con'
 
 convertDataConDefinition :: C.DataConDefinition -> ANFConvert ANF.DataConDefinition
-convertDataConDefinition (C.DataConDefinition conName id' mTyArg) = do
+convertDataConDefinition (C.DataConDefinition conName mTyArg) = do
   mTyArg' <- traverse convertTypeTerm mTyArg
   pure
     ANF.DataConDefinition
     { ANF.dataConDefinitionName = conName
-    , ANF.dataConDefinitionId = id'
     , ANF.dataConDefinitionArgument = mTyArg'
     }
 
 convertDataCon :: C.DataCon -> ANFConvert ANF.DataCon
-convertDataCon con@(C.DataCon conName id') = do
+convertDataCon con@(C.DataCon conName) = do
   (ty, index) <- getDataConInfo con
   pure
     ANF.DataCon
     { ANF.dataConName = conName
-    , ANF.dataConId = id'
     , ANF.dataConType = ty
     , ANF.dataConIndex = index
     }
 
 convertIdent :: Bool -> C.Ident -> ANF.Ident
-convertIdent isTopLevel (C.Ident name id') = ANF.Ident name id' isTopLevel
+convertIdent isTopLevel (C.Ident name) = ANF.Ident name isTopLevel
 
 convertIdent' :: C.Ident -> ANFConvert ANF.Ident
-convertIdent' ident@(C.Ident name id') =
-  ANF.Ident name id' <$> isIdentTopLevel ident
+convertIdent' ident@(C.Ident name) =
+  ANF.Ident name <$> isIdentTopLevel ident
 
 convertType :: C.Type -> ANFConvert ANF.Type
 convertType ty = go (typeToNonEmpty ty)
@@ -140,7 +138,11 @@ normalizeExpr name (C.EApp (C.App func args retTy)) =
           ANF.Lit lit -> error $ "Encountered lit function application " ++ show lit
           ANF.ConEnum _ con -> error $ "Encountered con enum function application " ++ show con
           ANF.Var (tyIdent@(ANF.Typed _ ident)) ->
-            case Map.lookup (ANF.identId ident) primitiveFunctionsById of
+            -- TODO: We need something more robust besides looking up by name.
+            -- The Renamer should maybe handle resolving this name, or when we
+            -- have modules we should make sure we are looking at the Prim
+            -- module.
+            case Map.lookup (ANF.identText ident) primitiveFunctionsByName of
               -- Primitive operation
               Just prim -> pure $ ANF.EPrimOp $ ANF.App prim argVals retTy'
               -- Default, just a function call
@@ -155,7 +157,7 @@ normalizeName name (C.EVar var) c =
       ident' <- convertTypedIdent ident
       case ident' of
         -- Top-level values need to be first called as functions
-        (ANF.Typed ty (ANF.Ident _ _ True)) ->
+        (ANF.Typed ty (ANF.Ident _ True)) ->
           case ty of
             FuncType{} -> c $ ANF.Var ident'
             _ -> mkNormalizeLet name (ANF.EApp $ ANF.App ident' [] ty) ty c
@@ -181,7 +183,7 @@ mkNormalizeLet name expr exprType c = do
   pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal [ANF.LetValBinding newIdent exprType expr] body
 
 normalizeBinding :: Maybe Text -> C.Binding -> ANFConvert ANF.Binding
-normalizeBinding mName (C.Binding ident@(C.Ident name _) _ args retTy body) = do
+normalizeBinding mName (C.Binding ident@(C.Ident name) _ args retTy body) = do
   -- If we are given a base name, then use it. Otherwise use the binding name
   -- as the base name for all sub expressions.
   let subName = fromMaybe name mName
@@ -192,7 +194,7 @@ normalizeBinding mName (C.Binding ident@(C.Ident name _) _ args retTy body) = do
   pure $ ANF.Binding ident' args' retTy' body'
 
 normalizeLetBinding :: C.Binding -> ANFConvert ANF.LetValBinding
-normalizeLetBinding (C.Binding ident@(C.Ident name _) (C.Forall _ ty) [] _ body) = do
+normalizeLetBinding (C.Binding ident@(C.Ident name) (C.Forall _ ty) [] _ body) = do
   body' <- normalizeExpr name body
   ty' <- convertType ty
   ident' <- convertIdent' ident

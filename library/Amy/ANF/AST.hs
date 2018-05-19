@@ -63,7 +63,6 @@ data TypeDeclaration
 data DataConDefinition
   = DataConDefinition
   { dataConDefinitionName :: !Text
-  , dataConDefinitionId :: !Int
   , dataConDefinitionArgument :: !(Maybe Type)
   } deriving (Show, Eq, Ord)
 
@@ -76,7 +75,6 @@ data Val
 data DataCon
   = DataCon
   { dataConName :: !Text
-  , dataConId :: !Int
   , dataConType :: !Type
   , dataConIndex :: !ConstructorIndex
   } deriving (Show, Eq, Ord)
@@ -149,7 +147,6 @@ data ConApp
 data Ident
   = Ident
   { identText :: !Text
-  , identId :: !Int
   , identIsTopLevel :: !Bool
   } deriving (Show, Eq, Ord)
 

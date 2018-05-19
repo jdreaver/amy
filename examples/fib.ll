@@ -19,12 +19,12 @@ entry:
 case.default.ret:                                 ; preds = %entry
   %0 = alloca i64
   store i64 %x, i64* %0
-  %c31 = load i64, i64* %0
-  %res34 = sub i64 %c31, 1
-  %res35 = call i64 @fib(i64 %res34)
-  %res36 = sub i64 %c31, 2
-  %res37 = call i64 @fib(i64 %res36)
-  %1 = add i64 %res35, %res37
+  %c13 = load i64, i64* %0
+  %res16 = sub i64 %c13, 1
+  %res17 = call i64 @fib(i64 %res16)
+  %res18 = sub i64 %c13, 2
+  %res19 = call i64 @fib(i64 %res18)
+  %1 = add i64 %res17, %res19
   br label %case.end.ret
 
 case.0.ret:                                       ; preds = %entry

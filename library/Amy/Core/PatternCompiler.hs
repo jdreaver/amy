@@ -81,7 +81,7 @@ data Clause con =
 freshVar :: Desugar Ident
 freshVar = do
   id' <- freshId
-  pure $ Ident ("_u" <> pack (show id')) id'
+  pure $ Ident ("_u" <> pack (show id'))
 
 -- | Main function for this algorithm. Takes equations and produces a
 -- 'CaseExpr'.

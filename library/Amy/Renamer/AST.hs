@@ -78,16 +78,15 @@ data TypeDeclaration
 data TyConDefinition
   = TyConDefinition
   { tyConDefinitionName :: !Text
-  , tyConDefinitionId :: !Int
   , tyConDefinitionArgs :: ![TyVarInfo]
   , tyConDefinitionLocation :: !(Maybe SourceSpan)
   } deriving (Show, Eq, Ord)
 
 tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
-tyConDefinitionToInfo (TyConDefinition name' id' args span') = TyConInfo name' id' (TyVar <$> args) span'
+tyConDefinitionToInfo (TyConDefinition name' args span') = TyConInfo name' (TyVar <$> args) span'
 
 fromPrimTyDef :: PrimTyCon -> TyConDefinition
-fromPrimTyDef (PrimTyCon name id') = TyConDefinition name id' [] Nothing
+fromPrimTyDef (PrimTyCon name) = TyConDefinition name [] Nothing
 
 fromPrimTypeDef :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
@@ -96,13 +95,12 @@ fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
 data DataConDefinition
   = DataConDefinition
   { dataConDefinitionName :: !(Located Text)
-  , dataConDefinitionId :: !Int
   , dataConDefinitionArgument :: !(Maybe TypeTerm)
   } deriving (Show, Eq)
 
 fromPrimDataCon :: PrimDataCon -> DataConDefinition
-fromPrimDataCon (PrimDataCon name id') =
-  DataConDefinition (Located (SourceSpan "" 1 1 1 1) name) id' Nothing
+fromPrimDataCon (PrimDataCon name) =
+  DataConDefinition (Located (SourceSpan "" 1 1 1 1) name) Nothing
 
 -- | A renamed 'Expr'
 data Expr
@@ -123,7 +121,6 @@ data Var
 data DataCon
   = DataCon
   { dataConName :: !(Located Text)
-  , dataConId :: !Int
   } deriving (Show, Eq)
 
 data If
@@ -174,7 +171,6 @@ data App
 data Ident
   = Ident
   { identText :: !Text
-  , identId :: !Int
   } deriving (Show, Eq, Ord)
 
 data TypeTerm
@@ -193,7 +189,6 @@ infixr 0 `TyFun`
 data TyConInfo
   = TyConInfo
   { tyConInfoName :: !Text
-  , tyConInfoId :: !Int
   , tyConInfoArgs :: ![TypeTerm]
   , tyConInfoLocation :: !(Maybe SourceSpan)
   } deriving (Show, Eq, Ord)
@@ -201,7 +196,6 @@ data TyConInfo
 data TyVarInfo
   = TyVarInfo
   { tyVarInfoName :: !Text
-  , tyVarInfoId :: !Int
   , tyVarInfoLocation :: !SourceSpan
   } deriving (Show, Eq, Ord)
 

@@ -43,7 +43,6 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
-import Data.Traversable (for)
 import Data.Validation
 
 import Amy.Errors
@@ -64,14 +63,14 @@ data RenamerState
   , renamerStateValuesInScope :: !(Map Text (Located Ident))
   , renamerStateDataConDefinitionsInScope :: !(Map Text R.DataConDefinition)
   , renamerStateTypeConstructorsInScope :: !(Map Text R.TyConDefinition)
-  , renamerStateTypeDeclarations :: !(Map Int R.TypeDeclaration)
+  , renamerStateTypeDeclarations :: !(Map Text R.TypeDeclaration)
   , renamerStateTypeVariablesInScope :: !(Map Text R.TyVarInfo)
   } deriving (Show, Eq)
 
 emptyRenamerState :: RenamerState
 emptyRenamerState =
   RenamerState
-  { renamerStateLastId = maxPrimId + 1
+  { renamerStateLastId = 0
   , renamerStateValuesInScope = primitiveFunctionNames
   , renamerStateDataConDefinitionsInScope = primitiveDataConNames
   , renamerStateTypeConstructorsInScope = primitiveTypeNames
@@ -89,9 +88,9 @@ allPrimTyCons = R.typeDeclarationTypeName <$> primitiveTypeDeclarations
 allPrimDataCons :: [R.DataConDefinition]
 allPrimDataCons = concatMap R.typeDeclarationConstructors primitiveTypeDeclarations
 
-primitiveTypeDeclNames :: Map Int R.TypeDeclaration
+primitiveTypeDeclNames :: Map Text R.TypeDeclaration
 primitiveTypeDeclNames =
-  Map.fromList $ (\tyDef -> (R.tyConDefinitionId $ R.typeDeclarationTypeName tyDef, tyDef)) <$> primitiveTypeDeclarations
+  Map.fromList $ (\tyDef -> (R.tyConDefinitionName $ R.typeDeclarationTypeName tyDef, tyDef)) <$> primitiveTypeDeclarations
 
 primitiveTypeNames :: Map Text R.TyConDefinition
 primitiveTypeNames =
@@ -104,9 +103,9 @@ primitiveDataConNames =
 primitiveFunctionNames :: Map Text (Located Ident)
 primitiveFunctionNames =
   Map.fromList $
-    (\(PrimitiveFunction _ name id' _) ->
+    (\(PrimitiveFunction _ name _) ->
        ( name
-       , Located (SourceSpan "" 1 1 1 1) (Ident name id')
+       , Located (SourceSpan "" 1 1 1 1) (Ident name)
        ))
     <$> allPrimitiveFunctions
 
@@ -119,9 +118,8 @@ freshId = do
 
 addValueToScope :: Located Text -> Renamer (Validation [Error] (Located Ident))
 addValueToScope lName@(Located span' name) = do
-  nameId <- freshId
   let
-    ident = Ident name nameId
+    ident = Ident name
   mExistingName <- lookupValueInScope name
   case mExistingName of
     Just existingName -> pure $ Failure [VariableShadowed lName existingName]
@@ -142,13 +140,11 @@ addDataConDefinitionToScope
   -> Maybe R.TypeTerm
   -> Renamer (Validation [Error] R.DataConDefinition)
 addDataConDefinitionToScope lname@(Located _ name) mArgTy = do
-  nameId <- freshId
   mExistingName <- lookupDataConDefinitionInScope name
   let
     con =
       R.DataConDefinition
       { R.dataConDefinitionName = lname
-      , R.dataConDefinitionId = nameId
       , R.dataConDefinitionArgument = mArgTy
       }
   case mExistingName of
@@ -164,21 +160,16 @@ lookupDataConInScopeOrError :: Located Text -> Renamer (Validation [Error] R.Dat
 lookupDataConInScopeOrError name@(Located _ name') =
   maybe (Failure [UnknownVariable name]) (Success . mkDataCon) <$> lookupDataConDefinitionInScope name'
  where
-  mkDataCon (R.DataConDefinition name'' id' _) = R.DataCon name'' id'
+  mkDataCon (R.DataConDefinition name'' _) = R.DataCon name''
 
 addTypeDefinitionToScope :: S.TyConDefinition -> Renamer (Validation [Error] R.TyConDefinition)
 addTypeDefinitionToScope (S.TyConDefinition name tyArgs span') = do
-  nameId <- freshId
-
   -- Rename ty args
-  tyArgs' <- for tyArgs $ \(S.TyVarInfo (Located argSpan argName)) -> do
-    id' <- freshId
-    pure $ R.TyVarInfo argName id' argSpan
   let
+    tyArgs' = (\(S.TyVarInfo (Located argSpan argName)) -> R.TyVarInfo argName argSpan) <$> tyArgs
     tyDef =
       R.TyConDefinition
       { R.tyConDefinitionName = name
-      , R.tyConDefinitionId = nameId
       , R.tyConDefinitionArgs = tyArgs'
       , R.tyConDefinitionLocation = Just span'
       }
@@ -197,12 +188,11 @@ lookupTypeConstructorInScopeOrError (S.TyConInfo name args span') = do
   mTyCon <- lookupTypeConstructorInScope name
   case mTyCon of
     Nothing -> pure $ Failure [UnknownTypeConstructor (Located span' name)]
-    Just (R.TyConInfo name' id' _ span'') -> do
+    Just (R.TyConInfo name' _ span'') -> do
       args' <- traverse lookupTypeTerm args
       pure $
         R.TyConInfo
         <$> pure name'
-        <*> pure id'
         <*> sequenceA args'
         <*> pure span''
 
@@ -213,21 +203,20 @@ lookupTypeTerm (S.TyParens t) = fmap R.TyParens <$> lookupTypeTerm t
 
 addTypeDeclarationToScope :: R.TypeDeclaration -> Renamer R.TypeDeclaration
 addTypeDeclarationToScope decl = do
-  let tyConId = R.tyConDefinitionId $ R.typeDeclarationTypeName decl
-  modify' (\s -> s { renamerStateTypeDeclarations = Map.insert tyConId decl (renamerStateTypeDeclarations s) })
+  let tyConName = R.tyConDefinitionName $ R.typeDeclarationTypeName decl
+  modify' (\s -> s { renamerStateTypeDeclarations = Map.insert tyConName decl (renamerStateTypeDeclarations s) })
   pure decl
 
 lookupTypeDeclaration :: R.TyConInfo -> Renamer R.TypeDeclaration
 lookupTypeDeclaration info =
   fromMaybe (error $ "Couldn't find declaration for " ++ show info)
-  . Map.lookup (R.tyConInfoId info)
+  . Map.lookup (R.tyConInfoName info)
   <$> gets renamerStateTypeDeclarations
 
 addTypeVariableToScope :: S.TyVarInfo -> Renamer (Validation [Error] R.TyVarInfo)
 addTypeVariableToScope info@(S.TyVarInfo (Located span' name)) = do
-  nameId <- freshId
   let
-    info' = R.TyVarInfo name nameId span'
+    info' = R.TyVarInfo name span'
   mExistingName <- lookupTypeVariableInScope info
   case mExistingName of
     Just _ -> pure () -- These will be set to equal during inference

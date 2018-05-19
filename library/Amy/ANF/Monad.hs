@@ -38,8 +38,8 @@ runANFConvert read' state' (ANFConvert action) = evalState (runReaderT action re
 
 data ANFConvertRead
   = ANFConvertRead
-  { anfConvertReadTypeReps :: !(Map Int ANF.Type)
-  , anfConvertReadDataConInfos :: !(Map Int (ANF.Type, ConstructorIndex))
+  { anfConvertReadTypeReps :: !(Map Text ANF.Type)
+  , anfConvertReadDataConInfos :: !(Map Text (ANF.Type, ConstructorIndex))
   , anfConvertReadTopLevelNames :: !(Set C.Ident)
   } deriving (Show, Eq)
 
@@ -47,7 +47,7 @@ anfConvertRead :: [C.Ident] -> [C.TypeDeclaration] -> ANFConvertRead
 anfConvertRead topLevelNames typeDeclarations =
   let
     allTypeDecls = typeDeclarations ++ (fromPrimTypeDefinition <$> allPrimTypeDefinitions)
-    typeRepMap = Map.fromList $ (\t -> (C.tyConDefinitionId $ C.typeDeclarationTypeName t, typeRep t)) <$> allTypeDecls
+    typeRepMap = Map.fromList $ (\t -> (C.tyConDefinitionName $ C.typeDeclarationTypeName t, typeRep t)) <$> allTypeDecls
     dataConInfos = Map.fromList $ concatMap mkDataConInfo allTypeDecls
   in
     ANFConvertRead
@@ -56,11 +56,11 @@ anfConvertRead topLevelNames typeDeclarations =
     , anfConvertReadTopLevelNames = fromList topLevelNames
     }
 
-mkDataConInfo :: C.TypeDeclaration -> [(Int, (ANF.Type, ConstructorIndex))]
+mkDataConInfo :: C.TypeDeclaration -> [(Text, (ANF.Type, ConstructorIndex))]
 mkDataConInfo decl@(C.TypeDeclaration _ cons) = mkInfo <$> zip cons [0..]
  where
   rep = typeRep decl
-  mkInfo (C.DataConDefinition _ id' _, index) = (id', (rep, ConstructorIndex index))
+  mkInfo (C.DataConDefinition name _, index) = (name, (rep, ConstructorIndex index))
 
 data ANFConvertState
   = ANFConvertState
@@ -78,20 +78,20 @@ freshId = do
 freshIdent :: Text -> ANFConvert ANF.Ident
 freshIdent t = do
   id' <- freshId
-  pure $ ANF.Ident (t <> pack (show id')) id' False
+  pure $ ANF.Ident (t <> pack (show id')) False
 
 getTyConDefinitionType :: C.TyConDefinition -> ANFConvert ANF.Type
-getTyConDefinitionType tyCon = fromMaybe err . Map.lookup (tyConDefinitionId tyCon) <$> asks anfConvertReadTypeReps
+getTyConDefinitionType tyCon = fromMaybe err . Map.lookup (tyConDefinitionName tyCon) <$> asks anfConvertReadTypeReps
   where
    err = error $ "Couldn't find TypeCompilationMethod of TyConDefinition " ++ show tyCon
 
 getTyConInfoType :: C.TyConInfo -> ANFConvert ANF.Type
-getTyConInfoType tyCon = fromMaybe err . Map.lookup (tyConInfoId tyCon) <$> asks anfConvertReadTypeReps
+getTyConInfoType tyCon = fromMaybe err . Map.lookup (tyConInfoName tyCon) <$> asks anfConvertReadTypeReps
   where
    err = error $ "Couldn't find TypeCompilationMethod of TyConInfo " ++ show tyCon
 
 getDataConInfo :: C.DataCon -> ANFConvert (ANF.Type, ConstructorIndex)
-getDataConInfo con = fromMaybe err . Map.lookup (C.dataConId con) <$> asks anfConvertReadDataConInfos
+getDataConInfo con = fromMaybe err . Map.lookup (C.dataConName con) <$> asks anfConvertReadDataConInfos
   where
    err = error $ "Couldn't find TypeCompilationMethod of TyConDefinition " ++ show con
 

@@ -1,4 +1,5 @@
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Amy.ANF.TypeRep
   ( typeRep
@@ -10,7 +11,6 @@ import GHC.Word (Word32)
 
 import Amy.ANF.AST as ANF
 import Amy.Core.AST as C
-import Amy.Prim
 
 -- | Describes how an Amy type is represented in LLVM.
 data TypeRep
@@ -42,10 +42,8 @@ typeRep (C.TypeDeclaration tyName constructors) =
       | otherwise -> 32
 
 maybePrimitiveType :: C.TyConDefinition -> Maybe ANF.Type
-maybePrimitiveType (C.TyConDefinition _ id' _ _)
-  | id' == intTyConId = Just PrimIntType
-  | id' == doubleTyConId = Just PrimDoubleType
+maybePrimitiveType (C.TyConDefinition name _ _)
+  -- TODO: Something more robust here besides text name matching.
+  | name == "Int" = Just PrimIntType
+  | name == "Double" = Just PrimDoubleType
   | otherwise = Nothing
- where
-  intTyConId = primTyConId intTyCon
-  doubleTyConId = primTyConId doubleTyCon

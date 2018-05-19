@@ -14,21 +14,21 @@ import Amy.Core.PatternCompiler
 
 -- Utils
 mkId :: Int -> Typed Ident
-mkId i = mkIdent $ Ident ("_u" <> pack (show i)) i
+mkId i = mkIdent $ Ident ("_u" <> pack (show i))
 
 mkIdent :: Ident -> Typed Ident
 mkIdent = Typed boolTy
 
 x, y, z, v, w, c, f, xs, ys :: Typed Ident
-x = Typed boolTy $ Ident "x" 0
-y = Typed boolTy $ Ident "y" 1
-z = Typed boolTy $ Ident "z" 2
-v = Typed boolTy $ Ident "v" 3
-w = Typed boolTy $ Ident "w" 4
-c = Typed boolTy $ Ident "c" 0
-f = Typed boolTy $ Ident "f" 0
-xs = Typed boolTy $ Ident "xs" 10
-ys = Typed boolTy $ Ident "ys" 11
+x = Typed boolTy $ Ident "x"
+y = Typed boolTy $ Ident "y"
+z = Typed boolTy $ Ident "z"
+v = Typed boolTy $ Ident "v"
+w = Typed boolTy $ Ident "w"
+c = Typed boolTy $ Ident "c"
+f = Typed boolTy $ Ident "f"
+xs = Typed boolTy $ Ident "xs"
+ys = Typed boolTy $ Ident "ys"
 
 match'
   :: (Ord con)
@@ -38,7 +38,7 @@ match'
 match' vars eqs = runDesugar 0 [] $ match vars eqs
 
 boolTy :: Type
-boolTy = TyTerm $ TyCon $ TyConInfo "Bool" 0 [] KStar
+boolTy = TyTerm $ TyCon $ TyConInfo "Bool" [] KStar
 
 mkVal :: Typed Ident -> Expr
 mkVal x' = EVar $ VVal x'
@@ -114,7 +114,7 @@ appC = Con "App" [boolTy, boolTy] 4
 letC = Con "Let" [boolTy, boolTy, boolTy] 4
 
 lamId :: Int -> Typed Ident
-lamId i = mkIdent $ Ident (pack $ show i) i
+lamId i = mkIdent $ Ident (pack $ show i)
 
 lamEquations :: [Equation Text]
 lamEquations =

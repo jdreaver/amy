@@ -31,18 +31,16 @@ desugarTypeDeclaration (T.TypeDeclaration tyName cons) =
   C.TypeDeclaration (desugarTyConDefinition tyName) (desugarDataConDefinition <$> cons)
 
 desugarDataConDefinition :: T.DataConDefinition -> C.DataConDefinition
-desugarDataConDefinition (T.DataConDefinition conName id' mTyArg) =
+desugarDataConDefinition (T.DataConDefinition conName mTyArg) =
   C.DataConDefinition
   { C.dataConDefinitionName = conName
-  , C.dataConDefinitionId = id'
   , C.dataConDefinitionArgument = desugarTypeTerm <$> mTyArg
   }
 
 desugarDataCon :: T.DataCon -> C.DataCon
-desugarDataCon (T.DataCon conName id') =
+desugarDataCon (T.DataCon conName) =
   C.DataCon
   { C.dataConName = conName
-  , C.dataConId = id'
   }
 
 desugarBinding :: T.Binding -> Desugar C.Binding
@@ -107,7 +105,7 @@ desugarVar (T.VVal ident) = C.VVal $ desugarTypedIdent ident
 desugarVar (T.VCons (T.Typed ty cons)) = C.VCons $ C.Typed (desugarType ty) (desugarDataCon cons)
 
 desugarIdent :: T.Ident -> C.Ident
-desugarIdent (T.Ident name id') = C.Ident name id'
+desugarIdent (T.Ident name) = C.Ident name
 
 desugarTypedIdent :: T.Typed T.Ident -> C.Typed C.Ident
 desugarTypedIdent (T.Typed ty ident) = C.Typed (desugarType ty) (desugarIdent ident)
@@ -125,13 +123,13 @@ desugarTypeTerm (T.TyVar info) = C.TyVar (desugarTyVarInfo info)
 desugarTypeTerm (T.TyParens t) = desugarTypeTerm t
 
 desugarTyConDefinition :: T.TyConDefinition -> C.TyConDefinition
-desugarTyConDefinition (T.TyConDefinition name id' args kind) = C.TyConDefinition name id' (desugarTyVarInfo <$> args) kind
+desugarTyConDefinition (T.TyConDefinition name args kind) = C.TyConDefinition name (desugarTyVarInfo <$> args) kind
 
 desugarTyConInfo :: T.TyConInfo -> C.TyConInfo
-desugarTyConInfo (T.TyConInfo name id' args kind) = C.TyConInfo name id' (desugarTypeTerm <$> args) kind
+desugarTyConInfo (T.TyConInfo name args kind) = C.TyConInfo name (desugarTypeTerm <$> args) kind
 
 desugarTyVarInfo :: T.TyVarInfo -> C.TyVarInfo
-desugarTyVarInfo (T.TyVarInfo name id' kind _) = C.TyVarInfo name id' kind
+desugarTyVarInfo (T.TyVarInfo name kind _) = C.TyVarInfo name kind
 
 --
 -- Case Expressions

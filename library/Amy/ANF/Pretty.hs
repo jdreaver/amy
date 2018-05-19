@@ -31,7 +31,7 @@ prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
 prettyTypeDeclaration' (TypeDeclaration tyName _ cons) =
    prettyTypeDeclaration (pretty tyName) (prettyConstructor <$> cons)
  where
-  prettyConstructor (DataConDefinition conName _ mArg) =
+  prettyConstructor (DataConDefinition conName mArg) =
     prettyDataConstructor (pretty conName) (prettyType . mkPrettyType <$> mArg)
 
 prettyBinding' :: Binding -> Doc ann
@@ -41,7 +41,7 @@ prettyBinding' (Binding ident args retTy body) =
   prettyBinding (prettyIdent ident) (prettyIdent . typedValue <$> args) (prettyExpr body)
 
 prettyIdent :: Ident -> Doc ann
-prettyIdent (Ident name _ _) = pretty name
+prettyIdent (Ident name _) = pretty name
 
 prettyVal :: Val -> Doc ann
 prettyVal (Var (Typed _ ident)) = prettyIdent ident
@@ -67,7 +67,7 @@ prettyExpr (EApp (App (Typed _ ident) args _)) =
   "$call" <+> prettyIdent ident <+> list (prettyVal <$> args)
 prettyExpr (EConApp (ConApp info mArg _ _)) =
   "$mkCon" <+> pretty (dataConName info) <+> list (prettyVal <$> maybeToList mArg)
-prettyExpr (EPrimOp (App (PrimitiveFunction _ name _ _) args _)) =
+prettyExpr (EPrimOp (App (PrimitiveFunction _ name _) args _)) =
   "$primOp" <+> pretty name <+> list (prettyVal <$> args)
 
 prettyLetValBinding :: LetValBinding -> Doc ann
