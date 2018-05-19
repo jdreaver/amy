@@ -8,17 +8,17 @@ entry:
   %0 = alloca i64
   store i64 2, i64* %0
   %x = load i64, i64* %0
-  %res15 = call i64 @f(i64 %x)
-  %ret = call i64 @f(i64 %res15)
+  %res14 = call i64 @f(i64 %x)
+  %ret = call i64 @f(i64 %res14)
   ret i64 %ret
 }
 
 define private i64 @f(i64 %x) {
 entry:
   %y = add i64 %x, -1
-  %res17 = sub i64 3, %y
-  %res18 = icmp slt i64 5, %res17
-  switch i1 %res18, label %case.0.ret [
+  %res16 = sub i64 3, %y
+  %res17 = icmp slt i64 5, %res16
+  switch i1 %res17, label %case.0.ret [
     i1 true, label %case.0.ret
     i1 false, label %case.1.ret
   ]

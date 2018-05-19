@@ -145,7 +145,7 @@ newtype Constraint = Constraint { unConstraint :: (T.Type, T.Type) }
 --
 
 inferModule :: R.Module -> Either Error T.Module
-inferModule (R.Module bindings externs typeDeclarations maxId) = do
+inferModule (R.Module bindings externs typeDeclarations) = do
   let
     externs' = convertExtern <$> externs
     externSchemes = (\(T.Extern name ty) -> (name, T.Forall [] ty)) <$> externs'
@@ -156,7 +156,7 @@ inferModule (R.Module bindings externs typeDeclarations maxId) = do
       { identTypes = Map.fromList $ externSchemes ++ primFuncSchemes
       , dataConstructorTypes = Map.fromList $ concatMap mkDataConTypes typeDeclarations'
       }
-  (bindings', maxId') <- inferTopLevel maxId env bindings
+  (bindings', maxId') <- inferTopLevel 0 env bindings
   pure (T.Module bindings' externs' typeDeclarations' maxId')
 
 convertExtern :: R.Extern -> T.Extern

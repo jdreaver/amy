@@ -56,6 +56,9 @@ data Module
   { moduleBindings :: ![Binding]
   , moduleExterns :: ![Extern]
   , moduleTypeDeclarations :: ![TypeDeclaration]
+    -- TODO: Instead of threading an Int through every AST Module, consider
+    -- running the whole compiler in some monad that admits a fresh name
+    -- supply. I'm not sure if that would make things easier at the expense of
   , moduleMaxId :: !Int
   } deriving (Show, Eq)
 

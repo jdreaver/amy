@@ -4,7 +4,6 @@ module Amy.Renamer.Monad
   ( Renamer
   , runRenamer
   , emptyRenamerState
-  , freshId
 
     -- * Values
   , addValueToScope
@@ -58,9 +57,7 @@ runRenamer initialState (Renamer action) = evalState action initialState
 
 data RenamerState
   = RenamerState
-  { renamerStateLastId :: !Int
-    -- ^ Last 'NameIntId' generated
-  , renamerStateValuesInScope :: !(Map Text (Located Ident))
+  { renamerStateValuesInScope :: !(Map Text (Located Ident))
   , renamerStateDataConDefinitionsInScope :: !(Map Text R.DataConDefinition)
   , renamerStateTypeConstructorsInScope :: !(Map Text R.TyConDefinition)
   , renamerStateTypeDeclarations :: !(Map Text R.TypeDeclaration)
@@ -70,8 +67,7 @@ data RenamerState
 emptyRenamerState :: RenamerState
 emptyRenamerState =
   RenamerState
-  { renamerStateLastId = 0
-  , renamerStateValuesInScope = primitiveFunctionNames
+  { renamerStateValuesInScope = primitiveFunctionNames
   , renamerStateDataConDefinitionsInScope = primitiveDataConNames
   , renamerStateTypeConstructorsInScope = primitiveTypeNames
   , renamerStateTypeDeclarations = primitiveTypeDeclNames
@@ -108,13 +104,6 @@ primitiveFunctionNames =
        , Located (SourceSpan "" 1 1 1 1) (Ident name)
        ))
     <$> allPrimitiveFunctions
-
-
--- | Generate a new 'NameIntId'
-freshId :: Renamer Int
-freshId = do
-  modify' (\s -> s { renamerStateLastId = 1 + renamerStateLastId s })
-  gets renamerStateLastId
 
 addValueToScope :: Located Text -> Renamer (Validation [Error] (Located Ident))
 addValueToScope lName@(Located span' name) = do
