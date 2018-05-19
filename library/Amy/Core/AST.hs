@@ -84,7 +84,7 @@ data TyConDefinition
   } deriving (Show, Eq, Ord)
 
 tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
-tyConDefinitionToInfo tyDef@(TyConDefinition name' id' args _) = TyConInfo name' id' (TyVar <$> args) tyDef
+tyConDefinitionToInfo (TyConDefinition name' id' args kind) = TyConInfo name' id' (TyVar <$> args) kind
 
 fromPrimTyDef :: PrimTyCon -> TyConDefinition
 fromPrimTyDef (PrimTyCon name id') = TyConDefinition name id' [] KStar
@@ -249,7 +249,7 @@ data TyConInfo
   { tyConInfoName :: !Text
   , tyConInfoId :: !Int
   , tyConInfoArgs :: ![TypeTerm]
-  , tyConInfoDefinition :: !TyConDefinition
+  , tyConInfoKind :: !Kind
   } deriving (Show, Eq, Ord)
 
 fromPrimTyCon :: PrimTyCon -> TyConInfo

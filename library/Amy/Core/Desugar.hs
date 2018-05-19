@@ -129,7 +129,7 @@ desugarTyConDefinition :: T.TyConDefinition -> C.TyConDefinition
 desugarTyConDefinition (T.TyConDefinition name id' args kind) = C.TyConDefinition name id' (desugarTyVarInfo <$> args) kind
 
 desugarTyConInfo :: T.TyConInfo -> C.TyConInfo
-desugarTyConInfo (T.TyConInfo name id' args tyDef) = C.TyConInfo name id' (desugarTypeTerm <$> args) (desugarTyConDefinition tyDef)
+desugarTyConInfo (T.TyConInfo name id' args kind) = C.TyConInfo name id' (desugarTypeTerm <$> args) kind
 
 desugarTyVarInfo :: T.TyVarInfo -> C.TyVarInfo
 desugarTyVarInfo (T.TyVarInfo name id' kind _) = C.TyVarInfo name id' kind

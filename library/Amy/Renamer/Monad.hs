@@ -200,14 +200,13 @@ lookupTypeConstructorInScopeOrError (S.TyConInfo name args span') = do
   mTyCon <- lookupTypeConstructorInScope name
   case mTyCon of
     Nothing -> pure $ Failure [UnknownTypeConstructor (Located span' name)]
-    Just (R.TyConInfo name' id' _ tyDef span'') -> do
+    Just (R.TyConInfo name' id' _ span'') -> do
       args' <- traverse lookupTypeTerm args
       pure $
         R.TyConInfo
         <$> pure name'
         <*> pure id'
         <*> sequenceA args'
-        <*> pure tyDef
         <*> pure span''
 
 lookupTypeTerm :: S.TypeTerm -> Renamer (Validation [Error] R.TypeTerm)

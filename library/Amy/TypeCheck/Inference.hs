@@ -617,7 +617,12 @@ convertTyConDefinition (R.TyConDefinition name' id' args _) = T.TyConDefinition 
   kind = foldr1 KFun $ const KStar <$> [0..length args]
 
 convertTyConInfo :: R.TyConInfo -> T.TyConInfo
-convertTyConInfo (R.TyConInfo name' id' args tyDef _) = T.TyConInfo name' id' (convertTypeTerm <$> args) (convertTyConDefinition tyDef)
+convertTyConInfo (R.TyConInfo name' id' args _) = T.TyConInfo name' id' (convertTypeTerm <$> args) kind
+ where
+  -- Our kind inference is really simple. We don't have higher-kinded types so
+  -- we just count the number of type variables and make a * for each one, plus
+  -- a * for the type constructor. Easy!
+  kind = foldr1 KFun $ const KStar <$> [0..length args]
 
 convertTyVarInfo :: R.TyVarInfo -> T.TyVarInfo
 convertTyVarInfo (R.TyVarInfo name' id' _) = T.TyVarInfo name' id' KStar TyVarNotGenerated

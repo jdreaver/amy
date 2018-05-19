@@ -84,7 +84,7 @@ data TyConDefinition
   } deriving (Show, Eq, Ord)
 
 tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
-tyConDefinitionToInfo tyDef@(TyConDefinition name' id' args span') = TyConInfo name' id' (TyVar <$> args) tyDef span'
+tyConDefinitionToInfo (TyConDefinition name' id' args span') = TyConInfo name' id' (TyVar <$> args) span'
 
 fromPrimTyDef :: PrimTyCon -> TyConDefinition
 fromPrimTyDef (PrimTyCon name id') = TyConDefinition name id' [] Nothing
@@ -198,7 +198,6 @@ data TyConInfo
   { tyConInfoName :: !Text
   , tyConInfoId :: !Int
   , tyConInfoArgs :: ![TypeTerm]
-  , tyConDefinition :: !TyConDefinition
   , tyConInfoLocation :: !(Maybe SourceSpan)
   } deriving (Show, Eq, Ord)
 
