@@ -185,7 +185,6 @@ lookupTypeConstructorInScopeOrError (S.TyConInfo name args span') = do
 lookupTypeTerm :: S.TypeTerm -> Renamer (Validation [Error] R.TypeTerm)
 lookupTypeTerm (S.TyCon info) = fmap R.TyCon <$> lookupTypeConstructorInScopeOrError info
 lookupTypeTerm (S.TyVar info) = fmap R.TyVar <$> lookupTypeVariableInScopeOrError info
-lookupTypeTerm (S.TyParens t) = fmap R.TyParens <$> lookupTypeTerm t
 
 addTypeDeclarationToScope :: R.TypeDeclaration -> Renamer R.TypeDeclaration
 addTypeDeclarationToScope decl = do

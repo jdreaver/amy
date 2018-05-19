@@ -199,7 +199,6 @@ patternType (PParens pat) = patternType pat
 data TypeTerm
   = TyCon !TyConInfo
   | TyVar !TyVarInfo
-  | TyParens !TypeTerm
   deriving (Show, Eq, Ord)
 
 data Type
@@ -241,7 +240,6 @@ typeTermKind (TyCon info) =
     KStar -> KStar
     KFun k _ -> k
 typeTermKind (TyVar var) = tyVarInfoKind var
-typeTermKind (TyParens t) = typeTermKind t
 
 data Scheme
   = Forall ![TyVarInfo] Type

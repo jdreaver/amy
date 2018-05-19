@@ -21,7 +21,6 @@ mkPrettyType (TyFun ty1 ty2) = PTyFun (mkPrettyType ty1) (mkPrettyType ty2)
 prettyTypeTerm :: TypeTerm -> Doc ann
 prettyTypeTerm (TyCon con) = prettyTyConInfo con
 prettyTypeTerm (TyVar var) = prettyTyVarInfo var
-prettyTypeTerm (TyParens t) = parens (prettyTypeTerm t)
 
 prettyTyConInfo :: TyConInfo -> Doc ann
 prettyTyConInfo (TyConInfo name args _) = prettyTyConName name <> args'

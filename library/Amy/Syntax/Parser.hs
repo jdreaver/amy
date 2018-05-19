@@ -94,12 +94,10 @@ typeTerm = do
   process (TyCon (TyConInfo con _ span')) args = pure $ TyCon $ TyConInfo con args span'
   process (TyVar var) [] = pure $ TyVar var
   process t@(TyVar _) args = mkError $ "type variable with arguments encountered (no higher-kinded types allowed): " ++ show (t, args)
-  process (TyParens t) [] = pure $ TyParens t
-  process t@(TyParens _) args = mkError $ "type parens with arguments encountered (no higher-kinded types allowed): " ++ show (t, args)
 
 typeTerm' :: AmyParser TypeTerm
 typeTerm' =
-  (TyParens <$> parens typeTerm <?> "type parens")
+  (parens typeTerm <?> "type parens")
   <|> (TyVar <$> tyVarName <?> "type variable")
   <|> (TyCon <$> tyConInfoNoArgs <?> "type constructor")
 

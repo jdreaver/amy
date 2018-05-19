@@ -119,7 +119,6 @@ normalize body =
   normType (T.TyFun a b) = T.TyFun (normType a) (normType b)
   normType (T.TyTerm t) = T.TyTerm $ normTypeTerm t
   normTypeTerm (T.TyCon con) = T.TyCon con
-  normTypeTerm (T.TyParens t) = T.TyParens (normTypeTerm t)
   normTypeTerm (T.TyVar a) =
     case Map.lookup a letterMap of
       Just x -> T.TyVar x
@@ -191,7 +190,6 @@ dataConstructorScheme con = do
       case arg of
         Just (T.TyCon tyCon) -> T.TyTerm (T.TyCon tyCon) `T.TyFun` T.TyTerm (T.TyCon tyNameInfo)
         Just (T.TyVar tyVar) -> T.TyTerm (T.TyVar tyVar) `T.TyFun` T.TyTerm (T.TyCon tyNameInfo)
-        Just (T.TyParens t) -> mkTy (Just t)
         Nothing -> T.TyTerm $ T.TyCon tyNameInfo
   pure $ T.Forall tyVars (mkTy mTyArg)
 
@@ -428,8 +426,6 @@ solver (su, cs) =
 
 unifies :: T.Type -> T.Type -> Solve Subst
 unifies t1 t2 | t1 == t2 = return emptySubst
-unifies (T.TyTerm (T.TyParens tp)) t = unifies (T.TyTerm tp) t
-unifies t (T.TyTerm (T.TyParens tp)) = unifies t (T.TyTerm tp)
 unifies (T.TyTerm (T.TyVar v@(T.TyVarInfo _ _ TyVarGenerated))) t = v `bind` t
 unifies t (T.TyTerm (T.TyVar v@(T.TyVarInfo _ _ TyVarGenerated))) = v `bind` t
 unifies (T.TyFun t1 t2) (T.TyFun t3 t4) = do
@@ -486,7 +482,6 @@ substituteType subst (t1 `T.TyFun` t2) = substituteType subst t1 `T.TyFun` subst
 
 substituteTypeTerm :: Subst -> T.TypeTerm -> T.Type
 substituteTypeTerm subst (T.TyCon con) = T.TyTerm $ T.TyCon $ substituteTyConInfo subst con
-substituteTypeTerm subst (T.TyParens t) = T.TyTerm $ T.TyParens $ substituteTypeTermArg subst t
 substituteTypeTerm (Subst subst) t@(T.TyVar var) = Map.findWithDefault (T.TyTerm t) var subst
 
 substituteTyConInfo :: Subst -> T.TyConInfo -> T.TyConInfo
@@ -494,7 +489,6 @@ substituteTyConInfo subst (T.TyConInfo name args tyDef) = T.TyConInfo name (subs
 
 substituteTypeTermArg :: Subst -> T.TypeTerm -> T.TypeTerm
 substituteTypeTermArg subst (T.TyCon con) = T.TyCon $ substituteTyConInfo subst con
-substituteTypeTermArg subst (T.TyParens t) = T.TyParens $ substituteTypeTermArg subst t
 substituteTypeTermArg (Subst subst) (T.TyVar var) =
   case Map.lookup var subst of
     Nothing -> T.TyVar var
@@ -566,7 +560,6 @@ freeTypeVariables (t1 `T.TyFun` t2) = freeTypeVariables t1 `Set.union` freeTypeV
 freeTypeTermTypeVariables :: T.TypeTerm -> Set T.TyVarInfo
 freeTypeTermTypeVariables (T.TyCon info) = freeTyConInfoTypeVariables info
 freeTypeTermTypeVariables (T.TyVar var) = Set.singleton var
-freeTypeTermTypeVariables (T.TyParens t) = freeTypeTermTypeVariables t
 
 freeTyConInfoTypeVariables :: T.TyConInfo -> Set T.TyVarInfo
 freeTyConInfoTypeVariables (T.TyConInfo _ args _) = Set.unions $ freeTypeTermTypeVariables <$> args
@@ -592,7 +585,6 @@ convertType (R.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
 convertTypeTerm :: R.TypeTerm -> T.TypeTerm
 convertTypeTerm (R.TyCon info) = T.TyCon (convertTyConInfo info)
 convertTypeTerm (R.TyVar info) = T.TyVar (convertTyVarInfo info)
-convertTypeTerm (R.TyParens t) = T.TyParens (convertTypeTerm t)
 
 convertTyConDefinition :: R.TyConDefinition -> T.TyConDefinition
 convertTyConDefinition (R.TyConDefinition name' args _) = T.TyConDefinition name' (convertTyVarInfo <$> args) kind

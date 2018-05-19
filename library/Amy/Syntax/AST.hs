@@ -190,7 +190,6 @@ data App
 data TypeTerm
   = TyCon !TyConInfo
   | TyVar !(Located TyVarName)
-  | TyParens !TypeTerm
   deriving (Show, Eq)
 
 data Type

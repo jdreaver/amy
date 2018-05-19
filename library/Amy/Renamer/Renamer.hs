@@ -58,7 +58,6 @@ renameTypeDeclaration (S.TypeDeclaration tyDef constructors) = do
           -- this type variable
           let mTyVar = find ((== locatedValue tyVar) . R.tyVarInfoName) tyVars
           in pure $ maybe (Failure [UnknownTypeVariable tyVar]) (Success . R.TyVar) mTyVar
-        renameArg (S.TyParens t) = fmap R.TyParens <$> renameArg t
       mArgTy' <- traverse renameArg mArgTy
       liftValidation (sequenceA mArgTy') $ \mArgTy'' ->
         addDataConDefinitionToScope name mArgTy''

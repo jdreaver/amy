@@ -123,13 +123,12 @@ spec = do
       parse' typeTerm "A (B b) a" `shouldParse`
         TyCon (
           TyConInfo "A"
-          [ TyParens $
-              TyCon (
-                TyConInfo "B"
-                [ TyVar (Located (SourceSpan "" 1 6 1 6) "b")
-                ]
-                (SourceSpan "" 1 4 1 4)
-              )
+          [ TyCon (
+              TyConInfo "B"
+              [ TyVar (Located (SourceSpan "" 1 6 1 6) "b")
+              ]
+              (SourceSpan "" 1 4 1 4)
+            )
           , TyVar (Located (SourceSpan "" 1 9 1 9) "a")
           ]
           (SourceSpan "" 1 1 1 1)

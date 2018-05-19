@@ -110,7 +110,6 @@ desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)
 desugarTypeTerm :: T.TypeTerm -> C.TypeTerm
 desugarTypeTerm (T.TyCon info) = C.TyCon (desugarTyConInfo info)
 desugarTypeTerm (T.TyVar info) = C.TyVar (desugarTyVarInfo info)
-desugarTypeTerm (T.TyParens t) = desugarTypeTerm t
 
 desugarTyConDefinition :: T.TyConDefinition -> C.TyConDefinition
 desugarTyConDefinition (T.TyConDefinition name args kind) = C.TyConDefinition name (desugarTyVarInfo <$> args) kind
