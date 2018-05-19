@@ -38,8 +38,6 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Data.Tuple (swap)
 
-import Amy.ASTCommon
-
 --
 -- Primitive Type ID Generation
 --
@@ -114,26 +112,18 @@ data PrimDataCon
   = PrimDataCon
   { primDataConName :: !Text
   , primDataConId :: !Int
-  , primDataConType :: !PrimTyCon
-  , primDataConSpan :: !ConstructorSpan
-  , primDataConIndex :: !ConstructorIndex
   } deriving (Show, Eq)
 
 mkPrimTypeDef :: PrimitiveType -> [PrimitiveDataCon] -> PrimTypeDefinition
 mkPrimTypeDef tyCon dataCons =
   let
     tyCon' = PrimTyCon (showPrimType tyCon) (primitiveTypeId tyCon)
-    span' = ConstructorSpan $ length dataCons
-    indexes = ConstructorIndex <$> [0..]
-    mkDataCon (i, prim) =
+    mkDataCon prim =
       PrimDataCon
       { primDataConName = showPrimDataCon prim
       , primDataConId = primitiveDataConId prim
-      , primDataConType = tyCon'
-      , primDataConSpan = span'
-      , primDataConIndex = i
       }
-    dataCons' = mkDataCon <$> zip indexes dataCons
+    dataCons' = mkDataCon <$> dataCons
   in PrimTypeDefinition tyCon' dataCons'
 
 -- Int

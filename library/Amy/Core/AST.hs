@@ -102,7 +102,7 @@ data DataConDefinition
   } deriving (Show, Eq, Ord)
 
 fromPrimDataCon :: PrimDataCon -> DataConDefinition
-fromPrimDataCon (PrimDataCon name id' _ _ _) =
+fromPrimDataCon (PrimDataCon name id') =
   DataConDefinition name id' Nothing
 
 data Expr

@@ -101,7 +101,7 @@ data DataConDefinition
   } deriving (Show, Eq)
 
 fromPrimDataCon :: PrimDataCon -> DataConDefinition
-fromPrimDataCon (PrimDataCon name id' _ _ _) =
+fromPrimDataCon (PrimDataCon name id') =
   DataConDefinition (Located (SourceSpan "" 1 1 1 1) name) id' Nothing
 
 -- | A renamed 'Expr'
