@@ -1,5 +1,3 @@
--- | Version of a parser 'Module' after renaming.
-
 module Amy.Renamer.AST
   ( Module(..)
   , Binding(..)
@@ -11,7 +9,6 @@ module Amy.Renamer.AST
   , DataConDefinition(..)
   , Expr(..)
   , Var(..)
-  , DataCon(..)
   , If(..)
   , Case(..)
   , Match(..)
@@ -20,7 +17,6 @@ module Amy.Renamer.AST
   , Let(..)
   , App(..)
 
-  , Ident(..)
   , TypeTerm(..)
   , Type(..)
   , TyConInfo(..)
@@ -30,15 +26,16 @@ module Amy.Renamer.AST
     -- Re-export
   , Literal(..)
   , module Amy.ASTCommon
+  , module Amy.Names
   ) where
 
 import Data.List.NonEmpty (NonEmpty)
 
 import Amy.ASTCommon
 import Amy.Literal (Literal(..))
+import Amy.Names
 import Amy.Prim
 import Amy.Syntax.Located
-import Data.Text (Text)
 
 data Module
   = Module
@@ -51,16 +48,16 @@ data Module
 -- 'BindingType' after they've been paired together.
 data Binding
   = Binding
-  { bindingName :: !(Located Ident)
+  { bindingName :: !(Located IdentName)
   , bindingType :: !(Maybe Scheme)
-  , bindingArgs :: ![Located Ident]
+  , bindingArgs :: ![Located IdentName]
   , bindingBody :: !Expr
   } deriving (Show, Eq)
 
 -- | A renamed extern declaration.
 data Extern
   = Extern
-  { externName :: !(Located Ident)
+  { externName :: !(Located IdentName)
   , externType :: !Type
   } deriving (Show, Eq)
 
@@ -72,7 +69,7 @@ data TypeDeclaration
 
 data TyConDefinition
   = TyConDefinition
-  { tyConDefinitionName :: !Text
+  { tyConDefinitionName :: !TyConName
   , tyConDefinitionArgs :: ![TyVarInfo]
   , tyConDefinitionLocation :: !(Maybe SourceSpan)
   } deriving (Show, Eq, Ord)
@@ -80,8 +77,8 @@ data TyConDefinition
 tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
 tyConDefinitionToInfo (TyConDefinition name' args span') = TyConInfo name' (TyVar <$> args) span'
 
-fromPrimTyDef :: PrimTyCon -> TyConDefinition
-fromPrimTyDef (PrimTyCon name) = TyConDefinition name [] Nothing
+fromPrimTyDef :: TyConName -> TyConDefinition
+fromPrimTyDef name = TyConDefinition name [] Nothing
 
 fromPrimTypeDef :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
@@ -89,12 +86,12 @@ fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
 
 data DataConDefinition
   = DataConDefinition
-  { dataConDefinitionName :: !(Located Text)
+  { dataConDefinitionName :: !(Located DataConName)
   , dataConDefinitionArgument :: !(Maybe TypeTerm)
   } deriving (Show, Eq)
 
-fromPrimDataCon :: PrimDataCon -> DataConDefinition
-fromPrimDataCon (PrimDataCon name) =
+fromPrimDataCon :: DataConName -> DataConDefinition
+fromPrimDataCon name =
   DataConDefinition (Located (SourceSpan "" 1 1 1 1) name) Nothing
 
 -- | A renamed 'Expr'
@@ -109,14 +106,9 @@ data Expr
   deriving (Show, Eq)
 
 data Var
-  = VVal !(Located Ident)
-  | VCons !DataCon
+  = VVal !(Located IdentName)
+  | VCons !DataConName
   deriving (Show, Eq)
-
-data DataCon
-  = DataCon
-  { dataConName :: !(Located Text)
-  } deriving (Show, Eq)
 
 data If
   = If
@@ -139,14 +131,14 @@ data Match
 
 data Pattern
   = PLit !(Located Literal)
-  | PVar !(Located Ident)
+  | PVar !(Located IdentName)
   | PCons !PatCons
   | PParens !Pattern
   deriving (Show, Eq)
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataCon
+  { patConsConstructor :: !DataConName
   , patConsArg :: !(Maybe Pattern)
   } deriving (Show, Eq)
 
@@ -163,11 +155,6 @@ data App
   , appArgs :: !(NonEmpty Expr)
   } deriving (Show, Eq)
 
-data Ident
-  = Ident
-  { identText :: !Text
-  } deriving (Show, Eq, Ord)
-
 data TypeTerm
   = TyCon !TyConInfo
   | TyVar !TyVarInfo
@@ -183,14 +170,14 @@ infixr 0 `TyFun`
 
 data TyConInfo
   = TyConInfo
-  { tyConInfoName :: !Text
+  { tyConInfoName :: !TyConName
   , tyConInfoArgs :: ![TypeTerm]
   , tyConInfoLocation :: !(Maybe SourceSpan)
   } deriving (Show, Eq, Ord)
 
 data TyVarInfo
   = TyVarInfo
-  { tyVarInfoName :: !Text
+  { tyVarInfoName :: !TyVarName
   , tyVarInfoLocation :: !SourceSpan
   } deriving (Show, Eq, Ord)
 

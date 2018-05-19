@@ -28,7 +28,7 @@ data CaseLiteralBlock
   , caseLiteralBlockName :: !Name
   , caseLiteralBlockNextName :: !Name
   , caseLiteralBlockConstant :: !C.Constant
-  , caseLiteralBlockBind :: !(Maybe (Typed Ident))
+  , caseLiteralBlockBind :: !(Maybe (Typed IdentName))
   } deriving (Show, Eq)
 
 data CaseDefaultBlock

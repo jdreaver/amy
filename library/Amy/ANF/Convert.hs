@@ -34,7 +34,7 @@ normalizeModule (C.Module bindings externs typeDeclarations maxId) =
     pure $ ANF.Module bindings' externs' typeDeclarations'
 
 convertExtern :: C.Extern -> ANFConvert ANF.Extern
-convertExtern (C.Extern name ty) = ANF.Extern (convertIdent True name) <$> convertType ty
+convertExtern (C.Extern name ty) = ANF.Extern name <$> convertType ty
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANFConvert ANF.TypeDeclaration
 convertTypeDeclaration (C.TypeDeclaration tyConDef con) = do
@@ -51,22 +51,15 @@ convertDataConDefinition (C.DataConDefinition conName mTyArg) = do
     , ANF.dataConDefinitionArgument = mTyArg'
     }
 
-convertDataCon :: C.DataCon -> ANFConvert ANF.DataCon
-convertDataCon con@(C.DataCon conName) = do
+convertDataCon :: DataConName -> ANFConvert ANF.DataCon
+convertDataCon con = do
   (ty, index) <- getDataConInfo con
   pure
     ANF.DataCon
-    { ANF.dataConName = conName
+    { ANF.dataConName = con
     , ANF.dataConType = ty
     , ANF.dataConIndex = index
     }
-
-convertIdent :: Bool -> C.Ident -> ANF.Ident
-convertIdent isTopLevel (C.Ident name) = ANF.Ident name isTopLevel
-
-convertIdent' :: C.Ident -> ANFConvert ANF.Ident
-convertIdent' ident@(C.Ident name) =
-  ANF.Ident name <$> isIdentTopLevel ident
 
 convertType :: C.Type -> ANFConvert ANF.Type
 convertType ty = go (typeToNonEmpty ty)
@@ -94,11 +87,10 @@ typeToNonEmpty :: C.Type -> NonEmpty C.Type
 typeToNonEmpty (t1 `C.TyFun` t2) = NE.cons t1 (typeToNonEmpty t2)
 typeToNonEmpty ty = ty :| []
 
-convertTypedIdent :: C.Typed C.Ident -> ANFConvert (ANF.Typed ANF.Ident)
+convertTypedIdent :: C.Typed IdentName -> ANFConvert (ANF.Typed IdentName)
 convertTypedIdent (C.Typed ty arg) = do
   ty' <- convertType ty
-  arg' <- convertIdent' arg
-  pure $ ANF.Typed ty' arg'
+  pure $ ANF.Typed ty' arg
 
 normalizeExpr
   :: Text -- ^ Base name for generated variables
@@ -137,12 +129,12 @@ normalizeExpr name (C.EApp (C.App func args retTy)) =
         case funcVal of
           ANF.Lit lit -> error $ "Encountered lit function application " ++ show lit
           ANF.ConEnum _ con -> error $ "Encountered con enum function application " ++ show con
-          ANF.Var (tyIdent@(ANF.Typed _ ident)) ->
+          ANF.Var (tyIdent@(ANF.Typed _ ident)) _ ->
             -- TODO: We need something more robust besides looking up by name.
             -- The Renamer should maybe handle resolving this name, or when we
             -- have modules we should make sure we are looking at the Prim
             -- module.
-            case Map.lookup (ANF.identText ident) primitiveFunctionsByName of
+            case Map.lookup ident primitiveFunctionsByName of
               -- Primitive operation
               Just prim -> pure $ ANF.EPrimOp $ ANF.App prim argVals retTy'
               -- Default, just a function call
@@ -153,16 +145,18 @@ normalizeName :: Text -> C.Expr -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConver
 normalizeName _ (C.ELit lit) c = c $ ANF.Lit lit
 normalizeName name (C.EVar var) c =
   case var of
-    C.VVal ident -> do
-      ident' <- convertTypedIdent ident
-      case ident' of
+    C.VVal (C.Typed ty ident) -> do
+      ty' <- convertType ty
+      isTopLevel <- isIdentTopLevel ident
+      let ident' = ANF.Typed ty' ident
+      if isTopLevel
         -- Top-level values need to be first called as functions
-        (ANF.Typed ty (ANF.Ident _ True)) ->
-          case ty of
-            FuncType{} -> c $ ANF.Var ident'
-            _ -> mkNormalizeLet name (ANF.EApp $ ANF.App ident' [] ty) ty c
+        then
+          case ty' of
+            FuncType{} -> c $ ANF.Var ident' isTopLevel
+            _ -> mkNormalizeLet name (ANF.EApp $ ANF.App ident' [] ty') ty' c
         -- Not a top-level value, just return
-        _ -> c $ ANF.Var ident'
+        else c $ ANF.Var ident' isTopLevel
     C.VCons (C.Typed ty con) -> do
       con' <- convertDataCon con
       ty' <- convertType ty
@@ -179,26 +173,24 @@ normalizeName name expr c = do
 mkNormalizeLet :: Text -> ANF.Expr -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 mkNormalizeLet name expr exprType c = do
   newIdent <- freshIdent name
-  body <- c $ ANF.Var (ANF.Typed exprType newIdent)
+  body <- c $ ANF.Var (ANF.Typed exprType newIdent) False
   pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal [ANF.LetValBinding newIdent exprType expr] body
 
 normalizeBinding :: Maybe Text -> C.Binding -> ANFConvert ANF.Binding
-normalizeBinding mName (C.Binding ident@(C.Ident name) _ args retTy body) = do
+normalizeBinding mName (C.Binding ident _ args retTy body) = do
   -- If we are given a base name, then use it. Otherwise use the binding name
   -- as the base name for all sub expressions.
-  let subName = fromMaybe name mName
+  let subName = fromMaybe (unIdentName ident) mName
   body' <- normalizeExpr subName body
-  ident' <- convertIdent' ident
   args' <- traverse convertTypedIdent args
   retTy' <- convertType retTy
-  pure $ ANF.Binding ident' args' retTy' body'
+  pure $ ANF.Binding ident args' retTy' body'
 
 normalizeLetBinding :: C.Binding -> ANFConvert ANF.LetValBinding
-normalizeLetBinding (C.Binding ident@(C.Ident name) (C.Forall _ ty) [] _ body) = do
-  body' <- normalizeExpr name body
+normalizeLetBinding (C.Binding ident (C.Forall _ ty) [] _ body) = do
+  body' <- normalizeExpr (unIdentName ident) body
   ty' <- convertType ty
-  ident' <- convertIdent' ident
-  pure $ ANF.LetValBinding ident' ty' body'
+  pure $ ANF.LetValBinding ident ty' body'
 normalizeLetBinding bind@C.Binding{} =
   error $ "Encountered let binding with arguments. Functions not allowed in ANF. " ++ show bind
 

@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 module Amy.Codegen.Pure
   ( codegenModule
@@ -10,7 +11,6 @@ import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Short as BSS
 import Data.Foldable (for_)
 import Data.Maybe (fromMaybe, mapMaybe)
-import Data.Text (Text)
 import Data.Traversable (for)
 import GHC.Word (Word32)
 import LLVM.AST as LLVM
@@ -70,7 +70,7 @@ codegenTypeDeclaration (ANF.TypeDeclaration _ ty _) =
     TaggedUnionType name' intBits ->
       Just $
         TypeDefinition
-        (textToName name')
+        (textToName $ unTyConName name')
         (Just $
           StructureType
           False
@@ -95,7 +95,7 @@ codegenTopLevelBinding binding = do
     , LLVM.returnType = returnType'
     , basicBlocks = blocks
     , linkage =
-        if ANF.identText (ANF.bindingName binding) == "main"
+        if ANF.bindingName binding == "main"
           then L.External
           else L.Private
     }
@@ -178,8 +178,11 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
   addInstruction $ name' := Phi endTy allOpsAndBlocks []
   pure $ LocalReference endTy name'
 codegenExpr' name' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = do
-  ty <- fromMaybe originalTy <$> topLevelType ident
-  funcOperand <- valOperand (ANF.Var $ ANF.Typed ty ident)
+  topLevelTy <- topLevelType ident
+  (ty, funcOperand) <-
+    case topLevelTy of
+      Nothing -> (originalTy,) <$> valOperand (ANF.Var (ANF.Typed originalTy ident) False)
+      Just ty' -> (ty',) <$> valOperand (ANF.Var (ANF.Typed ty' ident) True)
   let
     (argTys', returnTy') =
       case ty of
@@ -215,9 +218,9 @@ gepIndex :: Integer -> Operand
 gepIndex i = ConstantOperand $ C.Int 32 i
 
 valOperand :: ANF.Val -> BlockGen Operand
-valOperand (ANF.Var (ANF.Typed ty ident@(ANF.Ident _ True))) =
+valOperand (ANF.Var (ANF.Typed ty ident) True) =
   pure $ ConstantOperand $ C.GlobalReference (llvmType ty) (identToName ident)
-valOperand (ANF.Var (ANF.Typed ty ident)) =
+valOperand (ANF.Var (ANF.Typed ty ident) False) =
   pure $ LocalReference (llvmType ty) (identToName ident)
 valOperand (ANF.Lit lit) = pure $ ConstantOperand $ literalConstant lit
 valOperand (ANF.ConEnum intBits con) =
@@ -225,8 +228,8 @@ valOperand (ANF.ConEnum intBits con) =
     (ConstructorIndex intIndex) = dataConIndex con
   in pure $ ConstantOperand $ C.Int intBits (fromIntegral intIndex)
 
-packConstructor :: Name -> DataCon -> Maybe ANF.Val -> Text -> Word32 -> BlockGen Operand
-packConstructor name' con mArg structName intBits = do
+packConstructor :: Name -> DataCon -> Maybe ANF.Val -> TyConName -> Word32 -> BlockGen Operand
+packConstructor name' con mArg (TyConName structName) intBits = do
   let
     (ConstructorIndex intIndex) = dataConIndex con
     structName' = textToName structName
@@ -320,4 +323,4 @@ llvmType (FuncType argTys retTy) =
   }
   (AddrSpace 0)
 llvmType (EnumType intBits) = IntegerType intBits
-llvmType (TaggedUnionType structName _) = LLVM.PointerType (NamedTypeReference (textToName structName)) (AddrSpace 0)
+llvmType (TaggedUnionType structName _) = LLVM.PointerType (NamedTypeReference (textToName $ unTyConName structName)) (AddrSpace 0)

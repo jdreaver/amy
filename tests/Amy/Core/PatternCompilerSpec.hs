@@ -13,26 +13,26 @@ import Amy.Core.Monad
 import Amy.Core.PatternCompiler
 
 -- Utils
-mkId :: Int -> Typed Ident
-mkId i = mkIdent $ Ident ("_u" <> pack (show i))
+mkId :: Int -> Typed IdentName
+mkId i = mkIdent $ IdentName ("_u" <> pack (show i))
 
-mkIdent :: Ident -> Typed Ident
+mkIdent :: IdentName -> Typed IdentName
 mkIdent = Typed boolTy
 
-x, y, z, v, w, c, f, xs, ys :: Typed Ident
-x = Typed boolTy $ Ident "x"
-y = Typed boolTy $ Ident "y"
-z = Typed boolTy $ Ident "z"
-v = Typed boolTy $ Ident "v"
-w = Typed boolTy $ Ident "w"
-c = Typed boolTy $ Ident "c"
-f = Typed boolTy $ Ident "f"
-xs = Typed boolTy $ Ident "xs"
-ys = Typed boolTy $ Ident "ys"
+x, y, z, v, w, c, f, xs, ys :: Typed IdentName
+x = Typed boolTy "x"
+y = Typed boolTy "y"
+z = Typed boolTy "z"
+v = Typed boolTy "v"
+w = Typed boolTy "w"
+c = Typed boolTy "c"
+f = Typed boolTy "f"
+xs = Typed boolTy "xs"
+ys = Typed boolTy "ys"
 
 match'
   :: (Ord con)
-  => [Typed Ident]
+  => [Typed IdentName]
   -> [Equation con]
   -> CaseExpr con
 match' vars eqs = runDesugar 0 [] $ match vars eqs
@@ -40,10 +40,10 @@ match' vars eqs = runDesugar 0 [] $ match vars eqs
 boolTy :: Type
 boolTy = TyTerm $ TyCon $ TyConInfo "Bool" [] KStar
 
-mkVal :: Typed Ident -> Expr
+mkVal :: Typed IdentName -> Expr
 mkVal x' = EVar $ VVal x'
 
-mkExpr :: [Typed Ident] -> Expr
+mkExpr :: [Typed IdentName] -> Expr
 mkExpr [] = error "empty list"
 mkExpr [x'] = mkVal x'
 mkExpr (x':y':xs') = EApp (App (mkVal x') (NE.fromList $ mkVal <$> (y':xs')) boolTy)
@@ -113,8 +113,8 @@ lamC = Con "Lam" [boolTy, boolTy] 4
 appC = Con "App" [boolTy, boolTy] 4
 letC = Con "Let" [boolTy, boolTy, boolTy] 4
 
-lamId :: Int -> Typed Ident
-lamId i = mkIdent $ Ident (pack $ show i)
+lamId :: Int -> Typed IdentName
+lamId i = mkIdent $ IdentName (pack $ show i)
 
 lamEquations :: [Equation Text]
 lamEquations =

@@ -8,7 +8,6 @@ import Data.List (find)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes, mapMaybe)
-import Data.Text (Text)
 import Data.Traversable (for, mapAccumL)
 import Data.Validation
 
@@ -54,7 +53,7 @@ renameTypeDeclaration (S.TypeDeclaration tyDef constructors) = do
     constructors' <- for constructors $ \(S.DataConDefinition name mArgTy) -> do
       let
         renameArg (S.TyCon tyCon) = fmap R.TyCon <$> lookupTypeConstructorInScopeOrError tyCon
-        renameArg (S.TyVar (S.TyVarInfo tyVar)) =
+        renameArg (S.TyVar tyVar) =
           -- Find the constructor's type variable argument corresponding to
           -- this type variable
           let mTyVar = find ((== locatedValue tyVar) . R.tyVarInfoName) tyVars
@@ -102,12 +101,12 @@ renameBindingGroup bindings bindingTypes = do
   bindings' <- traverse (uncurry $ renameBinding (bindingTypesMap bindingTypes)) (zip bindingNames bindings)
   pure $ sequenceA bindings'
 
-bindingTypesMap :: [BindingType] -> Map Text S.Scheme
+bindingTypesMap :: [BindingType] -> Map IdentName S.Scheme
 bindingTypesMap = Map.fromList . fmap (\(BindingType (Located _ name) ts) -> (name, ts))
 
 renameBinding
-  :: Map Text S.Scheme
-  -> Validation [Error] (Located R.Ident)
+  :: Map IdentName S.Scheme
+  -> Validation [Error] (Located IdentName)
   -> S.Binding
   -> Renamer (Validation [Error] R.Binding)
 renameBinding typeMap name binding = withNewScope $ do -- Begin new scope

@@ -6,13 +6,10 @@ module Amy.Errors
   , errorLocation
   ) where
 
-import Data.Text (Text)
 import Data.Void (Void)
-import LLVM.AST (Operand)
 import Text.Groom
 import Text.Megaparsec
 
-import Amy.ANF.AST as ANF
 import Amy.Renamer.AST as R
 import Amy.Syntax.AST as S
 import Amy.TypeCheck.AST as T
@@ -22,23 +19,22 @@ data Error
   = ParserError !(ParseError Char Void)
 
   -- Renamer
-  | UnknownVariable !(Located Text)
-  | VariableShadowed !(Located Text) !(Located R.Ident)
+  | UnknownVariable !(Located IdentName)
+  | UnknownDataCon !(Located DataConName)
+  | VariableShadowed !(Located IdentName) !(Located IdentName)
   | TypeConstructorDefinitionContainsTyCon !S.TyConInfo
-  | DuplicateDataConstructorName !(Located Text) !R.DataConDefinition
-  | DuplicateTypeVariable !(Located Text) !(Located Text)
-  | TypeConstructorAlreadyExists !(Located Text) !R.TyConInfo
-  | UnknownTypeConstructor !(Located Text)
-  | UnknownTypeVariable !(Located Text)
-  | NonIdentifierName !(Located Text)
+  | DuplicateDataConstructorName !(Located DataConName) !R.DataConDefinition
+  | DuplicateTypeVariable !(Located TyVarName) !(Located TyVarName)
+  | TypeConstructorAlreadyExists !(Located TyConName) !R.TyConInfo
+  | UnknownTypeConstructor !(Located TyConName)
+  | UnknownTypeVariable !(Located TyVarName)
 
   -- Type checker
   -- TODO: Add source spans here
   | UnificationFail !T.Type !T.Type
   | KindMismatch !T.TyVarInfo !T.Type
   | InfiniteType !T.TyVarInfo !T.Type
-  | UnboundVariable !T.Ident
-  | UnboundConstructor !T.DataCon
+  | UnboundVariable !IdentName
 
   -- | BindingLacksTypeSignature !RBinding
   -- | TypeMismatch !(Type PrimitiveType) !(Type PrimitiveType)
@@ -46,11 +42,6 @@ data Error
   -- | WrongNumberOfArguments !Int !Int
   -- | ExpectedPrimitiveType !(Maybe (Located Name)) !(Type PrimitiveType)
   -- | ExpectedFunctionType !(Type PrimitiveType)
-
-  -- Codegen
-  | CodegenMissingSymbol !ANF.Ident
-  | NoCurrying !T.App
-  | UnknownOperandType !Operand
   deriving (Show, Eq)
 
 errorLocation :: Error -> Maybe SourceSpan
@@ -58,6 +49,7 @@ errorLocation e =
   case e of
     ParserError{} -> Nothing
     UnknownVariable (Located s _) -> Just s
+    UnknownDataCon (Located s _) -> Just s
     VariableShadowed (Located s _) _ -> Just s
     TypeConstructorDefinitionContainsTyCon (S.TyConInfo _ _ s) -> Just s
     DuplicateDataConstructorName (Located s _) _ -> Just s
@@ -65,13 +57,11 @@ errorLocation e =
     TypeConstructorAlreadyExists (Located s _) _ -> Just s
     UnknownTypeConstructor (Located s _) -> Just s
     UnknownTypeVariable (Located s _) -> Just s
-    NonIdentifierName (Located s _) -> Just s
 
     UnificationFail{} -> Nothing
     KindMismatch{} -> Nothing
     InfiniteType{} -> Nothing
     UnboundVariable{} -> Nothing
-    UnboundConstructor{} -> Nothing
 
     -- BindingLacksTypeSignature bind -> Just $ locatedSpan $ rBindingName bind
     -- TypeMismatch{} -> Nothing
@@ -79,10 +69,6 @@ errorLocation e =
     -- WrongNumberOfArguments{} -> Nothing
     -- ExpectedPrimitiveType mLocated _ -> locatedSpan <$> mLocated
     -- ExpectedFunctionType{} -> Nothing
-
-    CodegenMissingSymbol{} -> Nothing
-    NoCurrying{} -> Nothing
-    UnknownOperandType{} -> Nothing
 
 showError :: Error -> String
 showError (ParserError err) = parseErrorPretty err

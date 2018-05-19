@@ -17,19 +17,16 @@ mkPrettyType (TyFun ty1 ty2) = PTyFun (mkPrettyType ty1) (mkPrettyType ty2)
 
 prettyTypeTerm :: TypeTerm -> Doc ann
 prettyTypeTerm (TyCon con) = prettyTyConInfo con
-prettyTypeTerm (TyVar var) = prettyTyVarInfo var
+prettyTypeTerm (TyVar var) = prettyTyVarName (locatedValue var)
 prettyTypeTerm (TyParens t) = parens (prettyTypeTerm t)
 
 prettyTyConInfo :: TyConInfo -> Doc ann
-prettyTyConInfo (TyConInfo name args _) = pretty name <> args'
+prettyTyConInfo (TyConInfo name args _) = prettyTyConName name <> args'
  where
   args' = if null args then mempty else space <> sep (prettyTypeTerm <$> args)
 
-prettyTyVarInfo :: TyVarInfo -> Doc ann
-prettyTyVarInfo (TyVarInfo (Located _ name)) = pretty name
-
 mkPrettyScheme :: Scheme -> PrettyScheme ann
-mkPrettyScheme (Forall vars ty) = PForall (pretty . locatedValue . unTyVarInfo <$> vars) (mkPrettyType ty)
+mkPrettyScheme (Forall vars ty) = PForall (pretty . unTyVarName . locatedValue <$> vars) (mkPrettyType ty)
 
 prettyModule :: Module -> Doc ann
 prettyModule (Module decls) = vcatTwoHardLines (prettyDeclaration <$> decls)
@@ -38,25 +35,25 @@ prettyDeclaration :: Declaration -> Doc ann
 prettyDeclaration (DeclBinding binding) = prettyBinding' binding
 prettyDeclaration (DeclBindingType bindingTy) = prettyBindingType' bindingTy
 prettyDeclaration (DeclExtern (Extern (Located _ name) ty)) =
-  prettyExtern (pretty name) (mkPrettyType ty)
+  prettyExtern (prettyIdent name) (mkPrettyType ty)
 prettyDeclaration (DeclType (TypeDeclaration info cons)) =
   prettyTypeDeclaration (prettyTyConDefinition info) (prettyConstructor <$> cons)
  where
   prettyConstructor (DataConDefinition (Located _ conName) mArg) =
-    prettyDataConstructor (pretty conName) (prettyTypeTerm <$> mArg)
+    prettyDataConstructor (prettyDataConName conName) (prettyTypeTerm <$> mArg)
 
 prettyTyConDefinition :: TyConDefinition -> Doc ann
-prettyTyConDefinition (TyConDefinition name args _) = pretty name <> args'
+prettyTyConDefinition (TyConDefinition name args _) = prettyTyConName name <> args'
  where
-  args' = if null args then mempty else space <> sep (prettyTyVarInfo <$> args)
+  args' = if null args then mempty else space <> sep (prettyTyVarName . locatedValue <$> args)
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding (Located _ name) args body) =
-  prettyBinding (pretty name) (pretty . locatedValue <$> args) (prettyExpr body)
+  prettyBinding (prettyIdent name) (prettyIdent . locatedValue <$> args) (prettyExpr body)
 
 prettyBindingType' :: BindingType -> Doc ann
 prettyBindingType' (BindingType (Located _ name) ty) =
-  prettyBindingScheme (pretty name) (mkPrettyScheme ty)
+  prettyBindingScheme (prettyIdent name) (mkPrettyScheme ty)
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
@@ -76,15 +73,15 @@ prettyExpr (EApp (App f args)) = sep $ prettyExpr f : (prettyExpr <$> toList arg
 prettyExpr (EParens expr) = parens $ prettyExpr expr
 
 prettyVar :: Var -> Doc ann
-prettyVar (VVal (Located _ var)) = pretty var
-prettyVar (VCons (Located _ var)) = pretty var
+prettyVar (VVal (Located _ var)) = prettyIdent var
+prettyVar (VCons (Located _ var)) = prettyDataConName var
 
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PLit (Located _ lit)) = pretty $ showLiteral lit
-prettyPattern (PVar (Located _ var)) = pretty var
+prettyPattern (PVar (Located _ var)) = prettyIdent var
 prettyPattern (PParens pat) = parens (prettyPattern pat)
-prettyPattern (PCons (PatCons (Located _ var) mArg)) =
-  pretty var <> maybe mempty prettyArg mArg
+prettyPattern (PCons (PatCons (Located _ con) mArg)) =
+  prettyDataConName con <> maybe mempty prettyArg mArg
  where
   prettyArg = (space <>) . prettyArg'
   prettyArg' arg@PCons{} = parens (prettyPattern arg)

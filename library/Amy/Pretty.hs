@@ -10,6 +10,10 @@ module Amy.Pretty
   , vcatHardLines
   , vcatTwoHardLines
   , groupOrHang
+  , prettyIdent
+  , prettyDataConName
+  , prettyTyConName
+  , prettyTyVarName
 
     -- Types
   , PrettyType(..)
@@ -33,6 +37,8 @@ module Amy.Pretty
 import Data.Maybe (fromMaybe)
 import Data.Text.Prettyprint.Doc as X
 
+import Amy.Names
+
 --
 -- General helpers
 --
@@ -54,6 +60,18 @@ groupOrHang doc =
     (line <> indent 2 doc)
     (space <> doc)
   )
+
+prettyIdent :: IdentName -> Doc ann
+prettyIdent = pretty . unIdentName
+
+prettyDataConName :: DataConName -> Doc ann
+prettyDataConName = pretty . unDataConName
+
+prettyTyConName :: TyConName -> Doc ann
+prettyTyConName = pretty . unTyConName
+
+prettyTyVarName :: TyVarName -> Doc ann
+prettyTyVarName = pretty . unTyVarName
 
 --
 -- Types

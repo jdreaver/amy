@@ -7,8 +7,9 @@ module Amy.Syntax.Lexer
   , number
   , symbol
   , identifier
-  , typeIdentifier
-  , dataConstructorName'
+  , dataConName
+  , tyConName
+  , tyVarName
   , dataConstructorSep
   , extern
   , forall
@@ -45,6 +46,7 @@ import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
+import Amy.Names
 import Amy.Syntax.Located
 import Amy.Syntax.Monad
 
@@ -83,8 +85,8 @@ number = fmap floatingOrInteger <$> lexeme L.scientific
 symbol :: Text -> AmyParser Text
 symbol sym = L.symbol spaceConsumer sym <?> unpack sym
 
-identifier :: AmyParser (Located Text)
-identifier = try (p >>= traverse check)
+identifier :: AmyParser (Located IdentName)
+identifier = fmap IdentName <$> try (p >>= traverse check)
  where
   p = lexeme $ do
     firstChar <- lowerChar
@@ -139,8 +141,14 @@ in' = void $ symbol "in"
 typeIdentifier :: AmyParser (Located Text)
 typeIdentifier = lexeme (pack <$> ((:) <$> upperChar <*> many alphaNumChar)) <?> "type identifier"
 
-dataConstructorName' :: AmyParser (Located Text)
-dataConstructorName' = typeIdentifier
+dataConName :: AmyParser (Located DataConName)
+dataConName = fmap DataConName <$> typeIdentifier
+
+tyConName :: AmyParser (Located TyConName)
+tyConName = fmap TyConName <$> typeIdentifier
+
+tyVarName :: AmyParser (Located TyVarName)
+tyVarName = fmap (TyVarName . unIdentName) <$> identifier
 
 dataConstructorSep :: AmyParser ()
 dataConstructorSep = char '|' >> spaceConsumer

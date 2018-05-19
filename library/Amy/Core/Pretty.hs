@@ -20,7 +20,7 @@ prettyTypeTerm (TyCon con) = prettyTyConInfo con
 prettyTypeTerm (TyVar var) = prettyTyVarInfo var
 
 prettyTyConInfo :: TyConInfo -> Doc ann
-prettyTyConInfo (TyConInfo name args _) = pretty name <> args'
+prettyTyConInfo (TyConInfo name args _) = prettyTyConName name <> args'
  where
   args' = if null args then mempty else space <> sep (prettyArg <$> args)
   prettyArg arg = parensIf (isConWithArgs arg) $ prettyTypeTerm arg
@@ -30,7 +30,7 @@ isConWithArgs (TyCon (TyConInfo _ args _)) = not (null args)
 isConWithArgs _ = False
 
 prettyTyVarInfo :: TyVarInfo -> Doc ann
-prettyTyVarInfo (TyVarInfo name _) = pretty name
+prettyTyVarInfo (TyVarInfo name _) = prettyTyVarName name
 
 mkPrettyScheme :: Scheme -> PrettyScheme ann
 mkPrettyScheme (Forall vars ty) = PForall (prettyTyVarInfo <$> vars) (mkPrettyType ty)
@@ -51,10 +51,10 @@ prettyTypeDeclaration' (TypeDeclaration tyName cons) =
    prettyTypeDeclaration (prettyTyConDefinition tyName) (prettyConstructor <$> cons)
  where
   prettyConstructor (DataConDefinition conName mArg) =
-    prettyDataConstructor (pretty conName) (prettyTypeTerm <$> mArg)
+    prettyDataConstructor (prettyDataConName conName) (prettyTypeTerm <$> mArg)
 
 prettyTyConDefinition :: TyConDefinition -> Doc ann
-prettyTyConDefinition (TyConDefinition name args _) = pretty name <> args'
+prettyTyConDefinition (TyConDefinition name args _) = prettyTyConName name <> args'
  where
   args' = if null args then mempty else space <> sep (prettyTyVarInfo <$> args)
 
@@ -64,14 +64,11 @@ prettyBinding' (Binding ident scheme args _ body) =
   hardline <>
   prettyBinding (prettyIdent ident) (prettyTypedIdent <$> args) (prettyExpr body)
 
-prettyScheme' :: Ident -> Scheme -> Doc ann
+prettyScheme' :: IdentName -> Scheme -> Doc ann
 prettyScheme' ident scheme = prettyBindingScheme (prettyIdent ident) (mkPrettyScheme scheme)
 
-prettyTypedIdent :: Typed Ident -> Doc ann
+prettyTypedIdent :: Typed IdentName -> Doc ann
 prettyTypedIdent (Typed ty ident) = parens $ prettyIdent ident <+> "::" <+> prettyType (mkPrettyType ty)
-
-prettyIdent :: Ident -> Doc ann
-prettyIdent (Ident name) = pretty name
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit lit) = pretty $ showLiteral lit
@@ -94,10 +91,10 @@ prettyExpr (EParens expr) = parens $ prettyExpr expr
 
 prettyVar :: Var -> Doc ann
 prettyVar (VVal (Typed _ var)) = prettyIdent var
-prettyVar (VCons (Typed _ con)) = pretty $ dataConName con
+prettyVar (VCons (Typed _ con)) = prettyDataConName con
 
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PLit lit) = pretty $ showLiteral lit
 prettyPattern (PCons (PatCons con mArg _)) =
-  pretty (dataConName con)
+  prettyDataConName con
   <> maybe mempty (\(Typed ty arg) -> space <> parens (prettyIdent arg <+> "::" <+> prettyType (mkPrettyType ty))) mArg

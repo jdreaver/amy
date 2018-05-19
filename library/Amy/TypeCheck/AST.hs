@@ -14,8 +14,6 @@ module Amy.TypeCheck.AST
   , fromPrimDataCon
   , Expr(..)
   , Var(..)
-  , DataCon(..)
-  , dataConFromDefinition
   , If(..)
   , Case(..)
   , Match(..)
@@ -26,7 +24,6 @@ module Amy.TypeCheck.AST
   , expressionType
   , patternType
 
-  , Ident(..)
   , TypeTerm(..)
   , Type(..)
   , TyConInfo(..)
@@ -41,14 +38,15 @@ module Amy.TypeCheck.AST
   , Literal(..)
   , module Amy.ASTCommon
   , module Amy.Kind
+  , module Amy.Names
   ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.Text (Text)
 
 import Amy.ASTCommon
 import Amy.Kind
 import Amy.Literal
+import Amy.Names
 import Amy.Prim
 
 data Module
@@ -66,10 +64,10 @@ data Module
 -- 'BindingType' after they've been paired together.
 data Binding
   = Binding
-  { bindingName :: !Ident
+  { bindingName :: !IdentName
   , bindingType :: !Scheme
     -- ^ Type for whole function
-  , bindingArgs :: ![Typed Ident]
+  , bindingArgs :: ![Typed IdentName]
     -- ^ Argument names and types split out from 'bindingType'
   , bindingReturnType :: !Type
     -- ^ Return type split out from 'bindingType'
@@ -79,7 +77,7 @@ data Binding
 -- | A renamed extern declaration.
 data Extern
   = Extern
-  { externName :: !Ident
+  { externName :: !IdentName
   , externType :: !Type
   } deriving (Show, Eq)
 
@@ -91,7 +89,7 @@ data TypeDeclaration
 
 data TyConDefinition
   = TyConDefinition
-  { tyConDefinitionName :: !Text
+  { tyConDefinitionName :: !TyConName
   , tyConDefinitionArgs :: ![TyVarInfo]
   , tyConDefinitionKind :: !Kind
   } deriving (Show, Eq, Ord)
@@ -99,8 +97,8 @@ data TyConDefinition
 tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
 tyConDefinitionToInfo (TyConDefinition name' args kind) = TyConInfo name' (TyVar <$> args) kind
 
-fromPrimTyDef :: PrimTyCon -> TyConDefinition
-fromPrimTyDef (PrimTyCon name) = TyConDefinition name [] KStar
+fromPrimTyDef :: TyConName -> TyConDefinition
+fromPrimTyDef name = TyConDefinition name [] KStar
 
 fromPrimTypeDef :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
@@ -108,13 +106,12 @@ fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
 
 data DataConDefinition
   = DataConDefinition
-  { dataConDefinitionName :: !Text
+  { dataConDefinitionName :: !DataConName
   , dataConDefinitionArgument :: !(Maybe TypeTerm)
   } deriving (Show, Eq, Ord)
 
-fromPrimDataCon :: PrimDataCon -> DataConDefinition
-fromPrimDataCon (PrimDataCon name) =
-  DataConDefinition name Nothing
+fromPrimDataCon :: DataConName -> DataConDefinition
+fromPrimDataCon name = DataConDefinition name Nothing
 
 -- | A renamed 'Expr'
 data Expr
@@ -128,17 +125,9 @@ data Expr
   deriving (Show, Eq)
 
 data Var
-  = VVal !(Typed Ident)
-  | VCons !(Typed DataCon)
+  = VVal !(Typed IdentName)
+  | VCons !(Typed DataConName)
   deriving (Show, Eq)
-
-data DataCon
-  = DataCon
-  { dataConName :: !Text
-  } deriving (Show, Eq, Ord)
-
-dataConFromDefinition :: DataConDefinition -> DataCon
-dataConFromDefinition (DataConDefinition name _) = DataCon name
 
 data If
   = If
@@ -161,14 +150,14 @@ data Match
 
 data Pattern
   = PLit !Literal
-  | PVar !(Typed Ident)
+  | PVar !(Typed IdentName)
   | PCons !PatCons
   | PParens !Pattern
   deriving (Show, Eq)
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataCon
+  { patConsConstructor :: !DataConName
   , patConsArg :: !(Maybe Pattern)
   , patConsType :: !Type
   } deriving (Show, Eq)
@@ -207,11 +196,6 @@ patternType (PVar (Typed ty _)) = ty
 patternType (PCons (PatCons _ _ ty)) = ty
 patternType (PParens pat) = patternType pat
 
-data Ident
-  = Ident
-  { identText :: !Text
-  } deriving (Show, Eq, Ord)
-
 data TypeTerm
   = TyCon !TyConInfo
   | TyVar !TyVarInfo
@@ -227,17 +211,17 @@ infixr 0 `TyFun`
 
 data TyConInfo
   = TyConInfo
-  { tyConInfoName :: !Text
+  { tyConInfoName :: !TyConName
   , tyConInfoArgs :: ![TypeTerm]
   , tyConInfoKind :: !Kind
   } deriving (Show, Eq, Ord)
 
-fromPrimTyCon :: PrimTyCon -> TyConInfo
+fromPrimTyCon :: TyConName -> TyConInfo
 fromPrimTyCon = tyConDefinitionToInfo . fromPrimTyDef
 
 data TyVarInfo
   = TyVarInfo
-  { tyVarInfoName :: !Text
+  { tyVarInfoName :: !TyVarName
   , tyVarInfoKind :: !Kind
   , tyVarInfoGenerated :: !TyVarGenerated
   } deriving (Show, Eq, Ord)

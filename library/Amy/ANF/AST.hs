@@ -18,18 +18,18 @@ module Amy.ANF.AST
   , App(..)
   , ConApp(..)
 
-  , Ident(..)
   , Type(..)
   , Typed(..)
 
   , module Amy.ASTCommon
+  , module Amy.Names
   ) where
 
-import Data.Text (Text)
 import GHC.Word (Word32)
 
 import Amy.ASTCommon
 import Amy.Literal
+import Amy.Names
 import Amy.Prim
 
 data Module
@@ -41,40 +41,40 @@ data Module
 
 data Binding
   = Binding
-  { bindingName :: !Ident
-  , bindingArgs :: ![Typed Ident]
+  { bindingName :: !IdentName
+  , bindingArgs :: ![Typed IdentName]
   , bindingReturnType :: !Type
   , bindingBody :: !Expr
   } deriving (Show, Eq)
 
 data Extern
   = Extern
-  { externName :: !Ident
+  { externName :: !IdentName
   , externType :: !Type
   } deriving (Show, Eq)
 
 data TypeDeclaration
   = TypeDeclaration
-  { typeDeclarationTypeName :: !Text
+  { typeDeclarationTypeName :: !TyConName
   , typeDeclarationType :: !Type
   , typeDeclarationConstructors :: ![DataConDefinition]
   } deriving (Show, Eq)
 
 data DataConDefinition
   = DataConDefinition
-  { dataConDefinitionName :: !Text
+  { dataConDefinitionName :: !DataConName
   , dataConDefinitionArgument :: !(Maybe Type)
   } deriving (Show, Eq, Ord)
 
 data Val
-  = Var !(Typed Ident)
+  = Var !(Typed IdentName) !Bool -- Bool means isTopLevel
   | Lit !Literal
   | ConEnum !Word32 !DataCon
   deriving (Show, Eq)
 
 data DataCon
   = DataCon
-  { dataConName :: !Text
+  { dataConName :: !DataConName
   , dataConType :: !Type
   , dataConIndex :: !ConstructorIndex
   } deriving (Show, Eq, Ord)
@@ -83,7 +83,7 @@ data Expr
   = EVal !Val
   | ELetVal !LetVal
   | ECase !Case
-  | EApp !(App (Typed Ident))
+  | EApp !(App (Typed IdentName))
   | EConApp !ConApp
   | EPrimOp !(App PrimitiveFunction)
   deriving (Show, Eq)
@@ -96,7 +96,7 @@ data LetVal
 
 data LetValBinding
   = LetValBinding
-  { letValBindingName :: !Ident
+  { letValBindingName :: !IdentName
   , letValBindingType :: !Type
   , letValBindingBody :: !Expr
   } deriving (Show, Eq)
@@ -104,7 +104,7 @@ data LetValBinding
 data Case
   = Case
   { caseScrutinee :: !Val
-  , caseScrutineeBinding :: !(Typed Ident)
+  , caseScrutineeBinding :: !(Typed IdentName)
   , caseAlternatives :: ![Match]
   , caseDefault :: !(Maybe Expr)
   , caseType :: !Type
@@ -124,7 +124,7 @@ data Pattern
 data PatCons
   = PatCons
   { patConsConstructor :: !DataCon
-  , patConsArg :: !(Maybe (Typed Ident))
+  , patConsArg :: !(Maybe (Typed IdentName))
   , patConsType :: !Type
   } deriving (Show, Eq)
 
@@ -139,16 +139,9 @@ data ConApp
   = ConApp
   { conAppCon :: !DataCon
   , conAppArg :: !(Maybe Val)
-  , conAppTaggedUnionName :: !Text
+  , conAppTaggedUnionName :: !TyConName
   , conAppTaggedUnionTagBits :: !Word32
   } deriving (Show, Eq)
-
--- | An identifier from source code
-data Ident
-  = Ident
-  { identText :: !Text
-  , identIsTopLevel :: !Bool
-  } deriving (Show, Eq, Ord)
 
 data Type
   = PrimIntType
@@ -158,7 +151,7 @@ data Type
     -- ^ Used for polymorphic types
   | FuncType ![Type] !Type
   | EnumType !Word32
-  | TaggedUnionType !Text !Word32
+  | TaggedUnionType !TyConName !Word32
   deriving (Show, Eq, Ord)
 
 data Typed a

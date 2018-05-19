@@ -11,8 +11,6 @@
 module Amy.Prim
   ( -- * Types
     PrimTypeDefinition(..)
-  , PrimTyCon(..)
-  , PrimDataCon(..)
   , allPrimTypeDefinitions
 
   , intTypeDefinition
@@ -35,6 +33,8 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+
+import Amy.Names
 
 --
 -- Primitive Type ID Generation
@@ -66,43 +66,29 @@ showPrimDataCon FalseDataCon = "False"
 
 data PrimTypeDefinition
   = PrimTypeDefinition
-  { primTypeDefinitionTypeName :: !PrimTyCon
-  , primTypeDefinitionDataConstructors :: ![PrimDataCon]
-  } deriving (Show, Eq)
-
-data PrimTyCon
-  = PrimTyCon
-  { primTyConName :: !Text
-  } deriving (Show, Eq)
-
-data PrimDataCon
-  = PrimDataCon
-  { primDataConName :: !Text
+  { primTypeDefinitionTypeName :: !TyConName
+  , primTypeDefinitionDataConstructors :: ![DataConName]
   } deriving (Show, Eq)
 
 mkPrimTypeDef :: PrimitiveType -> [PrimitiveDataCon] -> PrimTypeDefinition
 mkPrimTypeDef tyCon dataCons =
   let
-    tyCon' = PrimTyCon (showPrimType tyCon)
-    mkDataCon prim =
-      PrimDataCon
-      { primDataConName = showPrimDataCon prim
-      }
-    dataCons' = mkDataCon <$> dataCons
+    tyCon' = TyConName (showPrimType tyCon)
+    dataCons' = DataConName . showPrimDataCon <$> dataCons
   in PrimTypeDefinition tyCon' dataCons'
 
 -- Int
 intTypeDefinition :: PrimTypeDefinition
 intTypeDefinition = mkPrimTypeDef IntType []
 
-intTyCon :: PrimTyCon
+intTyCon :: TyConName
 intTyCon = primTypeDefinitionTypeName intTypeDefinition
 
 -- Double
 doubleTypeDefinition :: PrimTypeDefinition
 doubleTypeDefinition = mkPrimTypeDef DoubleType []
 
-doubleTyCon :: PrimTyCon
+doubleTyCon :: TyConName
 doubleTyCon = primTypeDefinitionTypeName doubleTypeDefinition
 
 -- Bool
@@ -110,10 +96,10 @@ doubleTyCon = primTypeDefinitionTypeName doubleTypeDefinition
 boolTypeDefinition :: PrimTypeDefinition
 boolTypeDefinition = mkPrimTypeDef BoolType [FalseDataCon, TrueDataCon]
 
-boolTyCon :: PrimTyCon
+boolTyCon :: TyConName
 boolTyCon = primTypeDefinitionTypeName boolTypeDefinition
 
-falseDataCon, trueDataCon :: PrimDataCon
+falseDataCon, trueDataCon :: DataConName
 [falseDataCon, trueDataCon] = primTypeDefinitionDataConstructors boolTypeDefinition
 
 allPrimTypeDefinitions :: [PrimTypeDefinition]
@@ -160,7 +146,7 @@ showPrimitiveFunctionName name =
     PrimIntToDouble -> "intToDouble#"
     PrimDoubleToInt -> "doubleToInt#"
 
-primitiveFunctionType' :: PrimitiveFunctionName -> NonEmpty PrimTyCon
+primitiveFunctionType' :: PrimitiveFunctionName -> NonEmpty TyConName
 primitiveFunctionType' name =
   case name of
     PrimIAdd -> [intTyCon, intTyCon, intTyCon]
@@ -176,16 +162,16 @@ primitiveFunctionType' name =
 data PrimitiveFunction
   = PrimitiveFunction
   { primitiveFunctionName :: !PrimitiveFunctionName
-  , primitiveFunctionNameText :: !Text
-  , primitiveFunctionType :: !(NonEmpty PrimTyCon)
+  , primitiveFunctionNameText :: !IdentName
+  , primitiveFunctionType :: !(NonEmpty TyConName)
   } deriving (Show, Eq)
 
 allPrimitiveFunctions :: [PrimitiveFunction]
 allPrimitiveFunctions =
-  (\prim -> PrimitiveFunction prim (showPrimitiveFunctionName prim) (primitiveFunctionType' prim))
+  (\prim -> PrimitiveFunction prim (IdentName $ showPrimitiveFunctionName prim) (primitiveFunctionType' prim))
   <$> allPrimitiveFunctionNames
 
-primitiveFunctionsByName :: Map Text PrimitiveFunction
+primitiveFunctionsByName :: Map IdentName PrimitiveFunction
 primitiveFunctionsByName =
   Map.fromList
-  $ (\prim -> (showPrimitiveFunctionName $ primitiveFunctionName prim, prim)) <$> allPrimitiveFunctions
+  $ (\prim -> (IdentName $ showPrimitiveFunctionName $ primitiveFunctionName prim, prim)) <$> allPrimitiveFunctions

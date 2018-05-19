@@ -28,7 +28,7 @@ data InputPattern con
   = PCon !(Con con) ![InputPattern con]
     -- ^ Constructor patterns are nested. We have the constructor tag and a
     -- list of pattern arguments.
-  | PVar !(Typed Ident)
+  | PVar !(Typed IdentName)
     -- ^ Variables are catch-all patterns that match anything and binds the
     -- result to the variable.
   deriving (Show, Eq)
@@ -61,7 +61,7 @@ type Equation con = ([InputPattern con], Expr)
 
 -- | A 'CaseExpr' is the output of the match algorithm
 data CaseExpr con
-  = CaseExpr !(Typed Ident) ![Clause con] !(Maybe (CaseExpr con))
+  = CaseExpr !(Typed IdentName) ![Clause con] !(Maybe (CaseExpr con))
     -- ^ Corresponds to a case in Core
   | Expr !Expr
     -- ^ An input expression
@@ -74,27 +74,27 @@ data CaseExpr con
 data Clause con =
   Clause
     !(Con con) -- Constructor for the clause
-    ![Typed Ident] -- Variables to bind the constructor arguments to
+    ![Typed IdentName] -- Variables to bind the constructor arguments to
     !(CaseExpr con) -- Expression for the clause
   deriving (Show, Eq)
 
-freshVar :: Desugar Ident
+freshVar :: Desugar IdentName
 freshVar = do
   id' <- freshId
-  pure $ Ident ("_u" <> pack (show id'))
+  pure $ IdentName ("_u" <> pack (show id'))
 
 -- | Main function for this algorithm. Takes equations and produces a
 -- 'CaseExpr'.
 match
   :: (Ord con)
-  => [Typed Ident]
+  => [Typed IdentName]
   -> [Equation con]
   -> Desugar (CaseExpr con)
 match vars eqs = match' vars eqs Error
 
 match'
   :: (Ord con)
-  => [Typed Ident]
+  => [Typed IdentName]
   -> [Equation con]
   -> CaseExpr con
   -> Desugar (CaseExpr con)
@@ -127,7 +127,7 @@ data GroupedEquations con
   | ConEquations ![ConEquation con]
   deriving (Show, Eq)
 
-data VarEquation con = VarEquation !(Typed Ident) !(Equation con)
+data VarEquation con = VarEquation !(Typed IdentName) !(Equation con)
   deriving (Show, Eq)
 
 data ConEquation con = ConEquation !(Con con) ![InputPattern con] !(Equation con)
@@ -155,7 +155,7 @@ concatGroupedEquations (x:y:xs) =
 -- simple case of all variables or all constructors.
 matchGroup
   :: (Ord con)
-  => [Typed Ident]
+  => [Typed IdentName]
   -> CaseExpr con
   -> GroupedEquations con
   -> Desugar (CaseExpr con)
@@ -166,7 +166,7 @@ matchGroup vars def (ConEquations eqs) = matchCon vars eqs def
 -- the pattern variable in the equation with the match variable.
 matchVar
   :: (Ord con)
-  => [Typed Ident]
+  => [Typed IdentName]
   -> [VarEquation con]
   -> CaseExpr con
   -> Desugar (CaseExpr con)
@@ -182,7 +182,7 @@ matchVar (u:us) eqs def = do
 -- in a 'Case' expression.
 matchCon
   :: (Ord con)
-  => [Typed Ident]
+  => [Typed IdentName]
   -> [ConEquation con]
   -> CaseExpr con
   -> Desugar (CaseExpr con)
@@ -220,7 +220,7 @@ groupByConstructor eqs =
 
 matchClause
   :: (Ord con)
-  => [Typed Ident]
+  => [Typed IdentName]
   -> CaseExpr con
   -> NonEmpty (ConEquation con)
   -> Desugar (Clause con)

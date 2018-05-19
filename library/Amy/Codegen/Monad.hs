@@ -27,7 +27,7 @@ import Amy.ANF.AST as ANF
 newtype CodeGen a = CodeGen (Reader CodeGenRead a)
   deriving (Functor, Applicative, Monad, MonadReader CodeGenRead)
 
-runCodeGen :: [(Ident, ANF.Type)] -> CodeGen a -> a
+runCodeGen :: [(IdentName, ANF.Type)] -> CodeGen a -> a
 runCodeGen topLevelTypes (CodeGen action) =
   let
     typeMap = Map.fromList topLevelTypes
@@ -36,7 +36,7 @@ runCodeGen topLevelTypes (CodeGen action) =
 
 data CodeGenRead
   = CodeGenRead
-  { codeGenReadTopLevelTypes :: !(Map Ident ANF.Type)
+  { codeGenReadTopLevelTypes :: !(Map IdentName ANF.Type)
   }
 
 newtype BlockGen a = BlockGen (StateT BlockGenState CodeGen a)
@@ -101,5 +101,5 @@ freshId = do
 freshUnName :: BlockGen LLVM.Name
 freshUnName = UnName <$> freshId
 
-topLevelType :: (MonadReader CodeGenRead m) => Ident -> m (Maybe ANF.Type)
+topLevelType :: (MonadReader CodeGenRead m) => IdentName -> m (Maybe ANF.Type)
 topLevelType ident = asks (Map.lookup ident . codeGenReadTopLevelTypes)

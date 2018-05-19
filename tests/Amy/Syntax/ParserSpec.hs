@@ -85,29 +85,29 @@ spec = do
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
-          (Forall [TyVarInfo $ Located (SourceSpan "" 1 13 1 13) "a"] $ TyTerm (TyVar (TyVarInfo $ Located (SourceSpan "" 1 16 1 16) "a")))
+          (Forall [Located (SourceSpan "" 1 13 1 13) "a"] $ TyTerm (TyVar (Located (SourceSpan "" 1 16 1 16) "a")))
       parse' bindingType "f :: forall a b. a -> b -> a"
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
           ( Forall
-              [ TyVarInfo $ Located (SourceSpan "" 1 13 1 13) "a"
-              , TyVarInfo $ Located (SourceSpan "" 1 15 1 15) "b"] $
-            TyTerm (TyVar (TyVarInfo $ Located (SourceSpan "" 1 18 1 18) "a"))
+              [ Located (SourceSpan "" 1 13 1 13) "a"
+              , Located (SourceSpan "" 1 15 1 15) "b"] $
+            TyTerm (TyVar (Located (SourceSpan "" 1 18 1 18) "a"))
             `TyFun`
-            TyTerm (TyVar (TyVarInfo $ Located (SourceSpan "" 1 23 1 23) "b"))
+            TyTerm (TyVar ( Located (SourceSpan "" 1 23 1 23) "b"))
             `TyFun`
-            TyTerm (TyVar (TyVarInfo $ Located (SourceSpan "" 1 28 1 28) "a"))
+            TyTerm (TyVar ( Located (SourceSpan "" 1 28 1 28) "a"))
           )
 
   describe "typeTerm" $ do
     it "handles simple terms" $ do
       parse' typeTerm "A" `shouldParse` TyCon (TyConInfo "A" [] (SourceSpan "" 1 1 1 1))
-      parse' typeTerm "a" `shouldParse` TyVar (TyVarInfo (Located (SourceSpan "" 1 1 1 1) "a"))
+      parse' typeTerm "a" `shouldParse` TyVar (Located (SourceSpan "" 1 1 1 1) "a")
 
     it "handles terms with args" $ do
       parse' typeTerm "A a" `shouldParse`
-        TyCon (TyConInfo "A" [TyVar (TyVarInfo (Located (SourceSpan "" 1 3 1 3) "a"))] (SourceSpan "" 1 1 1 1))
+        TyCon (TyConInfo "A" [TyVar (Located (SourceSpan "" 1 3 1 3) "a")] (SourceSpan "" 1 1 1 1))
 
     it "tightly binds constructor applications" $ do
       parse' typeTerm "A B C" `shouldParse`
@@ -126,11 +126,11 @@ spec = do
           [ TyParens $
               TyCon (
                 TyConInfo "B"
-                [ TyVar (TyVarInfo (Located (SourceSpan "" 1 6 1 6) "b"))
+                [ TyVar (Located (SourceSpan "" 1 6 1 6) "b")
                 ]
                 (SourceSpan "" 1 4 1 4)
               )
-          , TyVar (TyVarInfo (Located (SourceSpan "" 1 9 1 9) "a"))
+          , TyVar (Located (SourceSpan "" 1 9 1 9) "a")
           ]
           (SourceSpan "" 1 1 1 1)
         )

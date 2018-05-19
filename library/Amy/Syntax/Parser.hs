@@ -72,10 +72,10 @@ parseScheme = do
   ty <- parseType <?> "type"
   pure $ Forall (fromMaybe [] vars) ty
 
-parseSchemeVars :: AmyParser [TyVarInfo]
+parseSchemeVars :: AmyParser [Located TyVarName]
 parseSchemeVars = do
   forall
-  vars <- many tyVarInfo
+  vars <- many tyVarName
   dot
   pure vars
 
@@ -97,31 +97,21 @@ typeTerm = do
   process (TyParens t) [] = pure $ TyParens t
   process t@(TyParens _) args = mkError $ "type parens with arguments encountered (no higher-kinded types allowed): " ++ show (t, args)
 
--- data TyVarWithArgs = TyVarWithArgs TyVarInfo
---   deriving (Show, Eq, Ord)
-
--- instance ShowErrorComponent TyVarWithArgs where
---   showErrorComponent (TyVarWithArgs info) =
---     "type variable with arguments encountered (no higher-kinded types allowed): " ++ show info
-
 typeTerm' :: AmyParser TypeTerm
 typeTerm' =
   (TyParens <$> parens typeTerm <?> "type parens")
-  <|> (TyVar <$> tyVarInfo <?> "type variable")
+  <|> (TyVar <$> tyVarName <?> "type variable")
   <|> (TyCon <$> tyConInfoNoArgs <?> "type constructor")
 
 tyConInfoNoArgs :: AmyParser TyConInfo
 tyConInfoNoArgs = do
-  Located span' name <- typeIdentifier
+  Located span' name <- tyConName
   pure
     TyConInfo
     { tyConInfoName = name
     , tyConInfoArgs = []
     , tyConInfoLocation = span'
     }
-
-tyVarInfo :: AmyParser TyVarInfo
-tyVarInfo = TyVarInfo <$> identifier
 
 binding :: AmyParser Binding
 binding = do
@@ -152,8 +142,8 @@ typeDeclaration = do
 
 tyConDefinition :: AmyParser TyConDefinition
 tyConDefinition = do
-  Located span' name <- typeIdentifier
-  args <- many tyVarInfo
+  Located span' name <- tyConName
+  args <- many tyVarName
   pure
     TyConDefinition
     { tyConDefinitionName = name
@@ -163,7 +153,7 @@ tyConDefinition = do
 
 dataConDefinition :: AmyParser DataConDefinition
 dataConDefinition = do
-  dataCon <- dataConstructorName'
+  dataCon <- dataConName
   mArg <- optional typeTerm
   pure
     DataConDefinition
@@ -210,7 +200,7 @@ literal =
 variable :: AmyParser Var
 variable =
   (VVal <$> identifier)
-  <|> (VCons <$> dataConstructorName')
+  <|> (VCons <$> dataConName)
 
 ifExpression :: AmyParser If
 ifExpression = do
@@ -259,7 +249,7 @@ parsePattern =
 
 patCons :: AmyParser PatCons
 patCons = do
-  constructor <- dataConstructorName'
+  constructor <- dataConName
   mArg <- optional parsePattern
   pure
     PatCons

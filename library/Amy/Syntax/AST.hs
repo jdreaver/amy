@@ -28,19 +28,19 @@ module Amy.Syntax.AST
   , TypeTerm(..)
   , Type(..)
   , TyConInfo(..)
-  , TyVarInfo(..)
   , Scheme(..)
 
     -- Re-export
   , Literal(..)
   , Located(..)
   , SourceSpan(..)
+  , module Amy.Names
   ) where
 
 import Data.List.NonEmpty (NonEmpty)
-import Data.Text (Text)
 
 import Amy.Literal (Literal(..))
+import Amy.Names
 import Amy.Syntax.Located
 
 -- | A 'Module' is simply a list of 'Declaration' values.
@@ -74,8 +74,8 @@ declType _ = Nothing
 -- x@
 data Binding
   = Binding
-  { bindingName :: !(Located Text)
-  , bindingArgs :: ![Located Text]
+  { bindingName :: !(Located IdentName)
+  , bindingArgs :: ![Located IdentName]
   , bindingBody :: !Expr
   } deriving (Show, Eq)
 
@@ -83,7 +83,7 @@ data Binding
 -- Int@ or @f :: Int -> Int@
 data BindingType
   = BindingType
-  { bindingTypeName :: !(Located Text)
+  { bindingTypeName :: !(Located IdentName)
   , bindingTypeScheme :: !Scheme
   } deriving (Show, Eq)
 
@@ -91,7 +91,7 @@ data BindingType
 -- Int@ or @f :: Int -> Int@
 data Extern
   = Extern
-  { externName :: !(Located Text)
+  { externName :: !(Located IdentName)
   , externType :: !Type
   } deriving (Show, Eq)
 
@@ -103,14 +103,14 @@ data TypeDeclaration
 
 data TyConDefinition
   = TyConDefinition
-  { tyConDefinitionName :: !Text
-  , tyConDefinitionArgs :: ![TyVarInfo]
+  { tyConDefinitionName :: !TyConName
+  , tyConDefinitionArgs :: ![Located TyVarName]
   , tyConDefinitionLocation :: !SourceSpan
   } deriving (Show, Eq)
 
 data DataConDefinition
   = DataConDefinition
-  { dataConDefinitionName :: !(Located Text)
+  { dataConDefinitionName :: !(Located DataConName)
   , dataConDefinitionArgument :: !(Maybe TypeTerm)
   } deriving (Show, Eq)
 
@@ -125,8 +125,8 @@ data Expr
   deriving (Show, Eq)
 
 data Var
-  = VVal !(Located Text)
-  | VCons !(Located Text)
+  = VVal !(Located IdentName)
+  | VCons !(Located DataConName)
   deriving (Show, Eq)
 
 data If
@@ -150,14 +150,14 @@ data Match
 
 data Pattern
   = PLit !(Located Literal)
-  | PVar !(Located Text)
+  | PVar !(Located IdentName)
   | PCons !PatCons
   | PParens !Pattern
   deriving (Show, Eq)
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !(Located Text)
+  { patConsConstructor :: !(Located DataConName)
   , patConsArg :: !(Maybe Pattern)
   } deriving (Show, Eq)
 
@@ -189,7 +189,7 @@ data App
 
 data TypeTerm
   = TyCon !TyConInfo
-  | TyVar !TyVarInfo
+  | TyVar !(Located TyVarName)
   | TyParens !TypeTerm
   deriving (Show, Eq)
 
@@ -202,14 +202,11 @@ infixr 0 `TyFun`
 
 data TyConInfo
   = TyConInfo
-  { tyConInfoName :: !Text
+  { tyConInfoName :: !TyConName
   , tyConInfoArgs :: ![TypeTerm]
   , tyConInfoLocation :: !SourceSpan
   } deriving (Show, Eq)
 
-newtype TyVarInfo = TyVarInfo { unTyVarInfo :: Located Text }
-  deriving (Show, Eq, Ord)
-
 data Scheme
-  = Forall ![TyVarInfo] Type
+  = Forall ![Located TyVarName] Type
   deriving (Show, Eq)

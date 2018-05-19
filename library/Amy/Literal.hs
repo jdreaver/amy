@@ -6,6 +6,7 @@ module Amy.Literal
   , literalType
   ) where
 
+import Amy.Names
 import Amy.Prim
 
 -- | A 'Literal' is any literal from the source code. This type is used in many
@@ -19,6 +20,6 @@ showLiteral :: Literal -> String
 showLiteral (LiteralInt x) = show x
 showLiteral (LiteralDouble x) = show x
 
-literalType :: Literal -> PrimTyCon
+literalType :: Literal -> TyConName
 literalType (LiteralInt _) = intTyCon
 literalType (LiteralDouble _) = doubleTyCon

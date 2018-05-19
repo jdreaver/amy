@@ -23,8 +23,7 @@ desugarModule (T.Module bindings externs typeDeclarations maxId) = do
     pure $ C.Module bindings' externs' typeDeclarations' maxId'
 
 desugarExtern :: T.Extern -> C.Extern
-desugarExtern (T.Extern ident ty) =
-  C.Extern (desugarIdent ident) (desugarType ty)
+desugarExtern (T.Extern ident ty) = C.Extern ident (desugarType ty)
 
 desugarTypeDeclaration :: T.TypeDeclaration -> C.TypeDeclaration
 desugarTypeDeclaration (T.TypeDeclaration tyName cons) =
@@ -37,16 +36,10 @@ desugarDataConDefinition (T.DataConDefinition conName mTyArg) =
   , C.dataConDefinitionArgument = desugarTypeTerm <$> mTyArg
   }
 
-desugarDataCon :: T.DataCon -> C.DataCon
-desugarDataCon (T.DataCon conName) =
-  C.DataCon
-  { C.dataConName = conName
-  }
-
 desugarBinding :: T.Binding -> Desugar C.Binding
 desugarBinding (T.Binding ident scheme args retTy body) =
   C.Binding
-    (desugarIdent ident)
+    ident
     (desugarScheme scheme)
     (desugarTypedIdent <$> args)
     (desugarType retTy)
@@ -83,7 +76,7 @@ desugarExpr (T.EIf (T.If pred' then' else')) =
   let
     boolTyCon' = T.TyTerm $ T.TyCon $ T.fromPrimTyCon boolTyCon
     mkBoolPatCons cons =
-      T.PatCons (T.dataConFromDefinition $ T.fromPrimDataCon cons) Nothing boolTyCon'
+      T.PatCons (T.dataConDefinitionName $ T.fromPrimDataCon cons) Nothing boolTyCon'
     matches =
       NE.fromList
       [ T.Match (T.PCons $ mkBoolPatCons trueDataCon) then'
@@ -102,13 +95,10 @@ desugarExpr (T.EParens expr) = C.EParens <$> desugarExpr expr
 
 desugarVar :: T.Var -> C.Var
 desugarVar (T.VVal ident) = C.VVal $ desugarTypedIdent ident
-desugarVar (T.VCons (T.Typed ty cons)) = C.VCons $ C.Typed (desugarType ty) (desugarDataCon cons)
+desugarVar (T.VCons (T.Typed ty con)) = C.VCons $ C.Typed (desugarType ty) con
 
-desugarIdent :: T.Ident -> C.Ident
-desugarIdent (T.Ident name) = C.Ident name
-
-desugarTypedIdent :: T.Typed T.Ident -> C.Typed C.Ident
-desugarTypedIdent (T.Typed ty ident) = C.Typed (desugarType ty) (desugarIdent ident)
+desugarTypedIdent :: T.Typed IdentName -> C.Typed IdentName
+desugarTypedIdent (T.Typed ty ident) = C.Typed (desugarType ty) ident
 
 desugarScheme :: T.Scheme -> C.Scheme
 desugarScheme (T.Forall vars ty) = C.Forall (desugarTyVarInfo <$> vars) (desugarType ty)
@@ -141,27 +131,25 @@ desugarTyVarInfo (T.TyVarInfo name kind _) = C.TyVarInfo name kind
 -- future. However, I'm sure row types will be different enough that we might
 -- need the pattern compiler to specifically know about them.
 
-matchToEquation :: T.Match -> Desugar (PC.Equation C.DataCon)
+matchToEquation :: T.Match -> Desugar (PC.Equation DataConName)
 matchToEquation (T.Match pat body) = do
   pat' <- convertPattern pat
   body' <- desugarExpr body
   pure ([pat'], body')
 
-convertPattern :: T.Pattern -> Desugar (PC.InputPattern C.DataCon)
+convertPattern :: T.Pattern -> Desugar (PC.InputPattern DataConName)
 convertPattern (T.PLit lit) = pure $ PC.PCon (PC.ConLit lit) []
 convertPattern (T.PVar ident) = pure $ PC.PVar $ desugarTypedIdent ident
 convertPattern (T.PCons (T.PatCons con mArg _)) = do
-  let
-    con' = desugarDataCon con
-  (tyDecl, _) <- lookupDataConType con'
+  (tyDecl, _) <- lookupDataConType con
   argPats <- traverse convertPattern $ maybeToList mArg
   let
     argTys = maybeToList $ desugarType . patternType <$> mArg
     span' = length $ C.typeDeclarationConstructors tyDecl
-  pure $ PC.PCon (PC.Con con' argTys span') argPats
+  pure $ PC.PCon (PC.Con con argTys span') argPats
 convertPattern (T.PParens pat) = convertPattern pat
 
-restoreCaseExpr :: PC.CaseExpr C.DataCon -> Desugar C.Expr
+restoreCaseExpr :: PC.CaseExpr DataConName -> Desugar C.Expr
 restoreCaseExpr (PC.CaseExpr scrutinee clauses mDefault) = do
   let
     scrutinee' = C.EVar $ C.VVal scrutinee
@@ -171,7 +159,7 @@ restoreCaseExpr (PC.CaseExpr scrutinee clauses mDefault) = do
 restoreCaseExpr (PC.Expr expr) = pure expr
 restoreCaseExpr Error = error "Found inexhaustive pattern match"
 
-restoreClause :: PC.Clause C.DataCon -> Desugar C.Match
+restoreClause :: PC.Clause DataConName -> Desugar C.Match
 restoreClause (PC.Clause (PC.ConLit lit) [] caseExpr) =
   C.Match (C.PLit lit) <$> restoreCaseExpr caseExpr
 restoreClause clause@(PC.Clause (PC.ConLit _) _ _) =

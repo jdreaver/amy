@@ -38,12 +38,12 @@ runANFConvert read' state' (ANFConvert action) = evalState (runReaderT action re
 
 data ANFConvertRead
   = ANFConvertRead
-  { anfConvertReadTypeReps :: !(Map Text ANF.Type)
-  , anfConvertReadDataConInfos :: !(Map Text (ANF.Type, ConstructorIndex))
-  , anfConvertReadTopLevelNames :: !(Set C.Ident)
+  { anfConvertReadTypeReps :: !(Map TyConName ANF.Type)
+  , anfConvertReadDataConInfos :: !(Map DataConName (ANF.Type, ConstructorIndex))
+  , anfConvertReadTopLevelNames :: !(Set IdentName)
   } deriving (Show, Eq)
 
-anfConvertRead :: [C.Ident] -> [C.TypeDeclaration] -> ANFConvertRead
+anfConvertRead :: [IdentName] -> [C.TypeDeclaration] -> ANFConvertRead
 anfConvertRead topLevelNames typeDeclarations =
   let
     allTypeDecls = typeDeclarations ++ (fromPrimTypeDefinition <$> allPrimTypeDefinitions)
@@ -56,7 +56,7 @@ anfConvertRead topLevelNames typeDeclarations =
     , anfConvertReadTopLevelNames = fromList topLevelNames
     }
 
-mkDataConInfo :: C.TypeDeclaration -> [(Text, (ANF.Type, ConstructorIndex))]
+mkDataConInfo :: C.TypeDeclaration -> [(DataConName, (ANF.Type, ConstructorIndex))]
 mkDataConInfo decl@(C.TypeDeclaration _ cons) = mkInfo <$> zip cons [0..]
  where
   rep = typeRep decl
@@ -75,10 +75,10 @@ freshId = do
   modify' (\s -> s { lastId = 1 + lastId s })
   gets lastId
 
-freshIdent :: Text -> ANFConvert ANF.Ident
+freshIdent :: Text -> ANFConvert IdentName
 freshIdent t = do
   id' <- freshId
-  pure $ ANF.Ident (t <> pack (show id')) False
+  pure $ IdentName (t <> pack (show id'))
 
 getTyConDefinitionType :: C.TyConDefinition -> ANFConvert ANF.Type
 getTyConDefinitionType tyCon = fromMaybe err . Map.lookup (tyConDefinitionName tyCon) <$> asks anfConvertReadTypeReps
@@ -90,10 +90,10 @@ getTyConInfoType tyCon = fromMaybe err . Map.lookup (tyConInfoName tyCon) <$> as
   where
    err = error $ "Couldn't find TypeCompilationMethod of TyConInfo " ++ show tyCon
 
-getDataConInfo :: C.DataCon -> ANFConvert (ANF.Type, ConstructorIndex)
-getDataConInfo con = fromMaybe err . Map.lookup (C.dataConName con) <$> asks anfConvertReadDataConInfos
+getDataConInfo :: DataConName -> ANFConvert (ANF.Type, ConstructorIndex)
+getDataConInfo con = fromMaybe err . Map.lookup con <$> asks anfConvertReadDataConInfos
   where
    err = error $ "Couldn't find TypeCompilationMethod of TyConDefinition " ++ show con
 
-isIdentTopLevel :: C.Ident -> ANFConvert Bool
+isIdentTopLevel :: IdentName -> ANFConvert Bool
 isIdentTopLevel ident = Set.member ident <$> asks anfConvertReadTopLevelNames

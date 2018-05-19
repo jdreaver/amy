@@ -11,7 +11,6 @@ module Amy.Core.AST
   , DataConDefinition(..)
   , Expr(..)
   , Var(..)
-  , DataCon(..)
   , If(..)
   , Case(..)
   , Match(..)
@@ -21,7 +20,6 @@ module Amy.Core.AST
   , App(..)
   , expressionType
 
-  , Ident(..)
   , substExpr
   , TypeTerm(..)
   , Type(..)
@@ -34,14 +32,15 @@ module Amy.Core.AST
   , Literal(..)
   , module Amy.ASTCommon
   , module Amy.Kind
+  , module Amy.Names
   ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.Text (Text)
 
 import Amy.ASTCommon
 import Amy.Kind
 import Amy.Literal
+import Amy.Names
 import Amy.Prim
 
 data Module
@@ -54,10 +53,10 @@ data Module
 
 data Binding
   = Binding
-  { bindingName :: !Ident
+  { bindingName :: !IdentName
   , bindingType :: !Scheme
     -- ^ Type for whole function
-  , bindingArgs :: ![Typed Ident]
+  , bindingArgs :: ![Typed IdentName]
     -- ^ Argument names and types split out from 'bindingType'
   , bindingReturnType :: !Type
     -- ^ Return type split out from 'bindingType'
@@ -66,7 +65,7 @@ data Binding
 
 data Extern
   = Extern
-  { externName :: !Ident
+  { externName :: !IdentName
   , externType :: !Type
   } deriving (Show, Eq)
 
@@ -78,7 +77,7 @@ data TypeDeclaration
 
 data TyConDefinition
   = TyConDefinition
-  { tyConDefinitionName :: !Text
+  { tyConDefinitionName :: !TyConName
   , tyConDefinitionArgs :: ![TyVarInfo]
   , tyConDefinitionKind :: !Kind
   } deriving (Show, Eq, Ord)
@@ -86,8 +85,8 @@ data TyConDefinition
 tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
 tyConDefinitionToInfo (TyConDefinition name' args kind) = TyConInfo name' (TyVar <$> args) kind
 
-fromPrimTyDef :: PrimTyCon -> TyConDefinition
-fromPrimTyDef (PrimTyCon name) = TyConDefinition name [] KStar
+fromPrimTyDef :: TyConName -> TyConDefinition
+fromPrimTyDef name = TyConDefinition name [] KStar
 
 fromPrimTypeDefinition :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDefinition (PrimTypeDefinition tyName cons) =
@@ -95,13 +94,12 @@ fromPrimTypeDefinition (PrimTypeDefinition tyName cons) =
 
 data DataConDefinition
   = DataConDefinition
-  { dataConDefinitionName :: !Text
+  { dataConDefinitionName :: !DataConName
   , dataConDefinitionArgument :: !(Maybe TypeTerm)
   } deriving (Show, Eq, Ord)
 
-fromPrimDataCon :: PrimDataCon -> DataConDefinition
-fromPrimDataCon (PrimDataCon name) =
-  DataConDefinition name Nothing
+fromPrimDataCon :: DataConName -> DataConDefinition
+fromPrimDataCon name = DataConDefinition name Nothing
 
 data Expr
   = ELit !Literal
@@ -113,14 +111,9 @@ data Expr
   deriving (Show, Eq)
 
 data Var
-  = VVal !(Typed Ident)
-  | VCons !(Typed DataCon)
+  = VVal !(Typed IdentName)
+  | VCons !(Typed DataConName)
   deriving (Show, Eq)
-
-data DataCon
-  = DataCon
-  { dataConName :: !Text
-  } deriving (Show, Eq, Ord)
 
 data If
   = If
@@ -132,7 +125,7 @@ data If
 data Case
   = Case
   { caseScrutinee :: !Expr
-  , caseScrutineeBinding :: !(Typed Ident)
+  , caseScrutineeBinding :: !(Typed IdentName)
   , caseAlternatives :: ![Match]
   , caseDefault :: !(Maybe Expr)
   } deriving (Show, Eq)
@@ -150,8 +143,8 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataCon
-  , patConsArg :: !(Maybe (Typed Ident))
+  { patConsConstructor :: !DataConName
+  , patConsArg :: !(Maybe (Typed IdentName))
   , patConsType :: !Type
   } deriving (Show, Eq)
 
@@ -186,12 +179,7 @@ expressionType (ELet let') = expressionType (letExpression let')
 expressionType (EApp app) = appReturnType app
 expressionType (EParens expr) = expressionType expr
 
-data Ident
-  = Ident
-  { identText :: !Text
-  } deriving (Show, Eq, Ord)
-
-substExpr :: Expr -> Ident -> Ident -> Expr
+substExpr :: Expr -> IdentName -> IdentName -> Expr
 substExpr e@(ELit _) _ _ = e
 substExpr (EVar v) var newVar =
   case v of
@@ -211,19 +199,14 @@ substExpr (EApp (App f args ty)) var newVar =
   EApp (App (substExpr f var newVar) ((\arg -> substExpr arg var newVar) <$> args) ty)
 substExpr (EParens expr) var newVar = EParens (substExpr expr var newVar)
 
-substBinding :: Binding -> Ident -> Ident -> Binding
+substBinding :: Binding -> IdentName -> IdentName -> Binding
 substBinding binding var newVar = binding { bindingBody = substExpr (bindingBody binding) var newVar }
 
-substMatch :: Match -> Ident -> Ident -> Match
+substMatch :: Match -> IdentName -> IdentName -> Match
 substMatch match' var newVar = match' { matchBody = substExpr (matchBody match') var newVar }
 
-replaceIdent :: Ident -> Ident -> Ident -> Ident
+replaceIdent :: IdentName -> IdentName -> IdentName -> IdentName
 replaceIdent var oldVar newVar = if var == oldVar then newVar else var
-
-data ConstructorName
-  = ConstructorName
-  { constructorNameText :: !Text
-  } deriving (Show, Eq, Ord)
 
 data TypeTerm
   = TyCon !TyConInfo
@@ -239,17 +222,17 @@ infixr 0 `TyFun`
 
 data TyConInfo
   = TyConInfo
-  { tyConInfoName :: !Text
+  { tyConInfoName :: !TyConName
   , tyConInfoArgs :: ![TypeTerm]
   , tyConInfoKind :: !Kind
   } deriving (Show, Eq, Ord)
 
-fromPrimTyCon :: PrimTyCon -> TyConInfo
+fromPrimTyCon :: TyConName -> TyConInfo
 fromPrimTyCon = tyConDefinitionToInfo . fromPrimTyDef
 
 data TyVarInfo
   = TyVarInfo
-  { tyVarInfoName :: !Text
+  { tyVarInfoName :: !TyVarName
   , tyVarInfoKind :: !Kind
   } deriving (Show, Eq, Ord)
 
