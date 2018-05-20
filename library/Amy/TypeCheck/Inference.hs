@@ -13,7 +13,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Bifunctor (first)
-import Data.Foldable (foldl')
+import Data.Foldable (foldl', toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
@@ -122,6 +122,7 @@ normalize body =
   normType (T.TyFun a b) = T.TyFun (normType a) (normType b)
   normType (T.TyTerm t) = T.TyTerm $ normTypeTerm t
   normTypeTerm (T.TyCon con) = T.TyCon con
+  normTypeTerm (T.TyApp con args) = T.TyApp con (normTypeTerm <$> args)
   normTypeTerm (T.TyVar a) =
     case Map.lookup a letterMap of
       Just x -> T.TyVar x
@@ -184,24 +185,25 @@ mkDataConTypes tyDecl@(T.TypeDeclaration _ dataConDefs) = mkDataConPair <$> data
 
 dataConstructorScheme :: DataConName -> Inference T.Scheme
 dataConstructorScheme con = do
-  (T.TypeDeclaration tyName _, T.DataConDefinition _ mTyArg) <-
+  (T.TypeDeclaration (T.TyConDefinition tyConName tyVars) _, T.DataConDefinition _ mTyArg) <-
     fromMaybe (error $ "No type definition for " ++ show con)
     . Map.lookup con
     <$> asks dataConstructorTypes
   let
-    tyVars = T.tyConDefinitionArgs tyName
-    tyNameInfo = T.tyConDefinitionToInfo tyName
+    tyApp =
+      case NE.nonEmpty tyVars of
+        Just tyVars' -> T.TyApp tyConName (T.TyVar <$> tyVars')
+        Nothing -> T.TyCon tyConName
     mkTy arg =
       case arg of
-        Just (T.TyCon tyCon) -> T.TyTerm (T.TyCon tyCon) `T.TyFun` T.TyTerm (T.TyCon tyNameInfo)
-        Just (T.TyVar tyVar) -> T.TyTerm (T.TyVar tyVar) `T.TyFun` T.TyTerm (T.TyCon tyNameInfo)
-        Nothing -> T.TyTerm $ T.TyCon tyNameInfo
+        Just term -> T.TyTerm term `T.TyFun` T.TyTerm tyApp
+        Nothing -> T.TyTerm $ T.TyCon tyConName
   pure $ T.Forall tyVars (mkTy mTyArg)
 
 primitiveFunctionScheme :: PrimitiveFunction -> (IdentName, T.Scheme)
 primitiveFunctionScheme (PrimitiveFunction _ name ty) =
   ( name
-  , T.Forall [] $ foldr1 T.TyFun $ T.TyTerm . T.TyCon . T.fromPrimTyCon <$> ty
+  , T.Forall [] $ foldr1 T.TyFun $ T.TyTerm . T.TyCon <$> ty
   )
 
 inferTopLevel :: Int -> TyEnv -> [R.Binding] -> Either Error ([T.Binding], Int)
@@ -273,13 +275,14 @@ checkTypeKind (T.TyTerm term) = checkTypeTermKind term
 checkTypeKind (T.TyFun t1 t2) = checkTypeKind t1 >> checkTypeKind t2
 
 checkTypeTermKind :: T.TypeTerm -> Inference ()
+checkTypeTermKind (T.TyCon _) = pure ()
 checkTypeTermKind (T.TyVar _) = pure ()
-checkTypeTermKind (T.TyCon con@(T.TyConInfo tyName args)) = do
+checkTypeTermKind (T.TyApp con args) = do
   -- Kind checking is pretty simple currently. We just check arity of the type
   -- constructor to make sure it is fully applied.
   tyDef@(T.TyConDefinition _ tyDefArgs) <-
     fromMaybe (error $ "No type definition for " ++ show con)
-    . Map.lookup tyName
+    . Map.lookup con
     <$> asks typeDefinitions
   let
     kind = foldr1 KFun $ const KStar <$> [0..length args]
@@ -329,7 +332,7 @@ inferExpr (R.EVar var) =
     R.VVal (Located _ valVar) -> do
       t <- lookupEnvIdentM valVar
       pure (T.EVar $ T.VVal (T.Typed t valVar), [])
-    R.VCons con -> do
+    R.VCons (Located _ con) -> do
       t <- instantiate =<< dataConstructorScheme con
       pure (T.EVar $ T.VCons (T.Typed t con), [])
 inferExpr (R.EIf (R.If pred' then' else')) = do
@@ -338,7 +341,7 @@ inferExpr (R.EIf (R.If pred' then' else')) = do
   (else'', elseCon) <- inferExpr else'
   let
     newConstraints =
-      [ Constraint (expressionType pred'', T.TyTerm $ T.TyCon $ T.fromPrimTyCon boolTyCon)
+      [ Constraint (expressionType pred'', T.TyTerm $ T.TyCon boolTyCon)
       , Constraint (expressionType then'', expressionType else'')
       ]
   pure
@@ -400,7 +403,7 @@ inferPattern (R.PLit (Located _ lit)) = pure (T.PLit lit, [])
 inferPattern (R.PVar (Located _ ident)) = do
   tvar <- freshTypeVariable
   pure (T.PVar $ T.Typed tvar ident, [])
-inferPattern (R.PCons (R.PatCons con mArg)) = do
+inferPattern (R.PCons (R.PatCons (Located _ con) mArg)) = do
   conTy <- instantiate =<< dataConstructorScheme con
   case mArg of
     -- Convert argument and add a constraint on argument plus constructor
@@ -461,9 +464,11 @@ unifies (T.TyFun t1 t2) (T.TyFun t3 t4) = do
   su1 <- unifies t1 t3
   su2 <- unifies (substituteType su1 t2) (substituteType su1 t4)
   pure (su2 `composeSubst` su1)
-unifies (T.TyTerm (T.TyCon (T.TyConInfo name1 args1))) (T.TyTerm (T.TyCon (T.TyConInfo name2 args2)))
+unifies (T.TyTerm (T.TyApp name1 args1)) (T.TyTerm (T.TyApp name2 args2))
   | name1 == name2 && length args1 == length args2 =
-    unifyMany (T.TyTerm <$> args1) (T.TyTerm <$> args2)
+    unifyMany (T.TyTerm <$> toList args1) (T.TyTerm <$> toList args2)
+unifies (T.TyTerm (T.TyCon name1)) (T.TyTerm (T.TyCon name2))
+  | name1 == name2 = return emptySubst
 unifies t1 t2 = throwError $ UnificationFail t1 t2
 
 unifyMany :: [T.Type] -> [T.Type] -> Solve Subst
@@ -509,20 +514,18 @@ substituteType subst (T.TyTerm t) = substituteTypeTerm subst t
 substituteType subst (t1 `T.TyFun` t2) = substituteType subst t1 `T.TyFun` substituteType subst t2
 
 substituteTypeTerm :: Subst -> T.TypeTerm -> T.Type
-substituteTypeTerm subst (T.TyCon con) = T.TyTerm $ T.TyCon $ substituteTyConInfo subst con
+substituteTypeTerm _ (T.TyCon con) = T.TyTerm $ T.TyCon con
 substituteTypeTerm (Subst subst) t@(T.TyVar var) = Map.findWithDefault (T.TyTerm t) var subst
-
-substituteTyConInfo :: Subst -> T.TyConInfo -> T.TyConInfo
-substituteTyConInfo subst (T.TyConInfo name args) = T.TyConInfo name (substituteTypeTermArg subst <$> args)
+substituteTypeTerm subst (T.TyApp con args) = T.TyTerm $ T.TyApp con (substituteTypeTermArg subst <$> args)
 
 substituteTypeTermArg :: Subst -> T.TypeTerm -> T.TypeTerm
-substituteTypeTermArg subst (T.TyCon con) = T.TyCon $ substituteTyConInfo subst con
+substituteTypeTermArg _ (T.TyCon con) = T.TyCon con
 substituteTypeTermArg (Subst subst) (T.TyVar var) =
   case Map.lookup var subst of
     Nothing -> T.TyVar var
-    Just (T.TyTerm (T.TyVar var')) -> T.TyVar var'
-    Just (T.TyTerm (T.TyCon con )) -> T.TyCon con
-    Just t -> error $ "Invalid TypeTerm argument substitution " ++ show (var, t)
+    Just (T.TyTerm term) -> term
+    Just t@(T.TyFun _ _) -> error $ "Invalid TypeTerm argument substitution " ++ show (var, t)
+substituteTypeTermArg subst (T.TyApp con args) = T.TyApp con (substituteTypeTermArg subst <$> args)
 
 substituteTyped :: Subst -> T.Typed a -> T.Typed a
 substituteTyped subst (T.Typed ty x) = T.Typed (substituteType subst ty) x
@@ -587,11 +590,9 @@ freeTypeVariables (T.TyTerm t) = freeTypeTermTypeVariables t
 freeTypeVariables (t1 `T.TyFun` t2) = freeTypeVariables t1 `Set.union` freeTypeVariables t2
 
 freeTypeTermTypeVariables :: T.TypeTerm -> Set T.TyVarInfo
-freeTypeTermTypeVariables (T.TyCon info) = freeTyConInfoTypeVariables info
+freeTypeTermTypeVariables (T.TyCon _) = Set.empty
 freeTypeTermTypeVariables (T.TyVar var) = Set.singleton var
-
-freeTyConInfoTypeVariables :: T.TyConInfo -> Set T.TyVarInfo
-freeTyConInfoTypeVariables (T.TyConInfo _ args) = Set.unions $ freeTypeTermTypeVariables <$> args
+freeTypeTermTypeVariables (T.TyApp _ args) = Set.unions $ freeTypeTermTypeVariables <$> toList args
 
 freeSchemeTypeVariables :: T.Scheme -> Set T.TyVarInfo
 freeSchemeTypeVariables (T.Forall tvs t) = freeTypeVariables t `Set.difference` Set.fromList tvs
@@ -612,14 +613,12 @@ convertType (R.TyTerm t) = T.TyTerm (convertTypeTerm t)
 convertType (R.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
 
 convertTypeTerm :: R.TypeTerm -> T.TypeTerm
-convertTypeTerm (R.TyCon info) = T.TyCon (convertTyConInfo info)
-convertTypeTerm (R.TyVar info) = T.TyVar (convertTyVarInfo info)
+convertTypeTerm (R.TyCon (Located _ con)) = T.TyCon con
+convertTypeTerm (R.TyVar var) = T.TyVar (convertTyVarInfo var)
+convertTypeTerm (R.TyApp (Located _ con) args) = T.TyApp con (convertTypeTerm <$> args)
 
 convertTyConDefinition :: R.TyConDefinition -> T.TyConDefinition
 convertTyConDefinition (R.TyConDefinition name' args _) = T.TyConDefinition name' (convertTyVarInfo <$> args)
 
-convertTyConInfo :: R.TyConInfo -> T.TyConInfo
-convertTyConInfo (R.TyConInfo name' args _) = T.TyConInfo name' (convertTypeTerm <$> args)
-
-convertTyVarInfo :: R.TyVarInfo -> T.TyVarInfo
-convertTyVarInfo (R.TyVarInfo name' _) = T.TyVarInfo name' TyVarNotGenerated
+convertTyVarInfo :: Located TyVarName -> T.TyVarInfo
+convertTyVarInfo (Located _ name') = T.TyVarInfo name' TyVarNotGenerated

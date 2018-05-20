@@ -10,7 +10,7 @@ module Amy.ANF.Monad
   , freshId
   , freshIdent
   , getTyConDefinitionType
-  , getTyConInfoType
+  , getTyConType
   , getDataConInfo
   , isIdentTopLevel
   ) where
@@ -85,10 +85,10 @@ getTyConDefinitionType tyCon = fromMaybe err . Map.lookup (tyConDefinitionName t
   where
    err = error $ "Couldn't find TypeCompilationMethod of TyConDefinition " ++ show tyCon
 
-getTyConInfoType :: C.TyConInfo -> ANFConvert ANF.Type
-getTyConInfoType tyCon = fromMaybe err . Map.lookup (tyConInfoName tyCon) <$> asks anfConvertReadTypeReps
+getTyConType :: TyConName -> ANFConvert ANF.Type
+getTyConType con = fromMaybe err . Map.lookup con <$> asks anfConvertReadTypeReps
   where
-   err = error $ "Couldn't find TypeCompilationMethod of TyConInfo " ++ show tyCon
+   err = error $ "Couldn't find TypeCompilationMethod of TyConName " ++ show con
 
 getDataConInfo :: DataConName -> ANFConvert (ANF.Type, ConstructorIndex)
 getDataConInfo con = fromMaybe err . Map.lookup con <$> asks anfConvertReadDataConInfos

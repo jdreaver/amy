@@ -19,18 +19,15 @@ mkPrettyType (TyTerm t) = PTyDoc $ prettyTypeTerm t
 mkPrettyType (TyFun ty1 ty2) = PTyFun (mkPrettyType ty1) (mkPrettyType ty2)
 
 prettyTypeTerm :: TypeTerm -> Doc ann
-prettyTypeTerm (TyCon con) = prettyTyConInfo con
+prettyTypeTerm (TyCon con) = prettyTyConName con
 prettyTypeTerm (TyVar var) = prettyTyVarInfo var
-
-prettyTyConInfo :: TyConInfo -> Doc ann
-prettyTyConInfo (TyConInfo name args) = prettyTyConName name <> args'
+prettyTypeTerm (TyApp con args) = prettyTyConName con <+> sep (toList $ prettyArg <$> args)
  where
-  args' = if null args then mempty else space <> sep (prettyArg <$> args)
-  prettyArg arg = parensIf (isConWithArgs arg) $ prettyTypeTerm arg
+  prettyArg arg = parensIf (isTyApp arg) $ prettyTypeTerm arg
 
-isConWithArgs :: TypeTerm -> Bool
-isConWithArgs (TyCon (TyConInfo _ args)) = not (null args)
-isConWithArgs _ = False
+isTyApp :: TypeTerm -> Bool
+isTyApp TyApp{} = True
+isTyApp _ = False
 
 prettyTyVarInfo :: TyVarInfo -> Doc ann
 prettyTyVarInfo (TyVarInfo name _) = prettyTyVarName name

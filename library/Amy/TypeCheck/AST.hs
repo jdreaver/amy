@@ -9,7 +9,6 @@ module Amy.TypeCheck.AST
   , TypeDeclaration(..)
   , TyConDefinition(..)
   , fromPrimTypeDef
-  , tyConDefinitionToInfo
   , DataConDefinition(..)
   , fromPrimDataCon
   , Expr(..)
@@ -26,8 +25,6 @@ module Amy.TypeCheck.AST
 
   , TypeTerm(..)
   , Type(..)
-  , TyConInfo(..)
-  , fromPrimTyCon
   , TyVarInfo(..)
   , TyVarGenerated(..)
   , Scheme(..)
@@ -89,9 +86,6 @@ data TyConDefinition
   { tyConDefinitionName :: !TyConName
   , tyConDefinitionArgs :: ![TyVarInfo]
   } deriving (Show, Eq, Ord)
-
-tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
-tyConDefinitionToInfo (TyConDefinition name' args) = TyConInfo name' (TyVar <$> args)
 
 fromPrimTyDef :: TyConName -> TyConDefinition
 fromPrimTyDef name = TyConDefinition name []
@@ -172,7 +166,7 @@ data App
   } deriving (Show, Eq)
 
 literalType' :: Literal -> Type
-literalType' lit = TyTerm $ TyCon $ fromPrimTyCon $ literalType lit
+literalType' lit = TyTerm $ TyCon $ literalType lit
 
 expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType' lit
@@ -193,8 +187,9 @@ patternType (PCons (PatCons _ _ ty)) = ty
 patternType (PParens pat) = patternType pat
 
 data TypeTerm
-  = TyCon !TyConInfo
+  = TyCon !TyConName
   | TyVar !TyVarInfo
+  | TyApp !TyConName !(NonEmpty TypeTerm)
   deriving (Show, Eq, Ord)
 
 data Type
@@ -203,15 +198,6 @@ data Type
   deriving (Show, Eq, Ord)
 
 infixr 0 `TyFun`
-
-data TyConInfo
-  = TyConInfo
-  { tyConInfoName :: !TyConName
-  , tyConInfoArgs :: ![TypeTerm]
-  } deriving (Show, Eq, Ord)
-
-fromPrimTyCon :: TyConName -> TyConInfo
-fromPrimTyCon = tyConDefinitionToInfo . fromPrimTyDef
 
 data TyVarInfo
   = TyVarInfo

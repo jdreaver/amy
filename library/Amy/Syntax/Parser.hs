@@ -88,28 +88,20 @@ parseType = makeExprParser term table
 typeTerm :: AmyParser TypeTerm
 typeTerm = do
   con :| rest <- CNE.sepBy1 typeTerm' spaceConsumer
-  process con rest
+  case (con, NE.nonEmpty rest) of
+    (TyCon name, Just args) -> pure $ TyApp name args
+    (TyCon name, Nothing) -> pure $ TyCon name
+    (TyVar var, Nothing) -> pure $ TyVar var
+    (TyVar _, Just _) -> mkError $ "type variable with arguments encountered (no higher-kinded types allowed): " ++ show (con, rest)
+    (TyApp _ _, _) -> mkError $ "currying of type constructors not allowed " ++ show (con, rest)
  where
   mkError = fancyFailure . Set.singleton . ErrorFail
-  process (TyCon (TyConInfo con _ span')) args = pure $ TyCon $ TyConInfo con args span'
-  process (TyVar var) [] = pure $ TyVar var
-  process t@(TyVar _) args = mkError $ "type variable with arguments encountered (no higher-kinded types allowed): " ++ show (t, args)
 
 typeTerm' :: AmyParser TypeTerm
 typeTerm' =
   (parens typeTerm <?> "type parens")
   <|> (TyVar <$> tyVarName <?> "type variable")
-  <|> (TyCon <$> tyConInfoNoArgs <?> "type constructor")
-
-tyConInfoNoArgs :: AmyParser TyConInfo
-tyConInfoNoArgs = do
-  Located span' name <- tyConName
-  pure
-    TyConInfo
-    { tyConInfoName = name
-    , tyConInfoArgs = []
-    , tyConInfoLocation = span'
-    }
+  <|> (TyCon <$> tyConName <?> "type constructor")
 
 binding :: AmyParser Binding
 binding = do

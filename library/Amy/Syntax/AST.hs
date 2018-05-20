@@ -27,7 +27,6 @@ module Amy.Syntax.AST
   , App(..)
   , TypeTerm(..)
   , Type(..)
-  , TyConInfo(..)
   , Scheme(..)
 
     -- Re-export
@@ -188,8 +187,9 @@ data App
   } deriving (Show, Eq)
 
 data TypeTerm
-  = TyCon !TyConInfo
+  = TyCon !(Located TyConName)
   | TyVar !(Located TyVarName)
+  | TyApp !(Located TyConName) !(NonEmpty TypeTerm)
   deriving (Show, Eq)
 
 data Type
@@ -198,13 +198,6 @@ data Type
   deriving (Show, Eq)
 
 infixr 0 `TyFun`
-
-data TyConInfo
-  = TyConInfo
-  { tyConInfoName :: !TyConName
-  , tyConInfoArgs :: ![TypeTerm]
-  , tyConInfoLocation :: !SourceSpan
-  } deriving (Show, Eq)
 
 data Scheme
   = Forall ![Located TyVarName] Type

@@ -4,7 +4,6 @@ module Amy.Renamer.AST
   , Extern(..)
   , TypeDeclaration(..)
   , TyConDefinition(..)
-  , tyConDefinitionToInfo
   , fromPrimTypeDef
   , DataConDefinition(..)
   , Expr(..)
@@ -19,8 +18,6 @@ module Amy.Renamer.AST
 
   , TypeTerm(..)
   , Type(..)
-  , TyConInfo(..)
-  , TyVarInfo(..)
   , Scheme(..)
 
     -- Re-export
@@ -70,12 +67,9 @@ data TypeDeclaration
 data TyConDefinition
   = TyConDefinition
   { tyConDefinitionName :: !TyConName
-  , tyConDefinitionArgs :: ![TyVarInfo]
+  , tyConDefinitionArgs :: ![Located TyVarName]
   , tyConDefinitionLocation :: !(Maybe SourceSpan)
   } deriving (Show, Eq, Ord)
-
-tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
-tyConDefinitionToInfo (TyConDefinition name' args span') = TyConInfo name' (TyVar <$> args) span'
 
 fromPrimTyDef :: TyConName -> TyConDefinition
 fromPrimTyDef name = TyConDefinition name [] Nothing
@@ -107,7 +101,7 @@ data Expr
 
 data Var
   = VVal !(Located IdentName)
-  | VCons !DataConName
+  | VCons !(Located DataConName)
   deriving (Show, Eq)
 
 data If
@@ -138,7 +132,7 @@ data Pattern
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataConName
+  { patConsConstructor :: !(Located DataConName)
   , patConsArg :: !(Maybe Pattern)
   } deriving (Show, Eq)
 
@@ -156,9 +150,10 @@ data App
   } deriving (Show, Eq)
 
 data TypeTerm
-  = TyCon !TyConInfo
-  | TyVar !TyVarInfo
-  deriving (Show, Eq, Ord)
+  = TyCon !(Located TyConName)
+  | TyVar !(Located TyVarName)
+  | TyApp !(Located TyConName) !(NonEmpty TypeTerm)
+  deriving (Show, Eq)
 
 data Type
   = TyTerm !TypeTerm
@@ -167,19 +162,6 @@ data Type
 
 infixr 0 `TyFun`
 
-data TyConInfo
-  = TyConInfo
-  { tyConInfoName :: !TyConName
-  , tyConInfoArgs :: ![TypeTerm]
-  , tyConInfoLocation :: !(Maybe SourceSpan)
-  } deriving (Show, Eq, Ord)
-
-data TyVarInfo
-  = TyVarInfo
-  { tyVarInfoName :: !TyVarName
-  , tyVarInfoLocation :: !SourceSpan
-  } deriving (Show, Eq, Ord)
-
 data Scheme
-  = Forall ![TyVarInfo] Type
+  = Forall ![Located TyVarName] Type
   deriving (Show, Eq)

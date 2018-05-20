@@ -41,43 +41,53 @@ rename' (S.Module declarations) = do
     <*> sequenceA typeDeclarations
 
 renameTypeDeclaration :: S.TypeDeclaration -> Renamer (Validation [Error] R.TypeDeclaration)
-renameTypeDeclaration (S.TypeDeclaration tyDef constructors) = do
+renameTypeDeclaration (S.TypeDeclaration (S.TyConDefinition name args span') constructors) = do
   -- Rename type name
-  tyDef' <- addTypeDefinitionToScope tyDef
+  name' <- fmap locatedValue <$> addTypeConstructorToScope (Located span' name)
+  let
+    tyDef =
+      R.TyConDefinition
+      <$> name'
+      <*> pure args
+      <*> pure (Just span')
 
-  liftValidation tyDef' $ \tyDef'' -> do
-    let
-      tyVars = R.tyConDefinitionArgs tyDef''
-
+  liftValidation tyDef $ \tyDef' -> do
     -- Rename data constructors
-    constructors' <- for constructors $ \(S.DataConDefinition name mArgTy) -> do
+    constructors' <- for constructors $ \(S.DataConDefinition con mArgTy) -> do
       let
         renameArg (S.TyCon tyCon) = fmap R.TyCon <$> lookupTypeConstructorInScopeOrError tyCon
-        renameArg (S.TyVar tyVar) =
+        renameArg (S.TyVar lTyVar@(Located tyVarSpan tyVar)) =
           -- Find the constructor's type variable argument corresponding to
           -- this type variable
-          let mTyVar = find ((== locatedValue tyVar) . R.tyVarInfoName) tyVars
-          in pure $ maybe (Failure [UnknownTypeVariable tyVar]) (Success . R.TyVar) mTyVar
+          let mTyVar = find ((== tyVar) . locatedValue) args
+          in pure $ maybe (Failure [UnknownTypeVariable lTyVar]) (Success . R.TyVar . Located tyVarSpan . locatedValue) mTyVar
+        renameArg (S.TyApp appCon appArgs) = do
+          appCon' <- lookupTypeConstructorInScopeOrError appCon
+          appArgs' <- traverse renameArg appArgs
+          pure
+            $ R.TyApp
+            <$> appCon'
+            <*> sequenceA appArgs'
       mArgTy' <- traverse renameArg mArgTy
       liftValidation (sequenceA mArgTy') $ \mArgTy'' ->
-        addDataConDefinitionToScope name mArgTy''
+        addDataConDefinitionToScope $ R.DataConDefinition con mArgTy''
     let
-      decl =
+      decl' =
         R.TypeDeclaration
-        <$> pure tyDef''
+        <$> pure tyDef'
         <*> sequenceA constructors'
-
-    traverse addTypeDeclarationToScope (decl <* checkForDuplicateTypeVariables tyVars)
+    liftValidation decl' $ \decl'' ->
+      addTypeDeclarationToScope decl'' span' <* pure (checkForDuplicateTypeVariables args)
 
 -- | We don't allow duplicate type variables in type definitions, like if we
 -- said @Either a a = ...@
-checkForDuplicateTypeVariables :: [R.TyVarInfo] -> Validation [Error] ()
+checkForDuplicateTypeVariables :: [Located TyVarName] -> Validation [Error] ()
 checkForDuplicateTypeVariables tyVars = if null dups then Success () else Failure dups
  where
-  checkDup :: R.TyVarInfo -> [R.TyVarInfo] -> Maybe Error
-  checkDup var@(R.TyVarInfo name span') prev =
-    case find ((== R.tyVarInfoName var) . R.tyVarInfoName) prev of
-      Just (R.TyVarInfo dupName dupSpan) -> Just (DuplicateTypeVariable (Located span' name) (Located dupSpan dupName))
+  checkDup :: Located TyVarName -> [Located TyVarName] -> Maybe Error
+  checkDup var@(Located _ name) prev =
+    case find ((== name) . locatedValue) prev of
+      Just dupVar -> Just (DuplicateTypeVariable var dupVar)
       Nothing -> Nothing
   dups :: [Error]
   dups = catMaybes $ snd $ mapAccumL (\prev var -> (var:prev, checkDup var prev)) [] tyVars
@@ -137,6 +147,17 @@ renameType (S.TyFun ty1 ty2) = do
     R.TyFun
     <$> ty1'
     <*> ty2'
+
+lookupTypeTerm :: S.TypeTerm -> Renamer (Validation [Error] R.TypeTerm)
+lookupTypeTerm (S.TyCon con) = fmap R.TyCon <$> lookupTypeConstructorInScopeOrError con
+lookupTypeTerm (S.TyVar var) = fmap R.TyVar <$> lookupTypeVariableInScopeOrError var
+lookupTypeTerm (S.TyApp con args) = do
+  con' <- lookupTypeConstructorInScopeOrError con
+  args' <- traverse lookupTypeTerm args
+  pure
+    $ R.TyApp
+    <$> con'
+    <*> sequenceA args'
 
 renameExpression :: S.Expr -> Renamer (Validation [Error] R.Expr)
 renameExpression (S.ELit lit) = pure $ Success $ R.ELit lit

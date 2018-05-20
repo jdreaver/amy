@@ -72,8 +72,9 @@ convertType ty = go (typeToNonEmpty ty)
   go _ = mkFunctionType ty
 
 convertTypeTerm :: C.TypeTerm -> ANFConvert ANF.Type
-convertTypeTerm (C.TyCon con) = getTyConInfoType con
+convertTypeTerm (C.TyCon con) = getTyConType con
 convertTypeTerm (C.TyVar _) = pure OpaquePointerType
+convertTypeTerm (C.TyApp con _) = getTyConType con
 
 mkFunctionType :: C.Type -> ANFConvert ANF.Type
 mkFunctionType ty = do

@@ -6,7 +6,6 @@ module Amy.Core.AST
   , Extern(..)
   , TypeDeclaration(..)
   , TyConDefinition(..)
-  , tyConDefinitionToInfo
   , fromPrimTypeDefinition
   , DataConDefinition(..)
   , Expr(..)
@@ -23,8 +22,6 @@ module Amy.Core.AST
   , substExpr
   , TypeTerm(..)
   , Type(..)
-  , TyConInfo(..)
-  , TyVarInfo(..)
   , Scheme(..)
   , Typed(..)
 
@@ -76,11 +73,8 @@ data TypeDeclaration
 data TyConDefinition
   = TyConDefinition
   { tyConDefinitionName :: !TyConName
-  , tyConDefinitionArgs :: ![TyVarInfo]
+  , tyConDefinitionArgs :: ![TyVarName]
   } deriving (Show, Eq, Ord)
-
-tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
-tyConDefinitionToInfo (TyConDefinition name' args) = TyConInfo name' (TyVar <$> args)
 
 fromPrimTyDef :: TyConName -> TyConDefinition
 fromPrimTyDef name = TyConDefinition name []
@@ -159,7 +153,7 @@ data App
   } deriving (Show, Eq)
 
 literalType' :: Literal -> Type
-literalType' lit = TyTerm $ TyCon $ fromPrimTyCon $ literalType lit
+literalType' lit = TyTerm $ TyCon $ literalType lit
 
 expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType' lit
@@ -206,8 +200,9 @@ replaceIdent :: IdentName -> IdentName -> IdentName -> IdentName
 replaceIdent var oldVar newVar = if var == oldVar then newVar else var
 
 data TypeTerm
-  = TyCon !TyConInfo
-  | TyVar !TyVarInfo
+  = TyCon !TyConName
+  | TyVar !TyVarName
+  | TyApp !TyConName !(NonEmpty TypeTerm)
   deriving (Show, Eq, Ord)
 
 data Type
@@ -217,22 +212,8 @@ data Type
 
 infixr 0 `TyFun`
 
-data TyConInfo
-  = TyConInfo
-  { tyConInfoName :: !TyConName
-  , tyConInfoArgs :: ![TypeTerm]
-  } deriving (Show, Eq, Ord)
-
-fromPrimTyCon :: TyConName -> TyConInfo
-fromPrimTyCon = tyConDefinitionToInfo . fromPrimTyDef
-
-data TyVarInfo
-  = TyVarInfo
-  { tyVarInfoName :: !TyVarName
-  } deriving (Show, Eq, Ord)
-
 data Scheme
-  = Forall ![TyVarInfo] Type
+  = Forall ![TyVarName] Type
   deriving (Show, Eq)
 
 data Typed a
