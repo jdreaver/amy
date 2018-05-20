@@ -1,8 +1,11 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Amy.Syntax.Pretty
   ( prettyModule
   , prettyDeclaration
   , prettyTypeDeclaration
   , prettyExpr
+  , prettyType
   ) where
 
 import Data.Foldable (toList)
@@ -11,23 +14,21 @@ import Amy.Literal
 import Amy.Pretty
 import Amy.Syntax.AST
 
-mkPrettyType :: Type -> PrettyType ann
-mkPrettyType (TyTerm t) = PTyDoc $ prettyTypeTerm t
-mkPrettyType (TyFun ty1 ty2) = PTyFun (mkPrettyType ty1) (mkPrettyType ty2)
-
-prettyTypeTerm :: TypeTerm -> Doc ann
-prettyTypeTerm (TyCon con) = prettyTyConName (locatedValue con)
-prettyTypeTerm (TyVar var) = prettyTyVarName (locatedValue var)
-prettyTypeTerm (TyApp con args) = prettyTyConName (locatedValue con) <+> sep (toList $ prettyArg <$> args)
+prettyType :: Type -> Doc ann
+prettyType (TyFun ty1 ty2) = parensIf (isTyApp ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
+prettyType (TyCon con) = prettyTyConName (locatedValue con)
+prettyType (TyVar var) = prettyTyVarName (locatedValue var)
+prettyType (TyApp con args) = prettyTyConName (locatedValue con) <+> sep (toList $ prettyArg <$> args)
  where
-  prettyArg arg = parensIf (isTyApp arg) $ prettyTypeTerm arg
+  prettyArg arg = parensIf (isTyApp arg) $ prettyType arg
 
-isTyApp :: TypeTerm -> Bool
+isTyApp :: Type -> Bool
 isTyApp TyApp{} = True
+isTyApp TyFun{} = True
 isTyApp _ = False
 
-mkPrettyScheme :: Scheme -> PrettyScheme ann
-mkPrettyScheme (Forall vars ty) = PForall (pretty . unTyVarName . locatedValue <$> vars) (mkPrettyType ty)
+prettyScheme' :: Scheme -> Doc ann
+prettyScheme' (Forall vars ty) = prettyScheme (pretty . unTyVarName . locatedValue <$> vars) (prettyType ty)
 
 prettyModule :: Module -> Doc ann
 prettyModule (Module decls) = vcatTwoHardLines (prettyDeclaration <$> decls)
@@ -36,12 +37,12 @@ prettyDeclaration :: Declaration -> Doc ann
 prettyDeclaration (DeclBinding binding) = prettyBinding' binding
 prettyDeclaration (DeclBindingType bindingTy) = prettyBindingType' bindingTy
 prettyDeclaration (DeclExtern (Extern (Located _ name) ty)) =
-  prettyExtern (prettyIdent name) (mkPrettyType ty)
+  prettyExtern (prettyIdent name) (prettyType ty)
 prettyDeclaration (DeclType (TypeDeclaration info cons)) =
   prettyTypeDeclaration (prettyTyConDefinition info) (prettyConstructor <$> cons)
  where
   prettyConstructor (DataConDefinition (Located _ conName) mArg) =
-    prettyDataConstructor (prettyDataConName conName) (prettyTypeTerm <$> mArg)
+    prettyDataConstructor (prettyDataConName conName) (prettyType <$> mArg)
 
 prettyTyConDefinition :: TyConDefinition -> Doc ann
 prettyTyConDefinition (TyConDefinition name args _) = prettyTyConName name <> args'
@@ -54,7 +55,7 @@ prettyBinding' (Binding (Located _ name) args body) =
 
 prettyBindingType' :: BindingType -> Doc ann
 prettyBindingType' (BindingType (Located _ name) ty) =
-  prettyBindingScheme (prettyIdent name) (mkPrettyScheme ty)
+  prettyBindingScheme (prettyIdent name) (prettyScheme' ty)
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit

@@ -16,9 +16,6 @@ module Amy.Pretty
   , prettyTyVarName
 
     -- Types
-  , PrettyType(..)
-  , prettyType
-  , PrettyScheme(..)
   , prettyScheme
 
     -- General AST
@@ -77,29 +74,11 @@ prettyTyVarName = pretty . unTyVarName
 -- Types
 --
 
-data PrettyType ann
-  = PTyDoc !(Doc ann)
-  | PTyFun !(PrettyType ann) !(PrettyType ann)
-  deriving (Show)
-
-prettyType :: PrettyType ann -> Doc ann
-prettyType t =
-  case t of
-    PTyDoc ty -> ty
-    PTyFun tyLeft tyRight ->
-      parensIf (isArr tyLeft) (prettyType tyLeft) <+> "->" <+> prettyType tyRight
- where
-  isArr PTyFun{} = True
-  isArr _ = False
-
-data PrettyScheme ann = PForall [Doc ann] (PrettyType ann)
-  deriving (Show)
-
-prettyScheme :: PrettyScheme ann -> Doc ann
-prettyScheme (PForall vars ty) =
+prettyScheme :: [Doc ann] -> Doc ann -> Doc ann
+prettyScheme vars ty =
   case vars of
-    [] -> prettyType ty
-    _ -> "forall" <+> hcat (punctuate space vars) <> "." <+> prettyType ty
+    [] -> ty
+    _ -> "forall" <+> hcat (punctuate space vars) <> "." <+> ty
 
 --
 -- General AST Helpers
@@ -141,13 +120,13 @@ prettyBinding :: Doc ann -> [Doc ann] -> Doc ann -> Doc ann
 prettyBinding name args body =
   sep (name : args) <+> "=" <> groupOrHang body
 
-prettyBindingType :: Doc ann -> PrettyType ann -> Doc ann
-prettyBindingType name ty = name <+> "::" <+> prettyType ty
+prettyBindingType :: Doc ann -> Doc ann -> Doc ann
+prettyBindingType name ty = name <+> "::" <+> ty
 
-prettyBindingScheme :: Doc ann -> PrettyScheme ann -> Doc ann
-prettyBindingScheme name scheme = name <+> "::" <+> prettyScheme scheme
+prettyBindingScheme :: Doc ann -> Doc ann -> Doc ann
+prettyBindingScheme name scheme = name <+> "::" <+> scheme
 
-prettyExtern :: Doc ann -> PrettyType ann -> Doc ann
+prettyExtern :: Doc ann -> Doc ann -> Doc ann
 prettyExtern name ty = "extern" <+> prettyBindingType name ty
 
 prettyTypeDeclaration :: Doc ann -> [Doc ann] -> Doc ann

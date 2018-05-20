@@ -11,23 +11,21 @@ import Amy.Core.AST
 import Amy.Literal
 import Amy.Pretty
 
-mkPrettyType :: Type -> PrettyType ann
-mkPrettyType (TyTerm t) = PTyDoc $ prettyTypeTerm t
-mkPrettyType (TyFun ty1 ty2) = PTyFun (mkPrettyType ty1) (mkPrettyType ty2)
-
-prettyTypeTerm :: TypeTerm -> Doc ann
-prettyTypeTerm (TyCon con) = prettyTyConName con
-prettyTypeTerm (TyVar var) = prettyTyVarName var
-prettyTypeTerm (TyApp con args) = prettyTyConName con <+> sep (toList $ prettyArg <$> args)
+prettyType :: Type -> Doc ann
+prettyType (TyFun ty1 ty2) = parensIf (isTyApp ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
+prettyType (TyCon con) = prettyTyConName con
+prettyType (TyVar var) = prettyTyVarName var
+prettyType (TyApp con args) = prettyTyConName con <+> sep (toList $ prettyArg <$> args)
  where
-  prettyArg arg = parensIf (isTyApp arg) $ prettyTypeTerm arg
+  prettyArg arg = parensIf (isTyApp arg) $ prettyType arg
 
-isTyApp :: TypeTerm -> Bool
+isTyApp :: Type -> Bool
 isTyApp TyApp{} = True
+isTyApp TyFun{} = True
 isTyApp _ = False
 
-mkPrettyScheme :: Scheme -> PrettyScheme ann
-mkPrettyScheme (Forall vars ty) = PForall (prettyTyVarName <$> vars) (mkPrettyType ty)
+prettyScheme' :: Scheme -> Doc ann
+prettyScheme' (Forall vars ty) = prettyScheme (prettyTyVarName <$> vars) (prettyType ty)
 
 prettyModule :: Module -> Doc ann
 prettyModule (Module bindings externs typeDeclarations _) =
@@ -38,14 +36,14 @@ prettyModule (Module bindings externs typeDeclarations _) =
 
 prettyExtern' :: Extern -> Doc ann
 prettyExtern' (Extern name ty) =
-  prettyExtern (prettyIdent name) (mkPrettyType ty)
+  prettyExtern (prettyIdent name) (prettyType ty)
 
 prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
 prettyTypeDeclaration' (TypeDeclaration tyName cons) =
    prettyTypeDeclaration (prettyTyConDefinition tyName) (prettyConstructor <$> cons)
  where
   prettyConstructor (DataConDefinition conName mArg) =
-    prettyDataConstructor (prettyDataConName conName) (prettyTypeTerm <$> mArg)
+    prettyDataConstructor (prettyDataConName conName) (prettyType <$> mArg)
 
 prettyTyConDefinition :: TyConDefinition -> Doc ann
 prettyTyConDefinition (TyConDefinition name args) = prettyTyConName name <> args'
@@ -54,15 +52,15 @@ prettyTyConDefinition (TyConDefinition name args) = prettyTyConName name <> args
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding ident scheme args _ body) =
-  prettyScheme' ident scheme <>
+  prettyBindingScheme' ident scheme <>
   hardline <>
   prettyBinding (prettyIdent ident) (prettyTypedIdent <$> args) (prettyExpr body)
 
-prettyScheme' :: IdentName -> Scheme -> Doc ann
-prettyScheme' ident scheme = prettyBindingScheme (prettyIdent ident) (mkPrettyScheme scheme)
+prettyBindingScheme' :: IdentName -> Scheme -> Doc ann
+prettyBindingScheme' ident scheme = prettyBindingScheme (prettyIdent ident) (prettyScheme' scheme)
 
 prettyTypedIdent :: Typed IdentName -> Doc ann
-prettyTypedIdent (Typed ty ident) = parens $ prettyIdent ident <+> "::" <+> prettyType (mkPrettyType ty)
+prettyTypedIdent (Typed ty ident) = parens $ prettyIdent ident <+> "::" <+> prettyType ty
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit lit) = pretty $ showLiteral lit
@@ -91,4 +89,4 @@ prettyPattern :: Pattern -> Doc ann
 prettyPattern (PLit lit) = pretty $ showLiteral lit
 prettyPattern (PCons (PatCons con mArg _)) =
   prettyDataConName con
-  <> maybe mempty (\(Typed ty arg) -> space <> parens (prettyIdent arg <+> "::" <+> prettyType (mkPrettyType ty))) mArg
+  <> maybe mempty (\(Typed ty arg) -> space <> parens (prettyIdent arg <+> "::" <+> prettyType ty)) mArg

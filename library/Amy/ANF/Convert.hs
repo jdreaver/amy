@@ -44,7 +44,7 @@ convertTypeDeclaration (C.TypeDeclaration tyConDef con) = do
 
 convertDataConDefinition :: C.DataConDefinition -> ANFConvert ANF.DataConDefinition
 convertDataConDefinition (C.DataConDefinition conName mTyArg) = do
-  mTyArg' <- traverse convertTypeTerm mTyArg
+  mTyArg' <- traverse convertType mTyArg
   pure
     ANF.DataConDefinition
     { ANF.dataConDefinitionName = conName
@@ -67,14 +67,11 @@ convertType ty = go (typeToNonEmpty ty)
   go :: NonEmpty C.Type -> ANFConvert ANF.Type
   go (ty' :| []) =
     case ty' of
-      C.TyTerm t -> convertTypeTerm t
+      C.TyCon con -> getTyConType con
+      C.TyVar _ -> pure OpaquePointerType
+      C.TyApp con _ -> getTyConType con
       C.TyFun{} -> mkFunctionType ty
   go _ = mkFunctionType ty
-
-convertTypeTerm :: C.TypeTerm -> ANFConvert ANF.Type
-convertTypeTerm (C.TyCon con) = getTyConType con
-convertTypeTerm (C.TyVar _) = pure OpaquePointerType
-convertTypeTerm (C.TyApp con _) = getTyConType con
 
 mkFunctionType :: C.Type -> ANFConvert ANF.Type
 mkFunctionType ty = do

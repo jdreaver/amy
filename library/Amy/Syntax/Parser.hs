@@ -83,9 +83,9 @@ parseType :: AmyParser Type
 parseType = makeExprParser term table
  where
   table = [[InfixR (TyFun <$ typeSeparatorArrow)]]
-  term = parens parseType <|> (TyTerm <$> typeTerm)
+  term = parens parseType <|> typeTerm
 
-typeTerm :: AmyParser TypeTerm
+typeTerm :: AmyParser Type
 typeTerm = do
   con :| rest <- CNE.sepBy1 typeTerm' spaceConsumer
   case (con, NE.nonEmpty rest) of
@@ -94,14 +94,15 @@ typeTerm = do
     (TyVar var, Nothing) -> pure $ TyVar var
     (TyVar _, Just _) -> mkError $ "type variable with arguments encountered (no higher-kinded types allowed): " ++ show (con, rest)
     (TyApp _ _, _) -> mkError $ "currying of type constructors not allowed " ++ show (con, rest)
+    (TyFun _ _, _) -> mkError $ "currying of type constructors not allowed " ++ show (con, rest)
  where
   mkError = fancyFailure . Set.singleton . ErrorFail
 
-typeTerm' :: AmyParser TypeTerm
+typeTerm' :: AmyParser Type
 typeTerm' =
-  (parens typeTerm <?> "type parens")
-  <|> (TyVar <$> tyVarName <?> "type variable")
-  <|> (TyCon <$> tyConName <?> "type constructor")
+  (parens parseType <?> "type parens")
+  <|> try (TyVar <$> tyVarName <?> "type variable")
+  <|> try (TyCon <$> tyConName <?> "type constructor")
 
 binding :: AmyParser Binding
 binding = do

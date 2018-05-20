@@ -33,7 +33,7 @@ desugarDataConDefinition :: T.DataConDefinition -> C.DataConDefinition
 desugarDataConDefinition (T.DataConDefinition conName mTyArg) =
   C.DataConDefinition
   { C.dataConDefinitionName = conName
-  , C.dataConDefinitionArgument = desugarTypeTerm <$> mTyArg
+  , C.dataConDefinitionArgument = desugarType <$> mTyArg
   }
 
 desugarBinding :: T.Binding -> Desugar C.Binding
@@ -74,7 +74,7 @@ desugarExpr (T.ECase (T.Case scrutinee matches)) = do
 
 desugarExpr (T.EIf (T.If pred' then' else')) =
   let
-    boolTyCon' = T.TyTerm $ T.TyCon boolTyCon
+    boolTyCon' = T.TyCon boolTyCon
     mkBoolPatCons cons =
       T.PatCons (T.dataConDefinitionName $ T.fromPrimDataCon cons) Nothing boolTyCon'
     matches =
@@ -104,13 +104,10 @@ desugarScheme :: T.Scheme -> C.Scheme
 desugarScheme (T.Forall vars ty) = C.Forall (desugarTyVarInfo <$> vars) (desugarType ty)
 
 desugarType :: T.Type -> C.Type
-desugarType (T.TyTerm t) = C.TyTerm (desugarTypeTerm t)
+desugarType (T.TyCon con) = C.TyCon con
+desugarType (T.TyVar var) = C.TyVar (desugarTyVarInfo var)
+desugarType (T.TyApp con args) = C.TyApp con (desugarType <$> args)
 desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)
-
-desugarTypeTerm :: T.TypeTerm -> C.TypeTerm
-desugarTypeTerm (T.TyCon con) = C.TyCon con
-desugarTypeTerm (T.TyVar var) = C.TyVar (desugarTyVarInfo var)
-desugarTypeTerm (T.TyApp con args) = C.TyApp con (desugarTypeTerm <$> args)
 
 desugarTyConDefinition :: T.TyConDefinition -> C.TyConDefinition
 desugarTyConDefinition (T.TyConDefinition name args) = C.TyConDefinition name args
@@ -164,7 +161,7 @@ restoreClause clause@(PC.Clause (PC.ConLit _) _ _) =
 restoreClause (PC.Clause (PC.Con con _ _) args caseExpr) = do
   (tyDecl, _) <- lookupDataConType con
   let
-    patTy = C.TyTerm $ C.TyCon $ C.tyConDefinitionName $ C.typeDeclarationTypeName tyDecl
+    patTy = C.TyCon $ C.tyConDefinitionName $ C.typeDeclarationTypeName tyDecl
     arg =
       case args of
         [] -> Nothing

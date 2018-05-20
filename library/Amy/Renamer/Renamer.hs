@@ -61,6 +61,13 @@ renameTypeDeclaration (S.TypeDeclaration (S.TyConDefinition name args span') con
           -- this type variable
           let mTyVar = find ((== tyVar) . locatedValue) args
           in pure $ maybe (Failure [UnknownTypeVariable lTyVar]) (Success . R.TyVar . Located tyVarSpan . locatedValue) mTyVar
+        renameArg (S.TyFun t1 t2) = do
+          ty1' <- renameArg t1
+          ty2' <- renameArg t2
+          pure
+            $ R.TyFun
+            <$> ty1'
+            <*> ty2'
         renameArg (S.TyApp appCon appArgs) = do
           appCon' <- lookupTypeConstructorInScopeOrError appCon
           appArgs' <- traverse renameArg appArgs
@@ -139,7 +146,15 @@ renameScheme (S.Forall vars ty) = do
     <*> ty'
 
 renameType :: S.Type -> Renamer (Validation [Error] R.Type)
-renameType (S.TyTerm term) = fmap R.TyTerm <$> lookupTypeTerm term
+renameType (S.TyCon con) = fmap R.TyCon <$> lookupTypeConstructorInScopeOrError con
+renameType (S.TyVar var) = fmap R.TyVar <$> lookupTypeVariableInScopeOrError var
+renameType (S.TyApp con args) = do
+  con' <- lookupTypeConstructorInScopeOrError con
+  args' <- traverse renameType args
+  pure
+    $ R.TyApp
+    <$> con'
+    <*> sequenceA args'
 renameType (S.TyFun ty1 ty2) = do
   ty1' <- renameType ty1
   ty2' <- renameType ty2
@@ -147,17 +162,6 @@ renameType (S.TyFun ty1 ty2) = do
     R.TyFun
     <$> ty1'
     <*> ty2'
-
-lookupTypeTerm :: S.TypeTerm -> Renamer (Validation [Error] R.TypeTerm)
-lookupTypeTerm (S.TyCon con) = fmap R.TyCon <$> lookupTypeConstructorInScopeOrError con
-lookupTypeTerm (S.TyVar var) = fmap R.TyVar <$> lookupTypeVariableInScopeOrError var
-lookupTypeTerm (S.TyApp con args) = do
-  con' <- lookupTypeConstructorInScopeOrError con
-  args' <- traverse lookupTypeTerm args
-  pure
-    $ R.TyApp
-    <$> con'
-    <*> sequenceA args'
 
 renameExpression :: S.Expr -> Renamer (Validation [Error] R.Expr)
 renameExpression (S.ELit lit) = pure $ Success $ R.ELit lit

@@ -37,7 +37,7 @@ match'
 match' vars eqs = runDesugar 0 [] $ match vars eqs
 
 boolTy :: Type
-boolTy = TyTerm $ TyCon "Bool"
+boolTy = TyCon "Bool"
 
 mkVal :: Typed IdentName -> Expr
 mkVal x' = EVar $ VVal x'

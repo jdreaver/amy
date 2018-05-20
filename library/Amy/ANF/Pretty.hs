@@ -13,8 +13,8 @@ import Amy.Literal
 import Amy.Pretty
 import Amy.Prim
 
-mkPrettyType :: Type -> PrettyType ann
-mkPrettyType = PTyDoc . pretty . show
+prettyType :: Type -> Doc ann
+prettyType = pretty . show
 
 prettyModule :: Module -> Doc ann
 prettyModule (Module bindings externs typeDeclarations) =
@@ -25,18 +25,18 @@ prettyModule (Module bindings externs typeDeclarations) =
 
 prettyExtern' :: Extern -> Doc ann
 prettyExtern' (Extern name ty) =
-  prettyExtern (prettyIdent name) (mkPrettyType ty)
+  prettyExtern (prettyIdent name) (prettyType ty)
 
 prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
 prettyTypeDeclaration' (TypeDeclaration tyName _ cons) =
    prettyTypeDeclaration (prettyTyConName tyName) (prettyConstructor <$> cons)
  where
   prettyConstructor (DataConDefinition conName mArg) =
-    prettyDataConstructor (prettyDataConName conName) (prettyType . mkPrettyType <$> mArg)
+    prettyDataConstructor (prettyDataConName conName) (prettyType <$> mArg)
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding ident args retTy body) =
-  prettyBindingType (prettyIdent ident) (mkPrettyType $ FuncType (typedType <$> args) retTy) <>
+  prettyBindingType (prettyIdent ident) (prettyType $ FuncType (typedType <$> args) retTy) <>
   hardline <>
   prettyBinding (prettyIdent ident) (prettyIdent . typedValue <$> args) (prettyExpr body)
 
@@ -69,7 +69,7 @@ prettyExpr (EPrimOp (App (PrimitiveFunction _ name _) args _)) =
 
 prettyLetValBinding :: LetValBinding -> Doc ann
 prettyLetValBinding (LetValBinding ident ty body) =
-  prettyBindingType (prettyIdent ident) (mkPrettyType ty) <>
+  prettyBindingType (prettyIdent ident) (prettyType ty) <>
   hardline <>
   prettyBinding (prettyIdent ident) [] (prettyExpr body)
 
@@ -77,4 +77,4 @@ prettyPattern :: Pattern -> Doc ann
 prettyPattern (PLit lit) = pretty $ showLiteral lit
 prettyPattern (PCons (PatCons con mArg _)) =
   prettyDataConName (dataConName con)
-  <> maybe mempty (\(Typed ty arg) -> space <> parens (prettyIdent arg <+> "::" <+> prettyType (mkPrettyType ty))) mArg
+  <> maybe mempty (\(Typed ty arg) -> space <> parens (prettyIdent arg <+> "::" <+> prettyType ty)) mArg

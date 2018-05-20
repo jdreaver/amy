@@ -25,7 +25,6 @@ module Amy.Syntax.AST
   , letBindingType
   , LetBinding(..)
   , App(..)
-  , TypeTerm(..)
   , Type(..)
   , Scheme(..)
 
@@ -110,7 +109,7 @@ data TyConDefinition
 data DataConDefinition
   = DataConDefinition
   { dataConDefinitionName :: !(Located DataConName)
-  , dataConDefinitionArgument :: !(Maybe TypeTerm)
+  , dataConDefinitionArgument :: !(Maybe Type)
   } deriving (Show, Eq)
 
 data Expr
@@ -186,14 +185,10 @@ data App
   , appArgs :: !(NonEmpty Expr)
   } deriving (Show, Eq)
 
-data TypeTerm
+data Type
   = TyCon !(Located TyConName)
   | TyVar !(Located TyVarName)
-  | TyApp !(Located TyConName) !(NonEmpty TypeTerm)
-  deriving (Show, Eq)
-
-data Type
-  = TyTerm !TypeTerm
+  | TyApp !(Located TyConName) !(NonEmpty Type)
   | TyFun !Type !Type
   deriving (Show, Eq)
 

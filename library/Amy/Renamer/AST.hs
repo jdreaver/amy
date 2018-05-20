@@ -16,7 +16,6 @@ module Amy.Renamer.AST
   , Let(..)
   , App(..)
 
-  , TypeTerm(..)
   , Type(..)
   , Scheme(..)
 
@@ -81,7 +80,7 @@ fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
 data DataConDefinition
   = DataConDefinition
   { dataConDefinitionName :: !(Located DataConName)
-  , dataConDefinitionArgument :: !(Maybe TypeTerm)
+  , dataConDefinitionArgument :: !(Maybe Type)
   } deriving (Show, Eq)
 
 fromPrimDataCon :: DataConName -> DataConDefinition
@@ -149,14 +148,10 @@ data App
   , appArgs :: !(NonEmpty Expr)
   } deriving (Show, Eq)
 
-data TypeTerm
+data Type
   = TyCon !(Located TyConName)
   | TyVar !(Located TyVarName)
-  | TyApp !(Located TyConName) !(NonEmpty TypeTerm)
-  deriving (Show, Eq)
-
-data Type
-  = TyTerm !TypeTerm
+  | TyApp !(Located TyConName) !(NonEmpty Type)
   | TyFun !Type !Type
   deriving (Show, Eq)
 

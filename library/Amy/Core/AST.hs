@@ -20,7 +20,6 @@ module Amy.Core.AST
   , expressionType
 
   , substExpr
-  , TypeTerm(..)
   , Type(..)
   , Scheme(..)
   , Typed(..)
@@ -86,7 +85,7 @@ fromPrimTypeDefinition (PrimTypeDefinition tyName cons) =
 data DataConDefinition
   = DataConDefinition
   { dataConDefinitionName :: !DataConName
-  , dataConDefinitionArgument :: !(Maybe TypeTerm)
+  , dataConDefinitionArgument :: !(Maybe Type)
   } deriving (Show, Eq, Ord)
 
 fromPrimDataCon :: DataConName -> DataConDefinition
@@ -153,7 +152,7 @@ data App
   } deriving (Show, Eq)
 
 literalType' :: Literal -> Type
-literalType' lit = TyTerm $ TyCon $ literalType lit
+literalType' lit = TyCon $ literalType lit
 
 expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType' lit
@@ -199,14 +198,10 @@ substMatch match' var newVar = match' { matchBody = substExpr (matchBody match')
 replaceIdent :: IdentName -> IdentName -> IdentName -> IdentName
 replaceIdent var oldVar newVar = if var == oldVar then newVar else var
 
-data TypeTerm
+data Type
   = TyCon !TyConName
   | TyVar !TyVarName
-  | TyApp !TyConName !(NonEmpty TypeTerm)
-  deriving (Show, Eq, Ord)
-
-data Type
-  = TyTerm !TypeTerm
+  | TyApp !TyConName !(NonEmpty Type)
   | TyFun !Type !Type
   deriving (Show, Eq, Ord)
 

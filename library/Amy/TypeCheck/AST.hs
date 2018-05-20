@@ -23,7 +23,6 @@ module Amy.TypeCheck.AST
   , expressionType
   , patternType
 
-  , TypeTerm(..)
   , Type(..)
   , TyVarInfo(..)
   , TyVarGenerated(..)
@@ -97,7 +96,7 @@ fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
 data DataConDefinition
   = DataConDefinition
   { dataConDefinitionName :: !DataConName
-  , dataConDefinitionArgument :: !(Maybe TypeTerm)
+  , dataConDefinitionArgument :: !(Maybe Type)
   } deriving (Show, Eq, Ord)
 
 fromPrimDataCon :: DataConName -> DataConDefinition
@@ -166,7 +165,7 @@ data App
   } deriving (Show, Eq)
 
 literalType' :: Literal -> Type
-literalType' lit = TyTerm $ TyCon $ literalType lit
+literalType' lit = TyCon $ literalType lit
 
 expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType' lit
@@ -186,14 +185,10 @@ patternType (PVar (Typed ty _)) = ty
 patternType (PCons (PatCons _ _ ty)) = ty
 patternType (PParens pat) = patternType pat
 
-data TypeTerm
+data Type
   = TyCon !TyConName
   | TyVar !TyVarInfo
-  | TyApp !TyConName !(NonEmpty TypeTerm)
-  deriving (Show, Eq, Ord)
-
-data Type
-  = TyTerm !TypeTerm
+  | TyApp !TyConName !(NonEmpty Type)
   | TyFun !Type !Type
   deriving (Show, Eq, Ord)
 
