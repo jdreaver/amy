@@ -190,15 +190,16 @@ dataConstructorScheme con = do
     . Map.lookup con
     <$> asks dataConstructorTypes
   let
+    mkTyConInfo v = T.TyVarInfo v TyVarNotGenerated
     tyApp =
       case NE.nonEmpty tyVars of
-        Just tyVars' -> T.TyApp tyConName (T.TyVar <$> tyVars')
+        Just tyVars' -> T.TyApp tyConName (T.TyVar . mkTyConInfo <$> tyVars')
         Nothing -> T.TyCon tyConName
     mkTy arg =
       case arg of
         Just term -> T.TyTerm term `T.TyFun` T.TyTerm tyApp
         Nothing -> T.TyTerm $ T.TyCon tyConName
-  pure $ T.Forall tyVars (mkTy mTyArg)
+  pure $ T.Forall (mkTyConInfo <$> tyVars) (mkTy mTyArg)
 
 primitiveFunctionScheme :: PrimitiveFunction -> (IdentName, T.Scheme)
 primitiveFunctionScheme (PrimitiveFunction _ name ty) =
@@ -618,7 +619,7 @@ convertTypeTerm (R.TyVar var) = T.TyVar (convertTyVarInfo var)
 convertTypeTerm (R.TyApp (Located _ con) args) = T.TyApp con (convertTypeTerm <$> args)
 
 convertTyConDefinition :: R.TyConDefinition -> T.TyConDefinition
-convertTyConDefinition (R.TyConDefinition name' args _) = T.TyConDefinition name' (convertTyVarInfo <$> args)
+convertTyConDefinition (R.TyConDefinition name' args _) = T.TyConDefinition name' (locatedValue <$> args)
 
 convertTyVarInfo :: Located TyVarName -> T.TyVarInfo
 convertTyVarInfo (Located _ name') = T.TyVarInfo name' TyVarNotGenerated

@@ -56,7 +56,7 @@ prettyTypeDeclaration' (TypeDeclaration tyName cons) =
 prettyTyConDefinition :: TyConDefinition -> Doc ann
 prettyTyConDefinition (TyConDefinition name args) = prettyTyConName name <> args'
  where
-  args' = if null args then mempty else space <> sep (prettyTyVarInfo <$> args)
+  args' = if null args then mempty else space <> sep (prettyTyVarName <$> args)
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding ident scheme args _ body) =

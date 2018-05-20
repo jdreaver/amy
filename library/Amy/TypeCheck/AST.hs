@@ -84,7 +84,7 @@ data TypeDeclaration
 data TyConDefinition
   = TyConDefinition
   { tyConDefinitionName :: !TyConName
-  , tyConDefinitionArgs :: ![TyVarInfo]
+  , tyConDefinitionArgs :: ![TyVarName]
   } deriving (Show, Eq, Ord)
 
 fromPrimTyDef :: TyConName -> TyConDefinition

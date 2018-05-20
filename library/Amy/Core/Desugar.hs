@@ -113,7 +113,7 @@ desugarTypeTerm (T.TyVar var) = C.TyVar (desugarTyVarInfo var)
 desugarTypeTerm (T.TyApp con args) = C.TyApp con (desugarTypeTerm <$> args)
 
 desugarTyConDefinition :: T.TyConDefinition -> C.TyConDefinition
-desugarTyConDefinition (T.TyConDefinition name args) = C.TyConDefinition name (desugarTyVarInfo <$> args)
+desugarTyConDefinition (T.TyConDefinition name args) = C.TyConDefinition name args
 
 desugarTyVarInfo :: T.TyVarInfo -> TyVarName
 desugarTyVarInfo (T.TyVarInfo name _) = name
