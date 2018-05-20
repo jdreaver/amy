@@ -31,14 +31,12 @@ module Amy.Core.AST
     -- Re-export
   , Literal(..)
   , module Amy.ASTCommon
-  , module Amy.Kind
   , module Amy.Names
   ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
 
 import Amy.ASTCommon
-import Amy.Kind
 import Amy.Literal
 import Amy.Names
 import Amy.Prim
@@ -79,14 +77,13 @@ data TyConDefinition
   = TyConDefinition
   { tyConDefinitionName :: !TyConName
   , tyConDefinitionArgs :: ![TyVarInfo]
-  , tyConDefinitionKind :: !Kind
   } deriving (Show, Eq, Ord)
 
 tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
-tyConDefinitionToInfo (TyConDefinition name' args kind) = TyConInfo name' (TyVar <$> args) kind
+tyConDefinitionToInfo (TyConDefinition name' args) = TyConInfo name' (TyVar <$> args)
 
 fromPrimTyDef :: TyConName -> TyConDefinition
-fromPrimTyDef name = TyConDefinition name [] KStar
+fromPrimTyDef name = TyConDefinition name []
 
 fromPrimTypeDefinition :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDefinition (PrimTypeDefinition tyName cons) =
@@ -224,7 +221,6 @@ data TyConInfo
   = TyConInfo
   { tyConInfoName :: !TyConName
   , tyConInfoArgs :: ![TypeTerm]
-  , tyConInfoKind :: !Kind
   } deriving (Show, Eq, Ord)
 
 fromPrimTyCon :: TyConName -> TyConInfo
@@ -233,7 +229,6 @@ fromPrimTyCon = tyConDefinitionToInfo . fromPrimTyDef
 data TyVarInfo
   = TyVarInfo
   { tyVarInfoName :: !TyVarName
-  , tyVarInfoKind :: !Kind
   } deriving (Show, Eq, Ord)
 
 data Scheme

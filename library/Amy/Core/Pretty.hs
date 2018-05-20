@@ -20,17 +20,17 @@ prettyTypeTerm (TyCon con) = prettyTyConInfo con
 prettyTypeTerm (TyVar var) = prettyTyVarInfo var
 
 prettyTyConInfo :: TyConInfo -> Doc ann
-prettyTyConInfo (TyConInfo name args _) = prettyTyConName name <> args'
+prettyTyConInfo (TyConInfo name args) = prettyTyConName name <> args'
  where
   args' = if null args then mempty else space <> sep (prettyArg <$> args)
   prettyArg arg = parensIf (isConWithArgs arg) $ prettyTypeTerm arg
 
 isConWithArgs :: TypeTerm -> Bool
-isConWithArgs (TyCon (TyConInfo _ args _)) = not (null args)
+isConWithArgs (TyCon (TyConInfo _ args)) = not (null args)
 isConWithArgs _ = False
 
 prettyTyVarInfo :: TyVarInfo -> Doc ann
-prettyTyVarInfo (TyVarInfo name _) = prettyTyVarName name
+prettyTyVarInfo (TyVarInfo name) = prettyTyVarName name
 
 mkPrettyScheme :: Scheme -> PrettyScheme ann
 mkPrettyScheme (Forall vars ty) = PForall (prettyTyVarInfo <$> vars) (mkPrettyType ty)
@@ -54,7 +54,7 @@ prettyTypeDeclaration' (TypeDeclaration tyName cons) =
     prettyDataConstructor (prettyDataConName conName) (prettyTypeTerm <$> mArg)
 
 prettyTyConDefinition :: TyConDefinition -> Doc ann
-prettyTyConDefinition (TyConDefinition name args _) = prettyTyConName name <> args'
+prettyTyConDefinition (TyConDefinition name args) = prettyTyConName name <> args'
  where
   args' = if null args then mempty else space <> sep (prettyTyVarInfo <$> args)
 

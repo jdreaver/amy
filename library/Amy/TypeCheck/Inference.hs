@@ -25,6 +25,7 @@ import Data.Text (Text, pack)
 import Data.Traversable (for)
 
 import Amy.Errors
+import Amy.Kind
 import Amy.Prim
 import Amy.Renamer.AST as R
 import Amy.Syntax.Located
@@ -70,11 +71,11 @@ newtype Inference a = Inference (ReaderT TyEnv (StateT Int (Except Error)) a)
 runInference :: Int -> TyEnv -> Inference a -> Either Error (a, Int)
 runInference maxId env (Inference action) = runExcept $ runStateT (runReaderT action env) (maxId + 1)
 
-freshTypeVariable :: Kind -> Inference T.Type
-freshTypeVariable kind = do
+freshTypeVariable :: Inference T.Type
+freshTypeVariable = do
   modify' (+ 1)
   id' <- get
-  pure $ T.TyTerm $ T.TyVar (T.TyVarInfo (TyVarName $ "t" <> pack (show id')) kind TyVarGenerated)
+  pure $ T.TyTerm $ T.TyVar (T.TyVarInfo (TyVarName $ "t" <> pack (show id')) TyVarGenerated)
 
 -- | Extends the current typing environment with a list of names and schemes
 -- for those names.
@@ -92,7 +93,7 @@ lookupEnvIdentM name = do
 -- constraints with the type variables and not worry about name collisions.
 instantiate :: T.Scheme -> Inference T.Type
 instantiate (T.Forall as t) = do
-  as' <- traverse (\v -> freshTypeVariable (T.tyVarInfoKind v)) as
+  as' <- traverse (const freshTypeVariable) as
   let s = Subst $ Map.fromList $ zip as as'
   return $ substituteType s t
 
@@ -132,9 +133,9 @@ letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
 replaceGensWithLetters :: [T.TyVarInfo] -> [Text] -> [(T.TyVarInfo, T.TyVarInfo)]
 replaceGensWithLetters _ [] = error "Ran out of letters, how???"
 replaceGensWithLetters [] _ = []
-replaceGensWithLetters (var@(T.TyVarInfo _ _ TyVarGenerated):vars) (l:ls) =
-  (var, T.TyVarInfo (TyVarName l) KStar TyVarNotGenerated) : replaceGensWithLetters vars ls
-replaceGensWithLetters (var@(T.TyVarInfo _ _ TyVarNotGenerated):vars) ls =
+replaceGensWithLetters (var@(T.TyVarInfo _ TyVarGenerated):vars) (l:ls) =
+  (var, T.TyVarInfo (TyVarName l) TyVarNotGenerated) : replaceGensWithLetters vars ls
+replaceGensWithLetters (var@(T.TyVarInfo _ TyVarNotGenerated):vars) ls =
   (var, var) : replaceGensWithLetters vars ls
 
 -- | A 'Constraint' is a statement that two types should be equal.
@@ -151,7 +152,7 @@ inferModule (R.Module bindings externs typeDeclarations) = do
     externs' = convertExtern <$> externs
     externSchemes = (\(T.Extern name ty) -> (name, T.Forall [] ty)) <$> externs'
     typeDeclarations' = (convertTypeDeclaration <$> typeDeclarations) ++ (T.fromPrimTypeDef <$> allPrimTypeDefinitions)
-    tyDefs = (\def@(T.TyConDefinition name _ _) -> (name, def)) . T.typeDeclarationTypeName <$> typeDeclarations'
+    tyDefs = (\def@(T.TyConDefinition name _) -> (name, def)) . T.typeDeclarationTypeName <$> typeDeclarations'
     primFuncSchemes = primitiveFunctionScheme <$> allPrimitiveFunctions
     env =
       TyEnv
@@ -257,7 +258,7 @@ generateBindingScheme :: R.Binding -> Inference T.Scheme
 generateBindingScheme binding =
   maybe
     -- No explicit type annotation, generate a type variable
-    (T.Forall [] <$> freshTypeVariable KStar)
+    (T.Forall [] <$> freshTypeVariable)
     -- There is an explicit type annotation. Use it.
     convertExisting
     (R.bindingType binding)
@@ -273,10 +274,10 @@ checkTypeKind (T.TyFun t1 t2) = checkTypeKind t1 >> checkTypeKind t2
 
 checkTypeTermKind :: T.TypeTerm -> Inference ()
 checkTypeTermKind (T.TyVar _) = pure ()
-checkTypeTermKind (T.TyCon con@(T.TyConInfo tyName args _)) = do
+checkTypeTermKind (T.TyCon con@(T.TyConInfo tyName args)) = do
   -- Kind checking is pretty simple currently. We just check arity of the type
   -- constructor to make sure it is fully applied.
-  tyDef@(T.TyConDefinition _ tyDefArgs _) <-
+  tyDef@(T.TyConDefinition _ tyDefArgs) <-
     fromMaybe (error $ "No type definition for " ++ show con)
     . Map.lookup tyName
     <$> asks typeDefinitions
@@ -301,7 +302,7 @@ solveBindingConstraints env bindingsInference = do
 
 inferBinding :: R.Binding -> Inference (T.Binding, [Constraint])
 inferBinding (R.Binding (Located _ name) _ args body) = do
-  argsAndTyVars <- traverse (\(Located _ arg) -> (arg,) <$> freshTypeVariable KStar) args
+  argsAndTyVars <- traverse (\(Located _ arg) -> (arg,) <$> freshTypeVariable) args
   let argsAndSchemes = (\(arg, t) -> (arg, T.Forall [] t)) <$> argsAndTyVars
   (body', bodyCons) <- extendEnvIdentM argsAndSchemes $ inferExpr body
   let
@@ -372,7 +373,7 @@ inferExpr (R.ELet (R.Let bindings expression)) = do
 inferExpr (R.EApp (R.App func args)) = do
   (func', funcConstraints) <- inferExpr func
   (args', argConstraints) <- NE.unzip <$> traverse inferExpr args
-  tyVar <- freshTypeVariable KStar
+  tyVar <- freshTypeVariable
   let
     argTypes = NE.toList $ expressionType <$> args'
     newConstraint = Constraint (expressionType func', foldr1 T.TyFun (argTypes ++ [tyVar]))
@@ -397,7 +398,7 @@ inferMatch (R.Match pat body) = do
 inferPattern :: R.Pattern -> Inference (T.Pattern, [Constraint])
 inferPattern (R.PLit (Located _ lit)) = pure (T.PLit lit, [])
 inferPattern (R.PVar (Located _ ident)) = do
-  tvar <- freshTypeVariable KStar
+  tvar <- freshTypeVariable
   pure (T.PVar $ T.Typed tvar ident, [])
 inferPattern (R.PCons (R.PatCons con mArg)) = do
   conTy <- instantiate =<< dataConstructorScheme con
@@ -406,7 +407,7 @@ inferPattern (R.PCons (R.PatCons con mArg)) = do
     Just arg -> do
       (arg', argCons) <- inferPattern arg
       let argTy = patternType arg'
-      retTy <- freshTypeVariable KStar
+      retTy <- freshTypeVariable
       let constraint = Constraint (argTy `T.TyFun` retTy, conTy)
       pure
         ( T.PCons $ T.PatCons con (Just arg') retTy
@@ -454,13 +455,13 @@ solver (su, cs) =
 
 unifies :: T.Type -> T.Type -> Solve Subst
 unifies t1 t2 | t1 == t2 = return emptySubst
-unifies (T.TyTerm (T.TyVar v@(T.TyVarInfo _ _ TyVarGenerated))) t = v `bind` t
-unifies t (T.TyTerm (T.TyVar v@(T.TyVarInfo _ _ TyVarGenerated))) = v `bind` t
+unifies (T.TyTerm (T.TyVar v@(T.TyVarInfo _ TyVarGenerated))) t = v `bind` t
+unifies t (T.TyTerm (T.TyVar v@(T.TyVarInfo _ TyVarGenerated))) = v `bind` t
 unifies (T.TyFun t1 t2) (T.TyFun t3 t4) = do
   su1 <- unifies t1 t3
   su2 <- unifies (substituteType su1 t2) (substituteType su1 t4)
   pure (su2 `composeSubst` su1)
-unifies (T.TyTerm (T.TyCon (T.TyConInfo name1 args1 _))) (T.TyTerm (T.TyCon (T.TyConInfo name2 args2 _)))
+unifies (T.TyTerm (T.TyCon (T.TyConInfo name1 args1))) (T.TyTerm (T.TyCon (T.TyConInfo name2 args2)))
   | name1 == name2 && length args1 == length args2 =
     unifyMany (T.TyTerm <$> args1) (T.TyTerm <$> args2)
 unifies t1 t2 = throwError $ UnificationFail t1 t2
@@ -512,7 +513,7 @@ substituteTypeTerm subst (T.TyCon con) = T.TyTerm $ T.TyCon $ substituteTyConInf
 substituteTypeTerm (Subst subst) t@(T.TyVar var) = Map.findWithDefault (T.TyTerm t) var subst
 
 substituteTyConInfo :: Subst -> T.TyConInfo -> T.TyConInfo
-substituteTyConInfo subst (T.TyConInfo name args tyDef) = T.TyConInfo name (substituteTypeTermArg subst <$> args) tyDef
+substituteTyConInfo subst (T.TyConInfo name args) = T.TyConInfo name (substituteTypeTermArg subst <$> args)
 
 substituteTypeTermArg :: Subst -> T.TypeTerm -> T.TypeTerm
 substituteTypeTermArg subst (T.TyCon con) = T.TyCon $ substituteTyConInfo subst con
@@ -590,7 +591,7 @@ freeTypeTermTypeVariables (T.TyCon info) = freeTyConInfoTypeVariables info
 freeTypeTermTypeVariables (T.TyVar var) = Set.singleton var
 
 freeTyConInfoTypeVariables :: T.TyConInfo -> Set T.TyVarInfo
-freeTyConInfoTypeVariables (T.TyConInfo _ args _) = Set.unions $ freeTypeTermTypeVariables <$> args
+freeTyConInfoTypeVariables (T.TyConInfo _ args) = Set.unions $ freeTypeTermTypeVariables <$> args
 
 freeSchemeTypeVariables :: T.Scheme -> Set T.TyVarInfo
 freeSchemeTypeVariables (T.Forall tvs t) = freeTypeVariables t `Set.difference` Set.fromList tvs
@@ -615,20 +616,10 @@ convertTypeTerm (R.TyCon info) = T.TyCon (convertTyConInfo info)
 convertTypeTerm (R.TyVar info) = T.TyVar (convertTyVarInfo info)
 
 convertTyConDefinition :: R.TyConDefinition -> T.TyConDefinition
-convertTyConDefinition (R.TyConDefinition name' args _) = T.TyConDefinition name' (convertTyVarInfo <$> args) kind
- where
-  -- Our kind inference is really simple. We don't have higher-kinded types so
-  -- we just count the number of type variables and make a * for each one, plus
-  -- a * for the type constructor. Easy!
-  kind = foldr1 KFun $ const KStar <$> [0..length args]
+convertTyConDefinition (R.TyConDefinition name' args _) = T.TyConDefinition name' (convertTyVarInfo <$> args)
 
 convertTyConInfo :: R.TyConInfo -> T.TyConInfo
-convertTyConInfo (R.TyConInfo name' args _) = T.TyConInfo name' (convertTypeTerm <$> args) kind
- where
-  -- Our kind inference is really simple. We don't have higher-kinded types so
-  -- we just count the number of type variables and make a * for each one, plus
-  -- a * for the type constructor. Easy!
-  kind = foldr1 KFun $ const KStar <$> [0..length args]
+convertTyConInfo (R.TyConInfo name' args _) = T.TyConInfo name' (convertTypeTerm <$> args)
 
 convertTyVarInfo :: R.TyVarInfo -> T.TyVarInfo
-convertTyVarInfo (R.TyVarInfo name' _) = T.TyVarInfo name' KStar TyVarNotGenerated
+convertTyVarInfo (R.TyVarInfo name' _) = T.TyVarInfo name' TyVarNotGenerated

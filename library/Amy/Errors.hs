@@ -10,6 +10,7 @@ import Data.Void (Void)
 import Text.Groom
 import Text.Megaparsec
 
+import Amy.Kind
 import Amy.Renamer.AST as R
 import Amy.Syntax.AST as S
 import Amy.TypeCheck.AST as T

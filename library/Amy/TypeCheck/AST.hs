@@ -30,21 +30,18 @@ module Amy.TypeCheck.AST
   , fromPrimTyCon
   , TyVarInfo(..)
   , TyVarGenerated(..)
-  , typeKind
   , Scheme(..)
   , Typed(..)
 
     -- Re-export
   , Literal(..)
   , module Amy.ASTCommon
-  , module Amy.Kind
   , module Amy.Names
   ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
 
 import Amy.ASTCommon
-import Amy.Kind
 import Amy.Literal
 import Amy.Names
 import Amy.Prim
@@ -91,14 +88,13 @@ data TyConDefinition
   = TyConDefinition
   { tyConDefinitionName :: !TyConName
   , tyConDefinitionArgs :: ![TyVarInfo]
-  , tyConDefinitionKind :: !Kind
   } deriving (Show, Eq, Ord)
 
 tyConDefinitionToInfo :: TyConDefinition -> TyConInfo
-tyConDefinitionToInfo (TyConDefinition name' args kind) = TyConInfo name' (TyVar <$> args) kind
+tyConDefinitionToInfo (TyConDefinition name' args) = TyConInfo name' (TyVar <$> args)
 
 fromPrimTyDef :: TyConName -> TyConDefinition
-fromPrimTyDef name = TyConDefinition name [] KStar
+fromPrimTyDef name = TyConDefinition name []
 
 fromPrimTypeDef :: PrimTypeDefinition -> TypeDeclaration
 fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
@@ -212,7 +208,6 @@ data TyConInfo
   = TyConInfo
   { tyConInfoName :: !TyConName
   , tyConInfoArgs :: ![TypeTerm]
-  , tyConInfoKind :: !Kind
   } deriving (Show, Eq, Ord)
 
 fromPrimTyCon :: TyConName -> TyConInfo
@@ -221,7 +216,6 @@ fromPrimTyCon = tyConDefinitionToInfo . fromPrimTyDef
 data TyVarInfo
   = TyVarInfo
   { tyVarInfoName :: !TyVarName
-  , tyVarInfoKind :: !Kind
   , tyVarInfoGenerated :: !TyVarGenerated
   } deriving (Show, Eq, Ord)
 
@@ -229,17 +223,6 @@ data TyVarGenerated
   = TyVarGenerated
   | TyVarNotGenerated
   deriving (Show, Eq, Ord)
-
-typeKind :: Type -> Kind
-typeKind (TyTerm term) = typeTermKind term
-typeKind (TyFun _ _) = KStar
-
-typeTermKind :: TypeTerm -> Kind
-typeTermKind (TyCon info) =
-  case tyConInfoKind info of
-    KStar -> KStar
-    KFun k _ -> k
-typeTermKind (TyVar var) = tyVarInfoKind var
 
 data Scheme
   = Forall ![TyVarInfo] Type

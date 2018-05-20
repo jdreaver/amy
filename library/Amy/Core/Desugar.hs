@@ -112,13 +112,13 @@ desugarTypeTerm (T.TyCon info) = C.TyCon (desugarTyConInfo info)
 desugarTypeTerm (T.TyVar info) = C.TyVar (desugarTyVarInfo info)
 
 desugarTyConDefinition :: T.TyConDefinition -> C.TyConDefinition
-desugarTyConDefinition (T.TyConDefinition name args kind) = C.TyConDefinition name (desugarTyVarInfo <$> args) kind
+desugarTyConDefinition (T.TyConDefinition name args) = C.TyConDefinition name (desugarTyVarInfo <$> args)
 
 desugarTyConInfo :: T.TyConInfo -> C.TyConInfo
-desugarTyConInfo (T.TyConInfo name args kind) = C.TyConInfo name (desugarTypeTerm <$> args) kind
+desugarTyConInfo (T.TyConInfo name args) = C.TyConInfo name (desugarTypeTerm <$> args)
 
 desugarTyVarInfo :: T.TyVarInfo -> C.TyVarInfo
-desugarTyVarInfo (T.TyVarInfo name kind _) = C.TyVarInfo name kind
+desugarTyVarInfo (T.TyVarInfo name _) = C.TyVarInfo name
 
 --
 -- Case Expressions

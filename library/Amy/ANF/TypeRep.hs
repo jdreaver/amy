@@ -42,7 +42,7 @@ typeRep (C.TypeDeclaration tyName constructors) =
       | otherwise -> 32
 
 maybePrimitiveType :: C.TyConDefinition -> Maybe ANF.Type
-maybePrimitiveType (C.TyConDefinition name _ _)
+maybePrimitiveType (C.TyConDefinition name _)
   -- TODO: Something more robust here besides text name matching.
   | name == "Int" = Just PrimIntType
   | name == "Double" = Just PrimDoubleType
