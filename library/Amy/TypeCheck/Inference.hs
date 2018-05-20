@@ -8,6 +8,7 @@ module Amy.TypeCheck.Inference
   , TyEnv
   ) where
 
+import Control.Monad (when)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State.Strict
@@ -39,6 +40,7 @@ data TyEnv
   = TyEnv
   { identTypes :: !(Map IdentName T.Scheme)
     -- TODO: Should this be constructed in the renamer?
+  , typeDefinitions :: !(Map TyConName T.TyConDefinition)
   , dataConstructorTypes :: !(Map DataConName (T.TypeDeclaration, T.DataConDefinition))
   } deriving (Show, Eq)
 
@@ -149,10 +151,12 @@ inferModule (R.Module bindings externs typeDeclarations) = do
     externs' = convertExtern <$> externs
     externSchemes = (\(T.Extern name ty) -> (name, T.Forall [] ty)) <$> externs'
     typeDeclarations' = (convertTypeDeclaration <$> typeDeclarations) ++ (T.fromPrimTypeDef <$> allPrimTypeDefinitions)
+    tyDefs = (\def@(T.TyConDefinition name _ _) -> (name, def)) . T.typeDeclarationTypeName <$> typeDeclarations'
     primFuncSchemes = primitiveFunctionScheme <$> allPrimitiveFunctions
     env =
       TyEnv
       { identTypes = Map.fromList $ externSchemes ++ primFuncSchemes
+      , typeDefinitions = Map.fromList tyDefs
       , dataConstructorTypes = Map.fromList $ concatMap mkDataConTypes typeDeclarations'
       }
   (bindings', maxId') <- inferTopLevel 0 env bindings
@@ -255,8 +259,32 @@ generateBindingScheme binding =
     -- No explicit type annotation, generate a type variable
     (T.Forall [] <$> freshTypeVariable KStar)
     -- There is an explicit type annotation. Use it.
-    (pure . convertScheme)
+    convertExisting
     (R.bindingType binding)
+ where
+  convertExisting scheme = do
+    let scheme'@(T.Forall _ ty) = convertScheme scheme
+    checkTypeKind ty
+    pure scheme'
+
+checkTypeKind :: T.Type -> Inference ()
+checkTypeKind (T.TyTerm term) = checkTypeTermKind term
+checkTypeKind (T.TyFun t1 t2) = checkTypeKind t1 >> checkTypeKind t2
+
+checkTypeTermKind :: T.TypeTerm -> Inference ()
+checkTypeTermKind (T.TyVar _) = pure ()
+checkTypeTermKind (T.TyCon con@(T.TyConInfo tyName args _)) = do
+  -- Kind checking is pretty simple currently. We just check arity of the type
+  -- constructor to make sure it is fully applied.
+  tyDef@(T.TyConDefinition _ tyDefArgs _) <-
+    fromMaybe (error $ "No type definition for " ++ show con)
+    . Map.lookup tyName
+    <$> asks typeDefinitions
+  let
+    kind = foldr1 KFun $ const KStar <$> [0..length args]
+    tyDefKind = foldr1 KFun $ const KStar <$> [0..length tyDefArgs]
+  when (kind /= tyDefKind) $
+    throwError $ KindMismatch con kind tyDef tyDefKind
 
 solveBindingConstraints :: TyEnv -> [(T.Binding, [Constraint])] -> Either Error [(T.Binding, [Constraint])]
 solveBindingConstraints env bindingsInference = do
@@ -448,7 +476,6 @@ unifyMany t1 t2 = error $ "unifyMany lists different length " ++ show (t1, t2)
 bind ::  T.TyVarInfo -> T.Type -> Solve Subst
 bind a t
   | t == T.TyTerm (T.TyVar a) = return emptySubst
-  | T.tyVarInfoKind a /= typeKind t = throwError $ KindMismatch a t
   | occursCheck a t = throwError $ InfiniteType a t
   | otherwise = return (singletonSubst a t)
 
@@ -503,9 +530,10 @@ substituteConstraint :: Subst -> Constraint -> Constraint
 substituteConstraint subst (Constraint (t1, t2)) = Constraint (substituteType subst t1, substituteType subst t2)
 
 substituteEnv :: Subst -> TyEnv -> TyEnv
-substituteEnv subst (TyEnv identTys dataConTys) =
+substituteEnv subst (TyEnv identTys tyDefs dataConTys) =
   TyEnv
     (Map.map (substituteScheme subst) identTys)
+    tyDefs
     dataConTys
 
 substituteBinding :: Subst -> T.Binding -> T.Binding
@@ -568,7 +596,7 @@ freeSchemeTypeVariables :: T.Scheme -> Set T.TyVarInfo
 freeSchemeTypeVariables (T.Forall tvs t) = freeTypeVariables t `Set.difference` Set.fromList tvs
 
 freeEnvTypeVariables :: TyEnv -> Set T.TyVarInfo
-freeEnvTypeVariables (TyEnv identTys _) =
+freeEnvTypeVariables (TyEnv identTys _ _) =
   foldl' Set.union Set.empty $ freeSchemeTypeVariables <$> Map.elems identTys
 
 --

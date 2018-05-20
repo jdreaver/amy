@@ -32,7 +32,7 @@ data Error
   -- Type checker
   -- TODO: Add source spans here
   | UnificationFail !T.Type !T.Type
-  | KindMismatch !T.TyVarInfo !T.Type
+  | KindMismatch !T.TyConInfo !Kind !T.TyConDefinition !Kind
   | InfiniteType !T.TyVarInfo !T.Type
   | UnboundVariable !IdentName
 
