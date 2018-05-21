@@ -10,6 +10,10 @@ module Amy.Pretty
   , vcatHardLines
   , vcatTwoHardLines
   , groupOrHang
+  , list
+  , bracketed
+
+    -- Names
   , prettyIdent
   , prettyDataConName
   , prettyTyConName
@@ -33,7 +37,7 @@ module Amy.Pretty
   ) where
 
 import Data.Maybe (fromMaybe)
-import Data.Text.Prettyprint.Doc as X
+import Data.Text.Prettyprint.Doc as X hiding (list)
 
 import Amy.Names
 
@@ -59,6 +63,25 @@ groupOrHang doc =
     (space <> doc)
   )
 
+list :: [Doc ann] -> Doc ann
+list =
+  group
+  . encloseSep
+    (flatAlt "[ " "[")
+    (flatAlt "\n]" "]")
+    ", "
+
+bracketed :: [Doc ann] -> Doc ann
+bracketed =
+  group
+  . encloseSep
+    "{ "
+    (flatAlt "\n}" " }")
+    ", "
+
+--
+-- Names
+--
 prettyIdent :: IdentName -> Doc ann
 prettyIdent = pretty . unIdentName
 
@@ -125,19 +148,17 @@ prettyBinding name args body =
   sep (name : args) <+> "=" <> groupOrHang body
 
 prettyBindingType :: Doc ann -> Doc ann -> Doc ann
-prettyBindingType name ty = name <+> "::" <+> ty
+prettyBindingType name ty = name <+> "::" <> groupOrHang ty
 
 prettyBindingScheme :: Doc ann -> Doc ann -> Doc ann
-prettyBindingScheme name scheme = name <+> "::" <+> scheme
+prettyBindingScheme name scheme = name <+> "::" <> groupOrHang scheme
 
 prettyExtern :: Doc ann -> Doc ann -> Doc ann
 prettyExtern name ty = "extern" <+> prettyBindingType name ty
 
 prettyTypeDeclaration :: Doc ann -> [Doc ann] -> Doc ann
-prettyTypeDeclaration tyName dataCons = tyName <>
-  case dataCons of
-    [] -> mempty
-    _ -> space <> "=" <+> concatWith (\l r -> l <+> "|" <+> r) dataCons
+prettyTypeDeclaration tyName dataCons =
+  tyName <> groupOrHang (encloseSep "= " mempty (flatAlt "| " " | ") dataCons)
 
 prettyDataConstructor :: Doc ann -> Maybe (Doc ann) -> Doc ann
 prettyDataConstructor tyConName mArg = tyConName <> maybe mempty (space <>) mArg

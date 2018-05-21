@@ -14,7 +14,15 @@ import Amy.Pretty
 import Amy.Prim
 
 prettyType :: Type -> Doc ann
-prettyType = pretty . show
+prettyType PrimIntType = "PrimInt"
+prettyType PrimDoubleType = "PrimDouble"
+prettyType (PointerType ty) = "Pointer" <+> parens (prettyType ty)
+prettyType OpaquePointerType = "OpaquePointer"
+prettyType (FuncType args retTy) = "Func" <> groupOrHang (tupled (prettyType <$> args) <+> "=>" <+> prettyType retTy)
+prettyType (EnumType bits) = "Enum" <+> pretty bits
+prettyType (TaggedUnionType (TyConName name) bits) = "TaggedUnion" <+> pretty name <+> pretty bits
+prettyType (RecordType rows) =
+  "RecordType" <> groupOrHang (bracketed ((\(RowLabel label, ty) -> pretty label <+> "::" <> groupOrHang (prettyType ty)) <$> rows))
 
 prettyModule :: Module -> Doc ann
 prettyModule (Module bindings externs typeDeclarations) =
@@ -47,7 +55,7 @@ prettyVal (ConEnum _ con) = prettyDataConName (dataConName con)
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (EVal val) = prettyVal val
-prettyExpr (ERecord rows) = braces $ sep $ punctuate comma $ prettyRow <$> rows
+prettyExpr (ERecord rows) = bracketed $ prettyRow <$> rows
 prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault _)) =
   prettyCase
     (prettyVal scrutinee)
@@ -69,7 +77,7 @@ prettyExpr (EPrimOp (App (PrimitiveFunction _ name _) args _)) =
   "$primOp" <+> prettyIdent name <+> list (prettyVal <$> args)
 
 prettyRow :: Row -> Doc ann
-prettyRow (Row label expr) = prettyRowLabel label <+> "=" <+> prettyExpr expr
+prettyRow (Row label expr) = prettyRowLabel label <+> "=" <> groupOrHang (prettyExpr expr)
 
 prettyLetValBinding :: LetValBinding -> Doc ann
 prettyLetValBinding (LetValBinding ident ty body) =

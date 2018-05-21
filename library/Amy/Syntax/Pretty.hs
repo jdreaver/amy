@@ -18,7 +18,7 @@ prettyType :: Type -> Doc ann
 prettyType (TyFun ty1 ty2) = parensIf (isTyApp ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
 prettyType (TyCon con) = prettyTyConName (locatedValue con)
 prettyType (TyVar var) = prettyTyVarName (locatedValue var)
-prettyType (TyRecord rows) = braces $ sep $ punctuate comma $ prettyTyRow <$> rows
+prettyType (TyRecord rows) = bracketed $ prettyTyRow <$> rows
 prettyType (TyApp con args) = prettyTyConName (locatedValue con) <+> sep (toList $ prettyArg <$> args)
  where
   prettyArg arg = parensIf (isTyApp arg) $ prettyType arg
@@ -63,7 +63,7 @@ prettyBindingType' (BindingType (Located _ name) ty) =
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
-prettyExpr (ERecord rows) = braces $ sep $ punctuate comma $ prettyRow <$> rows
+prettyExpr (ERecord rows) = bracketed $ prettyRow <$> rows
 prettyExpr (EVar var) = prettyVar var
 prettyExpr (EIf (If pred' then' else')) =
   prettyIf (prettyExpr pred') (prettyExpr then') (prettyExpr else')
