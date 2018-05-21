@@ -18,9 +18,13 @@ prettyType :: Type -> Doc ann
 prettyType (TyFun ty1 ty2) = parensIf (isTyApp ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
 prettyType (TyCon con) = prettyTyConName con
 prettyType (TyVar var) = prettyTyVarInfo var
+prettyType (TyRecord rows) = braces $ sep $ punctuate comma $ prettyTyRow <$> rows
 prettyType (TyApp con args) = prettyTyConName con <+> sep (toList $ prettyArg <$> args)
  where
   prettyArg arg = parensIf (isTyApp arg) $ prettyType arg
+
+prettyTyRow :: TyRow -> Doc ann
+prettyTyRow (TyRow label ty) = prettyRowLabel label <+> "::" <+> prettyType ty
 
 isTyApp :: Type -> Bool
 isTyApp TyApp{} = True
@@ -67,6 +71,7 @@ prettyBindingScheme' ident scheme = prettyBindingScheme (prettyIdent ident) (pre
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit lit) = pretty $ showLiteral lit
+prettyExpr (ERecord rows) = braces $ sep $ punctuate comma $ prettyRow <$> rows
 prettyExpr (EVar var) = prettyVar var
 prettyExpr (EIf (If pred' then' else')) =
   prettyIf (prettyExpr pred') (prettyExpr then') (prettyExpr else')
@@ -78,6 +83,9 @@ prettyExpr (ELet (Let bindings body)) =
   prettyLet (prettyBinding' <$> bindings) (prettyExpr body)
 prettyExpr (EApp (App f args _)) = sep $ prettyExpr f : (prettyExpr <$> toList args)
 prettyExpr (EParens expr) = parens $ prettyExpr expr
+
+prettyRow :: Row -> Doc ann
+prettyRow (Row label expr) = prettyRowLabel label <+> "=" <+> prettyExpr expr
 
 prettyVar :: Var -> Doc ann
 prettyVar (VVal (Typed _ var)) = prettyIdent var

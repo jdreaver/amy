@@ -15,8 +15,5 @@ f =
     Left i -> Left i
     Right j -> Right j
 
-g :: forall c d. c -> Either c d
-g x = Left x
-
 h :: forall a. Either a (Either a Int)
 h = Right (Right 1)
