@@ -197,7 +197,7 @@ dataConstructorScheme con = do
     mkTy arg =
       case arg of
         Just ty -> ty `T.TyFun` tyApp
-        Nothing -> T.TyCon tyConName
+        Nothing -> tyApp
   pure $ T.Forall (mkTyConInfo <$> tyVars) (mkTy mTyArg)
 
 primitiveFunctionScheme :: PrimitiveFunction -> (IdentName, T.Scheme)
