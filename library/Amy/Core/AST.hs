@@ -9,6 +9,7 @@ module Amy.Core.AST
   , fromPrimTypeDefinition
   , DataConDefinition(..)
   , Expr(..)
+  , Row(..)
   , Var(..)
   , If(..)
   , Case(..)
@@ -21,6 +22,7 @@ module Amy.Core.AST
 
   , substExpr
   , Type(..)
+  , TyRow(..)
   , Scheme(..)
   , Typed(..)
 
@@ -93,12 +95,19 @@ fromPrimDataCon name = DataConDefinition name Nothing
 
 data Expr
   = ELit !Literal
+  | ERecord ![Row]
   | EVar !Var
   | ECase !Case
   | ELet !Let
   | EApp !App
   | EParens !Expr
   deriving (Show, Eq)
+
+data Row
+  = Row
+  { rowLabel :: !RowLabel
+  , rowValue :: !Expr
+  } deriving (Show, Eq)
 
 data Var
   = VVal !(Typed IdentName)
@@ -156,6 +165,9 @@ literalType' lit = TyCon $ literalType lit
 
 expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType' lit
+expressionType (ERecord rows) = TyRecord $ mkTyRow <$> rows
+ where
+  mkTyRow (Row label expr) = TyRow label (expressionType expr)
 expressionType (EVar var) =
   case var of
     VVal (Typed ty _) -> ty
@@ -171,6 +183,9 @@ expressionType (EParens expr) = expressionType expr
 
 substExpr :: Expr -> IdentName -> IdentName -> Expr
 substExpr e@(ELit _) _ _ = e
+substExpr (ERecord rows) var newVar = ERecord $ substRow <$> rows
+ where
+  substRow (Row label expr) = Row label (substExpr expr var newVar)
 substExpr (EVar v) var newVar =
   case v of
     VVal (Typed ty ident) -> EVar (VVal $ Typed ty $ replaceIdent ident var newVar)
@@ -202,10 +217,17 @@ data Type
   = TyCon !TyConName
   | TyVar !TyVarName
   | TyApp !TyConName !(NonEmpty Type)
+  | TyRecord ![TyRow]
   | TyFun !Type !Type
   deriving (Show, Eq, Ord)
 
 infixr 0 `TyFun`
+
+data TyRow
+  = TyRow
+  { tyRowLabel :: !RowLabel
+  , tyRowType :: !Type
+  } deriving (Show, Eq, Ord)
 
 data Scheme
   = Forall ![TyVarName] Type

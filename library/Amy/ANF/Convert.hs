@@ -10,6 +10,7 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
+import Data.Traversable (for)
 
 import Amy.ANF.AST as ANF
 import Amy.ANF.Monad
@@ -70,8 +71,16 @@ convertType ty = go (typeToNonEmpty ty)
       C.TyCon con -> getTyConType con
       C.TyVar _ -> pure OpaquePointerType
       C.TyApp con _ -> getTyConType con
+      C.TyRecord rows -> mkRecordType rows
       C.TyFun{} -> mkFunctionType ty
   go _ = mkFunctionType ty
+
+mkRecordType :: [C.TyRow] -> ANFConvert ANF.Type
+mkRecordType rows = do
+  rows' <- for rows $ \(C.TyRow label ty) -> do
+    ty' <- convertType ty
+    pure (label, ty')
+  pure $ RecordType rows'
 
 mkFunctionType :: C.Type -> ANFConvert ANF.Type
 mkFunctionType ty = do
@@ -95,6 +104,10 @@ normalizeExpr
   -> C.Expr -- ^ Expression to normalize
   -> ANFConvert ANF.Expr
 normalizeExpr _ (C.ELit lit) = pure $ ANF.EVal $ ANF.Lit lit
+normalizeExpr _ (C.ERecord rows) =
+  fmap ANF.ERecord
+  $ for rows
+  $ \(C.Row label expr) -> ANF.Row label <$> normalizeExpr (unRowLabel label) expr
 normalizeExpr name var@C.EVar{} = normalizeName name var (pure . ANF.EVal)
 normalizeExpr name expr@(C.ECase (C.Case scrutinee bind matches defaultExpr)) =
   normalizeName name scrutinee $ \scrutineeVal -> do

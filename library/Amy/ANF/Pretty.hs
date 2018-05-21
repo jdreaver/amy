@@ -47,6 +47,7 @@ prettyVal (ConEnum _ con) = prettyDataConName (dataConName con)
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (EVal val) = prettyVal val
+prettyExpr (ERecord rows) = braces $ sep $ punctuate comma $ prettyRow <$> rows
 prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault _)) =
   prettyCase
     (prettyVal scrutinee)
@@ -66,6 +67,9 @@ prettyExpr (EConApp (ConApp info mArg _ _)) =
   "$mkCon" <+> prettyDataConName (dataConName info) <+> list (prettyVal <$> maybeToList mArg)
 prettyExpr (EPrimOp (App (PrimitiveFunction _ name _) args _)) =
   "$primOp" <+> prettyIdent name <+> list (prettyVal <$> args)
+
+prettyRow :: Row -> Doc ann
+prettyRow (Row label expr) = prettyRowLabel label <+> "=" <+> prettyExpr expr
 
 prettyLetValBinding :: LetValBinding -> Doc ann
 prettyLetValBinding (LetValBinding ident ty body) =

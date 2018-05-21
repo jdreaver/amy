@@ -9,6 +9,7 @@ module Amy.ANF.AST
   , Val(..)
   , DataCon(..)
   , Expr(..)
+  , Row(..)
   , LetVal(..)
   , LetValBinding(..)
   , Case(..)
@@ -81,12 +82,19 @@ data DataCon
 
 data Expr
   = EVal !Val
+  | ERecord ![Row]
   | ELetVal !LetVal
   | ECase !Case
   | EApp !(App (Typed IdentName))
   | EConApp !ConApp
   | EPrimOp !(App PrimitiveFunction)
   deriving (Show, Eq)
+
+data Row
+  = Row
+  { rowLabel :: !RowLabel
+  , rowValue :: !Expr
+  } deriving (Show, Eq)
 
 data LetVal
   = LetVal
@@ -152,6 +160,7 @@ data Type
   | FuncType ![Type] !Type
   | EnumType !Word32
   | TaggedUnionType !TyConName !Word32
+  | RecordType ![(RowLabel, Type)]
   deriving (Show, Eq, Ord)
 
 data Typed a
