@@ -71,7 +71,7 @@ prettyBindingScheme' ident scheme = prettyBindingScheme (prettyIdent ident) (pre
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit lit) = pretty $ showLiteral lit
-prettyExpr (ERecord rows) = bracketed $ prettyRow <$> rows
+prettyExpr (ERecord (Typed _ rows)) = bracketed $ prettyRow <$> rows
 prettyExpr (EVar var) = prettyVar var
 prettyExpr (EIf (If pred' then' else')) =
   prettyIf (prettyExpr pred') (prettyExpr then') (prettyExpr else')

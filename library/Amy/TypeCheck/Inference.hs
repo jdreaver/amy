@@ -328,8 +328,9 @@ inferExpr :: R.Expr -> Inference (T.Expr, [Constraint])
 inferExpr (R.ELit (Located _ lit)) = pure (T.ELit lit, [])
 inferExpr (R.ERecord rows) = do
   (rows', rowsCons) <- unzip <$> traverse inferRow rows
+  let ty = T.TyRecord $ (\(T.Row label expr) -> T.TyRow label (expressionType expr)) <$> rows'
   pure
-    ( T.ERecord rows'
+    ( T.ERecord (Typed ty rows')
     , concat rowsCons
     )
 inferExpr (R.EVar var) =
@@ -559,7 +560,7 @@ substituteBinding subst (T.Binding name ty args retTy body) =
 
 substituteTExpr :: Subst -> T.Expr -> T.Expr
 substituteTExpr _ lit@T.ELit{} = lit
-substituteTExpr subst (T.ERecord rows) = T.ERecord $ substituteRow <$> rows
+substituteTExpr subst (T.ERecord (Typed ty rows)) = T.ERecord $ Typed (substituteType subst ty) (substituteRow <$> rows)
  where
   substituteRow (T.Row label expr) = T.Row label $ substituteTExpr subst expr
 substituteTExpr subst (T.EVar var) =

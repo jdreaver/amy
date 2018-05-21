@@ -47,9 +47,11 @@ desugarBinding (T.Binding ident scheme args retTy body) =
 
 desugarExpr :: T.Expr -> Desugar C.Expr
 desugarExpr (T.ELit lit) = pure $ C.ELit lit
-desugarExpr (T.ERecord rows) = do
-  let desugarRow (T.Row label expr) = C.Row label <$> desugarExpr expr
-  C.ERecord <$> traverse desugarRow rows
+desugarExpr (T.ERecord (T.Typed ty rows)) = do
+  let
+    ty' = desugarType ty
+    desugarRow (T.Row label expr) = C.Row label <$> desugarExpr expr
+  C.ERecord . C.Typed ty' <$> traverse desugarRow rows
 desugarExpr (T.EVar var) = pure $ C.EVar (desugarVar var)
 desugarExpr (T.ECase (T.Case scrutinee matches)) = do
   -- Desugar the case expression

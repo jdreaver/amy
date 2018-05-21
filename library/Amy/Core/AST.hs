@@ -95,7 +95,7 @@ fromPrimDataCon name = DataConDefinition name Nothing
 
 data Expr
   = ELit !Literal
-  | ERecord ![Row]
+  | ERecord !(Typed [Row])
   | EVar !Var
   | ECase !Case
   | ELet !Let
@@ -165,9 +165,7 @@ literalType' lit = TyCon $ literalType lit
 
 expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType' lit
-expressionType (ERecord rows) = TyRecord $ mkTyRow <$> rows
- where
-  mkTyRow (Row label expr) = TyRow label (expressionType expr)
+expressionType (ERecord (Typed ty _)) = ty
 expressionType (EVar var) =
   case var of
     VVal (Typed ty _) -> ty
@@ -183,7 +181,7 @@ expressionType (EParens expr) = expressionType expr
 
 substExpr :: Expr -> IdentName -> IdentName -> Expr
 substExpr e@(ELit _) _ _ = e
-substExpr (ERecord rows) var newVar = ERecord $ substRow <$> rows
+substExpr (ERecord (Typed ty rows)) var newVar = ERecord $ Typed ty $ substRow <$> rows
  where
   substRow (Row label expr) = Row label (substExpr expr var newVar)
 substExpr (EVar v) var newVar =

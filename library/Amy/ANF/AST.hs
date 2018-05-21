@@ -82,7 +82,7 @@ data DataCon
 
 data Expr
   = EVal !Val
-  | ERecord ![Row]
+  | ERecord !(Typed [Row])
   | ELetVal !LetVal
   | ECase !Case
   | EApp !(App (Typed IdentName))
@@ -93,6 +93,8 @@ data Expr
 data Row
   = Row
   { rowLabel :: !RowLabel
+    -- TODO: Should this be a Val instead of Expr? Should row construction
+    -- involve just primitive expressions?
   , rowValue :: !Expr
   } deriving (Show, Eq)
 

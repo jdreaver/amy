@@ -68,7 +68,7 @@ prettyTypedIdent (Typed ty ident) = parens $ prettyIdent ident <+> "::" <+> pret
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit lit) = pretty $ showLiteral lit
-prettyExpr (ERecord rows) = bracketed $ prettyRow <$> rows
+prettyExpr (ERecord (Typed _ rows)) = bracketed $ prettyRow <$> rows
 prettyExpr (EVar var) = prettyVar var
 prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault)) =
   prettyCase

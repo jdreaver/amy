@@ -55,7 +55,7 @@ prettyVal (ConEnum _ con) = prettyDataConName (dataConName con)
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (EVal val) = prettyVal val
-prettyExpr (ERecord rows) = bracketed $ prettyRow <$> rows
+prettyExpr (ERecord (Typed _ rows)) = bracketed $ prettyRow <$> rows
 prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault _)) =
   prettyCase
     (prettyVal scrutinee)

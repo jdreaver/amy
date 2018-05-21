@@ -10,6 +10,7 @@ module Amy.Codegen.Pure
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Short as BSS
 import Data.Foldable (for_)
+import Data.List (sort, sortOn)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Traversable (for)
 import GHC.Word (Word32)
@@ -110,6 +111,22 @@ codegenExpr' name' (ANF.EVal val) =
   -- expression. No worries, LLVM will most certainly remove these redundant
   -- instructions.
   bindOpToName name' =<< valOperand val
+codegenExpr' name' (ANF.ERecord (ANF.Typed ty rows)) = do
+  -- Allocate struct
+  let allocOp = LocalReference (LLVM.PointerType (llvmType ty) (AddrSpace 0)) name'
+  addInstruction $ name' := Alloca (llvmType ty) Nothing 0 []
+
+  -- Pack rows
+  let numberedRows = zip [0..] $ sortOn ANF.rowLabel rows
+  for_ numberedRows $ \(i, ANF.Row (RowLabel label) expr) -> do
+    rowPtrName <- freshUnName
+    rowOp <- codegenExpr' (textToName label) expr
+    let
+      rowPtrOp = LocalReference (LLVM.PointerType (IntegerType 32) (AddrSpace 0)) rowPtrName
+    addInstruction $ rowPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex i] []
+    addInstruction $ Do $ Store False rowPtrOp rowOp Nothing 0 []
+
+  pure allocOp
 codegenExpr' name' (ANF.ELetVal (ANF.LetVal bindings expr)) = do
   for_ bindings $ \(ANF.LetValBinding ident _ body) ->
     codegenExpr' (identToName ident) body
@@ -324,3 +341,4 @@ llvmType (FuncType argTys retTy) =
   (AddrSpace 0)
 llvmType (EnumType intBits) = IntegerType intBits
 llvmType (TaggedUnionType structName _) = LLVM.PointerType (NamedTypeReference (textToName $ unTyConName structName)) (AddrSpace 0)
+llvmType (RecordType rows) = StructureType False $ llvmType . snd <$> sort rows
