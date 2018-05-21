@@ -13,12 +13,14 @@ entry:
   ret i64 %ret
 }
 
-define private { i64* }* @g(i64* %x) {
+define private { i64*, i64 }* @g(i64* %x) {
 entry:
-  %ret = alloca { i64* }
-  %0 = getelementptr { i64* }, { i64* }* %ret, i32 0, i32 0
+  %ret = alloca { i64*, i64 }
+  %0 = getelementptr { i64*, i64 }, { i64*, i64 }* %ret, i32 0, i32 0
   store i64* %x, i64** %0
-  ret { i64* }* %ret
+  %1 = getelementptr { i64*, i64 }, { i64*, i64 }* %ret, i32 0, i32 1
+  store i64 1, i64* %1
+  ret { i64*, i64 }* %ret
 }
 
 define private %List* @h(i64* %x) {

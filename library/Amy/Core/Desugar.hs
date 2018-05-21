@@ -47,11 +47,8 @@ desugarBinding (T.Binding ident scheme args retTy body) =
 
 desugarExpr :: T.Expr -> Desugar C.Expr
 desugarExpr (T.ELit lit) = pure $ C.ELit lit
-desugarExpr (T.ERecord (T.Typed ty rows)) = do
-  let
-    ty' = desugarType ty
-    desugarRow (T.Row label expr) = C.Row label <$> desugarExpr expr
-  C.ERecord . C.Typed ty' <$> traverse desugarRow rows
+desugarExpr (T.ERecord (T.Typed ty rows)) =
+  C.ERecord . C.Typed (desugarType ty) <$> traverse desugarExpr rows
 desugarExpr (T.EVar var) = pure $ C.EVar (desugarVar var)
 desugarExpr (T.ECase (T.Case scrutinee matches)) = do
   -- Desugar the case expression
@@ -110,7 +107,7 @@ desugarScheme (T.Forall vars ty) = C.Forall (desugarTyVarInfo <$> vars) (desugar
 
 desugarType :: T.Type -> C.Type
 desugarType (T.TyCon con) = C.TyCon con
-desugarType (T.TyRecord rows) = C.TyRecord $ (\(T.TyRow label ty) -> C.TyRow label (desugarType ty)) <$> rows
+desugarType (T.TyRecord rows) = C.TyRecord $ desugarType <$> rows
 desugarType (T.TyVar var) = C.TyVar (desugarTyVarInfo var)
 desugarType (T.TyApp con args) = C.TyApp con (desugarType <$> args)
 desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)

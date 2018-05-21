@@ -9,6 +9,7 @@ module Amy.Syntax.Pretty
   ) where
 
 import Data.Foldable (toList)
+import qualified Data.Map.Strict as Map
 
 import Amy.Literal
 import Amy.Pretty
@@ -18,13 +19,13 @@ prettyType :: Type -> Doc ann
 prettyType (TyFun ty1 ty2) = parensIf (isTyApp ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
 prettyType (TyCon con) = prettyTyConName (locatedValue con)
 prettyType (TyVar var) = prettyTyVarName (locatedValue var)
-prettyType (TyRecord rows) = bracketed $ prettyTyRow <$> rows
+prettyType (TyRecord rows) = bracketed $ uncurry prettyTyRow <$> Map.toList rows
 prettyType (TyApp con args) = prettyTyConName (locatedValue con) <+> sep (toList $ prettyArg <$> args)
  where
   prettyArg arg = parensIf (isTyApp arg) $ prettyType arg
 
-prettyTyRow :: TyRow -> Doc ann
-prettyTyRow (TyRow (Located _ label) ty) = prettyRowLabel label <+> "::" <+> prettyType ty
+prettyTyRow :: Located RowLabel -> Type -> Doc ann
+prettyTyRow (Located _ label) ty = prettyRowLabel label <+> "::" <+> prettyType ty
 
 isTyApp :: Type -> Bool
 isTyApp TyApp{} = True
@@ -63,7 +64,7 @@ prettyBindingType' (BindingType (Located _ name) ty) =
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
-prettyExpr (ERecord rows) = bracketed $ prettyRow <$> rows
+prettyExpr (ERecord rows) = bracketed $ uncurry prettyRow <$> Map.toList rows
 prettyExpr (EVar var) = prettyVar var
 prettyExpr (EIf (If pred' then' else')) =
   prettyIf (prettyExpr pred') (prettyExpr then') (prettyExpr else')
@@ -79,8 +80,8 @@ prettyExpr (ELet (Let bindings body)) =
 prettyExpr (EApp (App f args)) = sep $ prettyExpr f : (prettyExpr <$> toList args)
 prettyExpr (EParens expr) = parens $ prettyExpr expr
 
-prettyRow :: Row -> Doc ann
-prettyRow (Row (Located _ label) expr) = prettyRowLabel label <+> "=" <+> prettyExpr expr
+prettyRow :: Located RowLabel -> Expr -> Doc ann
+prettyRow (Located _ label) expr = prettyRowLabel label <+> "=" <+> prettyExpr expr
 
 prettyVar :: Var -> Doc ann
 prettyVar (VVal (Located _ var)) = prettyIdent var

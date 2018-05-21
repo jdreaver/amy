@@ -7,6 +7,7 @@ module Amy.ANF.Pretty
 
 import Data.Foldable (toList)
 import Data.Maybe (maybeToList)
+import qualified Data.Map.Strict as Map
 
 import Amy.ANF.AST
 import Amy.Literal
@@ -55,7 +56,7 @@ prettyVal (ConEnum _ con) = prettyDataConName (dataConName con)
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (EVal val) = prettyVal val
-prettyExpr (ERecord (Typed _ rows)) = bracketed $ prettyRow <$> rows
+prettyExpr (ERecord (Typed _ rows)) = bracketed $ uncurry prettyRow <$> Map.toList rows
 prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault _)) =
   prettyCase
     (prettyVal scrutinee)
@@ -76,8 +77,8 @@ prettyExpr (EConApp (ConApp info mArg _ _)) =
 prettyExpr (EPrimOp (App (PrimitiveFunction _ name _) args _)) =
   "$primOp" <+> prettyIdent name <+> list (prettyVal <$> args)
 
-prettyRow :: Row -> Doc ann
-prettyRow (Row label val) = prettyRowLabel label <+> "=" <> groupOrHang (prettyVal val)
+prettyRow :: RowLabel -> Val -> Doc ann
+prettyRow label val = prettyRowLabel label <+> "=" <> groupOrHang (prettyVal val)
 
 prettyLetValBinding :: LetValBinding -> Doc ann
 prettyLetValBinding (LetValBinding ident ty body) =

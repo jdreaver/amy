@@ -7,6 +7,7 @@ module Amy.ANF.Convert
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
+import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
@@ -75,9 +76,9 @@ convertType ty = go (typeToNonEmpty ty)
       C.TyFun{} -> mkFunctionType ty
   go _ = mkFunctionType ty
 
-mkRecordType :: [C.TyRow] -> ANFConvert ANF.Type
+mkRecordType :: Map RowLabel C.Type -> ANFConvert ANF.Type
 mkRecordType rows = do
-  rows' <- for rows $ \(C.TyRow label ty) -> do
+  rows' <- for (Map.toAscList rows) $ \(label, ty) -> do
     ty' <- convertType ty
     pure (label, ty')
   pure $ RecordType rows'
@@ -104,12 +105,10 @@ normalizeExpr
   -> C.Expr -- ^ Expression to normalize
   -> ANFConvert ANF.Expr
 normalizeExpr _ (C.ELit lit) = pure $ ANF.EVal $ ANF.Lit lit
-normalizeExpr _ (C.ERecord (C.Typed ty rows)) = do
-  let rows' = (\(C.Row (RowLabel label) expr) -> (label, expr)) <$> rows
-  normalizeList (uncurry normalizeName) rows' $ \vals -> do
+normalizeExpr _ (C.ERecord (C.Typed ty rows)) =
+  normalizeRows (Map.toList rows) $ \rows' -> do
     ty' <- convertType ty
-    let rows'' = zipWith (\val (C.Row label _) -> ANF.Row label val) vals rows
-    pure $ ANF.ERecord $ ANF.Typed ty' rows''
+    pure $ ANF.ERecord $ ANF.Typed ty' (Map.fromList rows')
 normalizeExpr name var@C.EVar{} = normalizeName name var (pure . ANF.EVal)
 normalizeExpr name expr@(C.ECase (C.Case scrutinee bind matches defaultExpr)) =
   normalizeName name scrutinee $ \scrutineeVal -> do
@@ -226,6 +225,12 @@ normalizeList :: (Monad m) => (a -> (b -> m c) -> m c) -> [a] -> ([b] -> m c) ->
 normalizeList _ [] c = c []
 normalizeList norm (x:xs) c =
   norm x $ \v -> normalizeList norm xs $ \vs -> c (v:vs)
+
+normalizeRows :: [(RowLabel, C.Expr)] -> ([(RowLabel, ANF.Val)] -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
+normalizeRows [] c = c []
+normalizeRows ((RowLabel label, x):xs) c =
+  normalizeName label x $ \v -> normalizeRows xs $ \vs -> c ((RowLabel label, v):vs)
+
 
 -- | ANF conversion produces a lot of nested and adjacent letval expressions.
 -- This function cleans them up into a single letval. Note that bindings in a

@@ -10,7 +10,8 @@ module Amy.Codegen.Pure
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Short as BSS
 import Data.Foldable (for_)
-import Data.List (sort, sortOn)
+import Data.List (sort)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Traversable (for)
 import GHC.Word (Word32)
@@ -120,8 +121,8 @@ codegenExpr' name' (ANF.ERecord (ANF.Typed ty rows)) = do
   addInstruction $ name' := Alloca innerTy Nothing 0 []
 
   -- Pack rows
-  let numberedRows = zip [0..] $ sortOn ANF.rowLabel rows
-  for_ numberedRows $ \(i, ANF.Row _ val) -> do
+  let numberedRows = zip [0..] $ Map.toAscList rows
+  for_ numberedRows $ \(i, (_, val)) -> do
     rowPtrName <- freshUnName
     rowOp <- valOperand val
     let

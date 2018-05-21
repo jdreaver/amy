@@ -12,7 +12,6 @@ module Amy.TypeCheck.AST
   , DataConDefinition(..)
   , fromPrimDataCon
   , Expr(..)
-  , Row(..)
   , Var(..)
   , If(..)
   , Case(..)
@@ -27,7 +26,6 @@ module Amy.TypeCheck.AST
   , Type(..)
   , TyVarInfo(..)
   , TyVarGenerated(..)
-  , TyRow(..)
   , Scheme(..)
   , Typed(..)
 
@@ -38,6 +36,7 @@ module Amy.TypeCheck.AST
   ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.Map.Strict (Map)
 
 import Amy.ASTCommon
 import Amy.Literal
@@ -107,7 +106,7 @@ fromPrimDataCon name = DataConDefinition name Nothing
 -- | A renamed 'Expr'
 data Expr
   = ELit !Literal
-  | ERecord !(Typed [Row])
+  | ERecord !(Typed (Map RowLabel Expr))
   | EVar !Var
   | EIf !If
   | ECase !Case
@@ -115,12 +114,6 @@ data Expr
   | EApp !App
   | EParens !Expr
   deriving (Show, Eq)
-
-data Row
-  = Row
-  { rowLabel :: !RowLabel
-  , rowValue :: !Expr
-  } deriving (Show, Eq)
 
 data Var
   = VVal !(Typed IdentName)
@@ -199,7 +192,7 @@ data Type
   = TyCon !TyConName
   | TyVar !TyVarInfo
   | TyApp !TyConName !(NonEmpty Type)
-  | TyRecord ![TyRow]
+  | TyRecord !(Map RowLabel Type)
   | TyFun !Type !Type
   deriving (Show, Eq, Ord)
 
@@ -215,12 +208,6 @@ data TyVarGenerated
   = TyVarGenerated
   | TyVarNotGenerated
   deriving (Show, Eq, Ord)
-
-data TyRow
-  = TyRow
-  { tyRowLabel :: !RowLabel
-  , tyRowType :: !Type
-  } deriving (Show, Eq, Ord)
 
 data Scheme
   = Forall ![TyVarInfo] Type

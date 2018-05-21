@@ -7,7 +7,6 @@ module Amy.Renamer.AST
   , fromPrimTypeDef
   , DataConDefinition(..)
   , Expr(..)
-  , Row(..)
   , Var(..)
   , If(..)
   , Case(..)
@@ -18,7 +17,6 @@ module Amy.Renamer.AST
   , App(..)
 
   , Type(..)
-  , TyRow(..)
   , Scheme(..)
 
     -- Re-export
@@ -28,6 +26,7 @@ module Amy.Renamer.AST
   ) where
 
 import Data.List.NonEmpty (NonEmpty)
+import Data.Map.Strict (Map)
 
 import Amy.ASTCommon
 import Amy.Literal (Literal(..))
@@ -92,7 +91,7 @@ fromPrimDataCon name =
 -- | A renamed 'Expr'
 data Expr
   = ELit !(Located Literal)
-  | ERecord ![Row]
+  | ERecord !(Map (Located RowLabel) Expr)
   | EVar !Var
   | EIf !If
   | ECase !Case
@@ -100,12 +99,6 @@ data Expr
   | EApp !App
   | EParens !Expr
   deriving (Show, Eq)
-
-data Row
-  = Row
-  { rowLabel :: !(Located RowLabel)
-  , rowValue :: !Expr
-  } deriving (Show, Eq)
 
 data Var
   = VVal !(Located IdentName)
@@ -161,17 +154,11 @@ data Type
   = TyCon !(Located TyConName)
   | TyVar !(Located TyVarName)
   | TyApp !(Located TyConName) !(NonEmpty Type)
-  | TyRecord ![TyRow]
+  | TyRecord !(Map (Located RowLabel) Type)
   | TyFun !Type !Type
   deriving (Show, Eq)
 
 infixr 0 `TyFun`
-
-data TyRow
-  = TyRow
-  { tyRowLabel :: !(Located RowLabel)
-  , tyRowType :: !Type
-  } deriving (Show, Eq)
 
 data Scheme
   = Forall ![Located TyVarName] Type

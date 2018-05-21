@@ -22,6 +22,8 @@ module Amy.Syntax.Parser
 import qualified Control.Applicative.Combinators.NonEmpty as CNE
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Text.Megaparsec
@@ -105,13 +107,13 @@ typeTerm' =
   <|> (TyCon <$> tyConName <?> "type constructor")
   <|> (TyRecord <$> tyRecord <?> "record")
 
-tyRecord :: AmyParser [TyRow]
+tyRecord :: AmyParser (Map (Located RowLabel) Type)
 tyRecord =
-  braces $ (`sepBy` comma) $ do
+  fmap Map.fromList $ braces $ (`sepBy` comma) $ do
     label' <- L.rowLabel
     doubleColon
     ty <- parseType
-    pure $ TyRow label' ty
+    pure (label', ty)
 
 binding :: AmyParser Binding
 binding = do
@@ -198,13 +200,13 @@ literal :: AmyParser (Located Literal)
 literal =
   fmap (either LiteralDouble LiteralInt) <$> number
 
-record :: AmyParser [Row]
+record :: AmyParser (Map (Located RowLabel) Expr)
 record =
-  braces $ (`sepBy` comma) $ do
+  fmap Map.fromList $ braces $ (`sepBy` comma) $ do
     label' <- L.rowLabel
     equals
     expr <- expression
-    pure $ Row label' expr
+    pure (label', expr)
 
 variable :: AmyParser Var
 variable =

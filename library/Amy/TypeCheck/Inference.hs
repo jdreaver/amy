@@ -122,7 +122,7 @@ normalize body =
   normType (T.TyFun a b) = T.TyFun (normType a) (normType b)
   normType (T.TyCon con) = T.TyCon con
   normType (T.TyApp con args) = T.TyApp con (normType <$> args)
-  normType (T.TyRecord rows) = T.TyRecord $ (\(T.TyRow label ty) -> (T.TyRow label (normType ty))) <$> rows
+  normType (T.TyRecord rows) = T.TyRecord $ normType <$> rows
   normType (T.TyVar a) =
     case Map.lookup a letterMap of
       Just x -> T.TyVar x
@@ -327,10 +327,10 @@ inferBinding (R.Binding (Located _ name) _ args body) = do
 inferExpr :: R.Expr -> Inference (T.Expr, [Constraint])
 inferExpr (R.ELit (Located _ lit)) = pure (T.ELit lit, [])
 inferExpr (R.ERecord rows) = do
-  (rows', rowsCons) <- unzip <$> traverse inferRow rows
-  let ty = T.TyRecord $ (\(T.Row label expr) -> T.TyRow label (expressionType expr)) <$> rows'
+  (rows', rowsCons) <- unzip <$> traverse (uncurry inferRow) (Map.toList rows)
+  let ty = T.TyRecord $ Map.fromList $ fmap expressionType <$> rows'
   pure
-    ( T.ERecord (Typed ty rows')
+    ( T.ERecord (Typed ty (Map.fromList rows'))
     , concat rowsCons
     )
 inferExpr (R.EVar var) =
@@ -394,11 +394,11 @@ inferExpr (R.EParens expr) = do
   (expr', constraints) <- inferExpr expr
   pure (T.EParens expr', constraints)
 
-inferRow :: R.Row -> Inference (T.Row, [Constraint])
-inferRow (R.Row (Located _ label) expr) = do
+inferRow :: Located RowLabel -> R.Expr -> Inference ((RowLabel, T.Expr), [Constraint])
+inferRow (Located _ label) expr = do
   (expr', exprCons) <- inferExpr expr
   pure
-    ( T.Row label expr'
+    ( (label, expr')
     , exprCons
     )
 
@@ -484,8 +484,8 @@ unifies (T.TyApp name1 args1) (T.TyApp name2 args2)
 unifies (T.TyCon name1) (T.TyCon name2)
   | name1 == name2 = return emptySubst
 unifies (T.TyRecord rows1) (T.TyRecord rows2)
-  | length rows1 == length rows2 =
-    unifyMany (T.tyRowType <$> rows1) (T.tyRowType <$> rows2)
+  | Map.keysSet rows1 == Map.keysSet rows2 =
+    unifyMany (snd <$> Map.toAscList rows1) (snd <$> Map.toAscList rows2)
 unifies t1 t2 = throwError $ UnificationFail t1 t2
 
 unifyMany :: [T.Type] -> [T.Type] -> Solve Subst
@@ -530,9 +530,7 @@ substituteType :: Subst -> T.Type -> T.Type
 substituteType _ (T.TyCon con) = T.TyCon con
 substituteType (Subst subst) t@(T.TyVar var) = Map.findWithDefault t var subst
 substituteType subst (T.TyApp con args) = T.TyApp con (substituteType subst <$> args)
-substituteType subst (T.TyRecord rows) = T.TyRecord $ substituteRecord <$> rows
- where
-  substituteRecord (T.TyRow label ty) = T.TyRow label $ substituteType subst ty
+substituteType subst (T.TyRecord rows) = T.TyRecord $ substituteType subst <$> rows
 substituteType subst (t1 `T.TyFun` t2) = substituteType subst t1 `T.TyFun` substituteType subst t2
 
 substituteTyped :: Subst -> T.Typed a -> T.Typed a
@@ -560,9 +558,7 @@ substituteBinding subst (T.Binding name ty args retTy body) =
 
 substituteTExpr :: Subst -> T.Expr -> T.Expr
 substituteTExpr _ lit@T.ELit{} = lit
-substituteTExpr subst (T.ERecord (Typed ty rows)) = T.ERecord $ Typed (substituteType subst ty) (substituteRow <$> rows)
- where
-  substituteRow (T.Row label expr) = T.Row label $ substituteTExpr subst expr
+substituteTExpr subst (T.ERecord (Typed ty rows)) = T.ERecord $ Typed (substituteType subst ty) (substituteTExpr subst <$> rows)
 substituteTExpr subst (T.EVar var) =
   T.EVar $
     case var of
@@ -600,7 +596,7 @@ freeTypeVariables :: T.Type -> Set T.TyVarInfo
 freeTypeVariables (T.TyCon _) = Set.empty
 freeTypeVariables (T.TyVar var) = Set.singleton var
 freeTypeVariables (T.TyApp _ args) = Set.unions $ freeTypeVariables <$> toList args
-freeTypeVariables (T.TyRecord rows) = Set.unions $ freeTypeVariables . T.tyRowType <$> rows
+freeTypeVariables (T.TyRecord rows) = Set.unions $ freeTypeVariables <$> Map.elems rows
 freeTypeVariables (t1 `T.TyFun` t2) = freeTypeVariables t1 `Set.union` freeTypeVariables t2
 
 freeSchemeTypeVariables :: T.Scheme -> Set T.TyVarInfo
@@ -621,9 +617,7 @@ convertType :: R.Type -> T.Type
 convertType (R.TyCon (Located _ con)) = T.TyCon con
 convertType (R.TyVar var) = T.TyVar (convertTyVarInfo var)
 convertType (R.TyApp (Located _ con) args) = T.TyApp con (convertType <$> args)
-convertType (R.TyRecord rows) = T.TyRecord $ convertRow <$> rows
- where
-  convertRow (R.TyRow (Located _ label) ty) = T.TyRow label $ convertType ty
+convertType (R.TyRecord rows) = T.TyRecord $ Map.mapKeys locatedValue $ convertType <$> rows
 convertType (R.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
 
 convertTyConDefinition :: R.TyConDefinition -> T.TyConDefinition

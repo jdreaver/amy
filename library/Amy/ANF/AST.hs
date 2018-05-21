@@ -9,7 +9,6 @@ module Amy.ANF.AST
   , Val(..)
   , DataCon(..)
   , Expr(..)
-  , Row(..)
   , LetVal(..)
   , LetValBinding(..)
   , Case(..)
@@ -27,6 +26,7 @@ module Amy.ANF.AST
   ) where
 
 import GHC.Word (Word32)
+import Data.Map.Strict (Map)
 
 import Amy.ASTCommon
 import Amy.Literal
@@ -82,19 +82,13 @@ data DataCon
 
 data Expr
   = EVal !Val
-  | ERecord !(Typed [Row])
+  | ERecord !(Typed (Map RowLabel Val))
   | ELetVal !LetVal
   | ECase !Case
   | EApp !(App (Typed IdentName))
   | EConApp !ConApp
   | EPrimOp !(App PrimitiveFunction)
   deriving (Show, Eq)
-
-data Row
-  = Row
-  { rowLabel :: !RowLabel
-  , rowValue :: !Val
-  } deriving (Show, Eq)
 
 data LetVal
   = LetVal
