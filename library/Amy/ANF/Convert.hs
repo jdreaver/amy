@@ -105,10 +105,11 @@ normalizeExpr
   -> ANFConvert ANF.Expr
 normalizeExpr _ (C.ELit lit) = pure $ ANF.EVal $ ANF.Lit lit
 normalizeExpr _ (C.ERecord (C.Typed ty rows)) = do
-  ty' <- convertType ty
-  fmap (ANF.ERecord . ANF.Typed ty')
-    $ for rows
-    $ \(C.Row label expr) -> ANF.Row label <$> normalizeExpr (unRowLabel label) expr
+  let rows' = (\(C.Row (RowLabel label) expr) -> (label, expr)) <$> rows
+  normalizeList (uncurry normalizeName) rows' $ \vals -> do
+    ty' <- convertType ty
+    let rows'' = zipWith (\val (C.Row label _) -> ANF.Row label val) vals rows
+    pure $ ANF.ERecord $ ANF.Typed ty' rows''
 normalizeExpr name var@C.EVar{} = normalizeName name var (pure . ANF.EVal)
 normalizeExpr name expr@(C.ECase (C.Case scrutinee bind matches defaultExpr)) =
   normalizeName name scrutinee $ \scrutineeVal -> do

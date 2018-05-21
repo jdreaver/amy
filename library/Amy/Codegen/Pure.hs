@@ -113,14 +113,17 @@ codegenExpr' name' (ANF.EVal val) =
   bindOpToName name' =<< valOperand val
 codegenExpr' name' (ANF.ERecord (ANF.Typed ty rows)) = do
   -- Allocate struct
-  let allocOp = LocalReference (LLVM.PointerType (llvmType ty) (AddrSpace 0)) name'
-  addInstruction $ name' := Alloca (llvmType ty) Nothing 0 []
+  let
+    -- TODO: Remove need for irrefutable pattern match
+    ty'@(LLVM.PointerType innerTy _) = llvmType ty
+    allocOp = LocalReference ty' name'
+  addInstruction $ name' := Alloca innerTy Nothing 0 []
 
   -- Pack rows
   let numberedRows = zip [0..] $ sortOn ANF.rowLabel rows
-  for_ numberedRows $ \(i, ANF.Row (RowLabel label) expr) -> do
+  for_ numberedRows $ \(i, ANF.Row _ val) -> do
     rowPtrName <- freshUnName
-    rowOp <- codegenExpr' (textToName label) expr
+    rowOp <- valOperand val
     let
       rowPtrOp = LocalReference (LLVM.PointerType (IntegerType 32) (AddrSpace 0)) rowPtrName
     addInstruction $ rowPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex i] []
@@ -341,4 +344,7 @@ llvmType (FuncType argTys retTy) =
   (AddrSpace 0)
 llvmType (EnumType intBits) = IntegerType intBits
 llvmType (TaggedUnionType structName _) = LLVM.PointerType (NamedTypeReference (textToName $ unTyConName structName)) (AddrSpace 0)
-llvmType (RecordType rows) = StructureType False $ llvmType . snd <$> sort rows
+llvmType (RecordType rows) = LLVM.PointerType (recordType rows) (AddrSpace 0)
+
+recordType :: [(RowLabel, ANF.Type)] -> LLVM.Type
+recordType rows = StructureType False $ llvmType . snd <$> sort rows

@@ -93,9 +93,7 @@ data Expr
 data Row
   = Row
   { rowLabel :: !RowLabel
-    -- TODO: Should this be a Val instead of Expr? Should row construction
-    -- involve just primitive expressions?
-  , rowValue :: !Expr
+  , rowValue :: !Val
   } deriving (Show, Eq)
 
 data LetVal
