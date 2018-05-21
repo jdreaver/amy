@@ -27,8 +27,8 @@ import qualified Data.Set as Set
 import Text.Megaparsec
 import Text.Megaparsec.Expr
 
-import Amy.Syntax.AST
-import Amy.Syntax.Lexer
+import Amy.Syntax.AST as S
+import Amy.Syntax.Lexer as L
 import Amy.Syntax.Monad
 
 parseModule :: AmyParser Module
@@ -89,20 +89,29 @@ typeTerm :: AmyParser Type
 typeTerm = do
   con :| rest <- CNE.sepBy1 typeTerm' spaceConsumer
   case (con, NE.nonEmpty rest) of
+    (ty, Nothing) -> pure ty
     (TyCon name, Just args) -> pure $ TyApp name args
-    (TyCon name, Nothing) -> pure $ TyCon name
-    (TyVar var, Nothing) -> pure $ TyVar var
-    (TyVar _, Just _) -> mkError $ "type variable with arguments encountered (no higher-kinded types allowed): " ++ show (con, rest)
+    (TyVar _, _) -> mkError $ "type variable with arguments encountered (no higher-kinded types allowed): " ++ show (con, rest)
     (TyApp _ _, _) -> mkError $ "currying of type constructors not allowed " ++ show (con, rest)
     (TyFun _ _, _) -> mkError $ "currying of type constructors not allowed " ++ show (con, rest)
+    (TyRecord _, _) -> mkError $ "tried to apply record type in TyApp " ++ show (con, rest)
  where
   mkError = fancyFailure . Set.singleton . ErrorFail
 
 typeTerm' :: AmyParser Type
 typeTerm' =
   (parens parseType <?> "type parens")
-  <|> try (TyVar <$> tyVarName <?> "type variable")
-  <|> try (TyCon <$> tyConName <?> "type constructor")
+  <|> (TyVar <$> tyVarName <?> "type variable")
+  <|> (TyCon <$> tyConName <?> "type constructor")
+  <|> (TyRecord <$> tyRecord <?> "record")
+
+tyRecord :: AmyParser [TyRow]
+tyRecord =
+  braces $ (`sepBy` comma) $ do
+    label' <- L.rowLabel
+    doubleColon
+    ty <- parseType
+    pure $ TyRow label' ty
 
 binding :: AmyParser Binding
 binding = do
@@ -176,6 +185,7 @@ expression' :: AmyParser Expr
 expression' =
   (expressionParens <?> "parens")
   <|> (ELit <$> literal <?> "literal")
+  <|> (ERecord <$> record <?> "record")
   <|> (EIf <$> ifExpression <?> "if expression")
   <|> (ECase <$> caseExpression <?> "case expression")
   <|> (ELet <$> letExpression' <?> "let expression")
@@ -187,6 +197,14 @@ expressionParens = EParens <$> parens expression
 literal :: AmyParser (Located Literal)
 literal =
   fmap (either LiteralDouble LiteralInt) <$> number
+
+record :: AmyParser [Row]
+record =
+  braces $ (`sepBy` comma) $ do
+    label' <- L.rowLabel
+    equals
+    expr <- expression
+    pure $ Row label' expr
 
 variable :: AmyParser Var
 variable =

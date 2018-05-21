@@ -14,6 +14,7 @@ module Amy.Pretty
   , prettyDataConName
   , prettyTyConName
   , prettyTyVarName
+  , prettyRowLabel
 
     -- Types
   , prettyScheme
@@ -69,6 +70,9 @@ prettyTyConName = pretty . unTyConName
 
 prettyTyVarName :: TyVarName -> Doc ann
 prettyTyVarName = pretty . unTyVarName
+
+prettyRowLabel :: RowLabel -> Doc ann
+prettyRowLabel = pretty . unRowLabel
 
 --
 -- Types

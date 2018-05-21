@@ -68,6 +68,11 @@ renameTypeDeclaration (S.TypeDeclaration (S.TyConDefinition name args span') con
             $ R.TyFun
             <$> ty1'
             <*> ty2'
+        renameArg (S.TyRecord rows) = do
+          rows' <- for rows $ \(S.TyRow label ty) -> do
+            ty' <- renameArg ty
+            pure $ R.TyRow label <$> ty'
+          pure $ R.TyRecord <$> sequenceA rows'
         renameArg (S.TyApp appCon appArgs) = do
           appCon' <- lookupTypeConstructorInScopeOrError appCon
           appArgs' <- traverse renameArg appArgs
@@ -155,6 +160,11 @@ renameType (S.TyApp con args) = do
     $ R.TyApp
     <$> con'
     <*> sequenceA args'
+renameType (S.TyRecord rows) = do
+  rows' <- for rows $ \(S.TyRow label ty) -> do
+    ty' <- renameType ty
+    pure $ R.TyRow label <$> ty'
+  pure $ R.TyRecord <$> sequenceA rows'
 renameType (S.TyFun ty1 ty2) = do
   ty1' <- renameType ty1
   ty2' <- renameType ty2
@@ -165,6 +175,11 @@ renameType (S.TyFun ty1 ty2) = do
 
 renameExpression :: S.Expr -> Renamer (Validation [Error] R.Expr)
 renameExpression (S.ELit lit) = pure $ Success $ R.ELit lit
+renameExpression (S.ERecord rows) = do
+  rows' <- for rows $ \(S.Row label expr) -> do
+    expr' <- renameExpression expr
+    pure $ R.Row label <$> expr'
+  pure $ R.ERecord <$> sequenceA rows'
 renameExpression (S.EVar var) =
   fmap (fmap R.EVar) $
     case var of

@@ -10,6 +10,7 @@ module Amy.Syntax.Lexer
   , dataConName
   , tyConName
   , tyVarName
+  , rowLabel
   , dataConstructorSep
   , extern
   , forall
@@ -20,9 +21,8 @@ module Amy.Syntax.Lexer
   , of'
   , let'
   , in'
-  , lparen
-  , rparen
   , parens
+  , braces
   , optionalParens
   , comma
   , dot
@@ -150,6 +150,9 @@ tyConName = fmap TyConName <$> typeIdentifier
 tyVarName :: AmyParser (Located TyVarName)
 tyVarName = fmap (TyVarName . unIdentName) <$> identifier
 
+rowLabel :: AmyParser (Located RowLabel)
+rowLabel = fmap (RowLabel . unIdentName) <$> identifier
+
 dataConstructorSep :: AmyParser ()
 dataConstructorSep = char '|' >> spaceConsumer
 
@@ -164,6 +167,15 @@ parens = between lparen rparen
 
 optionalParens :: AmyParser a -> AmyParser a
 optionalParens p = parens p <|> p
+
+lbrace :: AmyParser ()
+lbrace = char '{' >> spaceConsumer
+
+rbrace :: AmyParser ()
+rbrace = char '}' >> spaceConsumer
+
+braces :: AmyParser a -> AmyParser a
+braces = between lbrace rbrace
 
 comma :: AmyParser ()
 comma = char ',' >> spaceConsumer
