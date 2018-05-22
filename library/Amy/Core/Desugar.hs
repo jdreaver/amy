@@ -107,7 +107,7 @@ desugarScheme (T.Forall vars ty) = C.Forall (desugarTyVarInfo <$> vars) (desugar
 
 desugarType :: T.Type -> C.Type
 desugarType (T.TyCon con) = C.TyCon con
-desugarType (T.TyRecord rows) = C.TyRecord $ desugarType <$> rows
+desugarType (T.TyRecord rows _) = C.TyRecord $ desugarType <$> rows
 desugarType (T.TyVar var) = C.TyVar (desugarTyVarInfo var)
 desugarType (T.TyApp con args) = C.TyApp con (desugarType <$> args)
 desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)

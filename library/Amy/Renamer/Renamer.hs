@@ -55,12 +55,13 @@ renameTypeDeclaration (S.TypeDeclaration (S.TyConDefinition name args span') con
     -- Rename data constructors
     constructors' <- for constructors $ \(S.DataConDefinition con mArgTy) -> do
       let
-        renameArg (S.TyCon tyCon) = fmap R.TyCon <$> lookupTypeConstructorInScopeOrError tyCon
-        renameArg (S.TyVar lTyVar@(Located tyVarSpan tyVar)) =
+        renameTyVar lTyVar@(Located tyVarSpan tyVar) =
           -- Find the constructor's type variable argument corresponding to
           -- this type variable
           let mTyVar = find ((== tyVar) . locatedValue) args
-          in pure $ maybe (Failure [UnknownTypeVariable lTyVar]) (Success . R.TyVar . Located tyVarSpan . locatedValue) mTyVar
+          in pure $ maybe (Failure [UnknownTypeVariable lTyVar]) (Success . Located tyVarSpan . locatedValue) mTyVar
+        renameArg (S.TyCon tyCon) = fmap R.TyCon <$> lookupTypeConstructorInScopeOrError tyCon
+        renameArg (S.TyVar tvar) = fmap R.TyVar <$> renameTyVar tvar
         renameArg (S.TyFun t1 t2) = do
           ty1' <- renameArg t1
           ty2' <- renameArg t2
@@ -68,7 +69,13 @@ renameTypeDeclaration (S.TypeDeclaration (S.TyConDefinition name args span') con
             $ R.TyFun
             <$> ty1'
             <*> ty2'
-        renameArg (S.TyRecord rows _) = fmap R.TyRecord . sequenceA <$> traverse renameArg rows
+        renameArg (S.TyRecord rows mVar) = do
+          rows' <- sequenceA <$> traverse renameArg rows
+          mVar' <- sequenceA <$> traverse renameTyVar mVar
+          pure
+            $ R.TyRecord
+            <$> rows'
+            <*> mVar'
         renameArg (S.TyApp appCon appArgs) = do
           appCon' <- lookupTypeConstructorInScopeOrError appCon
           appArgs' <- traverse renameArg appArgs
@@ -156,7 +163,13 @@ renameType (S.TyApp con args) = do
     $ R.TyApp
     <$> con'
     <*> sequenceA args'
-renameType (S.TyRecord rows _) = fmap R.TyRecord . sequenceA <$> traverse renameType rows
+renameType (S.TyRecord rows mVar) = do
+  rows' <- sequenceA <$> traverse renameType rows
+  mVar' <- sequenceA <$> traverse lookupTypeVariableInScopeOrError mVar
+  pure
+    $ R.TyRecord
+    <$> rows'
+    <*> mVar'
 renameType (S.TyFun ty1 ty2) = do
   ty1' <- renameType ty1
   ty2' <- renameType ty2

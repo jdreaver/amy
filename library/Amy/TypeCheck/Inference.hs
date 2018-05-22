@@ -18,7 +18,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, maybeToList)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text, pack)
@@ -71,11 +71,11 @@ newtype Inference a = Inference (ReaderT TyEnv (StateT Int (Except Error)) a)
 runInference :: Int -> TyEnv -> Inference a -> Either Error (a, Int)
 runInference maxId env (Inference action) = runExcept $ runStateT (runReaderT action env) (maxId + 1)
 
-freshTypeVariable :: Inference T.Type
+freshTypeVariable :: Inference T.TyVarInfo
 freshTypeVariable = do
   modify' (+ 1)
   id' <- get
-  pure $ T.TyVar (T.TyVarInfo (TyVarName $ "t" <> pack (show id')) TyVarGenerated)
+  pure $ T.TyVarInfo (TyVarName $ "t" <> pack (show id')) TyVarGenerated
 
 -- | Extends the current typing environment with a list of names and schemes
 -- for those names.
@@ -93,7 +93,7 @@ lookupEnvIdentM name = do
 -- constraints with the type variables and not worry about name collisions.
 instantiate :: T.Scheme -> Inference T.Type
 instantiate (T.Forall as t) = do
-  as' <- traverse (const freshTypeVariable) as
+  as' <- fmap T.TyVar <$> traverse (const freshTypeVariable) as
   let s = Subst $ Map.fromList $ zip as as'
   return $ substituteType s t
 
@@ -122,11 +122,9 @@ normalize body =
   normType (T.TyFun a b) = T.TyFun (normType a) (normType b)
   normType (T.TyCon con) = T.TyCon con
   normType (T.TyApp con args) = T.TyApp con (normType <$> args)
-  normType (T.TyRecord rows) = T.TyRecord $ normType <$> rows
-  normType (T.TyVar a) =
-    case Map.lookup a letterMap of
-      Just x -> T.TyVar x
-      Nothing -> error "type variable not in signature"
+  normType (T.TyRecord rows mVar) = T.TyRecord (normType <$> rows) (normTyVar <$> mVar)
+  normType (T.TyVar a) = T.TyVar $ normTyVar a
+  normTyVar var = fromMaybe (error "type variable not in signature") (Map.lookup var letterMap)
 
 letters :: [Text]
 letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
@@ -261,7 +259,7 @@ generateBindingScheme :: R.Binding -> Inference T.Scheme
 generateBindingScheme binding =
   maybe
     -- No explicit type annotation, generate a type variable
-    (T.Forall [] <$> freshTypeVariable)
+    (T.Forall [] . T.TyVar <$> freshTypeVariable)
     -- There is an explicit type annotation. Use it.
     convertExisting
     (R.bindingType binding)
@@ -274,7 +272,7 @@ generateBindingScheme binding =
 checkTypeKind :: T.Type -> Inference ()
 checkTypeKind (T.TyCon _) = pure ()
 checkTypeKind (T.TyVar _) = pure ()
-checkTypeKind (T.TyRecord _) = pure () -- TODO: Record kinds
+checkTypeKind (T.TyRecord _ _) = pure () -- TODO: Record kinds
 checkTypeKind (T.TyFun t1 t2) = checkTypeKind t1 >> checkTypeKind t2
 checkTypeKind (T.TyApp con args) = do
   -- Kind checking is pretty simple currently. We just check arity of the type
@@ -304,7 +302,7 @@ solveBindingConstraints env bindingsInference = do
 
 inferBinding :: R.Binding -> Inference (T.Binding, [Constraint])
 inferBinding (R.Binding (Located _ name) _ args body) = do
-  argsAndTyVars <- traverse (\(Located _ arg) -> (arg,) <$> freshTypeVariable) args
+  argsAndTyVars <- traverse (\(Located _ arg) -> (arg,) . T.TyVar <$> freshTypeVariable) args
   let argsAndSchemes = (\(arg, t) -> (arg, T.Forall [] t)) <$> argsAndTyVars
   (body', bodyCons) <- extendEnvIdentM argsAndSchemes $ inferExpr body
   let
@@ -328,7 +326,8 @@ inferExpr :: R.Expr -> Inference (T.Expr, [Constraint])
 inferExpr (R.ELit (Located _ lit)) = pure (T.ELit lit, [])
 inferExpr (R.ERecord rows) = do
   (rows', rowsCons) <- unzip <$> traverse (uncurry inferRow) (Map.toList rows)
-  let ty = T.TyRecord $ Map.fromList $ fmap expressionType <$> rows'
+  varTy <- freshTypeVariable
+  let ty = T.TyRecord (Map.fromList $ fmap expressionType <$> rows') (Just varTy)
   pure
     ( T.ERecord (Typed ty (Map.fromList rows'))
     , concat rowsCons
@@ -382,7 +381,7 @@ inferExpr (R.ELet (R.Let bindings expression)) = do
 inferExpr (R.EApp (R.App func args)) = do
   (func', funcConstraints) <- inferExpr func
   (args', argConstraints) <- NE.unzip <$> traverse inferExpr args
-  tyVar <- freshTypeVariable
+  tyVar <- T.TyVar <$> freshTypeVariable
   let
     argTypes = NE.toList $ expressionType <$> args'
     newConstraint = Constraint (expressionType func', foldr1 T.TyFun (argTypes ++ [tyVar]))
@@ -415,7 +414,7 @@ inferMatch (R.Match pat body) = do
 inferPattern :: R.Pattern -> Inference (T.Pattern, [Constraint])
 inferPattern (R.PLit (Located _ lit)) = pure (T.PLit lit, [])
 inferPattern (R.PVar (Located _ ident)) = do
-  tvar <- freshTypeVariable
+  tvar <- T.TyVar <$> freshTypeVariable
   pure (T.PVar $ T.Typed tvar ident, [])
 inferPattern (R.PCons (R.PatCons (Located _ con) mArg)) = do
   conTy <- instantiate =<< dataConstructorScheme con
@@ -424,7 +423,7 @@ inferPattern (R.PCons (R.PatCons (Located _ con) mArg)) = do
     Just arg -> do
       (arg', argCons) <- inferPattern arg
       let argTy = patternType arg'
-      retTy <- freshTypeVariable
+      retTy <- T.TyVar <$> freshTypeVariable
       let constraint = Constraint (argTy `T.TyFun` retTy, conTy)
       pure
         ( T.PCons $ T.PatCons con (Just arg') retTy
@@ -483,9 +482,31 @@ unifies (T.TyApp name1 args1) (T.TyApp name2 args2)
     unifyMany (toList args1) (toList args2)
 unifies (T.TyCon name1) (T.TyCon name2)
   | name1 == name2 = return emptySubst
-unifies (T.TyRecord rows1) (T.TyRecord rows2)
-  | Map.keysSet rows1 == Map.keysSet rows2 =
-    unifyMany (snd <$> Map.toAscList rows1) (snd <$> Map.toAscList rows2)
+unifies t1@(T.TyRecord rows1 mVar1) t2@(T.TyRecord rows2 mVar2) = do
+  let
+    commonFields = Map.intersectionWith (,) rows1 rows2
+    justFields1 = Map.difference rows1 rows2
+    justFields2 = Map.difference rows2 rows1
+    unifyRecordWithVar subst rows var = do
+      subst' <- unifies (substituteType subst $ T.TyRecord rows Nothing) (substituteType subst $ T.TyVar var)
+      pure $ subst' `composeSubst` subst
+
+  substCommon <- uncurry unifyMany $ unzip $ snd <$> Map.toAscList commonFields
+  case (mVar1, mVar2) of
+    -- Neither record is extensible
+    (Nothing, Nothing) ->
+      if Map.keysSet rows1 == Map.keysSet rows2
+      then pure substCommon
+      else throwError $ UnificationFail t1 t2
+    -- Both records are extensible
+    (Just var1, Just var2) -> do
+      subst' <- unifyRecordWithVar substCommon justFields1 var2
+      unifyRecordWithVar subst' justFields2 var1
+    -- Only one record is extensible
+    (Just var1, Nothing) ->
+      unifyRecordWithVar substCommon justFields2 var1
+    (Nothing, Just var2) ->
+      unifyRecordWithVar substCommon justFields1 var2
 unifies t1 t2 = throwError $ UnificationFail t1 t2
 
 unifyMany :: [T.Type] -> [T.Type] -> Solve Subst
@@ -530,7 +551,18 @@ substituteType :: Subst -> T.Type -> T.Type
 substituteType _ (T.TyCon con) = T.TyCon con
 substituteType (Subst subst) t@(T.TyVar var) = Map.findWithDefault t var subst
 substituteType subst (T.TyApp con args) = T.TyApp con (substituteType subst <$> args)
-substituteType subst (T.TyRecord rows) = T.TyRecord $ substituteType subst <$> rows
+substituteType subst@(Subst subst') record@(T.TyRecord rows mVar) =
+  let rows' = substituteType subst <$> rows
+  in case mVar >>= flip Map.lookup subst' of
+    Nothing -> T.TyRecord rows' mVar
+    Just (T.TyVar var) -> T.TyRecord rows' (Just var)
+    Just record'@(T.TyRecord newRows mVar') ->
+      -- Ensure no overlap in rows. If there was overlap then unification
+      -- shouldn't have allowed it.
+      if null $ Set.intersection (Map.keysSet rows') (Map.keysSet newRows)
+      then T.TyRecord (Map.union rows' newRows) mVar'
+      else error $ "Found duplicate keys in record substitution: " ++ show (record, record')
+    Just t -> error $ "Invalid substitution for record. Did a kind check fail ?" ++ show (record, t)
 substituteType subst (t1 `T.TyFun` t2) = substituteType subst t1 `T.TyFun` substituteType subst t2
 
 substituteTyped :: Subst -> T.Typed a -> T.Typed a
@@ -596,7 +628,7 @@ freeTypeVariables :: T.Type -> Set T.TyVarInfo
 freeTypeVariables (T.TyCon _) = Set.empty
 freeTypeVariables (T.TyVar var) = Set.singleton var
 freeTypeVariables (T.TyApp _ args) = Set.unions $ freeTypeVariables <$> toList args
-freeTypeVariables (T.TyRecord rows) = Set.unions $ freeTypeVariables <$> Map.elems rows
+freeTypeVariables (T.TyRecord rows mVar) = Set.unions $ Set.fromList (maybeToList mVar) : (freeTypeVariables <$> Map.elems rows)
 freeTypeVariables (t1 `T.TyFun` t2) = freeTypeVariables t1 `Set.union` freeTypeVariables t2
 
 freeSchemeTypeVariables :: T.Scheme -> Set T.TyVarInfo
@@ -617,7 +649,10 @@ convertType :: R.Type -> T.Type
 convertType (R.TyCon (Located _ con)) = T.TyCon con
 convertType (R.TyVar var) = T.TyVar (convertTyVarInfo var)
 convertType (R.TyApp (Located _ con) args) = T.TyApp con (convertType <$> args)
-convertType (R.TyRecord rows) = T.TyRecord $ Map.mapKeys locatedValue $ convertType <$> rows
+convertType (R.TyRecord rows mVar) =
+  T.TyRecord
+    (Map.mapKeys locatedValue $ convertType <$> rows)
+    (flip T.TyVarInfo TyVarNotGenerated . locatedValue <$> mVar)
 convertType (R.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
 
 convertTyConDefinition :: R.TyConDefinition -> T.TyConDefinition

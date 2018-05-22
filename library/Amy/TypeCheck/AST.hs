@@ -192,7 +192,7 @@ data Type
   = TyCon !TyConName
   | TyVar !TyVarInfo
   | TyApp !TyConName !(NonEmpty Type)
-  | TyRecord !(Map RowLabel Type)
+  | TyRecord !(Map RowLabel Type) !(Maybe TyVarInfo)
   | TyFun !Type !Type
   deriving (Show, Eq, Ord)
 
