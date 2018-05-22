@@ -125,7 +125,7 @@ codegenExpr' name' (ANF.ERecord (ANF.Typed ty rows)) = do
     rowPtrName <- freshUnName
     let
       rowOp = valOperand val
-      rowPtrOp = LocalReference (LLVM.PointerType (IntegerType 32) (AddrSpace 0)) rowPtrName
+      rowPtrOp = LocalReference (LLVM.PointerType (IntegerType 64) (AddrSpace 0)) rowPtrName
     addInstruction $ rowPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex i] []
     addInstruction $ Do $ Store False rowPtrOp rowOp Nothing 0 []
 
@@ -260,7 +260,7 @@ packConstructor name' con mArg (TyConName structName) intBits = do
   -- Set the tag
   tagPtrName <- freshUnName
   let
-    tagPtrOp = LocalReference (LLVM.PointerType (IntegerType 32) (AddrSpace 0)) tagPtrName
+    tagPtrOp = LocalReference (LLVM.PointerType (IntegerType 64) (AddrSpace 0)) tagPtrName
     tagOp = ConstantOperand $ C.Int intBits (fromIntegral intIndex)
   addInstruction $ tagPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex 0] []
   addInstruction $ Do $ Store False tagPtrOp tagOp Nothing 0 []
