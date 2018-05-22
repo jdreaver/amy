@@ -16,7 +16,7 @@ prettyType :: Type -> Doc ann
 prettyType (TyFun ty1 ty2) = parensIf (isTyApp ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
 prettyType (TyCon con) = prettyTyConName con
 prettyType (TyVar var) = prettyTyVarName var
-prettyType (TyRecord rows) = bracketed $ uncurry prettyTyRow <$> Map.toList rows
+prettyType (TyRecord rows mVar) = prettyTyRecord (uncurry prettyTyRow <$> Map.toList rows) (prettyTyVarName <$> mVar)
 prettyType (TyApp con args) = prettyTyConName con <+> sep (toList $ prettyArg <$> args)
  where
   prettyArg arg = parensIf (isTyApp arg) $ prettyType arg

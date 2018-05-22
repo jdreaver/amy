@@ -72,7 +72,8 @@ convertType ty = go (typeToNonEmpty ty)
       C.TyCon con -> getTyConType con
       C.TyVar _ -> pure OpaquePointerType
       C.TyApp con _ -> getTyConType con
-      C.TyRecord rows -> mkRecordType rows
+      -- N.B. ANF/LLVM doesn't care about polymorphic records
+      C.TyRecord rows _ -> mkRecordType rows
       C.TyFun{} -> mkFunctionType ty
   go _ = mkFunctionType ty
 
