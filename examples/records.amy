@@ -3,8 +3,14 @@ List a = Nil | Cons { car :: a, cdr :: List a }
 main :: Int
 main = 1
 
-g :: forall a. a -> { x :: a, y :: Int }
+g :: forall a b. a -> { x :: a, y :: Int }
 g x = { y = 1, x = x }
 
 h :: forall a. a -> List a
 h x = Cons { car = x, cdr = Cons { car = x, cdr = Nil } }
+
+# a :: { x :: Int, y :: Bool }
+a =
+  if True
+  then { x = 1 }
+  else { y = False }

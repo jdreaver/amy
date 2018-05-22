@@ -127,7 +127,8 @@ codegenExpr' name' (ANF.ERecord (ANF.Typed ty rows)) = do
       rowOp = valOperand val
       rowPtrOp = LocalReference (LLVM.PointerType (IntegerType 64) (AddrSpace 0)) rowPtrName
     addInstruction $ rowPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex i] []
-    addInstruction $ Do $ Store False rowPtrOp rowOp Nothing 0 []
+    rowPtrOp' <- maybeConvertPointer Nothing rowPtrOp (LLVM.PointerType (operandType rowOp) (AddrSpace 0))
+    addInstruction $ Do $ Store False rowPtrOp' rowOp Nothing 0 []
 
   pure allocOp
 codegenExpr' name' (ANF.ELetVal (ANF.LetVal bindings expr)) = do
