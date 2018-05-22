@@ -11,7 +11,7 @@ module Amy.Syntax.Lexer
   , tyConName
   , tyVarName
   , rowLabel
-  , dataConstructorSep
+  , pipe
   , extern
   , forall
   , if'
@@ -153,8 +153,8 @@ tyVarName = fmap (TyVarName . unIdentName) <$> identifier
 rowLabel :: AmyParser (Located RowLabel)
 rowLabel = fmap (RowLabel . unIdentName) <$> identifier
 
-dataConstructorSep :: AmyParser ()
-dataConstructorSep = char '|' >> spaceConsumer
+pipe :: AmyParser ()
+pipe = char '|' >> spaceConsumer
 
 lparen :: AmyParser ()
 lparen = char '(' >> spaceConsumer

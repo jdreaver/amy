@@ -34,6 +34,7 @@ module Amy.Pretty
   , prettyExtern
   , prettyTypeDeclaration
   , prettyDataConstructor
+  , prettyTyRecord
   ) where
 
 import Data.Maybe (fromMaybe)
@@ -79,6 +80,13 @@ bracketed =
     (flatAlt "\n}" " }")
     ", "
 
+punctuatePrefix
+  :: Doc ann -- ^ Punctuation, e.g. 'comma'
+  -> [Doc ann]
+  -> [Doc ann]
+punctuatePrefix _ [] = []
+punctuatePrefix p (d:ds) = d : ((\d' -> p <> d') <$> ds)
+
 --
 -- Names
 --
@@ -105,7 +113,7 @@ prettyScheme :: [Doc ann] -> Doc ann -> Doc ann
 prettyScheme vars ty =
   case vars of
     [] -> ty
-    _ -> "forall" <+> hcat (punctuate space vars) <> "." <+> ty
+    _ -> "forall" <+> hcat (punctuate space vars) <> "." <> ty
 
 --
 -- General AST Helpers
@@ -162,3 +170,18 @@ prettyTypeDeclaration tyName dataCons =
 
 prettyDataConstructor :: Doc ann -> Maybe (Doc ann) -> Doc ann
 prettyDataConstructor tyConName mArg = tyConName <> maybe mempty (space <>) mArg
+
+prettyTyRecord :: [Doc ann] -> Maybe (Doc ann) -> Doc ann
+-- prettyTyRecord fields mVar = bracketed $ maybe fields (replaceLast fields . doReplace) mVar
+--  where
+--   doReplace var Nothing = var
+--   doReplace var (Just last') = cat [last', " | ", var]
+prettyTyRecord fields mVar =
+  group $ "{" <+> cat fieldsWithVar <> flatAlt "\n}" " }"
+ where
+  fieldsWithVar = punctuatePrefix ", " fields ++ maybe [] (\v -> [flatAlt "| " " | " <> v]) mVar
+
+-- replaceLast :: [a] -> (Maybe a -> a) -> [a]
+-- replaceLast [] f = [f Nothing]
+-- replaceLast [x] f = [f (Just x)]
+-- replaceLast (x:xs) f = x : replaceLast xs f

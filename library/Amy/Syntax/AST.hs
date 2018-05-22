@@ -191,7 +191,7 @@ data Type
   = TyCon !(Located TyConName)
   | TyVar !(Located TyVarName)
   | TyApp !(Located TyConName) !(NonEmpty Type)
-  | TyRecord !(Map (Located RowLabel) Type)
+  | TyRecord !(Map (Located RowLabel) Type) !(Maybe (Located TyVarName))
   | TyFun !Type !Type
   deriving (Show, Eq)
 

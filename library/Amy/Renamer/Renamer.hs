@@ -68,7 +68,7 @@ renameTypeDeclaration (S.TypeDeclaration (S.TyConDefinition name args span') con
             $ R.TyFun
             <$> ty1'
             <*> ty2'
-        renameArg (S.TyRecord rows) = fmap R.TyRecord . sequenceA <$> traverse renameArg rows
+        renameArg (S.TyRecord rows _) = fmap R.TyRecord . sequenceA <$> traverse renameArg rows
         renameArg (S.TyApp appCon appArgs) = do
           appCon' <- lookupTypeConstructorInScopeOrError appCon
           appArgs' <- traverse renameArg appArgs
@@ -156,7 +156,7 @@ renameType (S.TyApp con args) = do
     $ R.TyApp
     <$> con'
     <*> sequenceA args'
-renameType (S.TyRecord rows) = fmap R.TyRecord . sequenceA <$> traverse renameType rows
+renameType (S.TyRecord rows _) = fmap R.TyRecord . sequenceA <$> traverse renameType rows
 renameType (S.TyFun ty1 ty2) = do
   ty1' <- renameType ty1
   ty2' <- renameType ty2

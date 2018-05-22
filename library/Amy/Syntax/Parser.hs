@@ -96,7 +96,7 @@ typeTerm = do
     (TyVar _, _) -> mkError $ "type variable with arguments encountered (no higher-kinded types allowed): " ++ show (con, rest)
     (TyApp _ _, _) -> mkError $ "currying of type constructors not allowed " ++ show (con, rest)
     (TyFun _ _, _) -> mkError $ "currying of type constructors not allowed " ++ show (con, rest)
-    (TyRecord _, _) -> mkError $ "tried to apply record type in TyApp " ++ show (con, rest)
+    (TyRecord _ _, _) -> mkError $ "tried to apply record type in TyApp " ++ show (con, rest)
  where
   mkError = fancyFailure . Set.singleton . ErrorFail
 
@@ -105,15 +105,18 @@ typeTerm' =
   (parens parseType <?> "type parens")
   <|> (TyVar <$> tyVarName <?> "type variable")
   <|> (TyCon <$> tyConName <?> "type constructor")
-  <|> (TyRecord <$> tyRecord <?> "record")
+  <|> (uncurry TyRecord <$> tyRecord <?> "record")
 
-tyRecord :: AmyParser (Map (Located RowLabel) Type)
+tyRecord :: AmyParser (Map (Located RowLabel) Type, Maybe (Located TyVarName))
 tyRecord =
-  fmap Map.fromList $ braces $ (`sepBy` comma) $ do
-    label' <- L.rowLabel
-    doubleColon
-    ty <- parseType
-    pure (label', ty)
+  braces $ do
+    fields <- (`sepBy` comma) $ do
+      label' <- L.rowLabel
+      doubleColon
+      ty <- parseType
+      pure (label', ty)
+    mTyVar <- optional $ pipe *> tyVarName
+    pure (Map.fromList fields, mTyVar)
 
 binding :: AmyParser Binding
 binding = do
@@ -135,7 +138,7 @@ typeDeclaration = do
   constructors <-
     case equals' of
       Nothing -> pure []
-      Just _ -> dataConDefinition `sepBy` (dataConstructorSep <* spaceConsumerNewlines)
+      Just _ -> dataConDefinition `sepBy` (pipe <* spaceConsumerNewlines)
   pure
     TypeDeclaration
     { typeDeclarationTypeName = tyName
