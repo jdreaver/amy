@@ -1,4 +1,3 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -11,16 +10,12 @@ module Amy.TypeCheck.Inference
 import Control.Monad (when)
 import Control.Monad.Except
 import Control.Monad.Reader
-import Control.Monad.State.Strict
 import Data.Bifunctor (first)
-import Data.Foldable (foldl')
 import Data.List (foldl1')
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
-import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe, maybeToList)
-import Data.Set (Set)
+import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text, pack)
 import Data.Traversable (for)
@@ -31,81 +26,8 @@ import Amy.Prim
 import Amy.Renamer.AST as R
 import Amy.Syntax.Located
 import Amy.TypeCheck.AST as T
-
---
--- Type Environment
---
-
--- | A 'TyEnv' is the typing environment. It contains known names with their
--- type schemes.
-data TyEnv
-  = TyEnv
-  { identTypes :: !(Map IdentName T.Scheme)
-    -- TODO: Should this be constructed in the renamer?
-  , typeDefinitions :: !(Map TyConName T.TyConDefinition)
-  , dataConstructorTypes :: !(Map DataConName (T.TypeDeclaration, T.DataConDefinition))
-  } deriving (Show, Eq)
-
-extendEnvIdent :: TyEnv -> (IdentName, T.Scheme) -> TyEnv
-extendEnvIdent env (x, s) =
-  env
-  { identTypes = Map.insert x s (identTypes env)
-  }
-
-extendEnvIdentList :: TyEnv -> [(IdentName, T.Scheme)] -> TyEnv
-extendEnvIdentList = foldl' extendEnvIdent
-
-lookupEnvIdent :: IdentName -> TyEnv -> Maybe T.Scheme
-lookupEnvIdent key = Map.lookup key . identTypes
-
---
--- Inference Monad
---
-
--- | Holds a 'TyEnv' variables in a 'ReaderT' and a 'State' 'Int'
--- counter for producing type variables.
-newtype Inference a = Inference (ReaderT TyEnv (StateT Int (Except Error)) a)
-  deriving (Functor, Applicative, Monad, MonadReader TyEnv, MonadState Int, MonadError Error)
-
--- TODO: Don't use Except, use Validation
-
-runInference :: Int -> TyEnv -> Inference a -> Either Error (a, Int)
-runInference maxId env (Inference action) = runExcept $ runStateT (runReaderT action env) (maxId + 1)
-
-freshTypeVariable :: Inference T.TyVarInfo
-freshTypeVariable = do
-  modify' (+ 1)
-  id' <- get
-  pure $ T.TyVarInfo (TyVarName $ "t" <> pack (show id')) TyVarGenerated
-
--- | Extends the current typing environment with a list of names and schemes
--- for those names.
-extendEnvIdentM :: [(IdentName, T.Scheme)] -> Inference a -> Inference a
-extendEnvIdentM tys = local (flip extendEnvIdentList tys)
-
--- | Lookup type in the environment
-lookupEnvIdentM :: IdentName -> Inference T.Type
-lookupEnvIdentM name = do
-  mTy <- asks (lookupEnvIdent name)
-  maybe (throwError $ UnboundVariable name) instantiate mTy
-
--- | Convert a scheme into a type by replacing all the type variables with
--- fresh names. Types are instantiated when they are looked up so we can make
--- constraints with the type variables and not worry about name collisions.
-instantiate :: T.Scheme -> Inference T.Type
-instantiate (T.Forall as t) = do
-  as' <- fmap T.TyVar <$> traverse (const freshTypeVariable) as
-  let s = Subst $ Map.fromList $ zip as as'
-  return $ substituteType s t
-
--- | Generalizing a type is the quantification of that type with all of the
--- free variables of the type minus the free variables in the environment. This
--- is like finding the type variables that should be "bound" by the
--- quantification. This is also called finding the "closure" of a type.
-generalize :: TyEnv -> T.Type -> T.Scheme
-generalize env t  = T.Forall as t
- where
-  as = Set.toList $ freeTypeVariables t `Set.difference` freeEnvTypeVariables env
+import Amy.TypeCheck.Monad
+import Amy.TypeCheck.Substitution
 
 -- | Produces a type scheme from a type by finding all the free type variables
 -- in the type, replacing them with sequential letters, and collecting the free
@@ -137,10 +59,6 @@ replaceGensWithLetters (var@(T.TyVarInfo _ TyVarGenerated):vars) (l:ls) =
   (var, T.TyVarInfo (TyVarName l) TyVarNotGenerated) : replaceGensWithLetters vars ls
 replaceGensWithLetters (var@(T.TyVarInfo _ TyVarNotGenerated):vars) ls =
   (var, var) : replaceGensWithLetters vars ls
-
--- | A 'Constraint' is a statement that two types should be equal.
-newtype Constraint = Constraint { unConstraint :: (T.Type, T.Type) }
-  deriving (Show, Eq)
 
 --
 -- Inference
@@ -469,7 +387,13 @@ patternScheme (T.PParens pat) = patternScheme pat
 -- Constraint Solver
 --
 
--- | Constraint solver monad
+-- | A 'Constraint' is a statement that two types should be equal.
+newtype Constraint = Constraint { unConstraint :: (T.Type, T.Type) }
+  deriving (Show, Eq)
+
+substituteConstraint :: Subst -> Constraint -> Constraint
+substituteConstraint subst (Constraint (t1, t2)) = Constraint (substituteType subst t1, substituteType subst t2)
+
 type Unifier = (Subst, [Constraint])
 
 runSolve :: [Constraint] -> Inference Subst
@@ -558,119 +482,6 @@ bind a t
 occursCheck :: T.TyVarInfo -> T.Type -> Bool
 occursCheck a t = a `Set.member` freeTypeVariables t
 
---
--- Substitutions
---
-
-newtype Subst = Subst (Map T.TyVarInfo T.Type)
-  deriving (Eq, Show, Semigroup, Monoid)
-
-emptySubst :: Subst
-emptySubst = Subst Map.empty
-
-singletonSubst :: T.TyVarInfo -> T.Type -> Subst
-singletonSubst a t = Subst $ Map.singleton a t
-
-composeSubst :: Subst -> Subst -> Subst
-(Subst s1) `composeSubst` (Subst s2) = Subst $ Map.map (substituteType (Subst s1)) s2 `Map.union` s1
-
-substituteScheme :: Subst -> T.Scheme -> T.Scheme
-substituteScheme (Subst subst) (T.Forall vars ty) = T.Forall vars $ substituteType s' ty
- where
-  s' = Subst $ foldr Map.delete subst vars
-
-substituteType :: Subst -> T.Type -> T.Type
-substituteType _ (T.TyCon con) = T.TyCon con
-substituteType (Subst subst) t@(T.TyVar var) = Map.findWithDefault t var subst
-substituteType subst (T.TyApp f arg) = T.TyApp (substituteType subst f) (substituteType subst arg)
-substituteType subst@(Subst subst') record@(T.TyRecord rows mVar) =
-  let rows' = substituteType subst <$> rows
-  in case mVar >>= flip Map.lookup subst' of
-    Nothing -> T.TyRecord rows' mVar
-    Just (T.TyVar var) -> T.TyRecord rows' (Just var)
-    Just record'@(T.TyRecord newRows mVar') ->
-      -- Ensure no overlap in rows. If there was overlap then unification
-      -- shouldn't have allowed it.
-      if null $ Set.intersection (Map.keysSet rows') (Map.keysSet newRows)
-      then T.TyRecord (Map.union rows' newRows) mVar'
-      else error $ "Found duplicate keys in record substitution: " ++ show (record, record')
-    Just t -> error $ "Invalid substitution for record. Did a kind check fail? " ++ show (record, t)
-substituteType subst (t1 `T.TyFun` t2) = substituteType subst t1 `T.TyFun` substituteType subst t2
-
-substituteTyped :: Subst -> T.Typed a -> T.Typed a
-substituteTyped subst (T.Typed ty x) = T.Typed (substituteType subst ty) x
-
-substituteConstraint :: Subst -> Constraint -> Constraint
-substituteConstraint subst (Constraint (t1, t2)) = Constraint (substituteType subst t1, substituteType subst t2)
-
-substituteEnv :: Subst -> TyEnv -> TyEnv
-substituteEnv subst (TyEnv identTys tyDefs dataConTys) =
-  TyEnv
-    (Map.map (substituteScheme subst) identTys)
-    tyDefs
-    dataConTys
-
-substituteBinding :: Subst -> T.Binding -> T.Binding
-substituteBinding subst (T.Binding name ty args retTy body) =
-  T.Binding
-  { T.bindingName = name
-  , T.bindingType = substituteScheme subst ty
-  , T.bindingArgs = substituteTyped subst <$> args
-  , T.bindingReturnType = substituteType subst retTy
-  , T.bindingBody = substituteTExpr subst body
-  }
-
-substituteTExpr :: Subst -> T.Expr -> T.Expr
-substituteTExpr _ lit@T.ELit{} = lit
-substituteTExpr subst (T.ERecord (Typed ty rows)) = T.ERecord $ Typed (substituteType subst ty) (substituteTExpr subst <$> rows)
-substituteTExpr subst (T.ERecordSelect expr label ty) =
-  T.ERecordSelect (substituteTExpr subst expr) label (substituteType subst ty)
-substituteTExpr subst (T.EVar var) =
-  T.EVar $
-    case var of
-      T.VVal var' -> T.VVal $ substituteTyped subst var'
-      T.VCons (T.Typed ty con) -> T.VCons (T.Typed (substituteType subst ty) con)
-substituteTExpr subst (T.EIf (T.If pred' then' else')) =
-  T.EIf (T.If (substituteTExpr subst pred') (substituteTExpr subst then') (substituteTExpr subst else'))
-substituteTExpr subst (T.ECase (T.Case scrutinee matches)) =
-  T.ECase (T.Case (substituteTExpr subst scrutinee) (substituteTMatch subst <$> matches))
-substituteTExpr subst (T.ELet (T.Let bindings expr)) =
-  T.ELet (T.Let (substituteBinding subst <$> bindings) (substituteTExpr subst expr))
-substituteTExpr subst (T.EApp (T.App f arg returnType)) =
-  T.EApp (T.App (substituteTExpr subst f) (substituteTExpr subst arg) (substituteType subst returnType))
-substituteTExpr subst (T.EParens expr) = T.EParens (substituteTExpr subst expr)
-
-substituteTMatch :: Subst -> T.Match -> T.Match
-substituteTMatch subst (T.Match pat body) =
-  T.Match (substituteTPattern subst pat) (substituteTExpr subst body)
-
-substituteTPattern :: Subst -> T.Pattern -> T.Pattern
-substituteTPattern _ pat@(T.PLit _) = pat
-substituteTPattern subst (T.PVar var) = T.PVar $ substituteTyped subst var
-substituteTPattern subst (T.PCons (T.PatCons con mArg retTy)) =
-  let
-    mArg' = substituteTPattern subst <$> mArg
-    retTy' = substituteType subst retTy
-  in T.PCons (T.PatCons con mArg' retTy')
-substituteTPattern subst (T.PParens pat) = T.PParens (substituteTPattern subst pat)
-
---
--- Free and Active type variables
---
-
-freeTypeVariables :: T.Type -> Set T.TyVarInfo
-freeTypeVariables (T.TyCon _) = Set.empty
-freeTypeVariables (T.TyVar var) = Set.singleton var
-freeTypeVariables (T.TyApp f arg) = freeTypeVariables f `Set.union` freeTypeVariables arg
-freeTypeVariables (T.TyRecord rows mVar) = Set.unions $ Set.fromList (maybeToList mVar) : (freeTypeVariables <$> Map.elems rows)
-freeTypeVariables (t1 `T.TyFun` t2) = freeTypeVariables t1 `Set.union` freeTypeVariables t2
-
-freeSchemeTypeVariables :: T.Scheme -> Set T.TyVarInfo
-freeSchemeTypeVariables (T.Forall tvs t) = freeTypeVariables t `Set.difference` Set.fromList tvs
-
-freeEnvTypeVariables :: TyEnv -> Set T.TyVarInfo
-freeEnvTypeVariables (TyEnv identTys _ _) =
-  foldl' Set.union Set.empty $ freeSchemeTypeVariables <$> Map.elems identTys
 
 --
 -- Names
