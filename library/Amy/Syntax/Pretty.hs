@@ -67,6 +67,7 @@ prettyBindingType' (BindingType (Located _ name) ty) =
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
 prettyExpr (ERecord rows) = bracketed $ uncurry prettyRow <$> Map.toList rows
+prettyExpr (ERecordSelect expr field) = prettyExpr expr <> "." <> prettyRowLabel (locatedValue field)
 prettyExpr (EVar var) = prettyVar var
 prettyExpr (EIf (If pred' then' else')) =
   prettyIf (prettyExpr pred') (prettyExpr then') (prettyExpr else')

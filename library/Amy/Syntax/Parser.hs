@@ -22,6 +22,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Text.Megaparsec
+import Text.Megaparsec.Char as C
 import Text.Megaparsec.Expr
 
 import Amy.Syntax.AST as S
@@ -159,7 +160,12 @@ expression = makeExprParser term table
   term = assertIndented *> expressionTerm <* spaceConsumerNewlines
 
 expressionTerm :: AmyParser Expr
-expressionTerm =
+expressionTerm = do
+  expr <- expressionTerm'
+  try (parseSelector expr <?> "record selector") <|> pure expr
+
+expressionTerm' :: AmyParser Expr
+expressionTerm' =
   (expressionParens <?> "parens")
   <|> (ELit <$> literal <?> "literal")
   <|> (ERecord <$> record <?> "record")
@@ -170,6 +176,9 @@ expressionTerm =
 
 expressionParens :: AmyParser Expr
 expressionParens = EParens <$> parens expression
+
+parseSelector :: Expr -> AmyParser Expr
+parseSelector expr = try $ ERecordSelect expr <$> (C.char '.' >> L.rowLabel)
 
 literal :: AmyParser (Located Literal)
 literal =

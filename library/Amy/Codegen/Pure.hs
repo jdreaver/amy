@@ -131,6 +131,7 @@ codegenExpr' name' (ANF.ERecord (ANF.Typed ty rows)) = do
     addInstruction $ Do $ Store False rowPtrOp' rowOp Nothing 0 []
 
   pure allocOp
+codegenExpr' _ e@(ANF.ERecordSelect _ _ _) = error $ "Can't codegen record select yet " ++ show e
 codegenExpr' name' (ANF.ELetVal (ANF.LetVal bindings expr)) = do
   for_ bindings $ \(ANF.LetValBinding ident _ body) ->
     codegenExpr' (identToName ident) body

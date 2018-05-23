@@ -49,6 +49,10 @@ desugarExpr :: T.Expr -> Desugar C.Expr
 desugarExpr (T.ELit lit) = pure $ C.ELit lit
 desugarExpr (T.ERecord (T.Typed ty rows)) =
   C.ERecord . C.Typed (desugarType ty) <$> traverse desugarExpr rows
+desugarExpr (T.ERecordSelect expr label ty) = do
+  expr' <- desugarExpr expr
+  let ty' = desugarType ty
+  pure $ C.ERecordSelect expr' label ty'
 desugarExpr (T.EVar var) = pure $ C.EVar (desugarVar var)
 desugarExpr (T.ECase (T.Case scrutinee matches)) = do
   -- Desugar the case expression

@@ -340,6 +340,15 @@ inferExpr (R.ERecord rows) = do
     ( T.ERecord (Typed ty (Map.fromList rows'))
     , concat rowsCons
     )
+inferExpr (R.ERecordSelect expr (Located _ label)) = do
+  (expr', exprCons) <- inferExpr expr
+  retVar <- freshTypeVariable
+  polyVar <- freshTypeVariable
+  let exprTy = T.TyRecord (Map.singleton label (T.TyVar retVar)) (Just polyVar)
+  pure
+    ( T.ERecordSelect expr' label (T.TyVar retVar)
+    , exprCons ++ [Constraint (expressionType expr', exprTy)]
+    )
 inferExpr (R.EVar var) =
   case var of
     R.VVal (Located _ valVar) -> do
@@ -571,7 +580,7 @@ substituteType subst@(Subst subst') record@(T.TyRecord rows mVar) =
       if null $ Set.intersection (Map.keysSet rows') (Map.keysSet newRows)
       then T.TyRecord (Map.union rows' newRows) mVar'
       else error $ "Found duplicate keys in record substitution: " ++ show (record, record')
-    Just t -> error $ "Invalid substitution for record. Did a kind check fail ?" ++ show (record, t)
+    Just t -> error $ "Invalid substitution for record. Did a kind check fail? " ++ show (record, t)
 substituteType subst (t1 `T.TyFun` t2) = substituteType subst t1 `T.TyFun` substituteType subst t2
 
 substituteTyped :: Subst -> T.Typed a -> T.Typed a
@@ -600,6 +609,8 @@ substituteBinding subst (T.Binding name ty args retTy body) =
 substituteTExpr :: Subst -> T.Expr -> T.Expr
 substituteTExpr _ lit@T.ELit{} = lit
 substituteTExpr subst (T.ERecord (Typed ty rows)) = T.ERecord $ Typed (substituteType subst ty) (substituteTExpr subst <$> rows)
+substituteTExpr subst (T.ERecordSelect expr label ty) =
+  T.ERecordSelect (substituteTExpr subst expr) label (substituteType subst ty)
 substituteTExpr subst (T.EVar var) =
   T.EVar $
     case var of

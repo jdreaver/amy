@@ -91,6 +91,7 @@ fromPrimDataCon name =
 data Expr
   = ELit !(Located Literal)
   | ERecord !(Map (Located RowLabel) Expr)
+  | ERecordSelect !Expr !(Located RowLabel)
   | EVar !Var
   | EIf !If
   | ECase !Case

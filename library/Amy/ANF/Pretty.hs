@@ -57,6 +57,7 @@ prettyVal (ConEnum _ con) = prettyDataConName (dataConName con)
 prettyExpr :: Expr -> Doc ann
 prettyExpr (EVal val) = prettyVal val
 prettyExpr (ERecord (Typed _ rows)) = bracketed $ uncurry prettyRow <$> Map.toList rows
+prettyExpr (ERecordSelect val field _) = prettyVal val <> "." <> prettyRowLabel field
 prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault _)) =
   prettyCase
     (prettyVal scrutinee)

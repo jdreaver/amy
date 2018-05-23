@@ -182,6 +182,12 @@ renameExpression :: S.Expr -> Renamer (Validation [Error] R.Expr)
 renameExpression (S.ELit lit) = pure $ Success $ R.ELit lit
 renameExpression (S.ERecord rows) =
   fmap R.ERecord . sequenceA <$> traverse renameExpression rows
+renameExpression (S.ERecordSelect expr ident) = do
+  expr' <- renameExpression expr
+  pure
+    $ R.ERecordSelect
+    <$> expr'
+    <*> pure ident
 renameExpression (S.EVar var) =
   fmap (fmap R.EVar) $
     case var of
