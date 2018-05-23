@@ -484,11 +484,8 @@ unifies t1@(T.TyRecord rows1 mVar1) t2@(T.TyRecord rows2 mVar2) = do
     commonFields = Map.intersectionWith (,) rows1 rows2
     justFields1 = Map.difference rows1 rows2
     justFields2 = Map.difference rows2 rows1
-    unifyRecordWithVar subst rows var = do
-      -- TODO: I'm pretty sure I need a fresh type variable here if the
-      -- original record had a type variable. The way it is currently makes all
-      -- records closed after unification.
-      subst' <- unifies (substituteType subst $ T.TyRecord rows Nothing) (substituteType subst $ T.TyVar var)
+    unifyRecordWithVar subst rows mVar unifyVar = do
+      subst' <- unifies (substituteType subst $ T.TyRecord rows mVar) (substituteType subst $ T.TyVar unifyVar)
       pure $ subst' `composeSubst` subst
 
   substCommon <- uncurry unifyMany $ unzip $ snd <$> Map.toAscList commonFields
@@ -500,13 +497,15 @@ unifies t1@(T.TyRecord rows1 mVar1) t2@(T.TyRecord rows2 mVar2) = do
       else throwError $ UnificationFail t1 t2
     -- Both records are extensible
     (Just var1, Just var2) -> do
-      subst' <- unifyRecordWithVar substCommon justFields1 var2
-      unifyRecordWithVar subst' justFields2 var1
+      fresh1 <- freshTypeVariable
+      subst' <- unifyRecordWithVar substCommon justFields1 (Just fresh1) var2
+      fresh2 <- freshTypeVariable
+      unifyRecordWithVar subst' justFields2 (Just fresh2) var1
     -- Only one record is extensible
     (Just var1, Nothing) ->
-      unifyRecordWithVar substCommon justFields2 var1
+      unifyRecordWithVar substCommon justFields2 Nothing var1
     (Nothing, Just var2) ->
-      unifyRecordWithVar substCommon justFields1 var2
+      unifyRecordWithVar substCommon justFields1 Nothing var2
 unifies t1 t2 = throwError $ UnificationFail t1 t2
 
 unifyMany :: [T.Type] -> [T.Type] -> Inference Subst
