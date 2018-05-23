@@ -206,8 +206,8 @@ primitiveFunctionScheme (PrimitiveFunction _ name ty) =
   )
 
 inferTopLevel :: Int -> TyEnv -> [R.Binding] -> Either Error ([T.Binding], Int)
-inferTopLevel maxId env bindings = do
-  (bindingsAndConstraints, maxId') <- runInference maxId env (inferBindings bindings)
+inferTopLevel maxId env bindings = runInference maxId env $ do
+  bindingsAndConstraints <- inferBindings bindings
   let (bindings', constraints) = unzip bindingsAndConstraints
   subst <- runSolve (concat constraints)
   let
@@ -219,7 +219,7 @@ inferTopLevel maxId env bindings = do
           binding' = binding { T.bindingType = scheme' }
           subst' = composeSubst letterSubst subst
         in substituteBinding subst' binding'
-  pure (bindings'', maxId')
+  pure bindings''
 
 -- | Infer a group of bindings.
 --
@@ -235,7 +235,7 @@ inferBindings bindings = do
 
   -- Solve constraints together
   env <- ask
-  either throwError pure $ solveBindingConstraints env bindingsInference
+  solveBindingConstraints env bindingsInference
 
 generateBindingConstraints :: [R.Binding] -> Inference [(T.Binding, [Constraint])]
 generateBindingConstraints bindings = do
@@ -287,7 +287,7 @@ checkTypeKind (T.TyApp con args) = do
   when (kind /= tyDefKind) $
     throwError $ KindMismatch con kind tyDef tyDefKind
 
-solveBindingConstraints :: TyEnv -> [(T.Binding, [Constraint])] -> Either Error [(T.Binding, [Constraint])]
+solveBindingConstraints :: TyEnv -> [(T.Binding, [Constraint])] -> Inference [(T.Binding, [Constraint])]
 solveBindingConstraints env bindingsInference = do
   -- Solve all constraints together.
   let
@@ -452,15 +452,13 @@ patternScheme (T.PParens pat) = patternScheme pat
 --
 
 -- | Constraint solver monad
-type Solve a = Except Error a
-
 type Unifier = (Subst, [Constraint])
 
-runSolve :: [Constraint] -> Either Error Subst
-runSolve cs = runExcept $ solver (emptySubst, cs)
+runSolve :: [Constraint] -> Inference Subst
+runSolve cs = solver (emptySubst, cs)
 
 -- Unification solver
-solver :: Unifier -> Solve Subst
+solver :: Unifier -> Inference Subst
 solver (su, cs) =
   case cs of
     [] -> return su
@@ -468,7 +466,7 @@ solver (su, cs) =
       su1 <- unifies t1 t2
       solver (su1 `composeSubst` su, substituteConstraint su1 <$> cs0)
 
-unifies :: T.Type -> T.Type -> Solve Subst
+unifies :: T.Type -> T.Type -> Inference Subst
 unifies t1 t2 | t1 == t2 = return emptySubst
 unifies (T.TyVar v@(T.TyVarInfo _ TyVarGenerated)) t = v `bind` t
 unifies t (T.TyVar v@(T.TyVarInfo _ TyVarGenerated)) = v `bind` t
@@ -487,6 +485,9 @@ unifies t1@(T.TyRecord rows1 mVar1) t2@(T.TyRecord rows2 mVar2) = do
     justFields1 = Map.difference rows1 rows2
     justFields2 = Map.difference rows2 rows1
     unifyRecordWithVar subst rows var = do
+      -- TODO: I'm pretty sure I need a fresh type variable here if the
+      -- original record had a type variable. The way it is currently makes all
+      -- records closed after unification.
       subst' <- unifies (substituteType subst $ T.TyRecord rows Nothing) (substituteType subst $ T.TyVar var)
       pure $ subst' `composeSubst` subst
 
@@ -508,7 +509,7 @@ unifies t1@(T.TyRecord rows1 mVar1) t2@(T.TyRecord rows2 mVar2) = do
       unifyRecordWithVar substCommon justFields1 var2
 unifies t1 t2 = throwError $ UnificationFail t1 t2
 
-unifyMany :: [T.Type] -> [T.Type] -> Solve Subst
+unifyMany :: [T.Type] -> [T.Type] -> Inference Subst
 unifyMany [] [] = return emptySubst
 unifyMany (t1 : ts1) (t2 : ts2) = do
   su1 <- unifies t1 t2
@@ -516,7 +517,7 @@ unifyMany (t1 : ts1) (t2 : ts2) = do
   return (su2 `composeSubst` su1)
 unifyMany t1 t2 = error $ "unifyMany lists different length " ++ show (t1, t2)
 
-bind ::  T.TyVarInfo -> T.Type -> Solve Subst
+bind ::  T.TyVarInfo -> T.Type -> Inference Subst
 bind a t
   | t == T.TyVar a = return emptySubst
   | occursCheck a t = throwError $ InfiniteType a t
