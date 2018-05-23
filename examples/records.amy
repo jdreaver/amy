@@ -12,5 +12,5 @@ h x = Cons { car = x, cdr = Cons { car = x, cdr = Nil } }
 # a :: { x :: Int, y :: Bool }
 a =
   if True
-  then { x = 1, y = True}
+  then { x = 1, y = True }
   else { y = False, x = 2 }
