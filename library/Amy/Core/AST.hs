@@ -21,6 +21,7 @@ module Amy.Core.AST
 
   , substExpr
   , Type(..)
+  , unfoldTyApp
   , Scheme(..)
   , Typed(..)
 
@@ -205,12 +206,17 @@ replaceIdent var oldVar newVar = if var == oldVar then newVar else var
 data Type
   = TyCon !TyConName
   | TyVar !TyVarName
-  | TyApp !TyConName !(NonEmpty Type)
+  | TyApp !Type !Type
   | TyRecord !(Map RowLabel Type) !(Maybe TyVarName)
   | TyFun !Type !Type
   deriving (Show, Eq, Ord)
 
 infixr 0 `TyFun`
+
+unfoldTyApp :: Type -> NonEmpty Type
+unfoldTyApp (TyApp app@(TyApp _ _) arg) = unfoldTyApp app <> (arg :| [])
+unfoldTyApp (TyApp f arg) = f :| [arg]
+unfoldTyApp t = t :| []
 
 data Scheme
   = Forall ![TyVarName] Type

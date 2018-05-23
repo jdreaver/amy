@@ -13,13 +13,11 @@ import Amy.Literal
 import Amy.Pretty
 
 prettyType :: Type -> Doc ann
-prettyType (TyFun ty1 ty2) = parensIf (isTyApp ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
+prettyType (TyFun ty1 ty2) = parensIf (isTyFun ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
 prettyType (TyCon con) = prettyTyConName con
 prettyType (TyVar var) = prettyTyVarName var
 prettyType (TyRecord rows mVar) = prettyTyRecord (uncurry prettyTyRow <$> Map.toList rows) (prettyTyVarName <$> mVar)
-prettyType (TyApp con args) = prettyTyConName con <+> sep (toList $ prettyArg <$> args)
- where
-  prettyArg arg = parensIf (isTyApp arg) $ prettyType arg
+prettyType (TyApp f arg) = prettyType f <+> parensIf (isTyApp arg) (prettyType arg)
 
 prettyTyRow :: RowLabel -> Type -> Doc ann
 prettyTyRow label ty = prettyRowLabel label <+> "::" <+> prettyType ty
@@ -28,6 +26,10 @@ isTyApp :: Type -> Bool
 isTyApp TyApp{} = True
 isTyApp TyFun{} = True
 isTyApp _ = False
+
+isTyFun :: Type -> Bool
+isTyFun TyFun{} = True
+isTyFun _ = False
 
 prettyScheme' :: Scheme -> Doc ann
 prettyScheme' (Forall vars ty) = prettyScheme (prettyTyVarName <$> vars) (prettyType ty)

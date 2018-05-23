@@ -76,13 +76,13 @@ renameTypeDeclaration (S.TypeDeclaration (S.TyConDefinition name args span') con
             $ R.TyRecord
             <$> rows'
             <*> mVar'
-        renameArg (S.TyApp appCon appArgs) = do
-          appCon' <- lookupTypeConstructorInScopeOrError appCon
-          appArgs' <- traverse renameArg appArgs
+        renameArg (S.TyApp f arg) = do
+          f' <- renameArg f
+          arg' <- renameArg arg
           pure
             $ R.TyApp
-            <$> appCon'
-            <*> sequenceA appArgs'
+            <$> f'
+            <*> arg'
       mArgTy' <- traverse renameArg mArgTy
       liftValidation (sequenceA mArgTy') $ \mArgTy'' ->
         addDataConDefinitionToScope $ R.DataConDefinition con mArgTy''
@@ -156,13 +156,13 @@ renameScheme (S.Forall vars ty) = do
 renameType :: S.Type -> Renamer (Validation [Error] R.Type)
 renameType (S.TyCon con) = fmap R.TyCon <$> lookupTypeConstructorInScopeOrError con
 renameType (S.TyVar var) = fmap R.TyVar <$> lookupTypeVariableInScopeOrError var
-renameType (S.TyApp con args) = do
-  con' <- lookupTypeConstructorInScopeOrError con
-  args' <- traverse renameType args
+renameType (S.TyApp f arg) = do
+  f' <- renameType f
+  arg' <- renameType arg
   pure
     $ R.TyApp
-    <$> con'
-    <*> sequenceA args'
+    <$> f'
+    <*> arg'
 renameType (S.TyRecord rows mVar) = do
   rows' <- sequenceA <$> traverse renameType rows
   mVar' <- sequenceA <$> traverse lookupTypeVariableInScopeOrError mVar

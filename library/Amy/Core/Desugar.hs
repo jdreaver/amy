@@ -109,7 +109,7 @@ desugarType :: T.Type -> C.Type
 desugarType (T.TyCon con) = C.TyCon con
 desugarType (T.TyRecord rows mVar) = C.TyRecord (desugarType <$> rows) (T.tyVarInfoName <$> mVar)
 desugarType (T.TyVar var) = C.TyVar (desugarTyVarInfo var)
-desugarType (T.TyApp con args) = C.TyApp con (desugarType <$> args)
+desugarType (T.TyApp f arg) = C.TyApp (desugarType f) (desugarType arg)
 desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)
 
 desugarTyConDefinition :: T.TyConDefinition -> C.TyConDefinition

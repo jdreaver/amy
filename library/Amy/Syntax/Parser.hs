@@ -19,13 +19,11 @@ module Amy.Syntax.Parser
   , literal
   ) where
 
-import qualified Control.Applicative.Combinators.NonEmpty as CNE
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
-import qualified Data.Set as Set
 import Text.Megaparsec
 import Text.Megaparsec.Expr
 
@@ -84,24 +82,14 @@ parseSchemeVars = do
 parseType :: AmyParser Type
 parseType = makeExprParser term table
  where
-  table = [[InfixR (TyFun <$ typeSeparatorArrow)]]
+  table =
+    [ [InfixL (TyApp <$ spaceConsumer)]
+    , [InfixR (TyFun <$ typeSeparatorArrow)]
+    ]
   term = parens parseType <|> typeTerm
 
 typeTerm :: AmyParser Type
-typeTerm = do
-  con :| rest <- CNE.sepBy1 typeTerm' spaceConsumer
-  case (con, NE.nonEmpty rest) of
-    (ty, Nothing) -> pure ty
-    (TyCon name, Just args) -> pure $ TyApp name args
-    (TyVar _, _) -> mkError $ "type variable with arguments encountered (no higher-kinded types allowed): " ++ show (con, rest)
-    (TyApp _ _, _) -> mkError $ "currying of type constructors not allowed " ++ show (con, rest)
-    (TyFun _ _, _) -> mkError $ "currying of type constructors not allowed " ++ show (con, rest)
-    (TyRecord _ _, _) -> mkError $ "tried to apply record type in TyApp " ++ show (con, rest)
- where
-  mkError = fancyFailure . Set.singleton . ErrorFail
-
-typeTerm' :: AmyParser Type
-typeTerm' =
+typeTerm =
   (parens parseType <?> "type parens")
   <|> (TyVar <$> tyVarName <?> "type variable")
   <|> (TyCon <$> tyConName <?> "type constructor")

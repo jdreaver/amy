@@ -24,6 +24,7 @@ module Amy.TypeCheck.AST
   , patternType
 
   , Type(..)
+  , unfoldTyApp
   , TyVarInfo(..)
   , TyVarGenerated(..)
   , Scheme(..)
@@ -191,12 +192,17 @@ patternType (PParens pat) = patternType pat
 data Type
   = TyCon !TyConName
   | TyVar !TyVarInfo
-  | TyApp !TyConName !(NonEmpty Type)
+  | TyApp !Type !Type
   | TyRecord !(Map RowLabel Type) !(Maybe TyVarInfo)
   | TyFun !Type !Type
   deriving (Show, Eq, Ord)
 
 infixr 0 `TyFun`
+
+unfoldTyApp :: Type -> NonEmpty Type
+unfoldTyApp (TyApp app@(TyApp _ _) arg) = unfoldTyApp app <> (arg :| [])
+unfoldTyApp (TyApp f arg) = f :| [arg]
+unfoldTyApp t = t :| []
 
 data TyVarInfo
   = TyVarInfo

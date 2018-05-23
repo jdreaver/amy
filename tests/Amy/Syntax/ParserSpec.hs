@@ -100,33 +100,35 @@ spec = do
             TyVar ( Located (SourceSpan "" 1 28 1 28) "a")
           )
 
-  describe "typeTerm" $ do
+  describe "parseType" $ do
     it "handles simple terms" $ do
-      parse' typeTerm "A" `shouldParse` TyCon (Located (SourceSpan "" 1 1 1 1) "A")
-      parse' typeTerm "a" `shouldParse` TyVar (Located (SourceSpan "" 1 1 1 1) "a")
+      parse' parseType "A" `shouldParse` TyCon (Located (SourceSpan "" 1 1 1 1) "A")
+      parse' parseType "a" `shouldParse` TyVar (Located (SourceSpan "" 1 1 1 1) "a")
 
     it "handles terms with args" $ do
-      parse' typeTerm "A a" `shouldParse`
-        TyApp (Located (SourceSpan "" 1 1 1 1) "A") [TyVar (Located (SourceSpan "" 1 3 1 3) "a")]
+      parse' parseType "A a" `shouldParse`
+        TyApp (TyCon $ Located (SourceSpan "" 1 1 1 1) "A") (TyVar (Located (SourceSpan "" 1 3 1 3) "a"))
 
     it "tightly binds constructor applications" $ do
-      parse' typeTerm "A B C" `shouldParse`
+      parse' parseType "A B C" `shouldParse`
         TyApp
-          (Located (SourceSpan "" 1 1 1 1) "A")
-          [ TyCon (Located (SourceSpan "" 1 3 1 3) "B")
-          , TyCon (Located (SourceSpan "" 1 5 1 5) "C")
-          ]
+          ( TyApp
+            (TyCon $ Located (SourceSpan "" 1 1 1 1) "A")
+            (TyCon (Located (SourceSpan "" 1 3 1 3) "B"))
+          )
+          (TyCon (Located (SourceSpan "" 1 5 1 5) "C"))
 
     it "handles terms with args and parens" $ do
-      parse' typeTerm "A (B b) a" `shouldParse`
+      parse' parseType "A (B b) a" `shouldParse`
         TyApp
-          (Located (SourceSpan "" 1 1 1 1) "A")
-          [ TyApp
-              (Located (SourceSpan "" 1 4 1 4) "B")
-              [ TyVar (Located (SourceSpan "" 1 6 1 6) "b")
-              ]
-          , TyVar (Located (SourceSpan "" 1 9 1 9) "a")
-          ]
+        ( TyApp
+          (TyCon $ Located (SourceSpan "" 1 1 1 1) "A")
+          ( TyApp
+            (TyCon $ Located (SourceSpan "" 1 4 1 4) "B")
+            (TyVar (Located (SourceSpan "" 1 6 1 6) "b"))
+          )
+        )
+        (TyVar (Located (SourceSpan "" 1 9 1 9) "a"))
 
   describe "parseType" $ do
     it "handles simple types" $ do

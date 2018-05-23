@@ -13,7 +13,8 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Bifunctor (first)
-import Data.Foldable (foldl', toList)
+import Data.Foldable (foldl')
+import Data.List (foldl1')
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
@@ -121,7 +122,7 @@ normalize body =
 
   normType (T.TyFun a b) = T.TyFun (normType a) (normType b)
   normType (T.TyCon con) = T.TyCon con
-  normType (T.TyApp con args) = T.TyApp con (normType <$> args)
+  normType (T.TyApp f arg) = T.TyApp (normType f) (normType arg)
   normType (T.TyRecord rows mVar) = T.TyRecord (normType <$> rows) (normTyVar <$> mVar)
   normType (T.TyVar a) = T.TyVar $ normTyVar a
   normTyVar var = fromMaybe (error "type variable not in signature") (Map.lookup var letterMap)
@@ -191,7 +192,7 @@ dataConstructorScheme con = do
     mkTyConInfo v = T.TyVarInfo v TyVarNotGenerated
     tyApp =
       case NE.nonEmpty tyVars of
-        Just tyVars' -> T.TyApp tyConName (T.TyVar . mkTyConInfo <$> tyVars')
+        Just tyVars' -> foldl1' T.TyApp (T.TyCon tyConName : (T.TyVar . mkTyConInfo <$> NE.toList tyVars'))
         Nothing -> T.TyCon tyConName
     mkTy arg =
       case arg of
@@ -274,18 +275,26 @@ checkTypeKind (T.TyCon _) = pure ()
 checkTypeKind (T.TyVar _) = pure ()
 checkTypeKind (T.TyRecord _ _) = pure () -- TODO: Record kinds
 checkTypeKind (T.TyFun t1 t2) = checkTypeKind t1 >> checkTypeKind t2
-checkTypeKind (T.TyApp con args) = do
-  -- Kind checking is pretty simple currently. We just check arity of the type
-  -- constructor to make sure it is fully applied.
-  tyDef@(T.TyConDefinition _ tyDefArgs) <-
-    fromMaybe (error $ "No type definition for " ++ show con)
-    . Map.lookup con
-    <$> asks typeDefinitions
-  let
-    kind = foldr1 KFun $ const KStar <$> [0..length args]
-    tyDefKind = foldr1 KFun $ const KStar <$> [0..length tyDefArgs]
-  when (kind /= tyDefKind) $
-    throwError $ KindMismatch con kind tyDef tyDefKind
+checkTypeKind t@T.TyApp{} =
+  -- TODO: Real kind inference instead of this nonsense :)
+  case unfoldTyApp t of
+    T.TyCon con :| args -> do
+      -- Kind checking is pretty simple currently. We just check arity of the type
+      -- constructor to make sure it is fully applied.
+      tyDef@(T.TyConDefinition _ tyDefArgs) <-
+        fromMaybe (error $ "No type definition for " ++ show con)
+        . Map.lookup con
+        <$> asks typeDefinitions
+      let
+        kind = foldr1 KFun $ const KStar <$> [0..length args]
+        tyDefKind = foldr1 KFun $ const KStar <$> [0..length tyDefArgs]
+      when (kind /= tyDefKind) $
+        throwError $ KindMismatch con kind tyDef tyDefKind
+    T.TyVar _ :| _ -> error $ "type variable with arguments encountered (no higher-kinded types allowed): " ++ show t
+    T.TyApp _ _ :| _ -> error $ "currying of type constructors not allowed " ++ show t
+    T.TyFun _ _ :| _ -> error $ "currying of type constructors not allowed " ++ show t
+    T.TyRecord _ _ :| _ -> error $ "tried to apply record type in TyApp " ++ show t
+
 
 solveBindingConstraints :: TyEnv -> [(T.Binding, [Constraint])] -> Inference [(T.Binding, [Constraint])]
 solveBindingConstraints env bindingsInference = do
@@ -474,9 +483,10 @@ unifies (T.TyFun t1 t2) (T.TyFun t3 t4) = do
   su1 <- unifies t1 t3
   su2 <- unifies (substituteType su1 t2) (substituteType su1 t4)
   pure (su2 `composeSubst` su1)
-unifies (T.TyApp name1 args1) (T.TyApp name2 args2)
-  | name1 == name2 && length args1 == length args2 =
-    unifyMany (toList args1) (toList args2)
+unifies (T.TyApp f1 arg1) (T.TyApp f2 arg2) = do
+  su1 <- unifies f1 f2
+  su2 <- unifies (substituteType su1 arg1) (substituteType su1 arg2)
+  pure (su2 `composeSubst` su1)
 unifies (T.TyCon name1) (T.TyCon name2)
   | name1 == name2 = return emptySubst
 unifies t1@(T.TyRecord rows1 mVar1) t2@(T.TyRecord rows2 mVar2) = do
@@ -549,7 +559,7 @@ substituteScheme (Subst subst) (T.Forall vars ty) = T.Forall vars $ substituteTy
 substituteType :: Subst -> T.Type -> T.Type
 substituteType _ (T.TyCon con) = T.TyCon con
 substituteType (Subst subst) t@(T.TyVar var) = Map.findWithDefault t var subst
-substituteType subst (T.TyApp con args) = T.TyApp con (substituteType subst <$> args)
+substituteType subst (T.TyApp f arg) = T.TyApp (substituteType subst f) (substituteType subst arg)
 substituteType subst@(Subst subst') record@(T.TyRecord rows mVar) =
   let rows' = substituteType subst <$> rows
   in case mVar >>= flip Map.lookup subst' of
@@ -626,7 +636,7 @@ substituteTPattern subst (T.PParens pat) = T.PParens (substituteTPattern subst p
 freeTypeVariables :: T.Type -> Set T.TyVarInfo
 freeTypeVariables (T.TyCon _) = Set.empty
 freeTypeVariables (T.TyVar var) = Set.singleton var
-freeTypeVariables (T.TyApp _ args) = Set.unions $ freeTypeVariables <$> toList args
+freeTypeVariables (T.TyApp f arg) = freeTypeVariables f `Set.union` freeTypeVariables arg
 freeTypeVariables (T.TyRecord rows mVar) = Set.unions $ Set.fromList (maybeToList mVar) : (freeTypeVariables <$> Map.elems rows)
 freeTypeVariables (t1 `T.TyFun` t2) = freeTypeVariables t1 `Set.union` freeTypeVariables t2
 
@@ -647,7 +657,7 @@ convertScheme (R.Forall vars ty) = T.Forall (convertTyVarInfo <$> vars) (convert
 convertType :: R.Type -> T.Type
 convertType (R.TyCon (Located _ con)) = T.TyCon con
 convertType (R.TyVar var) = T.TyVar (convertTyVarInfo var)
-convertType (R.TyApp (Located _ con) args) = T.TyApp con (convertType <$> args)
+convertType (R.TyApp f arg) = T.TyApp (convertType f) (convertType arg)
 convertType (R.TyRecord rows mVar) =
   T.TyRecord
     (Map.mapKeys locatedValue $ convertType <$> rows)

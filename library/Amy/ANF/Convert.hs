@@ -71,7 +71,10 @@ convertType ty = go (typeToNonEmpty ty)
     case ty' of
       C.TyCon con -> getTyConType con
       C.TyVar _ -> pure OpaquePointerType
-      C.TyApp con _ -> getTyConType con
+      app@C.TyApp{} ->
+        case unfoldTyApp app of
+          TyCon con :| _ -> getTyConType con
+          _ -> error $ "Can't convert non-TyCon TyApp yet " ++ show ty'
       -- N.B. ANF/LLVM doesn't care about polymorphic records
       C.TyRecord rows _ -> mkRecordType rows
       C.TyFun{} -> mkFunctionType ty

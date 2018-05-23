@@ -16,21 +16,23 @@ import Amy.Pretty
 import Amy.Syntax.AST
 
 prettyType :: Type -> Doc ann
-prettyType (TyFun ty1 ty2) = parensIf (isTyApp ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
+prettyType (TyFun ty1 ty2) = parensIf (isTyFun ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
 prettyType (TyCon con) = prettyTyConName (locatedValue con)
 prettyType (TyVar var) = prettyTyVarName (locatedValue var)
 prettyType (TyRecord rows mVar) = prettyTyRecord (uncurry prettyTyRow <$> Map.toList rows) (prettyTyVarName . locatedValue <$> mVar)
-prettyType (TyApp con args) = prettyTyConName (locatedValue con) <+> sep (toList $ prettyArg <$> args)
- where
-  prettyArg arg = parensIf (isTyApp arg) $ prettyType arg
+prettyType (TyApp f arg) = prettyType f <+> parensIf (isTyApp arg) (prettyType arg)
 
 prettyTyRow :: Located RowLabel -> Type -> Doc ann
 prettyTyRow (Located _ label) ty = prettyRowLabel label <+> "::" <+> prettyType ty
 
 isTyApp :: Type -> Bool
 isTyApp TyApp{} = True
-isTyApp TyFun{} = True
+isTyApp TyFun{} = True -- Technically -> is an infix app
 isTyApp _ = False
+
+isTyFun :: Type -> Bool
+isTyFun TyFun{} = True
+isTyFun _ = False
 
 prettyScheme' :: Scheme -> Doc ann
 prettyScheme' (Forall vars ty) = prettyScheme (pretty . unTyVarName . locatedValue <$> vars) (prettyType ty)
