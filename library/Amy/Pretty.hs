@@ -113,7 +113,7 @@ prettyScheme :: [Doc ann] -> Doc ann -> Doc ann
 prettyScheme vars ty =
   case vars of
     [] -> ty
-    _ -> "forall" <+> hcat (punctuate space vars) <> "." <> ty
+    _ -> "forall" <+> hcat (punctuate space vars) <> "." <+> ty
 
 --
 -- General AST Helpers
