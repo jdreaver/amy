@@ -151,11 +151,12 @@ dataConDefinition = do
     }
 
 expression :: AmyParser Expr
-expression = makeExprParser expressionTerm table
+expression = makeExprParser term table
  where
   table =
     [ [InfixR (EApp <$ spaceConsumerNewlines)]
     ]
+  term = assertIndented *> expressionTerm <* spaceConsumerNewlines
 
 expressionTerm :: AmyParser Expr
 expressionTerm =
