@@ -154,7 +154,7 @@ expression :: AmyParser Expr
 expression = makeExprParser term table
  where
   table =
-    [ [InfixR (EApp <$ spaceConsumerNewlines)]
+    [ [InfixL (EApp <$ spaceConsumerNewlines)]
     ]
   term = assertIndented *> expressionTerm <* spaceConsumerNewlines
 

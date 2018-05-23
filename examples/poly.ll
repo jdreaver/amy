@@ -10,17 +10,17 @@ entry:
   %1 = bitcast double* %0 to i64*
   %2 = call i64* @id(i64* %1)
   %3 = bitcast i64* %2 to double*
-  %res14 = load double, double* %3
+  %res15 = load double, double* %3
   %4 = alloca double
-  store double %res14, double* %4
+  store double %res15, double* %4
   %5 = bitcast double* %4 to i64*
   %6 = alloca double
   store double 5.100000e+00, double* %6
   %7 = bitcast double* %6 to i64*
   %8 = call i64* @const(i64* %5, i64* %7)
   %9 = bitcast i64* %8 to double*
-  %res15 = load double, double* %9
-  %ret = fptoui double %res15 to i64
+  %res16 = load double, double* %9
+  %ret = fptoui double %res16 to i64
   ret i64 %ret
 }
 
