@@ -159,11 +159,6 @@ unfoldApp :: App -> NonEmpty Expr
 unfoldApp (App (EApp app@App{}) arg _) = unfoldApp app <> (arg :| [])
 unfoldApp (App f arg _) = f :| [arg]
 
--- TODO: Remove if not needed
--- unfoldApp :: App -> NonEmpty (Expr, Type)
--- unfoldApp (App (EApp app@App{}) arg ty) = unfoldApp app <> ((arg, ty) :| [])
--- unfoldApp (App _ arg ty) = (arg, ty) :| []
-
 literalType' :: Literal -> Type
 literalType' lit = TyCon $ literalType lit
 
