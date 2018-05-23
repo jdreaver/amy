@@ -3,7 +3,7 @@ List a = Nil | Cons { car :: a, cdr :: List a }
 main :: Int
 main = addXY { x = 1, y = 2 }
 
-addXY :: { x :: Int, y :: Int } -> Int
+addXY :: forall a. { x :: Int, y :: Int | a } -> Int
 addXY r = iAdd# r.x r.y
 
 g :: forall a b. a -> { x :: a, y :: Int }
