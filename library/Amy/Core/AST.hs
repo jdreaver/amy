@@ -17,6 +17,7 @@ module Amy.Core.AST
   , PatCons(..)
   , Let(..)
   , App(..)
+  , unfoldApp
   , expressionType
 
   , substExpr
@@ -150,9 +151,18 @@ data Let
 data App
   = App
   { appFunction :: !Expr
-  , appArgs :: !(NonEmpty Expr)
+  , appArg :: !Expr
   , appReturnType :: !Type
   } deriving (Show, Eq)
+
+unfoldApp :: App -> NonEmpty Expr
+unfoldApp (App (EApp app@App{}) arg _) = unfoldApp app <> (arg :| [])
+unfoldApp (App f arg _) = f :| [arg]
+
+-- TODO: Remove if not needed
+-- unfoldApp :: App -> NonEmpty (Expr, Type)
+-- unfoldApp (App (EApp app@App{}) arg ty) = unfoldApp app <> ((arg, ty) :| [])
+-- unfoldApp (App _ arg ty) = (arg, ty) :| []
 
 literalType' :: Literal -> Type
 literalType' lit = TyCon $ literalType lit
@@ -190,8 +200,8 @@ substExpr (ECase (Case scrut bind alts default')) var newVar =
   )
 substExpr (ELet (Let bindings body)) var newVar =
   ELet (Let ((\b -> substBinding b var newVar) <$> bindings) (substExpr body var newVar))
-substExpr (EApp (App f args ty)) var newVar =
-  EApp (App (substExpr f var newVar) ((\arg -> substExpr arg var newVar) <$> args) ty)
+substExpr (EApp (App f arg ty)) var newVar =
+  EApp (App (substExpr f var newVar) (substExpr arg var newVar) ty)
 substExpr (EParens expr) var newVar = EParens (substExpr expr var newVar)
 
 substBinding :: Binding -> IdentName -> IdentName -> Binding

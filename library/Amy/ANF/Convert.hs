@@ -125,36 +125,38 @@ normalizeExpr name (C.ELet (C.Let bindings expr)) = do
   bindings' <- traverse normalizeLetBinding bindings
   expr' <- normalizeExpr name expr
   pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal bindings' expr'
-normalizeExpr name (C.EApp (C.App func args retTy)) =
+normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
+  -- TODO: More robust arity checking besides just unfolding App nodes.
+  let func :| args = C.unfoldApp app
   normalizeList (normalizeName name) (toList args) $ \argVals -> do
-  retTy' <- convertType retTy
-  case func of
-    C.EVar (C.VCons (C.Typed _ con)) -> do
-      con' <- convertDataCon con
-      let
-        mArg =
-          case argVals of
-            [] -> Nothing
-            [x] -> Just x
-            _ -> error $ "Tried to create ConApp node, but incorrect number of args " ++ show func
-      case retTy' of
-        TaggedUnionType structName intBits -> pure $ ANF.EConApp $ ANF.ConApp con' mArg structName intBits
-        _ -> error $ "Invalid type for ConApp " ++ show retTy'
-    _ ->
-      normalizeName name func $ \funcVal ->
-        case funcVal of
-          ANF.Lit lit -> error $ "Encountered lit function application " ++ show lit
-          ANF.ConEnum _ con -> error $ "Encountered con enum function application " ++ show con
-          ANF.Var (tyIdent@(ANF.Typed _ ident)) _ ->
-            -- TODO: We need something more robust besides looking up by name.
-            -- The Renamer should maybe handle resolving this name, or when we
-            -- have modules we should make sure we are looking at the Prim
-            -- module.
-            case Map.lookup ident primitiveFunctionsByName of
-              -- Primitive operation
-              Just prim -> pure $ ANF.EPrimOp $ ANF.App prim argVals retTy'
-              -- Default, just a function call
-              Nothing -> pure $ ANF.EApp $ ANF.App tyIdent argVals retTy'
+    retTy' <- convertType retTy
+    case func of
+      C.EVar (C.VCons (C.Typed _ con)) -> do
+        con' <- convertDataCon con
+        let
+          mArg =
+            case argVals of
+              [] -> Nothing
+              [x] -> Just x
+              _ -> error $ "Tried to create ConApp node, but incorrect number of args " ++ show func
+        case retTy' of
+          TaggedUnionType structName intBits -> pure $ ANF.EConApp $ ANF.ConApp con' mArg structName intBits
+          _ -> error $ "Invalid type for ConApp " ++ show retTy'
+      _ ->
+        normalizeName name func $ \funcVal ->
+          case funcVal of
+            ANF.Lit lit -> error $ "Encountered lit function application " ++ show lit
+            ANF.ConEnum _ con -> error $ "Encountered con enum function application " ++ show con
+            ANF.Var (tyIdent@(ANF.Typed _ ident)) _ ->
+              -- TODO: We need something more robust besides looking up by name.
+              -- The Renamer should maybe handle resolving this name, or when we
+              -- have modules we should make sure we are looking at the Prim
+              -- module.
+              case Map.lookup ident primitiveFunctionsByName of
+                -- Primitive operation
+                Just prim -> pure $ ANF.EPrimOp $ ANF.App prim argVals retTy'
+                -- Default, just a function call
+                Nothing -> pure $ ANF.EApp $ ANF.App tyIdent argVals retTy'
 normalizeExpr name (C.EParens expr) = normalizeExpr name expr
 
 normalizeName :: Text -> C.Expr -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr

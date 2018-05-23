@@ -79,7 +79,7 @@ prettyExpr (ELet (Let bindings body)) =
  where
   prettyLetBinding (LetBinding binding) = prettyBinding' binding
   prettyLetBinding (LetBindingType bindingTy) = prettyBindingType' bindingTy
-prettyExpr (EApp (App f args)) = sep $ prettyExpr f : (prettyExpr <$> toList args)
+prettyExpr (EApp f arg) = prettyExpr f <+> prettyExpr arg
 prettyExpr (EParens expr) = parens $ prettyExpr expr
 
 prettyRow :: Located RowLabel -> Expr -> Doc ann

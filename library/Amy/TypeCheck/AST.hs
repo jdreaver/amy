@@ -163,7 +163,7 @@ data Let
 data App
   = App
   { appFunction :: !Expr
-  , appArgs :: !(NonEmpty Expr)
+  , appArg :: !Expr
   , appReturnType :: !Type
   } deriving (Show, Eq)
 

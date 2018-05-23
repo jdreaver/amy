@@ -24,7 +24,6 @@ module Amy.Syntax.AST
   , letBinding
   , letBindingType
   , LetBinding(..)
-  , App(..)
   , Type(..)
   , Scheme(..)
 
@@ -120,7 +119,7 @@ data Expr
   | EIf !If
   | ECase !Case
   | ELet !Let
-  | EApp !App
+  | EApp !Expr !Expr
   | EParens !Expr
   deriving (Show, Eq)
 
@@ -179,13 +178,6 @@ letBinding _ = Nothing
 letBindingType :: LetBinding -> Maybe BindingType
 letBindingType (LetBindingType x) = Just x
 letBindingType _ = Nothing
-
--- | Function application
-data App
-  = App
-  { appFunction :: !Expr
-  , appArgs :: !(NonEmpty Expr)
-  } deriving (Show, Eq)
 
 data Type
   = TyCon !(Located TyConName)

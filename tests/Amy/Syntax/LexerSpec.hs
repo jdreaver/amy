@@ -45,22 +45,3 @@ spec = do
 
     it "handles items with semicolons" $ do
       parse' (spaceConsumer *> indentedBlock integer <* eof) " 1\n 2; 3; 4\n 5" `shouldParse` [1..5]
-
-  describe "lineFold" $ do
-
-    it "works" $ do
-      parse' (lineFold integer) "1" `shouldParse` [1]
-      parse' (lineFold integer) "1\n 2\n 3" `shouldParse` [1, 2, 3]
-      parse' (spaceConsumerNewlines >> lineFold integer) "  1\n   2\n   3" `shouldParse` [1, 2, 3]
-
-    it "can handle normal spaces" $ do
-      parse' (lineFold integer) "1 2 3" `shouldParse` [1, 2, 3]
-
-    it "rejects things that aren't indented" $ do
-      parse' (lineFold integer >> eof) "1\n2"
-        `shouldFailWith`
-        err [SourcePos "" (mkPos 2) (mkPos 1)] (utok '2' <> eeof <> elabel "indentation past column 1")
-
-      parse' (spaceConsumerNewlines >> lineFold integer >> eof) "  1\n  2"
-        `shouldFailWith`
-        err [SourcePos "" (mkPos 2) (mkPos 3)] (utok '2' <> eeof <> elabel "indentation past column 3")

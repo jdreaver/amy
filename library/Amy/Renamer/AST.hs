@@ -14,7 +14,6 @@ module Amy.Renamer.AST
   , Pattern(..)
   , PatCons(..)
   , Let(..)
-  , App(..)
 
   , Type(..)
   , Scheme(..)
@@ -96,7 +95,7 @@ data Expr
   | EIf !If
   | ECase !Case
   | ELet !Let
-  | EApp !App
+  | EApp !Expr !Expr
   | EParens !Expr
   deriving (Show, Eq)
 
@@ -141,13 +140,6 @@ data Let
   = Let
   { letBindings :: ![Binding]
   , letExpression :: !Expr
-  } deriving (Show, Eq)
-
--- | An 'App' after enaming.
-data App
-  = App
-  { appFunction :: !Expr
-  , appArgs :: !(NonEmpty Expr)
   } deriving (Show, Eq)
 
 data Type

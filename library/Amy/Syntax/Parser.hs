@@ -11,7 +11,6 @@ module Amy.Syntax.Parser
   , typeTerm
   , binding
   , expression
-  , expression'
   , expressionParens
   , caseExpression
   , ifExpression
@@ -19,8 +18,6 @@ module Amy.Syntax.Parser
   , literal
   ) where
 
-import Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
@@ -80,13 +77,12 @@ parseSchemeVars = do
   pure vars
 
 parseType :: AmyParser Type
-parseType = makeExprParser term table
+parseType = makeExprParser typeTerm table
  where
   table =
     [ [InfixL (TyApp <$ spaceConsumer)]
     , [InfixR (TyFun <$ typeSeparatorArrow)]
     ]
-  term = parens parseType <|> typeTerm
 
 typeTerm :: AmyParser Type
 typeTerm =
@@ -155,27 +151,14 @@ dataConDefinition = do
     }
 
 expression :: AmyParser Expr
-expression = do
-  -- Parse a NonEmpty list of expressions separated by spaces.
-  f :| args <- lineFold expression'
+expression = makeExprParser expressionTerm table
+ where
+  table =
+    [ [InfixR (EApp <$ spaceConsumerNewlines)]
+    ]
 
-  pure $
-    case NE.nonEmpty args of
-      -- Just a simple expression
-      Nothing -> f
-      -- We must have a function application
-      Just args' ->
-        EApp
-        App
-        { appFunction = f
-        , appArgs = args'
-        }
-
--- | Parses any expression except function application. This is needed to avoid
--- left recursion. Without this distinction, f a b would be parsed as f (a b)
--- instead of (f a) b.
-expression' :: AmyParser Expr
-expression' =
+expressionTerm :: AmyParser Expr
+expressionTerm =
   (expressionParens <?> "parens")
   <|> (ELit <$> literal <?> "literal")
   <|> (ERecord <$> record <?> "record")

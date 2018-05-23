@@ -386,16 +386,16 @@ inferExpr (R.ELet (R.Let bindings expression)) = do
     ( T.ELet (T.Let bindings' expression')
     , concat bindingsCons ++ expCons
     )
-inferExpr (R.EApp (R.App func args)) = do
-  (func', funcConstraints) <- inferExpr func
-  (args', argConstraints) <- NE.unzip <$> traverse inferExpr args
+inferExpr (R.EApp f arg) = do
+  (f', funcConstraints) <- inferExpr f
+  (arg', argConstraints) <- inferExpr arg
   tyVar <- T.TyVar <$> freshTypeVariable
   let
-    argTypes = NE.toList $ expressionType <$> args'
-    newConstraint = Constraint (expressionType func', foldr1 T.TyFun (argTypes ++ [tyVar]))
+    argType = expressionType arg'
+    newConstraint = Constraint (expressionType f', argType `T.TyFun` tyVar)
   pure
-    ( T.EApp (T.App func' args' tyVar)
-    , funcConstraints ++ concat argConstraints ++ [newConstraint]
+    ( T.EApp (T.App f' arg' tyVar)
+    , funcConstraints ++ argConstraints ++ [newConstraint]
     )
 inferExpr (R.EParens expr) = do
   (expr', constraints) <- inferExpr expr
@@ -611,8 +611,8 @@ substituteTExpr subst (T.ECase (T.Case scrutinee matches)) =
   T.ECase (T.Case (substituteTExpr subst scrutinee) (substituteTMatch subst <$> matches))
 substituteTExpr subst (T.ELet (T.Let bindings expr)) =
   T.ELet (T.Let (substituteBinding subst <$> bindings) (substituteTExpr subst expr))
-substituteTExpr subst (T.EApp (T.App func args returnType)) =
-  T.EApp (T.App (substituteTExpr subst func) (substituteTExpr subst <$> args) (substituteType subst returnType))
+substituteTExpr subst (T.EApp (T.App f arg returnType)) =
+  T.EApp (T.App (substituteTExpr subst f) (substituteTExpr subst arg) (substituteType subst returnType))
 substituteTExpr subst (T.EParens expr) = T.EParens (substituteTExpr subst expr)
 
 substituteTMatch :: Subst -> T.Match -> T.Match

@@ -89,10 +89,10 @@ desugarExpr (T.ELet (T.Let bindings body)) = do
   bindings' <- traverse desugarBinding bindings
   body' <- desugarExpr body
   pure $ C.ELet (C.Let bindings' body')
-desugarExpr (T.EApp (T.App func args ty)) = do
+desugarExpr (T.EApp (T.App func arg ty)) = do
   func' <- desugarExpr func
-  args' <- traverse desugarExpr args
-  pure $ C.EApp (C.App func' args' (desugarType ty))
+  arg' <- desugarExpr arg
+  pure $ C.EApp (C.App func' arg' (desugarType ty))
 desugarExpr (T.EParens expr) = C.EParens <$> desugarExpr expr
 
 desugarVar :: T.Var -> C.Var

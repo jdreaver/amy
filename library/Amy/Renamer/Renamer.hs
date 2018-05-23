@@ -217,14 +217,13 @@ renameExpression (S.ELet (S.Let bindings expression)) =
       $ R.Let
       <$> rLetBindings
       <*> rLetExpression
-renameExpression (S.EApp (S.App func args)) = do
-  func' <- renameExpression func
-  args' <- traverse renameExpression args
+renameExpression (S.EApp f arg) = do
+  f' <- renameExpression f
+  arg' <- renameExpression arg
   pure
-    $ fmap R.EApp
-    $ R.App
-    <$> func'
-    <*> sequenceA args'
+    $ R.EApp
+    <$> f'
+    <*> arg'
 renameExpression (S.EParens expr) = fmap R.EParens <$> renameExpression expr
 
 renameMatch :: S.Match -> Renamer (Validation [Error] R.Match)

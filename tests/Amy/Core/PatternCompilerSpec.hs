@@ -4,8 +4,8 @@ module Amy.Core.PatternCompilerSpec
   ( spec
   ) where
 
+import Data.List (foldl1')
 import Data.Text (pack)
-import qualified Data.List.NonEmpty as NE
 import Test.Hspec
 
 import Amy.Core.AST
@@ -45,7 +45,9 @@ mkVal x' = EVar $ VVal x'
 mkExpr :: [Typed IdentName] -> Expr
 mkExpr [] = error "empty list"
 mkExpr [x'] = mkVal x'
-mkExpr (x':y':xs') = EApp (App (mkVal x') (NE.fromList $ mkVal <$> (y':xs')) boolTy)
+mkExpr xs' = foldl1' mkApp (mkVal <$> xs')
+ where
+  mkApp e1 e2 = EApp (App e1 e2 boolTy)
 
 -- Bool type
 trueC, falseC :: Con

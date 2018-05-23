@@ -34,7 +34,6 @@ module Amy.Syntax.Lexer
   , text
   , indentedBlock
   , indentedBlockNonEmpty
-  , lineFold
   ) where
 
 import qualified Control.Applicative.Combinators.NonEmpty as CNE
@@ -221,13 +220,3 @@ indentedBlockNonEmpty
 indentedBlockNonEmpty p =
   fmap join $ withBlockIndentation $ CNE.some $
     assertSameIndentation *> p `CNE.sepBy1` semiColon <* spaceConsumerNewlines
-
--- | Parse something that can bleed over newlines as long as the indentation on
--- the next lines is strictly greater than the first line.
-lineFold :: AmyParser a -> AmyParser (NonEmpty a)
-lineFold p =
-  withBlockIndentation $ do
-    first <- p
-    spaceConsumerNewlines
-    rest <- many $ assertIndented *> p <* spaceConsumerNewlines
-    pure $ first :| rest

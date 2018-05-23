@@ -84,7 +84,7 @@ prettyExpr (ECase (Case scrutinee matches)) =
   mkMatch (Match pat body) = (prettyPattern pat, prettyExpr body)
 prettyExpr (ELet (Let bindings body)) =
   prettyLet (prettyBinding' <$> bindings) (prettyExpr body)
-prettyExpr (EApp (App f args _)) = sep $ prettyExpr f : (prettyExpr <$> toList args)
+prettyExpr (EApp (App f arg _)) = prettyExpr f <+> prettyExpr arg
 prettyExpr (EParens expr) = parens $ prettyExpr expr
 
 prettyRow :: RowLabel -> Expr -> Doc ann

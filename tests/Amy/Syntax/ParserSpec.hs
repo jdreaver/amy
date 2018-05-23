@@ -21,32 +21,6 @@ parse' parser = parse (runAmyParser parser) ""
 spec :: Spec
 spec = do
 
-  describe "expression" $ do
-    it "parses complex expressions" $ do
-      parse' expression "f (g x) 1" `shouldParse`
-        EApp (
-          App
-          (EVar (VVal $ Located (SourceSpan "" 1 1 1 1) "f"))
-          [ EParens $
-              EApp $
-                App
-                (EVar (VVal $ Located (SourceSpan "" 1 4 1 4) "g"))
-                [EVar (VVal $ Located (SourceSpan "" 1 6 1 6) "x")]
-          , ELit (Located (SourceSpan "" 1 9 1 9) (LiteralInt 1))
-          ]
-        )
-
-    it "parses multi-line expression" $ do
-      parse' expression "f 1\n 2 3" `shouldParse`
-        EApp (
-          App
-          (EVar (VVal $ Located (SourceSpan "" 1 1 1 1) "f"))
-          [ ELit (Located (SourceSpan "" 1 3 1 3) (LiteralInt 1))
-          , ELit (Located (SourceSpan "" 2 2 2 2) (LiteralInt 2))
-          , ELit (Located (SourceSpan "" 2 4 2 4) (LiteralInt 3))
-          ]
-        )
-
   describe "externDecl" $ do
     it "parses extern declaration" $ do
       parse' externDecl "extern f :: Int"
@@ -193,9 +167,8 @@ spec = do
         `shouldParse`
         EParens
           (EApp
-             (App
-               (EVar (VVal $ Located (SourceSpan "" 1 2 1 2) "f"))
-               [EVar (VVal $ Located (SourceSpan "" 1 4 1 4) "x")])
+            (EVar (VVal $ Located (SourceSpan "" 1 2 1 2) "f"))
+            (EVar (VVal $ Located (SourceSpan "" 1 4 1 4) "x"))
           )
 
   describe "ifExpression" $ do
@@ -209,9 +182,9 @@ spec = do
       parse' ifExpression "if f x then f y else g 2"
         `shouldParse`
         If
-          (EApp $ App (EVar (VVal $ Located (SourceSpan "" 1 4 1 4) "f")) [EVar (VVal $ Located (SourceSpan "" 1 6 1 6) "x")])
-          (EApp $ App (EVar (VVal $ Located (SourceSpan "" 1 13 1 13) "f")) [EVar (VVal $ Located (SourceSpan "" 1 15 1 15) "y")])
-          (EApp $ App (EVar (VVal $ Located (SourceSpan "" 1 22 1 22) "g")) [ELit (Located (SourceSpan "" 1 24 1 24) (LiteralInt 2))])
+          (EApp (EVar (VVal $ Located (SourceSpan "" 1 4 1 4) "f")) (EVar (VVal $ Located (SourceSpan "" 1 6 1 6) "x")))
+          (EApp (EVar (VVal $ Located (SourceSpan "" 1 13 1 13) "f")) (EVar (VVal $ Located (SourceSpan "" 1 15 1 15) "y")))
+          (EApp (EVar (VVal $ Located (SourceSpan "" 1 22 1 22) "g")) (ELit (Located (SourceSpan "" 1 24 1 24) (LiteralInt 2))))
 
   describe "literal" $ do
     it "can discriminate between integer and double" $ do
