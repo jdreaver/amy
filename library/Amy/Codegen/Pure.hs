@@ -9,7 +9,7 @@ module Amy.Codegen.Pure
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Short as BSS
 import Data.Foldable (for_)
-import Data.List (sort)
+import Data.List (elemIndex, sort)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Traversable (for)
@@ -131,7 +131,30 @@ codegenExpr' name' (ANF.ERecord (ANF.Typed ty rows)) = do
     addInstruction $ Do $ Store False rowPtrOp' rowOp Nothing 0 []
 
   pure allocOp
-codegenExpr' _ e@(ANF.ERecordSelect _ _ _) = error $ "Can't codegen record select yet " ++ show e
+codegenExpr' name' (ANF.ERecordSelect val label retTy) = do
+  -- Compute what index to use
+  let
+    tyRows =
+      case val of
+        Var (Typed (RecordType rows) _) _ -> rows
+        _ -> error $ "Expected record var, got " ++ show val
+    index' =
+      fromMaybe (error $ "Couldn't find index for label in type " ++ show (label, tyRows))
+      . elemIndex label
+      $ fst <$> tyRows
+    valOp = valOperand val
+
+  -- Compute offset with getelementptr
+  dataPtrName <- freshUnName
+  let
+    dataPtrOp = LocalReference (LLVM.PointerType (LLVM.PointerType (IntegerType 64) (AddrSpace 0)) (AddrSpace 0)) dataPtrName
+  addInstruction $ dataPtrName := GetElementPtr False valOp [gepIndex 0, gepIndex (fromIntegral index')] []
+
+  -- Load value from pointer
+  let
+    dataOp = LocalReference (LLVM.PointerType (llvmType retTy) (AddrSpace 0)) name'
+  addInstruction $ name' := Load False dataPtrOp Nothing 0 []
+  pure dataOp
 codegenExpr' name' (ANF.ELetVal (ANF.LetVal bindings expr)) = do
   for_ bindings $ \(ANF.LetValBinding ident _ body) ->
     codegenExpr' (identToName ident) body

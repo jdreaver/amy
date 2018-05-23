@@ -1,7 +1,10 @@
 List a = Nil | Cons { car :: a, cdr :: List a }
 
 main :: Int
-main = 1
+main = addXY { x = 1, y = 2 }
+
+addXY :: { x :: Int, y :: Int } -> Int
+addXY r = iAdd# r.x r.y
 
 g :: forall a b. a -> { x :: a, y :: Int }
 g x = { y = 1, x = x }
