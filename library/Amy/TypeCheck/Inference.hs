@@ -326,8 +326,7 @@ inferExpr :: R.Expr -> Inference (T.Expr, [Constraint])
 inferExpr (R.ELit (Located _ lit)) = pure (T.ELit lit, [])
 inferExpr (R.ERecord rows) = do
   (rows', rowsCons) <- unzip <$> traverse (uncurry inferRow) (Map.toList rows)
-  varTy <- freshTypeVariable
-  let ty = T.TyRecord (Map.fromList $ fmap expressionType <$> rows') (Just varTy)
+  let ty = T.TyRecord (Map.fromList $ fmap expressionType <$> rows') Nothing
   pure
     ( T.ERecord (Typed ty (Map.fromList rows'))
     , concat rowsCons
