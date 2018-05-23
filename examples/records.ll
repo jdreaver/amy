@@ -12,16 +12,15 @@ entry:
   store i64 1, i64* %0
   %1 = getelementptr { i64, i64 }, { i64, i64 }* %res26, i32 0, i32 1
   store i64 2, i64* %1
-  %2 = bitcast { i64, i64 }* %res26 to { i64, i64, i64 }*
-  %ret = call i64 @addXY({ i64, i64, i64 }* %2)
+  %ret = call i64 @addXY({ i64, i64 }* %res26)
   ret i64 %ret
 }
 
-define private i64 @addXY({ i64, i64, i64 }* %r) {
+define private i64 @addXY({ i64, i64 }* %r) {
 entry:
-  %0 = getelementptr { i64, i64, i64 }, { i64, i64, i64 }* %r, i32 0, i32 0
+  %0 = getelementptr { i64, i64 }, { i64, i64 }* %r, i32 0, i32 0
   %res27 = load i64, i64* %0
-  %1 = getelementptr { i64, i64, i64 }, { i64, i64, i64 }* %r, i32 0, i32 2
+  %1 = getelementptr { i64, i64 }, { i64, i64 }* %r, i32 0, i32 1
   %res28 = load i64, i64* %1
   %ret = add i64 %res27, %res28
   ret i64 %ret

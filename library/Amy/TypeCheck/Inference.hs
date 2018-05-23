@@ -522,9 +522,13 @@ unifies t1@(T.TyRecord rows1 mVar1) t2@(T.TyRecord rows2 mVar2) = do
       unifyRecordWithVar subst' justFields2 (Just fresh2) var1
     -- Only one record is extensible
     (Just var1, Nothing) ->
-      unifyRecordWithVar substCommon justFields2 Nothing var1
+      if null justFields1
+      then unifyRecordWithVar substCommon justFields2 Nothing var1
+      else throwError $ UnificationFail t1 t2
     (Nothing, Just var2) ->
-      unifyRecordWithVar substCommon justFields1 Nothing var2
+      if null justFields2
+      then unifyRecordWithVar substCommon justFields1 Nothing var2
+      else throwError $ UnificationFail t1 t2
 unifies t1 t2 = throwError $ UnificationFail t1 t2
 
 unifyMany :: [T.Type] -> [T.Type] -> Inference Subst
