@@ -47,6 +47,8 @@ inferModule (R.Module bindings externs typeDeclarations) = do
       { identTypes = Map.fromList $ externSchemes ++ primFuncSchemes
       , typeDefinitions = Map.fromList tyDefs
       , dataConstructorTypes = Map.fromList $ concatMap mkDataConTypes typeDeclarations'
+      , tyVarKinds = Map.empty
+      , tyConKinds = Map.empty
       , maxId = 0
       }
   bindings' <- inferTopLevel env bindings

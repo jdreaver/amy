@@ -6,19 +6,26 @@ module Amy.TypeCheck.Monad
   , substituteEnv
   , Inference(..)
   , runInference
+  , freshId
   , freshTypeVariable
   , withNewLexicalScope
   , addIdentSchemeToScope
   , lookupIdentScheme
+  , addUnknownTyVarKindToScope
+  , lookupTyVarKind
+  , addUnknownTyConKindToScope
+  , lookupTyConKind
   ) where
 
 import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (fromMaybe)
 import Data.Text (pack)
 
 import Amy.Errors
+import Amy.Kind
 import Amy.Renamer.AST as R
 import Amy.TypeCheck.AST as T
 import Amy.TypeCheck.Substitution
@@ -35,6 +42,8 @@ data TyEnv
     -- TODO: Should this be constructed in the renamer?
   , typeDefinitions :: !(Map TyConName T.TyConDefinition)
   , dataConstructorTypes :: !(Map DataConName (T.TypeDeclaration, T.DataConDefinition))
+  , tyVarKinds :: !(Map TyVarName Kind)
+  , tyConKinds :: !(Map TyConName Kind)
   , maxId :: !Int
   } deriving (Show, Eq)
 
@@ -72,6 +81,7 @@ withNewLexicalScope action = do
   modify' $ \s ->
     s
     { identTypes = identTypes orig
+    , tyVarKinds = tyVarKinds orig
     }
   pure result
 
@@ -82,3 +92,27 @@ lookupIdentScheme :: IdentName -> Inference T.Scheme
 lookupIdentScheme name = do
   mScheme <- gets (Map.lookup name . identTypes)
   maybe (throwError $ UnboundVariable name) pure mScheme
+
+addUnknownTyVarKindToScope :: TyVarName -> Inference Int
+addUnknownTyVarKindToScope name = do
+  i <- freshId
+  modify' (\s -> s { tyVarKinds = Map.insert name (KUnknown i) (tyVarKinds s) })
+  pure i
+
+lookupTyVarKind :: TyVarName -> Inference Kind
+lookupTyVarKind name =
+  fromMaybe (error $ "Can't find kind for name, Renamer must have messed up " ++ show name)
+  . Map.lookup name
+  <$> gets tyVarKinds
+
+addUnknownTyConKindToScope :: TyConName -> Inference Int
+addUnknownTyConKindToScope name = do
+  i <- freshId
+  modify' (\s -> s { tyConKinds = Map.insert name (KUnknown i) (tyConKinds s) })
+  pure i
+
+lookupTyConKind :: TyConName -> Inference Kind
+lookupTyConKind name =
+  fromMaybe (error $ "Can't find kind for name, Renamer must have messed up " ++ show name)
+  . Map.lookup name
+  <$> gets tyConKinds
