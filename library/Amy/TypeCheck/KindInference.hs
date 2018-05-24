@@ -9,6 +9,8 @@ import Control.Monad.State.Strict
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe, mapMaybe, maybeToList)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Traversable (for)
 
 import Amy.Errors
@@ -159,9 +161,17 @@ unify k1 k2 = throwError $ KindUnificationFail k1 k2
 bind :: Int -> Kind -> KindInference Subst
 bind i k
   | k == KUnknown i = pure emptySubst
-  -- TODO: Occurs check
-  -- | occursCheck i k = throwError $ InfiniteKind i k
+  | occursCheck i k = throwError $ InfiniteKind i k
   | otherwise = pure (singletonSubst i k)
+
+occursCheck :: Int -> Kind -> Bool
+occursCheck i k = i `Set.member` unknownKindVariables k
+
+unknownKindVariables :: Kind -> Set Int
+unknownKindVariables KStar = Set.empty
+unknownKindVariables (KUnknown i) = Set.singleton i
+unknownKindVariables KRow = Set.empty
+unknownKindVariables (KFun k1 k2) = unknownKindVariables k1 `Set.union` unknownKindVariables k2
 
 --
 -- Substitutions

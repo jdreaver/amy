@@ -35,6 +35,7 @@ data Error
   | KindUnificationFail !Kind ! Kind
   | KindMismatch !T.TyConName !Kind !T.TyConDefinition !Kind
   | InfiniteType !T.TyVarInfo !T.Type
+  | InfiniteKind !Int !Kind
   | UnboundVariable !IdentName
 
   -- | BindingLacksTypeSignature !RBinding
@@ -62,6 +63,7 @@ errorLocation e =
     KindUnificationFail{} -> Nothing
     KindMismatch{} -> Nothing
     InfiniteType{} -> Nothing
+    InfiniteKind{} -> Nothing
     UnboundVariable{} -> Nothing
 
     -- BindingLacksTypeSignature bind -> Just $ locatedSpan $ rBindingName bind
