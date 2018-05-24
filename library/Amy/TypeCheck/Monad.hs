@@ -13,6 +13,7 @@ module Amy.TypeCheck.Monad
   , lookupIdentScheme
   , addUnknownTyVarKindToScope
   , lookupTyVarKind
+  , addTyConKindToScope
   , addUnknownTyConKindToScope
   , lookupTyConKind
   ) where
@@ -39,8 +40,6 @@ import Amy.TypeCheck.Substitution
 data TyEnv
   = TyEnv
   { identTypes :: !(Map IdentName T.Scheme)
-    -- TODO: Should this be constructed in the renamer?
-  , typeDefinitions :: !(Map TyConName T.TyConDefinition)
   , dataConstructorTypes :: !(Map DataConName (T.TypeDeclaration, T.DataConDefinition))
   , tyVarKinds :: !(Map TyVarName Kind)
   , tyConKinds :: !(Map TyConName Kind)
@@ -105,10 +104,14 @@ lookupTyVarKind name =
   . Map.lookup name
   <$> gets tyVarKinds
 
+addTyConKindToScope :: TyConName -> Kind -> Inference ()
+addTyConKindToScope name kind =
+  modify' (\s -> s { tyConKinds = Map.insert name kind (tyConKinds s) })
+
 addUnknownTyConKindToScope :: TyConName -> Inference Int
 addUnknownTyConKindToScope name = do
   i <- freshId
-  modify' (\s -> s { tyConKinds = Map.insert name (KUnknown i) (tyConKinds s) })
+  addTyConKindToScope name $ KUnknown i
   pure i
 
 lookupTyConKind :: TyConName -> Inference Kind

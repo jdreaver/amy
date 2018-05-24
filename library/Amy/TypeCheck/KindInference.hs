@@ -2,6 +2,7 @@
 
 module Amy.TypeCheck.KindInference
   ( inferTypeDeclarationKind
+  , inferTypeKind
   ) where
 
 import Control.Monad.Except
@@ -35,7 +36,7 @@ inferTypeDeclarationKind (TypeDeclaration (TyConDefinition tyCon tyArgs) constru
       tyConConstraint = Constraint (KUnknown tyConKindVar, foldr1 KFun $ (KUnknown <$> tyVarKindVars) ++ [KStar])
 
     -- Traverse constructors to collect constraints.
-    (_, constructorCons) <- unzip <$> traverse inferTypeKind (mapMaybe dataConDefinitionArgument constructors)
+    (_, constructorCons) <- unzip <$> traverse inferTypeKind' (mapMaybe dataConDefinitionArgument constructors)
 
     -- Solve constraints
     (Subst subst) <- solver (emptySubst, tyConConstraint : concat constructorCons)
@@ -44,36 +45,45 @@ inferTypeDeclarationKind (TypeDeclaration (TyConDefinition tyCon tyArgs) constru
     let kind = fromMaybe (error "Lost the input kind") $ Map.lookup tyConKindVar subst
     pure $ starIfUnknown kind
 
-inferTypeKind :: Type -> Inference (Kind, [Constraint])
-inferTypeKind (TyCon name) = do
+inferTypeKind :: Type -> Inference Kind
+inferTypeKind ty = do
+  (kind, cons) <- inferTypeKind' ty
+  subst <- solver (emptySubst, cons)
+  pure $ starIfUnknown $ substituteKind subst kind
+
+inferTypeKind' :: Type -> Inference (Kind, [Constraint])
+inferTypeKind' (TyCon name) = do
   kind <- lookupTyConKind name
   pure (kind, [])
-inferTypeKind (TyVar (TyVarInfo name _)) = do
+inferTypeKind' (TyVar (TyVarInfo name _)) = do
   kind <- lookupTyVarKind name
   pure (kind, [])
-inferTypeKind (TyApp t1 t2) = do
-  (k1, cons1) <- inferTypeKind t1
-  (k2, cons2) <- inferTypeKind t2
+inferTypeKind' (TyApp t1 t2) = do
+  (k1, cons1) <- inferTypeKind' t1
+  (k2, cons2) <- inferTypeKind' t2
   retKind <- KUnknown <$> freshId
   let constraint = Constraint (k1, k2 `KFun` retKind)
-  pure (KFun k1 k2, cons1 ++ cons2 ++ [constraint])
-inferTypeKind (TyFun t1 t2) = do
-  (k1, cons1) <- inferTypeKind t1
-  (k2, cons2) <- inferTypeKind t2
+  pure (retKind, cons1 ++ cons2 ++ [constraint])
+inferTypeKind' (TyFun t1 t2) = do
+  (k1, cons1) <- inferTypeKind' t1
+  (k2, cons2) <- inferTypeKind' t2
+  kind <- KUnknown <$> freshId
   let
     constraints =
       [ Constraint (k1, KStar)
       , Constraint (k2, KStar)
+      , Constraint (kind, KStar)
       ]
-  pure (KFun k1 k2, cons1 ++ cons2 ++ constraints)
-inferTypeKind (TyRecord fields mVar) = do
+  pure (kind, cons1 ++ cons2 ++ constraints)
+inferTypeKind' (TyRecord fields mVar) = do
   fieldCons <- for (Map.elems fields) $ \ty -> do
-    (fieldKind, fieldCons) <- inferTypeKind ty
+    (fieldKind, fieldCons) <- inferTypeKind' ty
     pure $ fieldCons ++ [Constraint (fieldKind, KStar)]
   varCons <- for (maybeToList mVar) $ \(TyVarInfo var _) -> do
     varKind <- lookupTyVarKind var
     pure $ Constraint (varKind, KRow)
-  pure (KStar, concat fieldCons ++ varCons)
+  kind <- KUnknown <$> freshId
+  pure (kind, concat fieldCons ++ varCons ++ [Constraint (kind, KStar)])
 
 -- | If we have any unknown kinds left, just call them KStar.
 starIfUnknown :: Kind -> Kind
@@ -145,4 +155,4 @@ substituteKind _ KRow = KRow
 substituteKind subst (KFun k1 k2) = KFun (substituteKind subst k1) (substituteKind subst k2)
 
 substituteConstraint :: Subst -> Constraint -> Constraint
-substituteConstraint subst (Constraint (i, kind)) = Constraint (i, substituteKind subst kind)
+substituteConstraint subst (Constraint (k1, k2)) = Constraint (substituteKind subst k1, substituteKind subst k2)

@@ -7,7 +7,6 @@ module Amy.TypeCheck.Inference
   , TyEnv
   ) where
 
-import Control.Monad (when)
 import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.Foldable (for_, traverse_)
@@ -27,6 +26,7 @@ import Amy.Prim
 import Amy.Renamer.AST as R
 import Amy.Syntax.Located
 import Amy.TypeCheck.AST as T
+import Amy.TypeCheck.KindInference
 import Amy.TypeCheck.Monad
 import Amy.TypeCheck.Substitution
 
@@ -40,19 +40,24 @@ inferModule (R.Module bindings externs typeDeclarations) = do
     externs' = convertExtern <$> externs
     externSchemes = (\(T.Extern name ty) -> (name, T.Forall [] ty)) <$> externs'
     typeDeclarations' = (convertTypeDeclaration <$> typeDeclarations) ++ (T.fromPrimTypeDef <$> allPrimTypeDefinitions)
-    tyDefs = (\def@(T.TyConDefinition name _) -> (name, def)) . T.typeDeclarationTypeName <$> typeDeclarations'
     primFuncSchemes = primitiveFunctionScheme <$> allPrimitiveFunctions
     env =
       TyEnv
       { identTypes = Map.fromList $ externSchemes ++ primFuncSchemes
-      , typeDefinitions = Map.fromList tyDefs
       , dataConstructorTypes = Map.fromList $ concatMap mkDataConTypes typeDeclarations'
       , tyVarKinds = Map.empty
       , tyConKinds = Map.empty
       , maxId = 0
       }
-  bindings' <- inferTopLevel env bindings
-  pure (T.Module bindings' externs' typeDeclarations')
+  runInference env $ do
+    -- Infer type declaration kinds and add to scope
+    for_ typeDeclarations' $ \decl@(T.TypeDeclaration (T.TyConDefinition tyCon _) _) -> do
+      kind <- inferTypeDeclarationKind decl
+      addTyConKindToScope tyCon kind
+
+    -- Infer all bindings
+    bindings' <- inferTopLevel bindings
+    pure (T.Module bindings' externs' typeDeclarations')
 
 convertExtern :: R.Extern -> T.Extern
 convertExtern (R.Extern (Located _ name) ty) = T.Extern name (convertType ty)
@@ -97,8 +102,8 @@ primitiveFunctionScheme (PrimitiveFunction _ name ty) =
   , T.Forall [] $ foldr1 T.TyFun $ T.TyCon <$> ty
   )
 
-inferTopLevel :: TyEnv -> [R.Binding] -> Either Error [T.Binding]
-inferTopLevel env bindings = runInference env $ do
+inferTopLevel :: [R.Binding] -> Inference [T.Binding]
+inferTopLevel bindings = do
   bindingsAndConstraints <- inferBindings bindings
   let (bindings', constraints) = unzip bindingsAndConstraints
   subst <- runSolve (concat constraints)
@@ -159,34 +164,17 @@ generateBindingScheme binding =
     (R.bindingType binding)
  where
   convertExisting scheme = do
-    let scheme'@(T.Forall _ ty) = convertScheme scheme
-    checkTypeKind ty
+    let scheme' = convertScheme scheme
+    checkSchemeKind scheme'
     pure scheme'
 
-checkTypeKind :: T.Type -> Inference ()
-checkTypeKind (T.TyCon _) = pure ()
-checkTypeKind (T.TyVar _) = pure ()
-checkTypeKind (T.TyRecord _ _) = pure () -- TODO: Record kinds
-checkTypeKind (T.TyFun t1 t2) = checkTypeKind t1 >> checkTypeKind t2
-checkTypeKind t@T.TyApp{} =
-  -- TODO: Real kind inference instead of this nonsense :)
-  case unfoldTyApp t of
-    T.TyCon con :| args -> do
-      -- Kind checking is pretty simple currently. We just check arity of the type
-      -- constructor to make sure it is fully applied.
-      tyDef@(T.TyConDefinition _ tyDefArgs) <-
-        fromMaybe (error $ "No type definition for " ++ show con)
-        . Map.lookup con
-        <$> gets typeDefinitions
-      let
-        kind = foldr1 KFun $ const KStar <$> [0..length args]
-        tyDefKind = foldr1 KFun $ const KStar <$> [0..length tyDefArgs]
-      when (kind /= tyDefKind) $
-        throwError $ KindMismatch con kind tyDef tyDefKind
-    T.TyVar _ :| _ -> error $ "type variable with arguments encountered (no higher-kinded types allowed): " ++ show t
-    T.TyApp _ _ :| _ -> error $ "currying of type constructors not allowed " ++ show t
-    T.TyFun _ _ :| _ -> error $ "currying of type constructors not allowed " ++ show t
-    T.TyRecord _ _ :| _ -> error $ "tried to apply record type in TyApp " ++ show t
+checkSchemeKind :: T.Scheme -> Inference ()
+checkSchemeKind scheme@(T.Forall tyVars ty) =
+  withNewLexicalScope $ do
+    traverse_ (addUnknownTyVarKindToScope . tyVarInfoName) tyVars
+    kind <- inferTypeKind ty
+    when (kind /= KStar) $
+      error $ "Somehow kind unification passed bu we don't have KStar " ++ show (scheme, kind)
 
 solveBindingConstraints :: TyEnv -> [(T.Binding, [Constraint])] -> Inference [(T.Binding, [Constraint])]
 solveBindingConstraints env bindingsInference = do
