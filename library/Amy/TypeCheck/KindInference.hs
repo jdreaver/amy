@@ -34,22 +34,22 @@ data KindInferenceState
 runKindInference :: KindInference a -> Either Error a
 runKindInference (KindInference action) = runExcept $ evalStateT action (KindInferenceState 0 Map.empty Map.empty)
 
-freshKindVariable :: KindInference Kind
+freshKindVariable :: KindInference Int
 freshKindVariable = do
   modify' (\s -> s { maxId = maxId s + 1 })
-  KUnknown <$> gets maxId
+  gets maxId
 
-addUnknownTyVarKind :: TyVarName -> KindInference Kind
+addUnknownTyVarKind :: TyVarName -> KindInference Int
 addUnknownTyVarKind name = do
-  kind <- freshKindVariable
-  modify' (\s -> s { tyVarKinds = Map.insert name kind (tyVarKinds s) })
-  pure kind
+  i <- freshKindVariable
+  modify' (\s -> s { tyVarKinds = Map.insert name (KUnknown i) (tyVarKinds s) })
+  pure i
 
-addUnknownTyConKind :: TyConName -> KindInference Kind
+addUnknownTyConKind :: TyConName -> KindInference Int
 addUnknownTyConKind name = do
-  kind <- freshKindVariable
-  modify' (\s -> s { tyConKinds = Map.insert name kind (tyConKinds s) })
-  pure kind
+  i <- freshKindVariable
+  modify' (\s -> s { tyConKinds = Map.insert name (KUnknown i) (tyConKinds s) })
+  pure i
 
 lookupTyVarKind :: TyVarName -> KindInference Kind
 lookupTyVarKind name =
@@ -80,7 +80,7 @@ inferTypeDeclarationKind' (TypeDeclaration (TyConDefinition tyCon tyArgs) constr
   tyConKindVar <- addUnknownTyConKind tyCon
   tyVarKindVars <- traverse addUnknownTyVarKind tyArgs
   let
-    tyConConstraint = Constraint (tyConKindVar, foldr1 KFun $ tyVarKindVars ++ [KStar])
+    tyConConstraint = Constraint (KUnknown tyConKindVar, foldr1 KFun $ (KUnknown <$> tyVarKindVars) ++ [KStar])
 
   -- Traverse constructors to collect constraints.
   (_, constructorCons) <- unzip <$> traverse inferTypeKind (mapMaybe dataConDefinitionArgument constructors)
@@ -89,10 +89,7 @@ inferTypeDeclarationKind' (TypeDeclaration (TyConDefinition tyCon tyArgs) constr
   (Subst subst) <- solver (emptySubst, tyConConstraint : concat constructorCons)
 
   -- Substitute into tyConKindVar and return
-  let
-    -- TODO: Remove irrefutable pattern match
-    (KUnknown tyConI) = tyConKindVar
-    kind = fromMaybe (error "Lost the input kind") $ Map.lookup tyConI subst
+  let kind = fromMaybe (error "Lost the input kind") $ Map.lookup tyConKindVar subst
   pure $ starIfUnknown kind
 
 inferTypeKind :: Type -> KindInference (Kind, [Constraint])
@@ -105,7 +102,7 @@ inferTypeKind (TyVar (TyVarInfo name _)) = do
 inferTypeKind (TyApp t1 t2) = do
   (k1, cons1) <- inferTypeKind t1
   (k2, cons2) <- inferTypeKind t2
-  retKind <- freshKindVariable
+  retKind <- KUnknown <$> freshKindVariable
   let constraint = Constraint (k1, k2 `KFun` retKind)
   pure (KFun k1 k2, cons1 ++ cons2 ++ [constraint])
 inferTypeKind (TyFun t1 t2) = do
