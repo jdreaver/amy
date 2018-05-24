@@ -57,11 +57,7 @@ lookupEnvIdent :: IdentName -> TyEnv -> Maybe T.Scheme
 lookupEnvIdent key = Map.lookup key . identTypes
 
 substituteEnv :: Subst -> TyEnv -> TyEnv
-substituteEnv subst (TyEnv identTys tyDefs dataConTys) =
-  TyEnv
-    (Map.map (substituteScheme subst) identTys)
-    tyDefs
-    dataConTys
+substituteEnv subst env = env { identTypes = Map.map (substituteScheme subst) (identTypes env) }
 
 --
 -- Inference Monad
@@ -77,10 +73,14 @@ newtype Inference a = Inference (ReaderT TyEnv (StateT Int (Except Error)) a)
 runInference :: TyEnv -> Inference a -> Either Error a
 runInference env (Inference action) = runExcept $ evalStateT (runReaderT action env) 0
 
+freshId :: Inference Int
+freshId = do
+  modify' (+1)
+  get
+
 freshTypeVariable :: Inference T.TyVarInfo
 freshTypeVariable = do
-  modify' (+ 1)
-  id' <- get
+  id' <- freshId
   pure $ T.TyVarInfo (TyVarName $ "t" <> pack (show id')) TyVarGenerated
 
 -- | Extends the current typing environment with a list of names and schemes
@@ -127,5 +127,5 @@ freeSchemeTypeVariables :: T.Scheme -> Set T.TyVarInfo
 freeSchemeTypeVariables (T.Forall tvs t) = freeTypeVariables t `Set.difference` Set.fromList tvs
 
 freeEnvTypeVariables :: TyEnv -> Set T.TyVarInfo
-freeEnvTypeVariables (TyEnv identTys _ _) =
-  foldl' Set.union Set.empty $ freeSchemeTypeVariables <$> Map.elems identTys
+freeEnvTypeVariables env =
+  foldl' Set.union Set.empty $ freeSchemeTypeVariables <$> Map.elems (identTypes env)
