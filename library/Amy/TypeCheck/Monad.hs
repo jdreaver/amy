@@ -8,6 +8,7 @@ module Amy.TypeCheck.Monad
   , runInference
   , freshTypeVariable
   , extendEnvIdentM
+  , withNewLexicalScope
   , lookupEnvIdentM
   , instantiate
   , generalize
@@ -15,7 +16,6 @@ module Amy.TypeCheck.Monad
   ) where
 
 import Control.Monad.Except
-import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Foldable (foldl')
 import Data.Map.Strict (Map)
@@ -42,6 +42,7 @@ data TyEnv
     -- TODO: Should this be constructed in the renamer?
   , typeDefinitions :: !(Map TyConName T.TyConDefinition)
   , dataConstructorTypes :: !(Map DataConName (T.TypeDeclaration, T.DataConDefinition))
+  , maxId :: !Int
   } deriving (Show, Eq)
 
 extendEnvIdent :: TyEnv -> (IdentName, T.Scheme) -> TyEnv
@@ -65,18 +66,18 @@ substituteEnv subst env = env { identTypes = Map.map (substituteScheme subst) (i
 
 -- | Holds a 'TyEnv' variables in a 'ReaderT' and a 'State' 'Int'
 -- counter for producing type variables.
-newtype Inference a = Inference (ReaderT TyEnv (StateT Int (Except Error)) a)
-  deriving (Functor, Applicative, Monad, MonadReader TyEnv, MonadState Int, MonadError Error)
+newtype Inference a = Inference (StateT TyEnv (Except Error) a)
+  deriving (Functor, Applicative, Monad, MonadState TyEnv, MonadError Error)
 
 -- TODO: Don't use Except, use Validation
 
 runInference :: TyEnv -> Inference a -> Either Error a
-runInference env (Inference action) = runExcept $ evalStateT (runReaderT action env) 0
+runInference env (Inference action) = runExcept $ evalStateT action env
 
 freshId :: Inference Int
 freshId = do
-  modify' (+1)
-  get
+  modify' (\s -> s { maxId = maxId s + 1 })
+  gets maxId
 
 freshTypeVariable :: Inference T.TyVarInfo
 freshTypeVariable = do
@@ -85,13 +86,23 @@ freshTypeVariable = do
 
 -- | Extends the current typing environment with a list of names and schemes
 -- for those names.
-extendEnvIdentM :: [(IdentName, T.Scheme)] -> Inference a -> Inference a
-extendEnvIdentM tys = local (flip extendEnvIdentList tys)
+extendEnvIdentM :: [(IdentName, T.Scheme)] -> Inference ()
+extendEnvIdentM tys = modify' (flip extendEnvIdentList tys)
+
+withNewLexicalScope :: Inference a -> Inference a
+withNewLexicalScope action = do
+  orig <- get
+  result <- action
+  modify' $ \s ->
+    s
+    { identTypes = identTypes orig
+    }
+  pure result
 
 -- | Lookup type in the environment
 lookupEnvIdentM :: IdentName -> Inference T.Type
 lookupEnvIdentM name = do
-  mTy <- asks (lookupEnvIdent name)
+  mTy <- gets (lookupEnvIdent name)
   maybe (throwError $ UnboundVariable name) instantiate mTy
 
 -- | Convert a scheme into a type by replacing all the type variables with

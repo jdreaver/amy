@@ -9,7 +9,7 @@ module Amy.TypeCheck.Inference
 
 import Control.Monad (when)
 import Control.Monad.Except
-import Control.Monad.Reader
+import Control.Monad.State.Strict
 import Data.Bifunctor (first)
 import Data.List (foldl1')
 import Data.List.NonEmpty (NonEmpty(..))
@@ -77,6 +77,7 @@ inferModule (R.Module bindings externs typeDeclarations) = do
       { identTypes = Map.fromList $ externSchemes ++ primFuncSchemes
       , typeDefinitions = Map.fromList tyDefs
       , dataConstructorTypes = Map.fromList $ concatMap mkDataConTypes typeDeclarations'
+      , maxId = 0
       }
   bindings' <- inferTopLevel env bindings
   pure (T.Module bindings' externs' typeDeclarations')
@@ -105,7 +106,7 @@ dataConstructorScheme con = do
   (T.TypeDeclaration (T.TyConDefinition tyConName tyVars) _, T.DataConDefinition _ mTyArg) <-
     fromMaybe (error $ "No type definition for " ++ show con)
     . Map.lookup con
-    <$> asks dataConstructorTypes
+    <$> gets dataConstructorTypes
   let
     mkTyConInfo v = T.TyVarInfo v TyVarNotGenerated
     tyApp =
@@ -153,7 +154,7 @@ inferBindings bindings = do
   bindingsInference <- generateBindingConstraints bindings
 
   -- Solve constraints together
-  env <- ask
+  env <- get
   solveBindingConstraints env bindingsInference
 
 generateBindingConstraints :: [R.Binding] -> Inference [(T.Binding, [Constraint])]
@@ -165,14 +166,16 @@ generateBindingConstraints bindings = do
   -- collect constraints for all bindings.
   let
     bindingNameSchemes = first (locatedValue . R.bindingName) <$> bindingsAndSchemes
-  extendEnvIdentM bindingNameSchemes $ for bindingsAndSchemes $ \(binding, scheme) -> do
-    (binding', constraints) <- inferBinding binding
-    let
-      -- Add the constraint for the binding itself
-      (T.Forall _ bindingTy) = T.bindingType binding'
-      (T.Forall _ schemeTy) = scheme
-      bindingConstraint = Constraint (schemeTy, bindingTy)
-    pure (binding', constraints ++ [bindingConstraint])
+  withNewLexicalScope $ do
+    extendEnvIdentM bindingNameSchemes
+    for bindingsAndSchemes $ \(binding, scheme) -> do
+      (binding', constraints) <- inferBinding binding
+      let
+        -- Add the constraint for the binding itself
+        (T.Forall _ bindingTy) = T.bindingType binding'
+        (T.Forall _ schemeTy) = scheme
+        bindingConstraint = Constraint (schemeTy, bindingTy)
+      pure (binding', constraints ++ [bindingConstraint])
 
 generateBindingScheme :: R.Binding -> Inference T.Scheme
 generateBindingScheme binding =
@@ -202,7 +205,7 @@ checkTypeKind t@T.TyApp{} =
       tyDef@(T.TyConDefinition _ tyDefArgs) <-
         fromMaybe (error $ "No type definition for " ++ show con)
         . Map.lookup con
-        <$> asks typeDefinitions
+        <$> gets typeDefinitions
       let
         kind = foldr1 KFun $ const KStar <$> [0..length args]
         tyDefKind = foldr1 KFun $ const KStar <$> [0..length tyDefArgs]
@@ -212,7 +215,6 @@ checkTypeKind t@T.TyApp{} =
     T.TyApp _ _ :| _ -> error $ "currying of type constructors not allowed " ++ show t
     T.TyFun _ _ :| _ -> error $ "currying of type constructors not allowed " ++ show t
     T.TyRecord _ _ :| _ -> error $ "tried to apply record type in TyApp " ++ show t
-
 
 solveBindingConstraints :: TyEnv -> [(T.Binding, [Constraint])] -> Inference [(T.Binding, [Constraint])]
 solveBindingConstraints env bindingsInference = do
@@ -231,7 +233,9 @@ inferBinding :: R.Binding -> Inference (T.Binding, [Constraint])
 inferBinding (R.Binding (Located _ name) _ args body) = do
   argsAndTyVars <- traverse (\(Located _ arg) -> (arg,) . T.TyVar <$> freshTypeVariable) args
   let argsAndSchemes = (\(arg, t) -> (arg, T.Forall [] t)) <$> argsAndTyVars
-  (body', bodyCons) <- extendEnvIdentM argsAndSchemes $ inferExpr body
+  (body', bodyCons) <- withNewLexicalScope $ do
+    extendEnvIdentM argsAndSchemes
+    inferExpr body
   let
     returnType = expressionType body'
     bindingTy = foldr1 T.TyFun $ (snd <$> argsAndTyVars) ++ [returnType]
@@ -308,7 +312,9 @@ inferExpr (R.ELet (R.Let bindings expression)) = do
   (bindings', bindingsCons) <- unzip <$> inferBindings bindings
   let
     bindingSchemes = (\binding -> (T.bindingName binding, T.bindingType binding)) <$> bindings'
-  (expression', expCons) <- extendEnvIdentM bindingSchemes $ inferExpr expression
+  (expression', expCons) <- withNewLexicalScope $ do
+    extendEnvIdentM bindingSchemes
+    inferExpr expression
   pure
     ( T.ELet (T.Let bindings' expression')
     , concat bindingsCons ++ expCons
@@ -340,7 +346,9 @@ inferMatch :: R.Match -> Inference (T.Match, [Constraint])
 inferMatch (R.Match pat body) = do
   (pat', patCons) <- inferPattern pat
   let patScheme = patternScheme pat'
-  (body', bodyCons) <- extendEnvIdentM patScheme $ inferExpr body
+  (body', bodyCons) <- withNewLexicalScope $ do
+    extendEnvIdentM patScheme
+    inferExpr body
   pure
     ( T.Match pat' body'
     , patCons ++ bodyCons
