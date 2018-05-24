@@ -4,6 +4,8 @@ module Amy.Kind
 
 data Kind
   = KStar
+  | KUnknown !Int
+  | KRow
   | KFun !Kind !Kind
   deriving (Show, Eq, Ord)
 
