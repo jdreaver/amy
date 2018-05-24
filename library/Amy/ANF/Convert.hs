@@ -19,7 +19,7 @@ import Amy.Core.AST as C
 import Amy.Prim
 
 normalizeModule :: C.Module -> ANF.Module
-normalizeModule (C.Module bindings externs typeDeclarations maxId) =
+normalizeModule (C.Module bindings externs typeDeclarations) =
   let
     -- Record top-level names
     topLevelNames =
@@ -28,8 +28,7 @@ normalizeModule (C.Module bindings externs typeDeclarations maxId) =
 
     -- Actual conversion
     convertRead = anfConvertRead topLevelNames typeDeclarations
-    convertState = anfConvertState (maxId + 1)
-  in runANFConvert convertRead convertState $ do
+  in runANFConvert convertRead $ do
     typeDeclarations' <- traverse convertTypeDeclaration typeDeclarations
     externs' <- traverse convertExtern externs
     bindings' <- traverse (normalizeBinding (Just "res")) bindings

@@ -7,15 +7,15 @@ module Amy.TypeCheck.Inference
   , TyEnv
   ) where
 
-import Control.Monad (when)
 import Control.Monad.Except
-import Control.Monad.Reader
-import Data.Bifunctor (first)
-import Data.List (foldl1')
+import Control.Monad.State.Strict
+import Data.Foldable (for_, traverse_)
+import Data.List (foldl', foldl1')
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, maybeToList)
+import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text, pack)
 import Data.Traversable (for)
@@ -26,39 +26,9 @@ import Amy.Prim
 import Amy.Renamer.AST as R
 import Amy.Syntax.Located
 import Amy.TypeCheck.AST as T
+import Amy.TypeCheck.KindInference
 import Amy.TypeCheck.Monad
 import Amy.TypeCheck.Substitution
-
--- | Produces a type scheme from a type by finding all the free type variables
--- in the type, replacing them with sequential letters, and collecting the free
--- type variables in the Forall quantifier.
-normalize :: T.Type -> (T.Scheme, Subst)
-normalize body =
- ( T.Forall (Map.elems letterMap) (normType body)
- , Subst $ T.TyVar <$> letterMap
- )
- where
-  letterMap =
-    Map.fromList
-    $ replaceGensWithLetters (Set.toList $ freeTypeVariables body) letters
-
-  normType (T.TyFun a b) = T.TyFun (normType a) (normType b)
-  normType (T.TyCon con) = T.TyCon con
-  normType (T.TyApp f arg) = T.TyApp (normType f) (normType arg)
-  normType (T.TyRecord rows mVar) = T.TyRecord (normType <$> rows) (normTyVar <$> mVar)
-  normType (T.TyVar a) = T.TyVar $ normTyVar a
-  normTyVar var = fromMaybe (error "type variable not in signature") (Map.lookup var letterMap)
-
-letters :: [Text]
-letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
-
-replaceGensWithLetters :: [T.TyVarInfo] -> [Text] -> [(T.TyVarInfo, T.TyVarInfo)]
-replaceGensWithLetters _ [] = error "Ran out of letters, how???"
-replaceGensWithLetters [] _ = []
-replaceGensWithLetters (var@(T.TyVarInfo _ TyVarGenerated):vars) (l:ls) =
-  (var, T.TyVarInfo (TyVarName l) TyVarNotGenerated) : replaceGensWithLetters vars ls
-replaceGensWithLetters (var@(T.TyVarInfo _ TyVarNotGenerated):vars) ls =
-  (var, var) : replaceGensWithLetters vars ls
 
 --
 -- Inference
@@ -70,16 +40,24 @@ inferModule (R.Module bindings externs typeDeclarations) = do
     externs' = convertExtern <$> externs
     externSchemes = (\(T.Extern name ty) -> (name, T.Forall [] ty)) <$> externs'
     typeDeclarations' = (convertTypeDeclaration <$> typeDeclarations) ++ (T.fromPrimTypeDef <$> allPrimTypeDefinitions)
-    tyDefs = (\def@(T.TyConDefinition name _) -> (name, def)) . T.typeDeclarationTypeName <$> typeDeclarations'
     primFuncSchemes = primitiveFunctionScheme <$> allPrimitiveFunctions
     env =
       TyEnv
       { identTypes = Map.fromList $ externSchemes ++ primFuncSchemes
-      , typeDefinitions = Map.fromList tyDefs
       , dataConstructorTypes = Map.fromList $ concatMap mkDataConTypes typeDeclarations'
+      , tyVarKinds = Map.empty
+      , tyConKinds = Map.empty
+      , maxId = 0
       }
-  (bindings', maxId') <- inferTopLevel 0 env bindings
-  pure (T.Module bindings' externs' typeDeclarations' maxId')
+  runInference env $ do
+    -- Infer type declaration kinds and add to scope
+    for_ typeDeclarations' $ \decl@(T.TypeDeclaration (T.TyConDefinition tyCon _) _) -> do
+      kind <- inferTypeDeclarationKind decl
+      addTyConKindToScope tyCon kind
+
+    -- Infer all bindings
+    bindings' <- inferTopLevel bindings
+    pure (T.Module bindings' externs' typeDeclarations')
 
 convertExtern :: R.Extern -> T.Extern
 convertExtern (R.Extern (Located _ name) ty) = T.Extern name (convertType ty)
@@ -105,7 +83,7 @@ dataConstructorScheme con = do
   (T.TypeDeclaration (T.TyConDefinition tyConName tyVars) _, T.DataConDefinition _ mTyArg) <-
     fromMaybe (error $ "No type definition for " ++ show con)
     . Map.lookup con
-    <$> asks dataConstructorTypes
+    <$> gets dataConstructorTypes
   let
     mkTyConInfo v = T.TyVarInfo v TyVarNotGenerated
     tyApp =
@@ -124,8 +102,8 @@ primitiveFunctionScheme (PrimitiveFunction _ name ty) =
   , T.Forall [] $ foldr1 T.TyFun $ T.TyCon <$> ty
   )
 
-inferTopLevel :: Int -> TyEnv -> [R.Binding] -> Either Error ([T.Binding], Int)
-inferTopLevel maxId env bindings = runInference maxId env $ do
+inferTopLevel :: [R.Binding] -> Inference [T.Binding]
+inferTopLevel bindings = do
   bindingsAndConstraints <- inferBindings bindings
   let (bindings', constraints) = unzip bindingsAndConstraints
   subst <- runSolve (concat constraints)
@@ -153,7 +131,7 @@ inferBindings bindings = do
   bindingsInference <- generateBindingConstraints bindings
 
   -- Solve constraints together
-  env <- ask
+  env <- get
   solveBindingConstraints env bindingsInference
 
 generateBindingConstraints :: [R.Binding] -> Inference [(T.Binding, [Constraint])]
@@ -163,16 +141,18 @@ generateBindingConstraints bindings = do
 
   -- Add all the binding type variables to the typing environment and then
   -- collect constraints for all bindings.
-  let
-    bindingNameSchemes = first (locatedValue . R.bindingName) <$> bindingsAndSchemes
-  extendEnvIdentM bindingNameSchemes $ for bindingsAndSchemes $ \(binding, scheme) -> do
-    (binding', constraints) <- inferBinding binding
-    let
-      -- Add the constraint for the binding itself
-      (T.Forall _ bindingTy) = T.bindingType binding'
-      (T.Forall _ schemeTy) = scheme
-      bindingConstraint = Constraint (schemeTy, bindingTy)
-    pure (binding', constraints ++ [bindingConstraint])
+  withNewLexicalScope $ do
+    -- Add all schemes to typing environment before going into each binding
+    for_ bindingsAndSchemes $ \(binding, scheme) ->
+      addIdentSchemeToScope (locatedValue $ R.bindingName binding) scheme
+    for bindingsAndSchemes $ \(binding, scheme) -> do
+      (binding', constraints) <- inferBinding binding
+      let
+        -- Add the constraint for the binding itself
+        (T.Forall _ bindingTy) = T.bindingType binding'
+        (T.Forall _ schemeTy) = scheme
+        bindingConstraint = Constraint (schemeTy, bindingTy)
+      pure (binding', constraints ++ [bindingConstraint])
 
 generateBindingScheme :: R.Binding -> Inference T.Scheme
 generateBindingScheme binding =
@@ -184,35 +164,17 @@ generateBindingScheme binding =
     (R.bindingType binding)
  where
   convertExisting scheme = do
-    let scheme'@(T.Forall _ ty) = convertScheme scheme
-    checkTypeKind ty
+    let scheme' = convertScheme scheme
+    checkSchemeKind scheme'
     pure scheme'
 
-checkTypeKind :: T.Type -> Inference ()
-checkTypeKind (T.TyCon _) = pure ()
-checkTypeKind (T.TyVar _) = pure ()
-checkTypeKind (T.TyRecord _ _) = pure () -- TODO: Record kinds
-checkTypeKind (T.TyFun t1 t2) = checkTypeKind t1 >> checkTypeKind t2
-checkTypeKind t@T.TyApp{} =
-  -- TODO: Real kind inference instead of this nonsense :)
-  case unfoldTyApp t of
-    T.TyCon con :| args -> do
-      -- Kind checking is pretty simple currently. We just check arity of the type
-      -- constructor to make sure it is fully applied.
-      tyDef@(T.TyConDefinition _ tyDefArgs) <-
-        fromMaybe (error $ "No type definition for " ++ show con)
-        . Map.lookup con
-        <$> asks typeDefinitions
-      let
-        kind = foldr1 KFun $ const KStar <$> [0..length args]
-        tyDefKind = foldr1 KFun $ const KStar <$> [0..length tyDefArgs]
-      when (kind /= tyDefKind) $
-        throwError $ KindMismatch con kind tyDef tyDefKind
-    T.TyVar _ :| _ -> error $ "type variable with arguments encountered (no higher-kinded types allowed): " ++ show t
-    T.TyApp _ _ :| _ -> error $ "currying of type constructors not allowed " ++ show t
-    T.TyFun _ _ :| _ -> error $ "currying of type constructors not allowed " ++ show t
-    T.TyRecord _ _ :| _ -> error $ "tried to apply record type in TyApp " ++ show t
-
+checkSchemeKind :: T.Scheme -> Inference ()
+checkSchemeKind scheme@(T.Forall tyVars ty) =
+  withNewLexicalScope $ do
+    traverse_ (addUnknownTyVarKindToScope . tyVarInfoName) tyVars
+    kind <- inferTypeKind ty
+    when (kind /= KStar) $
+      error $ "Somehow kind unification passed bu we don't have KStar " ++ show (scheme, kind)
 
 solveBindingConstraints :: TyEnv -> [(T.Binding, [Constraint])] -> Inference [(T.Binding, [Constraint])]
 solveBindingConstraints env bindingsInference = do
@@ -230,8 +192,10 @@ solveBindingConstraints env bindingsInference = do
 inferBinding :: R.Binding -> Inference (T.Binding, [Constraint])
 inferBinding (R.Binding (Located _ name) _ args body) = do
   argsAndTyVars <- traverse (\(Located _ arg) -> (arg,) . T.TyVar <$> freshTypeVariable) args
-  let argsAndSchemes = (\(arg, t) -> (arg, T.Forall [] t)) <$> argsAndTyVars
-  (body', bodyCons) <- extendEnvIdentM argsAndSchemes $ inferExpr body
+  (body', bodyCons) <- withNewLexicalScope $ do
+    for_ argsAndTyVars $ \(arg, ty) ->
+      addIdentSchemeToScope arg (T.Forall [] ty)
+    inferExpr body
   let
     returnType = expressionType body'
     bindingTy = foldr1 T.TyFun $ (snd <$> argsAndTyVars) ++ [returnType]
@@ -270,7 +234,7 @@ inferExpr (R.ERecordSelect expr (Located _ label)) = do
 inferExpr (R.EVar var) =
   case var of
     R.VVal (Located _ valVar) -> do
-      t <- lookupEnvIdentM valVar
+      t <- lookupIdentScheme valVar >>= instantiate
       pure (T.EVar $ T.VVal (T.Typed t valVar), [])
     R.VCons (Located _ con) -> do
       t <- instantiate =<< dataConstructorScheme con
@@ -306,9 +270,10 @@ inferExpr (R.ECase (R.Case scrutinee matches)) = do
     )
 inferExpr (R.ELet (R.Let bindings expression)) = do
   (bindings', bindingsCons) <- unzip <$> inferBindings bindings
-  let
-    bindingSchemes = (\binding -> (T.bindingName binding, T.bindingType binding)) <$> bindings'
-  (expression', expCons) <- extendEnvIdentM bindingSchemes $ inferExpr expression
+  (expression', expCons) <- withNewLexicalScope $ do
+    for_ bindings' $ \binding ->
+      addIdentSchemeToScope (T.bindingName binding) (T.bindingType binding)
+    inferExpr expression
   pure
     ( T.ELet (T.Let bindings' expression')
     , concat bindingsCons ++ expCons
@@ -339,8 +304,9 @@ inferRow (Located _ label) expr = do
 inferMatch :: R.Match -> Inference (T.Match, [Constraint])
 inferMatch (R.Match pat body) = do
   (pat', patCons) <- inferPattern pat
-  let patScheme = patternScheme pat'
-  (body', bodyCons) <- extendEnvIdentM patScheme $ inferExpr body
+  (body', bodyCons) <- withNewLexicalScope $ do
+    traverse_ (uncurry addIdentSchemeToScope) (patternScheme pat')
+    inferExpr body
   pure
     ( T.Match pat' body'
     , patCons ++ bodyCons
@@ -377,11 +343,82 @@ inferPattern (R.PParens pat) = do
     , patCons
     )
 
-patternScheme :: T.Pattern -> [(IdentName, T.Scheme)]
-patternScheme (T.PLit _) = []
-patternScheme (T.PVar (T.Typed ty ident)) = [(ident, T.Forall [] ty)]
-patternScheme (T.PCons (T.PatCons _ mArg _)) = maybe [] patternScheme mArg
+patternScheme :: T.Pattern -> Maybe (IdentName, T.Scheme)
+patternScheme (T.PLit _) = Nothing
+patternScheme (T.PVar (T.Typed ty ident)) = Just (ident, T.Forall [] ty)
+patternScheme (T.PCons (T.PatCons _ mArg _)) = patternScheme =<< mArg
 patternScheme (T.PParens pat) = patternScheme pat
+
+--
+-- Utilities
+--
+
+-- | Produces a type scheme from a type by finding all the free type variables
+-- in the type, replacing them with sequential letters, and collecting the free
+-- type variables in the Forall quantifier.
+normalize :: T.Type -> (T.Scheme, Subst)
+normalize body =
+ ( T.Forall (Map.elems letterMap) (normType body)
+ , Subst $ T.TyVar <$> letterMap
+ )
+ where
+  letterMap =
+    Map.fromList
+    $ replaceGensWithLetters (Set.toList $ freeTypeVariables body) letters
+
+  normType (T.TyFun a b) = T.TyFun (normType a) (normType b)
+  normType (T.TyCon con) = T.TyCon con
+  normType (T.TyApp f arg) = T.TyApp (normType f) (normType arg)
+  normType (T.TyRecord rows mVar) = T.TyRecord (normType <$> rows) (normTyVar <$> mVar)
+  normType (T.TyVar a) = T.TyVar $ normTyVar a
+  normTyVar var = fromMaybe (error "type variable not in signature") (Map.lookup var letterMap)
+
+letters :: [Text]
+letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
+
+replaceGensWithLetters :: [T.TyVarInfo] -> [Text] -> [(T.TyVarInfo, T.TyVarInfo)]
+replaceGensWithLetters _ [] = error "Ran out of letters, how???"
+replaceGensWithLetters [] _ = []
+replaceGensWithLetters (var@(T.TyVarInfo _ TyVarGenerated):vars) (l:ls) =
+  (var, T.TyVarInfo (TyVarName l) TyVarNotGenerated) : replaceGensWithLetters vars ls
+replaceGensWithLetters (var@(T.TyVarInfo _ TyVarNotGenerated):vars) ls =
+  (var, var) : replaceGensWithLetters vars ls
+
+-- | Convert a scheme into a type by replacing all the type variables with
+-- fresh names. Types are instantiated when they are looked up so we can make
+-- constraints with the type variables and not worry about name collisions.
+instantiate :: T.Scheme -> Inference T.Type
+instantiate (T.Forall as t) = do
+  as' <- fmap T.TyVar <$> traverse (const freshTypeVariable) as
+  let s = Subst $ Map.fromList $ zip as as'
+  return $ substituteType s t
+
+-- | Generalizing a type is the quantification of that type with all of the
+-- free variables of the type minus the free variables in the environment. This
+-- is like finding the type variables that should be "bound" by the
+-- quantification. This is also called finding the "closure" of a type.
+generalize :: TyEnv -> T.Type -> T.Scheme
+generalize env t  = T.Forall as t
+ where
+  as = Set.toList $ freeTypeVariables t `Set.difference` freeEnvTypeVariables env
+
+--
+-- Free type variables
+--
+
+freeTypeVariables :: T.Type -> Set T.TyVarInfo
+freeTypeVariables (T.TyCon _) = Set.empty
+freeTypeVariables (T.TyVar var) = Set.singleton var
+freeTypeVariables (T.TyApp f arg) = freeTypeVariables f `Set.union` freeTypeVariables arg
+freeTypeVariables (T.TyRecord rows mVar) = Set.unions $ Set.fromList (maybeToList mVar) : (freeTypeVariables <$> Map.elems rows)
+freeTypeVariables (t1 `T.TyFun` t2) = freeTypeVariables t1 `Set.union` freeTypeVariables t2
+
+freeSchemeTypeVariables :: T.Scheme -> Set T.TyVarInfo
+freeSchemeTypeVariables (T.Forall tvs t) = freeTypeVariables t `Set.difference` Set.fromList tvs
+
+freeEnvTypeVariables :: TyEnv -> Set T.TyVarInfo
+freeEnvTypeVariables env =
+  foldl' Set.union Set.empty $ freeSchemeTypeVariables <$> Map.elems (identTypes env)
 
 --
 -- Constraint Solver
@@ -481,7 +518,6 @@ bind a t
 
 occursCheck :: T.TyVarInfo -> T.Type -> Bool
 occursCheck a t = a `Set.member` freeTypeVariables t
-
 
 --
 -- Names

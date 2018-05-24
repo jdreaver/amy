@@ -20,6 +20,9 @@ module Amy.Pretty
   , prettyTyVarName
   , prettyRowLabel
 
+    -- Kinds
+  , prettyKind
+
     -- Types
   , prettyScheme
 
@@ -40,6 +43,7 @@ module Amy.Pretty
 import Data.Maybe (fromMaybe)
 import Data.Text.Prettyprint.Doc as X hiding (list)
 
+import Amy.Kind
 import Amy.Names
 
 --
@@ -104,6 +108,20 @@ prettyTyVarName = pretty . unTyVarName
 
 prettyRowLabel :: RowLabel -> Doc ann
 prettyRowLabel = pretty . unRowLabel
+
+--
+-- Kinds
+--
+
+prettyKind :: Kind -> Doc ann
+prettyKind KStar = "*"
+prettyKind (KUnknown i) = "k" <> pretty i
+prettyKind KRow = "#row"
+prettyKind (KFun k1 k2) = parensIf (isKFun k1) (prettyKind k1) <+> "->" <+> prettyKind k2
+
+isKFun :: Kind -> Bool
+isKFun KFun{} = True
+isKFun _ = False
 
 --
 -- Types
@@ -172,16 +190,7 @@ prettyDataConstructor :: Doc ann -> Maybe (Doc ann) -> Doc ann
 prettyDataConstructor tyConName mArg = tyConName <> maybe mempty (space <>) mArg
 
 prettyTyRecord :: [Doc ann] -> Maybe (Doc ann) -> Doc ann
--- prettyTyRecord fields mVar = bracketed $ maybe fields (replaceLast fields . doReplace) mVar
---  where
---   doReplace var Nothing = var
---   doReplace var (Just last') = cat [last', " | ", var]
 prettyTyRecord fields mVar =
   group $ "{" <+> cat fieldsWithVar <> flatAlt "\n}" " }"
  where
   fieldsWithVar = punctuatePrefix ", " fields ++ maybe [] (\v -> [flatAlt "| " " | " <> v]) mVar
-
--- replaceLast :: [a] -> (Maybe a -> a) -> [a]
--- replaceLast [] f = [f Nothing]
--- replaceLast [x] f = [f (Just x)]
--- replaceLast (x:xs) f = x : replaceLast xs f

@@ -13,14 +13,14 @@ entry:
   ]
 
 case.0.x:                                         ; preds = %entry, %entry
-  %x16 = call i64 @f(i64 100)
-  %0 = call i64 @abs(i64 %x16)
+  %x1 = call i64 @f(i64 100)
+  %0 = call i64 @abs(i64 %x1)
   br label %case.end.x
 
 case.1.x:                                         ; preds = %entry
-  %x17 = call i64 @threeHundred()
-  %x18 = call i64 @f(i64 %x17)
-  %1 = call i64 @abs(i64 %x18)
+  %x2 = call i64 @threeHundred()
+  %x3 = call i64 @f(i64 %x2)
+  %1 = call i64 @abs(i64 %x3)
   br label %case.end.x
 
 case.end.x:                                       ; preds = %case.1.x, %case.0.x
@@ -44,9 +44,9 @@ case.0.ret:                                       ; preds = %entry, %entry
   br label %case.end.ret
 
 case.1.ret:                                       ; preds = %entry
-  %res19 = call i64 @threeHundred()
+  %res4 = call i64 @threeHundred()
   %1 = alloca i64
-  store i64 %res19, i64* %1
+  store i64 %res4, i64* %1
   %2 = load i64, i64* %1
   br label %case.end.ret
 

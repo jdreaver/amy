@@ -32,8 +32,10 @@ data Error
   -- Type checker
   -- TODO: Add source spans here
   | UnificationFail !T.Type !T.Type
+  | KindUnificationFail !Kind ! Kind
   | KindMismatch !T.TyConName !Kind !T.TyConDefinition !Kind
   | InfiniteType !T.TyVarInfo !T.Type
+  | InfiniteKind !Int !Kind
   | UnboundVariable !IdentName
 
   -- | BindingLacksTypeSignature !RBinding
@@ -58,8 +60,10 @@ errorLocation e =
     UnknownTypeVariable (Located s _) -> Just s
 
     UnificationFail{} -> Nothing
+    KindUnificationFail{} -> Nothing
     KindMismatch{} -> Nothing
     InfiniteType{} -> Nothing
+    InfiniteKind{} -> Nothing
     UnboundVariable{} -> Nothing
 
     -- BindingLacksTypeSignature bind -> Just $ locatedSpan $ rBindingName bind
