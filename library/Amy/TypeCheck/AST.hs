@@ -103,7 +103,7 @@ fromPrimDataCon name = DataConDefinition name Nothing
 -- | A renamed 'Expr'
 data Expr
   = ELit !Literal
-  | ERecord !(Typed (Map RowLabel Expr))
+  | ERecord !(Map RowLabel (Typed Expr))
   | ERecordSelect !Expr !RowLabel !Type
   | EVar !Var
   | EIf !If
@@ -169,7 +169,7 @@ literalType' lit = TyCon $ literalType lit
 
 expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType' lit
-expressionType (ERecord (Typed ty _)) = ty
+expressionType (ERecord rows) = TyRecord (typedType <$> rows) Nothing
 expressionType (ERecordSelect _ _ ty) = ty
 expressionType (EVar var) =
   case var of

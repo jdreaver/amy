@@ -67,7 +67,8 @@ substituteBinding subst (T.Binding name ty args retTy body) =
 
 substituteExpr :: Subst -> T.Expr -> T.Expr
 substituteExpr _ lit@T.ELit{} = lit
-substituteExpr subst (T.ERecord (Typed ty rows)) = T.ERecord $ Typed (substituteType subst ty) (substituteExpr subst <$> rows)
+substituteExpr subst (T.ERecord rows) =
+  T.ERecord $ (\(Typed ty expr) -> Typed (substituteType subst ty) (substituteExpr subst expr)) <$> rows
 substituteExpr subst (T.ERecordSelect expr label ty) =
   T.ERecordSelect (substituteExpr subst expr) label (substituteType subst ty)
 substituteExpr subst (T.EVar var) =

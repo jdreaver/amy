@@ -71,7 +71,7 @@ prettyTypedIdent (Typed ty ident) = parens $ prettyIdent ident <+> "::" <+> pret
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit lit) = pretty $ showLiteral lit
-prettyExpr (ERecord (Typed _ rows)) = bracketed $ uncurry prettyRow <$> Map.toList rows
+prettyExpr (ERecord rows) = bracketed $ uncurry prettyRow <$> Map.toList (typedValue <$> rows)
 prettyExpr (ERecordSelect expr field _) = prettyExpr expr <> "." <> prettyRowLabel field
 prettyExpr (EVar var) = prettyVar var
 prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault)) =

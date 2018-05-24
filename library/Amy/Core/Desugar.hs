@@ -46,8 +46,8 @@ desugarBinding (T.Binding ident scheme args retTy body) =
 
 desugarExpr :: T.Expr -> Desugar C.Expr
 desugarExpr (T.ELit lit) = pure $ C.ELit lit
-desugarExpr (T.ERecord (T.Typed ty rows)) =
-  C.ERecord . C.Typed (desugarType ty) <$> traverse desugarExpr rows
+desugarExpr (T.ERecord rows) =
+  C.ERecord <$> traverse (\(T.Typed ty expr) -> C.Typed (desugarType ty) <$> desugarExpr expr) rows
 desugarExpr (T.ERecordSelect expr label ty) = do
   expr' <- desugarExpr expr
   let ty' = desugarType ty

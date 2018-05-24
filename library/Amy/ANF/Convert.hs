@@ -108,10 +108,9 @@ normalizeExpr
   -> C.Expr -- ^ Expression to normalize
   -> ANFConvert ANF.Expr
 normalizeExpr _ (C.ELit lit) = pure $ ANF.EVal $ ANF.Lit lit
-normalizeExpr _ (C.ERecord (C.Typed ty rows)) =
-  normalizeRows (Map.toList rows) $ \rows' -> do
-    ty' <- convertType ty
-    pure $ ANF.ERecord $ ANF.Typed ty' (Map.fromList rows')
+normalizeExpr _ (C.ERecord rows) =
+  normalizeRows (Map.toList rows) $ \rows' ->
+    pure $ ANF.ERecord $ Map.fromList rows'
 normalizeExpr name (C.ERecordSelect expr label ty) =
   normalizeName name expr $ \val ->
     ANF.ERecordSelect val label <$> convertType ty
@@ -234,11 +233,11 @@ normalizeList _ [] c = c []
 normalizeList norm (x:xs) c =
   norm x $ \v -> normalizeList norm xs $ \vs -> c (v:vs)
 
-normalizeRows :: [(RowLabel, C.Expr)] -> ([(RowLabel, ANF.Val)] -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
+normalizeRows :: [(RowLabel, C.Typed C.Expr)] -> ([(RowLabel, ANF.Typed ANF.Val)] -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 normalizeRows [] c = c []
-normalizeRows ((RowLabel label, x):xs) c =
-  normalizeName label x $ \v -> normalizeRows xs $ \vs -> c ((RowLabel label, v):vs)
-
+normalizeRows ((RowLabel label, C.Typed ty x):xs) c = do
+  ty' <- convertType ty
+  normalizeName label x $ \v -> normalizeRows xs $ \vs -> c ((RowLabel label, ANF.Typed ty' v):vs)
 
 -- | ANF conversion produces a lot of nested and adjacent letval expressions.
 -- This function cleans them up into a single letval. Note that bindings in a

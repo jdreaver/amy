@@ -82,7 +82,7 @@ data DataCon
 
 data Expr
   = EVal !Val
-  | ERecord !(Typed (Map RowLabel Val))
+  | ERecord !(Map RowLabel (Typed Val))
   | ERecordSelect !Val !RowLabel !Type
   | ELetVal !LetVal
   | ECase !Case

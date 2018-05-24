@@ -217,9 +217,9 @@ inferExpr :: R.Expr -> Inference (T.Expr, [Constraint])
 inferExpr (R.ELit (Located _ lit)) = pure (T.ELit lit, [])
 inferExpr (R.ERecord rows) = do
   (rows', rowsCons) <- unzip <$> traverse (uncurry inferRow) (Map.toList rows)
-  let ty = T.TyRecord (Map.fromList $ fmap expressionType <$> rows') Nothing
+  let typedRows = (\r -> Typed (expressionType r) r) <$> Map.fromList rows'
   pure
-    ( T.ERecord (Typed ty (Map.fromList rows'))
+    ( T.ERecord typedRows
     , concat rowsCons
     )
 inferExpr (R.ERecordSelect expr (Located _ label)) = do

@@ -111,17 +111,18 @@ codegenExpr' name' (ANF.EVal val) =
   -- expression. No worries, LLVM will most certainly remove these redundant
   -- instructions.
   bindOpToName name' (valOperand val)
-codegenExpr' name' (ANF.ERecord (ANF.Typed ty rows)) = do
+codegenExpr' name' (ANF.ERecord rows) = do
   -- Allocate struct
   let
-    -- TODO: Remove need for irrefutable pattern match
-    ty'@(LLVM.PointerType innerTy _) = llvmType ty
+    rowsTy = Map.toAscList $ typedType <$> rows
+    ty = recordType rowsTy
+    ty' = llvmType (RecordType rowsTy)
     allocOp = LocalReference ty' name'
-  addInstruction $ name' := Alloca innerTy Nothing 0 []
+  addInstruction $ name' := Alloca ty Nothing 0 []
 
   -- Pack rows
   let numberedRows = zip [0..] $ Map.toAscList rows
-  for_ numberedRows $ \(i, (_, val)) -> do
+  for_ numberedRows $ \(i, (_, Typed _ val)) -> do
     rowPtrName <- freshUnName
     let
       rowOp = valOperand val
