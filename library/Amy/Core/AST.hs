@@ -45,7 +45,6 @@ data Module
   { moduleBindings :: ![Binding]
   , moduleExterns :: ![Extern]
   , moduleTypeDeclarations :: ![TypeDeclaration]
-  , moduleMaxId :: !Int
   } deriving (Show, Eq)
 
 data Binding

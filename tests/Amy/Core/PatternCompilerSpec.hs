@@ -34,7 +34,7 @@ match'
   :: [Typed IdentName]
   -> [Equation]
   -> CaseExpr
-match' vars eqs = runDesugar 0 [] $ match vars eqs
+match' vars eqs = runDesugar [] $ match vars eqs
 
 boolTy :: Type
 boolTy = TyCon "Bool"

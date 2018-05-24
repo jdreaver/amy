@@ -14,13 +14,12 @@ import Amy.Prim
 import Amy.TypeCheck.AST as T
 
 desugarModule :: T.Module -> C.Module
-desugarModule (T.Module bindings externs typeDeclarations maxId) = do
+desugarModule (T.Module bindings externs typeDeclarations) = do
   let typeDeclarations' = desugarTypeDeclaration <$> typeDeclarations
-  runDesugar (maxId + 1) typeDeclarations' $ do
+  runDesugar typeDeclarations' $ do
     bindings' <- traverse desugarBinding bindings
     let externs' = desugarExtern <$> externs
-    maxId' <- freshId
-    pure $ C.Module bindings' externs' typeDeclarations' maxId'
+    pure $ C.Module bindings' externs' typeDeclarations'
 
 desugarExtern :: T.Extern -> C.Extern
 desugarExtern (T.Extern ident ty) = C.Extern ident (desugarType ty)

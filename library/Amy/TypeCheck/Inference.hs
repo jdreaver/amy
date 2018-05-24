@@ -78,8 +78,8 @@ inferModule (R.Module bindings externs typeDeclarations) = do
       , typeDefinitions = Map.fromList tyDefs
       , dataConstructorTypes = Map.fromList $ concatMap mkDataConTypes typeDeclarations'
       }
-  (bindings', maxId') <- inferTopLevel 0 env bindings
-  pure (T.Module bindings' externs' typeDeclarations' maxId')
+  bindings' <- inferTopLevel env bindings
+  pure (T.Module bindings' externs' typeDeclarations')
 
 convertExtern :: R.Extern -> T.Extern
 convertExtern (R.Extern (Located _ name) ty) = T.Extern name (convertType ty)
@@ -124,8 +124,8 @@ primitiveFunctionScheme (PrimitiveFunction _ name ty) =
   , T.Forall [] $ foldr1 T.TyFun $ T.TyCon <$> ty
   )
 
-inferTopLevel :: Int -> TyEnv -> [R.Binding] -> Either Error ([T.Binding], Int)
-inferTopLevel maxId env bindings = runInference maxId env $ do
+inferTopLevel :: TyEnv -> [R.Binding] -> Either Error [T.Binding]
+inferTopLevel env bindings = runInference env $ do
   bindingsAndConstraints <- inferBindings bindings
   let (bindings', constraints) = unzip bindingsAndConstraints
   subst <- runSolve (concat constraints)

@@ -33,8 +33,8 @@ import Amy.Prim
 newtype ANFConvert a = ANFConvert (ReaderT ANFConvertRead (State ANFConvertState) a)
   deriving (Functor, Applicative, Monad, MonadReader ANFConvertRead, MonadState ANFConvertState)
 
-runANFConvert :: ANFConvertRead -> ANFConvertState -> ANFConvert a -> a
-runANFConvert read' state' (ANFConvert action) = evalState (runReaderT action read') state'
+runANFConvert :: ANFConvertRead -> ANFConvert a -> a
+runANFConvert read' (ANFConvert action) = evalState (runReaderT action read') (anfConvertState 0)
 
 data ANFConvertRead
   = ANFConvertRead

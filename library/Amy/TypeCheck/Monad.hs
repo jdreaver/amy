@@ -74,8 +74,8 @@ newtype Inference a = Inference (ReaderT TyEnv (StateT Int (Except Error)) a)
 
 -- TODO: Don't use Except, use Validation
 
-runInference :: Int -> TyEnv -> Inference a -> Either Error (a, Int)
-runInference maxId env (Inference action) = runExcept $ runStateT (runReaderT action env) (maxId + 1)
+runInference :: TyEnv -> Inference a -> Either Error a
+runInference env (Inference action) = runExcept $ evalStateT (runReaderT action env) 0
 
 freshTypeVariable :: Inference T.TyVarInfo
 freshTypeVariable = do

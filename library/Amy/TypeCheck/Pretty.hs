@@ -41,7 +41,7 @@ prettyScheme' :: Scheme -> Doc ann
 prettyScheme' (Forall vars ty) = prettyScheme (prettyTyVarInfo <$> vars) (prettyType ty)
 
 prettyModule :: Module -> Doc ann
-prettyModule (Module bindings externs typeDeclarations _) =
+prettyModule (Module bindings externs typeDeclarations) =
   vcatTwoHardLines
   $ (prettyExtern' <$> externs)
   ++ (prettyTypeDeclaration' <$> typeDeclarations)

@@ -20,8 +20,8 @@ import Amy.Core.AST as C
 newtype Desugar a = Desugar (ReaderT (Map DataConName (TypeDeclaration, DataConDefinition)) (State Int) a)
   deriving (Functor, Applicative, Monad, MonadReader (Map DataConName (TypeDeclaration, DataConDefinition)), MonadState Int)
 
-runDesugar :: Int -> [TypeDeclaration] -> Desugar a -> a
-runDesugar maxId decls (Desugar action) = evalState (runReaderT action dataConMap) maxId
+runDesugar :: [TypeDeclaration] -> Desugar a -> a
+runDesugar decls (Desugar action) = evalState (runReaderT action dataConMap) 0
  where
   dataConMap = Map.fromList $ concatMap mkDataConTypes decls
 
