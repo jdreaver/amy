@@ -6,7 +6,6 @@ module Amy.TypeCheck.KindInference
 
 import Control.Monad.Except
 import Control.Monad.State.Strict
-import Data.Foldable (traverse_)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe, mapMaybe, maybeToList)
@@ -82,14 +81,17 @@ inferTypeDeclarationKind' (TypeDeclaration (TyConDefinition tyCon tyArgs) constr
     tyConConstraint = Constraint (tyConKindVar, foldr1 KFun $ tyVarKindVars ++ [KStar])
 
   -- Traverse constructors to collect constraints.
-  (consKinds, consCons) <- unzip <$> traverse inferTypeKind (mapMaybe dataConDefinitionArgument constructors)
+  (_, constructorCons) <- unzip <$> traverse inferTypeKind (mapMaybe dataConDefinitionArgument constructors)
 
   -- Solve constraints
-  subst <- undefined
+  (Subst subst) <- solver (emptySubst, tyConConstraint : concat constructorCons)
 
   -- Substitute into tyConKindVar and return
-
-  undefined
+  let
+    -- TODO: Remove irrefutable pattern match
+    (KUnknown tyConI) = tyConKindVar
+    kind = fromMaybe (error "Lost the input kind") $ Map.lookup tyConI subst
+  pure $ starIfUnknown kind
 
 inferTypeKind :: Type -> KindInference (Kind, [Constraint])
 inferTypeKind (TyCon name) = do
@@ -107,8 +109,12 @@ inferTypeKind (TyApp t1 t2) = do
 inferTypeKind (TyFun t1 t2) = do
   (k1, cons1) <- inferTypeKind t1
   (k2, cons2) <- inferTypeKind t2
-  let constraint = Constraint (k1, k2 `KFun` KStar)
-  pure (KFun k1 k2, cons1 ++ cons2 ++ [constraint])
+  let
+    constraints =
+      [ Constraint (k1, KStar)
+      , Constraint (k2, KStar)
+      ]
+  pure (KFun k1 k2, cons1 ++ cons2 ++ constraints)
 inferTypeKind (TyRecord fields mVar) = do
   fieldCons <- for (Map.elems fields) $ \ty -> do
     (fieldKind, fieldCons) <- inferTypeKind ty
@@ -131,3 +137,53 @@ starIfUnknown (KFun k1 k2) = KFun (starIfUnknown k1) (starIfUnknown k2)
 
 newtype Constraint = Constraint (Kind, Kind)
   deriving (Show, Eq)
+
+solver :: (Subst, [Constraint]) -> KindInference Subst
+solver (su, cs) =
+  case cs of
+    [] -> return su
+    (Constraint (t1, t2): cs0) -> do
+      su1 <- unify t1 t2
+      solver (su1 `composeSubst` su, substituteConstraint su1 <$> cs0)
+
+unify :: Kind -> Kind -> KindInference Subst
+unify k1 k2 | k1 == k2 = pure emptySubst
+unify (KUnknown i) k = i `bind` k
+unify k (KUnknown i) = i `bind` k
+unify (KFun k1 k2) (KFun k3 k4) = do
+  su1 <- unify k1 k3
+  su2 <- unify (substituteKind su1 k2) (substituteKind su1 k4)
+  pure (su2 `composeSubst` su1)
+unify k1 k2 = throwError $ KindUnificationFail k1 k2
+
+bind :: Int -> Kind -> KindInference Subst
+bind i k
+  | k == KUnknown i = pure emptySubst
+  -- TODO: Occurs check
+  -- | occursCheck i k = throwError $ InfiniteKind i k
+  | otherwise = pure (singletonSubst i k)
+
+--
+-- Substitutions
+--
+
+newtype Subst = Subst (Map Int Kind)
+  deriving (Eq, Show, Semigroup, Monoid)
+
+emptySubst :: Subst
+emptySubst = Subst Map.empty
+
+singletonSubst :: Int -> Kind -> Subst
+singletonSubst a t = Subst $ Map.singleton a t
+
+composeSubst :: Subst -> Subst -> Subst
+(Subst s1) `composeSubst` (Subst s2) = Subst $ Map.map (substituteKind (Subst s1)) s2 `Map.union` s1
+
+substituteKind :: Subst -> Kind -> Kind
+substituteKind _ KStar = KStar
+substituteKind (Subst subst) k@(KUnknown i) = Map.findWithDefault k i subst
+substituteKind _ KRow = KRow
+substituteKind subst (KFun k1 k2) = KFun (substituteKind subst k1) (substituteKind subst k2)
+
+substituteConstraint :: Subst -> Constraint -> Constraint
+substituteConstraint subst (Constraint (i, kind)) = Constraint (i, substituteKind subst kind)
