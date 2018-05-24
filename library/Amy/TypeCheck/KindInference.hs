@@ -142,18 +142,18 @@ solver (su, cs) =
   case cs of
     [] -> return su
     (Constraint (t1, t2): cs0) -> do
-      su1 <- unify t1 t2
+      su1 <- unifyKinds t1 t2
       solver (su1 `composeSubst` su, substituteConstraint su1 <$> cs0)
 
-unify :: Kind -> Kind -> KindInference Subst
-unify k1 k2 | k1 == k2 = pure emptySubst
-unify (KUnknown i) k = i `bind` k
-unify k (KUnknown i) = i `bind` k
-unify (KFun k1 k2) (KFun k3 k4) = do
-  su1 <- unify k1 k3
-  su2 <- unify (substituteKind su1 k2) (substituteKind su1 k4)
+unifyKinds :: Kind -> Kind -> KindInference Subst
+unifyKinds k1 k2 | k1 == k2 = pure emptySubst
+unifyKinds (KUnknown i) k = i `bind` k
+unifyKinds k (KUnknown i) = i `bind` k
+unifyKinds (KFun k1 k2) (KFun k3 k4) = do
+  su1 <- unifyKinds k1 k3
+  su2 <- unifyKinds (substituteKind su1 k2) (substituteKind su1 k4)
   pure (su2 `composeSubst` su1)
-unify k1 k2 = throwError $ KindUnificationFail k1 k2
+unifyKinds k1 k2 = throwError $ KindUnificationFail k1 k2
 
 bind :: Int -> Kind -> KindInference Subst
 bind i k
