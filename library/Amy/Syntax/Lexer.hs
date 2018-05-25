@@ -26,6 +26,7 @@ module Amy.Syntax.Lexer
   , optionalParens
   , comma
   , dot
+  , colon
   , semiColon
   , doubleColon
   , equals
@@ -181,6 +182,9 @@ comma = char ',' >> spaceConsumer
 
 dot :: AmyParser ()
 dot = char '.' >> spaceConsumer
+
+colon :: AmyParser ()
+colon = char ':' >> spaceConsumer
 
 semiColon :: AmyParser ()
 semiColon = char ';' >> spaceConsumer

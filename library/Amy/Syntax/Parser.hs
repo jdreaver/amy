@@ -188,7 +188,7 @@ record :: AmyParser (Map (Located RowLabel) Expr)
 record =
   fmap Map.fromList $ braces $ (`sepBy` comma) $ do
     label' <- L.rowLabel
-    equals
+    colon
     expr <- expression
     pure (label', expr)
 

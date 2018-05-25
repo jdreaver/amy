@@ -1,19 +1,19 @@
 List a = Nil | Cons { car :: a, cdr :: List a }
 
 main :: Int
-main = addXY { x = 1, y = 2 }
+main = addXY { x: 1, y: 2 }
 
 addXY :: forall a. { x :: Int, y :: Int | a } -> Int
 addXY r = iAdd# r.x r.y
 
 g :: forall a b. a -> { x :: a, y :: Int }
-g x = { y = 1, x = x }
+g x = { y: 1, x: x }
 
 h :: forall a. a -> List a
-h x = Cons { car = x, cdr = Cons { car = x, cdr = Nil } }
+h x = Cons { car: x, cdr: Cons { car: x, cdr: Nil } }
 
 # a :: { x :: Int, y :: Bool }
 a =
   if True
-  then { x = 1, y = True }
-  else { y = False, x = 2 }
+  then { x: 1, y: True }
+  else { y: False, x: 2 }
