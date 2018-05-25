@@ -459,7 +459,7 @@ unifies (T.TyApp f1 arg1) (T.TyApp f2 arg2) = do
   pure (su2 `composeSubst` su1)
 unifies (T.TyCon name1) (T.TyCon name2)
   | name1 == name2 = return emptySubst
-unifies t1@(T.TyRecord rows1 mVar1) t2@(T.TyRecord rows2 mVar2) = do
+unifies (T.TyRecord rows1 mVar1) (T.TyRecord rows2 mVar2) = do
   let
     commonFields = Map.intersectionWith (,) rows1 rows2
     justFields1 = Map.difference rows1 rows2
@@ -467,43 +467,24 @@ unifies t1@(T.TyRecord rows1 mVar1) t2@(T.TyRecord rows2 mVar2) = do
     unifyRecordWithVar subst rows mVar unifyVar = do
       let
         recordTy = substituteType subst $ T.TyRecord rows mVar
+        mVarTy = substituteType subst . T.TyVar <$> mVar
         unifyVarTy = substituteType subst $ T.TyVar unifyVar
       subst' <-
-        case (Map.null rows, mVar) of
+        case (Map.null rows, mVarTy) of
           -- If rows is empty, then unify with the given type variable
-          (True, Just var) -> unifies (T.TyVar var) unifyVarTy
+          (True, Just varTy) -> unifies varTy unifyVarTy
           _ -> unifies recordTy unifyVarTy
       pure $ subst' `composeSubst` subst
 
+  -- Unify common fields
   substCommon <- uncurry unifyMany $ unzip $ snd <$> Map.toAscList commonFields
-  case (mVar1, mVar2) of
-    -- Neither record is extensible
-    (Nothing, Nothing) ->
-      if Map.keysSet rows1 == Map.keysSet rows2
-      then pure substCommon
-      else throwError $ UnificationFail t1 t2
-    -- Both records are extensible
-    (Just var1, Just var2) ->
-      -- Side condition: if the tails are equal but the prefixes are not equal,
-      -- then don't unify. This prevents us from unifying rows with the same
-      -- tail but not the same prefix. For example, {x::Int|a} and {y::Int|a}
-      -- shouldn't unify.
-      if var1 == var2 && not (Map.null justFields1 || Map.null justFields2)
-      then throwError $ UnificationFail t1 t2
-      else do
-        fresh1 <- freshTypeVariable
-        subst' <- unifyRecordWithVar substCommon justFields1 (Just fresh1) var2
-        fresh2 <- freshTypeVariable
-        unifyRecordWithVar subst' justFields2 (Just fresh2) var1
-    -- Only one record is extensible
-    (Just var1, Nothing) ->
-      if null justFields1
-      then unifyRecordWithVar substCommon justFields2 Nothing var1
-      else throwError $ UnificationFail t1 t2
-    (Nothing, Just var2) ->
-      if null justFields2
-      then unifyRecordWithVar substCommon justFields1 Nothing var2
-      else throwError $ UnificationFail t1 t2
+  -- If the second record is extensible, unify it with the remaining rows from
+  -- the first record
+  fresh1 <- traverse (const freshTypeVariable) mVar1
+  subst1 <- maybe (pure substCommon) (unifyRecordWithVar substCommon justFields1 fresh1) mVar2
+  -- Vice versa, unifying rows from second record with first variable.
+  fresh2 <- traverse (const freshTypeVariable) mVar2
+  maybe (pure subst1) (unifyRecordWithVar subst1 justFields2 fresh2) mVar1
 unifies t1 t2 = throwError $ UnificationFail t1 t2
 
 unifyMany :: [T.Type] -> [T.Type] -> Inference Subst
