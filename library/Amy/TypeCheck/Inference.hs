@@ -465,17 +465,14 @@ unifies t1@(T.TyRecord rows1 mVar1) t2@(T.TyRecord rows2 mVar2) = do
     justFields1 = Map.difference rows1 rows2
     justFields2 = Map.difference rows2 rows1
     unifyRecordWithVar subst rows mVar unifyVar = do
+      let
+        recordTy = substituteType subst $ T.TyRecord rows mVar
+        unifyVarTy = substituteType subst $ T.TyVar unifyVar
       subst' <-
-        case (Map.null rows, mVar, unifyVar) of
-          -- TODO: This special case for user-generated type variables seems
-          -- super janky. Is there something more principled here? The reason
-          -- for this is to allow user-defined extensible records in type
-          -- signatures. Normal unification would only allow generated type
-          -- variables to unify with the empty record otherwise. We can only do
-          -- this for empty records because if we didn't then we would be too
-          -- permissive.
-          (True, Just var, T.TyVarInfo _ TyVarNotGenerated) -> pure $ singletonSubst var (T.TyVar unifyVar)
-          _ -> unifies (substituteType subst $ T.TyRecord rows mVar) (substituteType subst $ T.TyVar unifyVar)
+        case (Map.null rows, mVar) of
+          -- If rows is empty, then unify with the given type variable
+          (True, Just var) -> unifies (T.TyVar var) unifyVarTy
+          _ -> unifies recordTy unifyVarTy
       pure $ subst' `composeSubst` subst
 
   substCommon <- uncurry unifyMany $ unzip $ snd <$> Map.toAscList commonFields
