@@ -459,32 +459,43 @@ unifies (T.TyApp f1 arg1) (T.TyApp f2 arg2) = do
   pure (su2 `composeSubst` su1)
 unifies (T.TyCon name1) (T.TyCon name2)
   | name1 == name2 = return emptySubst
-unifies (T.TyRecord rows1 mVar1) (T.TyRecord rows2 mVar2) = do
+unifies t1@(T.TyRecord rows1 mTail1) t2@(T.TyRecord rows2 mTail2) = do
   let
     commonFields = Map.intersectionWith (,) rows1 rows2
     justFields1 = Map.difference rows1 rows2
     justFields2 = Map.difference rows2 rows1
-    unifyRecordWithVar subst rows mVar unifyVar = do
+    -- We only need fresh type variables for record tails if there are
+    -- differences between the records.
+    maybeFreshTail distinctRows =
+      if Map.null distinctRows
+      then pure
+      else const freshTypeVariable
+    unifyRecordWithVar subst rows mTail mUnifyVar = do
       let
-        recordTy = substituteType subst $ T.TyRecord rows mVar
-        mVarTy = substituteType subst . T.TyVar <$> mVar
-        unifyVarTy = substituteType subst $ T.TyVar unifyVar
+        recordTy = substituteType subst $ T.TyRecord rows mTail
+        mkVar = substituteType subst . T.TyVar
       subst' <-
-        case (Map.null rows, mVarTy) of
-          -- If rows is empty, then unify with the given type variable
-          (True, Just varTy) -> unifies varTy unifyVarTy
-          _ -> unifies recordTy unifyVarTy
+        case (Map.null rows, mTail, mUnifyVar) of
+          -- Rows are empty and unify variable is empty. This corresponds to
+          -- unifying an empty row with an empty row.
+          (True, Nothing, Nothing) -> pure emptySubst
+          -- Distinct rows are empty but there are type variables so unify them
+          (True, Just tail', Just unifyVar) -> unifies (mkVar tail') (mkVar unifyVar)
+          -- Rows are empty and we are unifying with the empty row.
+          (True, Just tail', Nothing) -> unifies (mkVar tail') (T.TyRecord Map.empty Nothing)
+          -- Base case, unify the record with the unify var
+          (_, _, Just unifyVar) -> unifies recordTy (mkVar unifyVar)
+          (_, _, _) -> throwError $ UnificationFail t1 t2
       pure $ subst' `composeSubst` subst
 
   -- Unify common fields
   substCommon <- uncurry unifyMany $ unzip $ snd <$> Map.toAscList commonFields
-  -- If the second record is extensible, unify it with the remaining rows from
-  -- the first record
-  fresh1 <- traverse (const freshTypeVariable) mVar1
-  subst1 <- maybe (pure substCommon) (unifyRecordWithVar substCommon justFields1 fresh1) mVar2
+  -- Unify fields unique first record with second variable.
+  mTail1' <- traverse (maybeFreshTail justFields2) mTail1
+  subst1 <- unifyRecordWithVar substCommon justFields1 mTail1' mTail2
   -- Vice versa, unifying rows from second record with first variable.
-  fresh2 <- traverse (const freshTypeVariable) mVar2
-  maybe (pure subst1) (unifyRecordWithVar subst1 justFields2 fresh2) mVar1
+  mTail2' <- traverse (maybeFreshTail justFields1) mTail2
+  unifyRecordWithVar subst1 justFields2 mTail2' mTail1
 unifies t1 t2 = throwError $ UnificationFail t1 t2
 
 unifyMany :: [T.Type] -> [T.Type] -> Inference Subst
