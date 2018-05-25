@@ -486,11 +486,18 @@ unifies t1@(T.TyRecord rows1 mVar1) t2@(T.TyRecord rows2 mVar2) = do
       then pure substCommon
       else throwError $ UnificationFail t1 t2
     -- Both records are extensible
-    (Just var1, Just var2) -> do
-      fresh1 <- freshTypeVariable
-      subst' <- unifyRecordWithVar substCommon justFields1 (Just fresh1) var2
-      fresh2 <- freshTypeVariable
-      unifyRecordWithVar subst' justFields2 (Just fresh2) var1
+    (Just var1, Just var2) ->
+      -- Side condition: if the tails are equal but the prefixes are not equal,
+      -- then don't unify. This prevents us from unifying rows with the same
+      -- tail but not the same prefix. For example, {x::Int|a} and {y::Int|a}
+      -- shouldn't unify.
+      if var1 == var2 && not (Map.null justFields1 || Map.null justFields2)
+      then throwError $ UnificationFail t1 t2
+      else do
+        fresh1 <- freshTypeVariable
+        subst' <- unifyRecordWithVar substCommon justFields1 (Just fresh1) var2
+        fresh2 <- freshTypeVariable
+        unifyRecordWithVar subst' justFields2 (Just fresh2) var1
     -- Only one record is extensible
     (Just var1, Nothing) ->
       if null justFields1
