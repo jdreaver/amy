@@ -155,17 +155,13 @@ expression :: AmyParser Expr
 expression = makeExprParser term table
  where
   table =
-    [ [InfixL (EApp <$ spaceConsumerNewlines)]
+    [ [Postfix (parseSelector <* spaceConsumerNewlines)]
+    , [InfixL (EApp <$ spaceConsumerNewlines)]
     ]
   term = assertIndented *> expressionTerm <* spaceConsumerNewlines
 
 expressionTerm :: AmyParser Expr
-expressionTerm = do
-  expr <- expressionTerm'
-  try (parseSelector expr <?> "record selector") <|> pure expr
-
-expressionTerm' :: AmyParser Expr
-expressionTerm' =
+expressionTerm =
   (expressionParens <?> "parens")
   <|> (ELit <$> literal <?> "literal")
   <|> (ERecord <$> record <?> "record")
@@ -177,8 +173,10 @@ expressionTerm' =
 expressionParens :: AmyParser Expr
 expressionParens = EParens <$> parens expression
 
-parseSelector :: Expr -> AmyParser Expr
-parseSelector expr = try $ ERecordSelect expr <$> (C.char '.' >> L.rowLabel)
+parseSelector :: AmyParser (Expr -> Expr)
+parseSelector = do
+  label' <- C.char '.' >> L.rowLabel
+  pure $ \expr -> ERecordSelect expr label'
 
 literal :: AmyParser (Located Literal)
 literal =
