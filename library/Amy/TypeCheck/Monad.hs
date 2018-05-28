@@ -71,6 +71,8 @@ freshId = do
 freshTypeVariable :: Inference T.TyVarInfo
 freshTypeVariable = do
   id' <- freshId
+  -- TODO: Give these a special name to ensure the name doesn't conflict with
+  -- user-defined type variables. Prefix with "$"?
   pure $ T.TyVarInfo (TyVarName $ "t" <> pack (show id')) TyVarGenerated
 
 withNewLexicalScope :: Inference a -> Inference a

@@ -78,6 +78,8 @@ freshId = do
 freshIdent :: Text -> ANFConvert IdentName
 freshIdent t = do
   id' <- freshId
+  -- TODO: Give these a special name to ensure the name doesn't conflict with
+  -- user-defined type variables. Prefix with "$"?
   pure $ IdentName (t <> pack (show id'))
 
 getTyConDefinitionType :: C.TyConDefinition -> ANFConvert ANF.Type

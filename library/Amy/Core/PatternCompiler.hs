@@ -81,6 +81,8 @@ data Clause =
 freshVar :: Desugar IdentName
 freshVar = do
   id' <- freshId
+  -- TODO: Give these a special name to ensure the name doesn't conflict with
+  -- user-defined type variables. Prefix with "$"?
   pure $ IdentName ("_u" <> pack (show id'))
 
 -- | Main function for this algorithm. Takes equations and produces a
