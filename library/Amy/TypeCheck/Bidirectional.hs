@@ -6,8 +6,13 @@
 -- Higher-Rank Polymorphism (Dunfield/Krishnaswami 2013)
 
 module Amy.TypeChecking.Bidirectional
-  ( instantiateLeft
-  , instantiateRight
+  ( inferExpr
+  , checkExpr
+  , Type(..)
+  , TVar(..)
+  , TEVar(..)
+  , Expr(..)
+  , Var(..)
   ) where
 
 import Control.Monad.Except
@@ -101,7 +106,7 @@ contextSubst ctx (TyForall v t) = TyForall v (contextSubst ctx t)
 contextHole :: ContextMember -> Context -> Maybe (Context, Context)
 contextHole member (Context context) = (\(cl, cr) -> (Context cl, Context (Seq.drop 1 cr))) . flip Seq.splitAt context <$> mIndex
  where
-  mIndex = Seq.elemIndexL member context
+  mIndex = Seq.elemIndexR member context
 
 -- | Γ = Γ0 [Θ1][Θ2] means Γ has the form (ΓL, Θ1, ΓM, Θ2, ΓR)
 contextTwoHoles :: ContextMember -> ContextMember -> Context -> Maybe (Context, Context, Context)
@@ -217,3 +222,90 @@ instantiateMonoType context a t =
     Just (contextL, contextR) -> do
       liftEither $ typeWellFormed contextL t
       pure $ contextL |> ContextSolved a t <> contextR
+
+--
+-- Subtyping
+--
+
+subType :: Context -> Type -> Type -> Checker Context
+subType context TyUnit TyUnit = pure context
+subType context (TyVar a) (TyVar b) | a == b = pure context
+subType context (TyEVar a) (TyEVar b) | a == b = pure context
+subType context (TyFun t1 t2) (TyFun t1' t2') = do
+  context' <- subType context t1' t1
+  subType context' (contextSubst context' t2) (contextSubst context' t2')
+subType context (TyForall a t1) t2 = do
+  a' <- freshTEVar
+  context' <- subType (context |> ContextMarker a' |> ContextEVar a') (instantiate a (TyEVar a') t1) t2
+  pure $ contextUntil (ContextMarker a') context'
+subType context t1 (TyForall a t2) =
+  contextUntil (ContextVar a) <$> subType (context |> ContextVar a) t1 t2
+subType context (TyEVar a) t = occursCheck a t >> instantiateLeft context a t
+subType context t (TyEVar a) = occursCheck a t >> instantiateRight context t a
+subType context t1 t2 = throwError $ "subType mismatch " ++ show (context, t1, t2)
+
+occursCheck :: TEVar -> Type -> Checker ()
+occursCheck a t =
+  if a `elem` freeTEVars t
+  then throwError $ "Infinite type " ++ show (a, t)
+  else pure ()
+
+--
+-- Checking
+--
+
+check :: Context -> Expr -> Type -> Checker Context
+check context EUnit TyUnit = pure context
+check context e (TyForall a t) =
+  contextUntil (ContextVar a) <$> check (context |> ContextVar a) e t
+check context (ELam x e) (TyFun t1 t2) =
+  contextUntil (ContextAssump x t1) <$> check (context |> ContextAssump x t1) e t2
+check context e t = do
+  (t', context') <- infer context e
+  subType context' (contextSubst context' t') (contextSubst context' t)
+
+--
+-- Infer
+--
+
+infer :: Context -> Expr -> Checker (Type, Context)
+infer context EUnit = pure (TyUnit, context)
+infer context (EVar x) = maybe (throwError $ "Unbound variable " ++ show x) (\t -> pure (t, context)) $ contextAssumption context x
+infer context (EAnn e t) = do
+  liftEither (typeWellFormed context t)
+  context' <- check context e t
+  pure (contextSubst context' t, context')
+infer context (ELam x e) = do
+  a <- freshTEVar
+  b <- freshTEVar
+  context' <- check (context |> ContextEVar a |> ContextEVar b |> ContextAssump x (TyEVar a)) e (TyEVar b)
+  let ty = contextSubst context' (TyEVar a `TyFun` TyEVar b)
+  pure (ty, contextUntil (ContextAssump x (TyEVar a)) context')
+infer context (EApp f e) = do
+  (tf, context') <- infer context f
+  inferApp context' (contextSubst context' tf) e
+
+inferApp :: Context -> Type -> Expr -> Checker (Type, Context)
+inferApp context (TyForall a t) e = do
+  a' <- freshTEVar
+  inferApp (context |> ContextEVar a') (instantiate a (TyEVar a') t) e
+inferApp context (TyEVar a) e = do
+  (context', a1, a2) <- instantiateTyFunContext context a
+  context'' <- check context' e (TyEVar a1)
+  let ty = contextSubst context'' (TyEVar a2)
+  pure (ty, context'')
+inferApp context (TyFun t1 t2) e = do
+  context' <- check context e t1
+  let ty = contextSubst context' t2
+  pure (ty, context')
+inferApp context t e = throwError $ "Cannot inferApp for " ++ show (context, t, e)
+
+--
+-- Top Level
+--
+
+checkExpr :: Expr -> Type -> Either String ()
+checkExpr expr ty = void $ runChecker (check (Context Seq.empty) expr ty)
+
+inferExpr :: Expr -> Either String Type
+inferExpr expr = fst <$> runChecker (infer (Context Seq.empty) expr)
