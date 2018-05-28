@@ -1,17 +1,20 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 
 -- | Test implementation of Complete and Easy Bidirectional Typechecking for
 -- Higher-Rank Polymorphism (Dunfield/Krishnaswami 2013)
 
 module Amy.TypeChecking.Bidirectional
-  ( inferExpr
+  ( inferBinding
+  , inferExpr
   , checkExpr
   , Type(..)
   , TVar(..)
   , TEVar(..)
   , Expr(..)
+  , Binding(..)
   , Var(..)
   ) where
 
@@ -25,6 +28,7 @@ import qualified Data.Sequence as Seq
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text, pack)
+import Data.Traversable (traverse)
 import GHC.Exts (IsList, IsString)
 import qualified GHC.Exts as GHC
 
@@ -67,6 +71,8 @@ data Expr
 
 newtype Var = Var { unVar :: Text }
   deriving (Show, Eq, Ord, IsString)
+
+data Binding = Binding Var [Var] Expr
 
 --
 -- Context
@@ -130,7 +136,7 @@ contextSolution (Context context) var = lookup var solutionPairs
   solutionPair _ = Nothing
 
 contextUntil :: ContextMember -> Context -> Context
-contextUntil member (Context context) = Context $ Seq.dropWhileR (/= member) context
+contextUntil member (Context context) = Context $ Seq.takeWhileL (/= member) context
 
 typeWellFormed :: Context -> Type -> Either String ()
 typeWellFormed _ TyUnit = return ()
@@ -254,35 +260,49 @@ occursCheck a t =
 -- Checking
 --
 
-check :: Context -> Expr -> Type -> Checker Context
-check context EUnit TyUnit = pure context
-check context e (TyForall a t) =
-  contextUntil (ContextVar a) <$> check (context |> ContextVar a) e t
-check context (ELam x e) (TyFun t1 t2) =
-  contextUntil (ContextAssump x t1) <$> check (context |> ContextAssump x t1) e t2
-check context e t = do
-  (t', context') <- infer context e
+checkExpr :: Context -> Expr -> Type -> Checker Context
+checkExpr context EUnit TyUnit = pure context
+checkExpr context e (TyForall a t) =
+  contextUntil (ContextVar a) <$> checkExpr (context |> ContextVar a) e t
+checkExpr context (ELam x e) (TyFun t1 t2) =
+  contextUntil (ContextAssump x t1) <$> checkExpr (context |> ContextAssump x t1) e t2
+checkExpr context e t = do
+  (t', context') <- inferExpr context e
   subType context' (contextSubst context' t') (contextSubst context' t)
 
 --
 -- Infer
 --
 
-infer :: Context -> Expr -> Checker (Type, Context)
-infer context EUnit = pure (TyUnit, context)
-infer context (EVar x) = maybe (throwError $ "Unbound variable " ++ show x) (\t -> pure (t, context)) $ contextAssumption context x
-infer context (EAnn e t) = do
+inferBinding :: Context -> Binding -> Checker (Type, Context)
+inferBinding context (Binding _ args expr) = do
+  argsAndVars <- traverse (\a -> (a,) <$> freshTEVar) args
+  exprVar <- freshTEVar
+  let
+    allVars = (snd <$> argsAndVars) ++ [exprVar]
+    argAssumps = uncurry ContextAssump . fmap TyEVar <$> argsAndVars
+  marker <- ContextMarker <$> freshTEVar
+  let
+    contextExtension = Context $ Seq.fromList $ (ContextEVar <$> allVars) ++ argAssumps ++ [marker]
+  context' <- checkExpr (context <> contextExtension) expr (TyEVar exprVar)
+  let ty = contextSubst context' $ foldr1 TyFun $ TyEVar <$> allVars
+  pure (ty, contextUntil marker context')
+
+inferExpr :: Context -> Expr -> Checker (Type, Context)
+inferExpr context EUnit = pure (TyUnit, context)
+inferExpr context (EVar x) = maybe (throwError $ "Unbound variable " ++ show x) (\t -> pure (t, context)) $ contextAssumption context x
+inferExpr context (EAnn e t) = do
   liftEither (typeWellFormed context t)
-  context' <- check context e t
+  context' <- checkExpr context e t
   pure (contextSubst context' t, context')
-infer context (ELam x e) = do
+inferExpr context (ELam x e) = do
   a <- freshTEVar
   b <- freshTEVar
-  context' <- check (context |> ContextEVar a |> ContextEVar b |> ContextAssump x (TyEVar a)) e (TyEVar b)
+  context' <- checkExpr (context |> ContextEVar a |> ContextEVar b |> ContextAssump x (TyEVar a)) e (TyEVar b)
   let ty = contextSubst context' (TyEVar a `TyFun` TyEVar b)
   pure (ty, contextUntil (ContextAssump x (TyEVar a)) context')
-infer context (EApp f e) = do
-  (tf, context') <- infer context f
+inferExpr context (EApp f e) = do
+  (tf, context') <- inferExpr context f
   inferApp context' (contextSubst context' tf) e
 
 inferApp :: Context -> Type -> Expr -> Checker (Type, Context)
@@ -291,11 +311,11 @@ inferApp context (TyForall a t) e = do
   inferApp (context |> ContextEVar a') (instantiate a (TyEVar a') t) e
 inferApp context (TyEVar a) e = do
   (context', a1, a2) <- instantiateTyFunContext context a
-  context'' <- check context' e (TyEVar a1)
+  context'' <- checkExpr context' e (TyEVar a1)
   let ty = contextSubst context'' (TyEVar a2)
   pure (ty, context'')
 inferApp context (TyFun t1 t2) e = do
-  context' <- check context e t1
+  context' <- checkExpr context e t1
   let ty = contextSubst context' t2
   pure (ty, context')
 inferApp context t e = throwError $ "Cannot inferApp for " ++ show (context, t, e)
@@ -304,8 +324,8 @@ inferApp context t e = throwError $ "Cannot inferApp for " ++ show (context, t, 
 -- Top Level
 --
 
-checkExpr :: Expr -> Type -> Either String ()
-checkExpr expr ty = void $ runChecker (check (Context Seq.empty) expr ty)
+-- checkExpr :: Expr -> Type -> Either String ()
+-- checkExpr expr ty = void $ runChecker (checkExpr (Context Seq.empty) expr ty)
 
-inferExpr :: Expr -> Either String Type
-inferExpr expr = fst <$> runChecker (infer (Context Seq.empty) expr)
+-- inferExpr :: Expr -> Either String Type
+-- inferExpr expr = fst <$> runChecker (inferExpr (Context Seq.empty) expr)
