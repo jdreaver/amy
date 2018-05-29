@@ -272,9 +272,10 @@ inferBinding context (Binding _ args expr) = do
   let
     allVars = (snd <$> argsAndVars) ++ [exprVar]
     argAssumps = uncurry ContextAssump . fmap TyEVar <$> argsAndVars
-    contextExtension = Context $ Seq.fromList $ (ContextEVar <$> allVars) ++ argAssumps
   marker <- ContextMarker <$> freshTEVar
-  context' <- checkExpr (context <> contextExtension |> marker) expr (TyEVar exprVar)
+  let
+    contextExtension = Context $ Seq.fromList $ (ContextEVar <$> allVars) ++ [marker] ++ argAssumps
+  context' <- checkExpr (context <> contextExtension) expr (TyEVar exprVar)
   let ty = contextSubst context' $ foldr1 TyFun $ TyEVar <$> allVars
   pure (ty, contextUntil marker context')
 
