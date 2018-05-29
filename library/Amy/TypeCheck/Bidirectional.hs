@@ -114,13 +114,6 @@ contextHole member (Context context) = (\(cl, cr) -> (Context cl, Context (Seq.d
  where
   mIndex = Seq.elemIndexR member context
 
--- | Γ = Γ0 [Θ1][Θ2] means Γ has the form (ΓL, Θ1, ΓM, Θ2, ΓR)
-contextTwoHoles :: ContextMember -> ContextMember -> Context -> Maybe (Context, Context, Context)
-contextTwoHoles member1 member2 context = do
-  (contextL, context') <- contextHole member1 context
-  (contextM, contextR) <- contextHole member2 context'
-  pure (contextL, contextM, contextR)
-
 contextAssumption :: Context -> Var -> Maybe Type
 contextAssumption (Context context) var = lookup var assumpPairs
  where
@@ -162,6 +155,13 @@ freshId = modify' (+1) >> get
 freshTEVar :: Checker TEVar
 freshTEVar = TEVar . ("a" <>) . pack . show <$> freshId
 
+findTEVarHole :: Context -> TEVar -> Checker (Context, Context)
+findTEVarHole context var =
+  maybe
+    (throwError $ "Couldn't find existential variable in context " ++ show (var, context))
+    pure
+    (contextHole (ContextEVar var) context)
+
 --
 -- Instantiate
 --
@@ -181,11 +181,9 @@ instantiateLeft context a (TyFun t1 t2) = do
   (context', a1, a2) <- instantiateTyFunContext context a
   context'' <- instantiateRight context' t1 a1
   instantiateLeft context'' a2 (contextSubst context'' t2)
-instantiateLeft context a (TyForall b t) = do
-  context' <- instantiateLeft (context |> ContextVar b) a t
-  case contextHole (ContextEVar a) context' of
-    Nothing -> throwError $ "Something weird happened and the TEVar isn't in the context anymore " ++ show (a, context')
-    Just (contextL, _) -> pure contextL
+instantiateLeft context a (TyForall b t) =
+  contextUntil (ContextVar b) <$>
+    instantiateLeft (context |> ContextVar b) a t
 -- Catch-all for all monotypes
 instantiateLeft context a t = instantiateMonoType context a t
 
@@ -197,37 +195,30 @@ instantiateRight context (TyFun t1 t2) a = do
   instantiateRight context'' (contextSubst context'' t2) a2
 instantiateRight context (TyForall b t) a = do
   b' <- freshTEVar
-  context' <- instantiateRight (context |> ContextMarker b' |> ContextEVar b') (instantiate b (TyEVar b') t) a
-  case contextHole (ContextMarker b') context' of
-    Nothing -> throwError $ "Something weird happened and the TEVar isn't in the context anymore " ++ show (a, context')
-    Just (contextL, _) -> pure contextL
+  contextUntil (ContextMarker b') <$>
+    instantiateRight (context |> ContextMarker b' |> ContextEVar b') (instantiate b (TyEVar b') t) a
 -- Catch-all for all monotypes
 instantiateRight context t a = instantiateMonoType context a t
 
 instantiateReach :: Context -> TEVar -> TEVar -> Checker Context
 instantiateReach context a b =
-  catchError (instantiateMonoType context a (TyEVar b)) $ \_ ->
-    case contextTwoHoles (ContextEVar a) (ContextEVar b) context of
-      Nothing -> throwError $ "Couldn't instantiate reach rule, failed on contextTwoHoles " ++ show (a, b, context)
-      Just (contextL, contextM, contextR) -> pure $ contextL |> ContextEVar a <> contextM |> ContextSolved b (TyEVar a) <> contextR
+  catchError (instantiateMonoType context a (TyEVar b)) $ \_ -> do
+    (contextL, contextR) <- findTEVarHole context b
+    pure $ contextL |> ContextSolved b (TyEVar a) <> contextR
 
 instantiateTyFunContext :: Context -> TEVar -> Checker (Context, TEVar, TEVar)
-instantiateTyFunContext context a =
-  case contextHole (ContextEVar a) context of
-    Nothing -> throwError $ "Couldn't instantiate TyFun, failed on contextHole " ++ show (a, context)
-    Just (contextL, contextR) -> do
-      a1 <- freshTEVar
-      a2 <- freshTEVar
-      let context' = contextL |> ContextEVar a2 |> ContextEVar a1 |> ContextSolved a (TyFun (TyEVar a1) (TyEVar a2)) <> contextR
-      pure (context', a1, a2)
+instantiateTyFunContext context a = do
+  (contextL, contextR) <- findTEVarHole context a
+  a1 <- freshTEVar
+  a2 <- freshTEVar
+  let context' = contextL |> ContextEVar a2 |> ContextEVar a1 |> ContextSolved a (TyFun (TyEVar a1) (TyEVar a2)) <> contextR
+  pure (context', a1, a2)
 
 instantiateMonoType :: Context -> TEVar -> Type -> Checker Context
-instantiateMonoType context a t =
-  case contextHole (ContextEVar a) context of
-    Nothing -> throwError $ "Couldn't instantiate mono type, failed on contextHole " ++ show (a, context)
-    Just (contextL, contextR) -> do
-      liftEither $ typeWellFormed contextL t
-      pure $ contextL |> ContextSolved a t <> contextR
+instantiateMonoType context a t = do
+  (contextL, contextR) <- findTEVarHole context a
+  liftEither $ typeWellFormed contextL t
+  pure $ contextL |> ContextSolved a t <> contextR
 
 --
 -- Subtyping
@@ -242,8 +233,8 @@ subType context (TyFun t1 t2) (TyFun t1' t2') = do
   subType context' (contextSubst context' t2) (contextSubst context' t2')
 subType context (TyForall a t1) t2 = do
   a' <- freshTEVar
-  context' <- subType (context |> ContextMarker a' |> ContextEVar a') (instantiate a (TyEVar a') t1) t2
-  pure $ contextUntil (ContextMarker a') context'
+  contextUntil (ContextMarker a') <$>
+    subType (context |> ContextMarker a' |> ContextEVar a') (instantiate a (TyEVar a') t1) t2
 subType context t1 (TyForall a t2) =
   contextUntil (ContextVar a) <$> subType (context |> ContextVar a) t1 t2
 subType context (TyEVar a) t = occursCheck a t >> instantiateLeft context a t
@@ -281,16 +272,19 @@ inferBinding context (Binding _ args expr) = do
   let
     allVars = (snd <$> argsAndVars) ++ [exprVar]
     argAssumps = uncurry ContextAssump . fmap TyEVar <$> argsAndVars
+    contextExtension = Context $ Seq.fromList $ (ContextEVar <$> allVars) ++ argAssumps
   marker <- ContextMarker <$> freshTEVar
-  let
-    contextExtension = Context $ Seq.fromList $ (ContextEVar <$> allVars) ++ argAssumps ++ [marker]
-  context' <- checkExpr (context <> contextExtension) expr (TyEVar exprVar)
+  context' <- checkExpr (context <> contextExtension |> marker) expr (TyEVar exprVar)
   let ty = contextSubst context' $ foldr1 TyFun $ TyEVar <$> allVars
   pure (ty, contextUntil marker context')
 
 inferExpr :: Context -> Expr -> Checker (Type, Context)
 inferExpr context EUnit = pure (TyUnit, context)
-inferExpr context (EVar x) = maybe (throwError $ "Unbound variable " ++ show x) (\t -> pure (t, context)) $ contextAssumption context x
+inferExpr context (EVar x) =
+  maybe
+    (throwError $ "Unbound variable " ++ show x)
+    (\t -> pure (t, context))
+    $ contextAssumption context x
 inferExpr context (EAnn e t) = do
   liftEither (typeWellFormed context t)
   context' <- checkExpr context e t
