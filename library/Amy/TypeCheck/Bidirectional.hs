@@ -8,6 +8,7 @@
 
 module Amy.TypeChecking.Bidirectional
   ( inferBinding
+  , checkBinding
   , inferExpr
   , checkExpr
   , Type(..)
@@ -21,7 +22,7 @@ module Amy.TypeChecking.Bidirectional
 import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.Foldable (toList)
-import Data.List (lookup)
+import Data.List (foldl', lookup)
 import Data.Maybe (fromMaybe, isJust, mapMaybe)
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
@@ -271,6 +272,13 @@ occursCheck a t =
 --
 -- Checking
 --
+
+checkBinding :: Context -> Binding -> Type -> Checker Context
+checkBinding context binding (TyForall a t) =
+  contextUntil (ContextVar a) <$> checkBinding (context |> ContextVar a) binding t
+checkBinding context binding t = do
+  (t', context') <- inferBinding context binding
+  subType context' (contextSubst context' t') (contextSubst context' t)
 
 checkExpr :: Context -> Expr -> Type -> Checker Context
 checkExpr context EUnit TyUnit = pure context
