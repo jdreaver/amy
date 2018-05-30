@@ -159,20 +159,36 @@ typeWellFormed context (TyForall v t) = typeWellFormed (context |> ContextVar v)
 -- Monad
 --
 
-newtype Checker a = Checker (ExceptT String (State Int) a)
-  deriving (Functor, Applicative, Monad, MonadState Int, MonadError String)
+newtype Checker a = Checker (ExceptT String (State CheckState) a)
+  deriving (Functor, Applicative, Monad, MonadState CheckState, MonadError String)
+
+data CheckState
+  = CheckState
+  { latestId :: !Int
+  , stateContext :: !Context
+  } deriving (Show, Eq)
 
 runChecker :: Checker a -> Either String a
-runChecker (Checker action) = evalState (runExceptT action) 0
+runChecker (Checker action) = evalState (runExceptT action) (CheckState 0 (Context Seq.empty))
 
 freshId :: Checker Int
-freshId = modify' (+1) >> get
+freshId = modify' (\s -> s { latestId = latestId s + 1 }) >> gets latestId
 
 freshTEVar :: Checker TEVar
 freshTEVar = TEVar . ("a" <>) . pack . show <$> freshId
 
-findTEVarHole :: Context -> TEVar -> Checker (Context, Context)
-findTEVarHole context var =
+getContext :: Checker Context
+getContext = gets stateContext
+
+putContext :: Context -> Checker ()
+putContext context = modify' (\s -> s { stateContext = context })
+
+modifyContext :: (Context -> Context) -> Checker ()
+modifyContext f = modify' (\s -> s { stateContext = f (stateContext s) })
+
+findTEVarHole :: TEVar -> Checker (Context, Context)
+findTEVarHole var = do
+  context <- getContext
   maybe
     (throwError $ "Couldn't find existential variable in context " ++ show (var, context))
     pure
@@ -197,71 +213,79 @@ instantiate _ _ t@(TyEVar _) = t
 instantiate v s (TyFun a b) = TyFun (instantiate v s a) (instantiate v s b)
 instantiate v s (TyForall a t) = TyForall a (instantiate v s t)
 
-instantiateLeft :: Context -> TEVar -> Type -> Checker Context
-instantiateLeft context a (TyEVar b) = instantiateReach context a b
-instantiateLeft context a (TyFun t1 t2) = do
-  (context', a1, a2) <- instantiateTyFunContext context a
-  context'' <- instantiateRight context' t1 a1
-  instantiateLeft context'' a2 (contextSubst context'' t2)
-instantiateLeft context a (TyForall b t) =
-  contextUntil (ContextVar b) <$>
-    instantiateLeft (context |> ContextVar b) a t
+instantiateLeft :: TEVar -> Type -> Checker ()
+instantiateLeft a (TyEVar b) = instantiateReach a b
+instantiateLeft a (TyFun t1 t2) = do
+  (a1, a2) <- instantiateTyFunContext a
+  instantiateRight t1 a1
+  context' <- getContext
+  instantiateLeft a2 (contextSubst context' t2)
+instantiateLeft a (TyForall b t) = do
+  modifyContext $ \context -> context |> ContextVar b
+  instantiateLeft a t
+  modifyContext $ contextUntil (ContextVar b)
 -- Catch-all for all monotypes
-instantiateLeft context a t = instantiateMonoType context a t
+instantiateLeft a t = instantiateMonoType a t
 
-instantiateRight :: Context -> Type -> TEVar -> Checker Context
-instantiateRight context (TyEVar b) a = instantiateReach context a b
-instantiateRight context (TyFun t1 t2) a = do
-  (context', a1, a2) <- instantiateTyFunContext context a
-  context'' <- instantiateLeft context' a1 t1
-  instantiateRight context'' (contextSubst context'' t2) a2
-instantiateRight context (TyForall b t) a = do
+instantiateRight :: Type -> TEVar -> Checker ()
+instantiateRight (TyEVar b) a = instantiateReach a b
+instantiateRight (TyFun t1 t2) a = do
+  (a1, a2) <- instantiateTyFunContext a
+  instantiateLeft a1 t1
+  context' <- getContext
+  instantiateRight (contextSubst context' t2) a2
+instantiateRight (TyForall b t) a = do
   b' <- freshTEVar
-  contextUntil (ContextMarker b') <$>
-    instantiateRight (context |> ContextMarker b' |> ContextEVar b') (instantiate b (TyEVar b') t) a
+  modifyContext $ \context -> context |> ContextMarker b' |> ContextEVar b'
+  instantiateRight (instantiate b (TyEVar b') t) a
+  modifyContext $ contextUntil (ContextMarker b')
 -- Catch-all for all monotypes
-instantiateRight context t a = instantiateMonoType context a t
+instantiateRight t a = instantiateMonoType a t
 
-instantiateReach :: Context -> TEVar -> TEVar -> Checker Context
-instantiateReach context a b =
-  catchError (instantiateMonoType context a (TyEVar b)) $ \_ -> do
-    (contextL, contextR) <- findTEVarHole context b
-    pure $ contextL |> ContextSolved b (TyEVar a) <> contextR
+instantiateReach :: TEVar -> TEVar -> Checker ()
+instantiateReach a b =
+  catchError (instantiateMonoType a (TyEVar b)) $ \_ -> do
+    (contextL, contextR) <- findTEVarHole b
+    putContext $ contextL |> ContextSolved b (TyEVar a) <> contextR
 
-instantiateTyFunContext :: Context -> TEVar -> Checker (Context, TEVar, TEVar)
-instantiateTyFunContext context a = do
-  (contextL, contextR) <- findTEVarHole context a
+instantiateTyFunContext :: TEVar -> Checker (TEVar, TEVar)
+instantiateTyFunContext a = do
+  (contextL, contextR) <- findTEVarHole a
   a1 <- freshTEVar
   a2 <- freshTEVar
-  let context' = contextL |> ContextEVar a2 |> ContextEVar a1 |> ContextSolved a (TyFun (TyEVar a1) (TyEVar a2)) <> contextR
-  pure (context', a1, a2)
+  putContext $ contextL |> ContextEVar a2 |> ContextEVar a1 |> ContextSolved a (TyFun (TyEVar a1) (TyEVar a2)) <> contextR
+  pure (a1, a2)
 
-instantiateMonoType :: Context -> TEVar -> Type -> Checker Context
-instantiateMonoType context a t = do
-  (contextL, contextR) <- findTEVarHole context a
+instantiateMonoType :: TEVar -> Type -> Checker ()
+instantiateMonoType a t = do
+  (contextL, contextR) <- findTEVarHole a
   liftEither $ typeWellFormed contextL t
-  pure $ contextL |> ContextSolved a t <> contextR
+  putContext $ contextL |> ContextSolved a t <> contextR
 
 --
 -- Subtyping
 --
 
-subType :: Context -> Type -> Type -> Checker Context
-subType context TyUnit TyUnit = pure context
-subType context (TyVar a) (TyVar b) | a == b = pure context
-subType context (TyEVar a) (TyEVar b) | a == b = pure context
-subType context (TyFun t1 t2) (TyFun t1' t2') = do
-  context' <- subType context t1' t1
-  subType context' (contextSubst context' t2) (contextSubst context' t2')
-subType context (TyForall a t1) t2 = do
+subType :: Type -> Type -> Checker ()
+subType TyUnit TyUnit = pure ()
+subType (TyVar a) (TyVar b) | a == b = pure ()
+subType (TyEVar a) (TyEVar b) | a == b = pure ()
+subType (TyFun t1 t2) (TyFun t1' t2') = do
+  subType t1' t1
+  context <- getContext
+  subType (contextSubst context t2) (contextSubst context t2')
+subType (TyForall a t1) t2 = do
   a' <- freshTEVar
-  contextUntil (ContextMarker a') <$>
-    subType (context |> ContextMarker a' |> ContextEVar a') (instantiate a (TyEVar a') t1) t2
-subType context t1 (TyForall a t2) =
-  contextUntil (ContextVar a) <$> subType (context |> ContextVar a) t1 t2
-subType context (TyEVar a) t = occursCheck a t >> instantiateLeft context a t
-subType context t (TyEVar a) = occursCheck a t >> instantiateRight context t a
-subType context t1 t2 = throwError $ "subType mismatch " ++ show (context, t1, t2)
+  modifyContext $ \context -> context |> ContextMarker a' |> ContextEVar a'
+  subType (instantiate a (TyEVar a') t1) t2
+  modifyContext $ contextUntil (ContextMarker a')
+subType t1 (TyForall a t2) = do
+  modifyContext $ \context -> context |> ContextVar a
+  subType t1 t2
+  modifyContext $ contextUntil (ContextVar a)
+subType (TyEVar a) t = occursCheck a t >> instantiateLeft a t
+subType t (TyEVar a) = occursCheck a t >> instantiateRight t a
+subType t1 t2 = throwError $ "subType mismatch " ++ show (t1, t2)
 
 occursCheck :: TEVar -> Type -> Checker ()
 occursCheck a t =
@@ -273,85 +297,101 @@ occursCheck a t =
 -- Checking
 --
 
-checkBinding :: Context -> Binding -> Type -> Checker Context
-checkBinding context binding (TyForall a t) =
-  contextUntil (ContextVar a) <$> checkBinding (context |> ContextVar a) binding t
-checkBinding context binding t = do
-  (t', context') <- inferBinding context binding
-  subType context' (contextSubst context' t') (contextSubst context' t)
+checkBinding :: Binding -> Type -> Checker ()
+checkBinding binding (TyForall a t) = do
+  modifyContext $ \context -> context |> ContextVar a
+  checkBinding binding t
+  modifyContext $ contextUntil (ContextVar a)
+checkBinding binding t = do
+  t' <- inferBinding binding
+  context <- getContext
+  subType (contextSubst context t') (contextSubst context t)
 
-checkExpr :: Context -> Expr -> Type -> Checker Context
-checkExpr context EUnit TyUnit = pure context
-checkExpr context e (TyForall a t) =
-  contextUntil (ContextVar a) <$> checkExpr (context |> ContextVar a) e t
-checkExpr context (ELam x e) (TyFun t1 t2) =
-  contextUntil (ContextAssump x t1) <$> checkExpr (context |> ContextAssump x t1) e t2
-checkExpr context e t = do
-  (t', context') <- inferExpr context e
-  subType context' (contextSubst context' t') (contextSubst context' t)
+checkExpr :: Expr -> Type -> Checker ()
+checkExpr EUnit TyUnit = pure ()
+checkExpr e (TyForall a t) = do
+  modifyContext $ \context -> context |> ContextVar a
+  checkExpr  e t
+  modifyContext $ contextUntil (ContextVar a)
+checkExpr (ELam x e) (TyFun t1 t2) = do
+  modifyContext $ \context -> context |> ContextAssump x t1
+  checkExpr e t2
+  modifyContext $ contextUntil (ContextAssump x t1)
+checkExpr e t = do
+  t' <- inferExpr e
+  context <- getContext
+  subType (contextSubst context t') (contextSubst context t)
 
 --
 -- Infer
 --
 
-inferBinding :: Context -> Binding -> Checker (Type, Context)
-inferBinding context (Binding _ args expr) = do
+inferBinding :: Binding -> Checker Type
+inferBinding (Binding _ args expr) = do
   argsAndVars <- traverse (\a -> (a,) <$> freshTEVar) args
   exprVar <- freshTEVar
   let
     allVars = (snd <$> argsAndVars) ++ [exprVar]
     argAssumps = uncurry ContextAssump . fmap TyEVar <$> argsAndVars
   marker <- freshTEVar
-  let
-    contextExtension = Context $ Seq.fromList $ ContextMarker marker : (ContextEVar <$> allVars) ++ argAssumps
-  context' <- checkExpr (context <> contextExtension) expr (TyEVar exprVar)
+  modifyContext (<> Context (Seq.fromList $ ContextMarker marker : (ContextEVar <$> allVars) ++ argAssumps))
+  checkExpr expr (TyEVar exprVar)
 
   -- Generalize (the Hindley-Milner extension in the paper)
+  context <- getContext
   let
-    (contextL, contextR) = findMarkerHole context' marker
+    (contextL, contextR) = findMarkerHole context marker
     unsolvedEVars = contextUnsolved contextR
     tyVars = TVar . unTEVar <$> unsolvedEVars  -- Would probably use letters and a substitution here
     ty = contextSubst contextR $ foldr1 TyFun $ TyEVar <$> allVars
     ty' = foldl' (\t (TEVar var) -> substituteTEVar (TEVar var) (TyVar $ TVar var) t) ty unsolvedEVars
     tyForall = foldr TyForall ty' tyVars
+  putContext contextL
+  pure tyForall
 
-  pure (tyForall, contextL)
-
-inferExpr :: Context -> Expr -> Checker (Type, Context)
-inferExpr context EUnit = pure (TyUnit, context)
-inferExpr context (EVar x) =
+inferExpr :: Expr -> Checker Type
+inferExpr EUnit = pure TyUnit
+inferExpr (EVar x) = do
+  context <- getContext
   maybe
     (throwError $ "Unbound variable " ++ show x)
-    (\t -> pure (t, context))
-    $ contextAssumption context x
-inferExpr context (EAnn e t) = do
+    pure
+    (contextAssumption context x)
+inferExpr (EAnn e t) = do
+  context <- getContext
   liftEither (typeWellFormed context t)
-  context' <- checkExpr context e t
-  pure (contextSubst context' t, context')
-inferExpr context (ELam x e) = do
+  checkExpr e t
+  context' <- getContext
+  pure (contextSubst context' t)
+inferExpr (ELam x e) = do
   a <- freshTEVar
   b <- freshTEVar
-  context' <- checkExpr (context |> ContextEVar a |> ContextEVar b |> ContextAssump x (TyEVar a)) e (TyEVar b)
-  let ty = contextSubst context' (TyEVar a `TyFun` TyEVar b)
-  pure (ty, contextUntil (ContextAssump x (TyEVar a)) context')
-inferExpr context (EApp f e) = do
-  (tf, context') <- inferExpr context f
-  inferApp context' (contextSubst context' tf) e
+  modifyContext $ \context -> context |> ContextEVar a |> ContextEVar b |> ContextAssump x (TyEVar a)
+  checkExpr e (TyEVar b)
+  context <- getContext
+  let ty = contextSubst context (TyEVar a `TyFun` TyEVar b)
+  modifyContext $ contextUntil (ContextAssump x (TyEVar a))
+  pure ty
+inferExpr (EApp f e) = do
+  tf <- inferExpr f
+  context <- getContext
+  inferApp (contextSubst context tf) e
 
-inferApp :: Context -> Type -> Expr -> Checker (Type, Context)
-inferApp context (TyForall a t) e = do
+inferApp :: Type -> Expr -> Checker Type
+inferApp (TyForall a t) e = do
   a' <- freshTEVar
-  inferApp (context |> ContextEVar a') (instantiate a (TyEVar a') t) e
-inferApp context (TyEVar a) e = do
-  (context', a1, a2) <- instantiateTyFunContext context a
-  context'' <- checkExpr context' e (TyEVar a1)
-  let ty = contextSubst context'' (TyEVar a2)
-  pure (ty, context'')
-inferApp context (TyFun t1 t2) e = do
-  context' <- checkExpr context e t1
-  let ty = contextSubst context' t2
-  pure (ty, context')
-inferApp context t e = throwError $ "Cannot inferApp for " ++ show (context, t, e)
+  modifyContext $ \context -> context |> ContextEVar a'
+  inferApp (instantiate a (TyEVar a') t) e
+inferApp (TyEVar a) e = do
+  (a1, a2) <- instantiateTyFunContext a
+  checkExpr e (TyEVar a1)
+  context <- getContext
+  pure $ contextSubst context (TyEVar a2)
+inferApp (TyFun t1 t2) e = do
+  checkExpr e t1
+  context <- getContext
+  pure $ contextSubst context t2
+inferApp t e = throwError $ "Cannot inferApp for " ++ show (t, e)
 
 --
 -- Top Level
@@ -365,6 +405,7 @@ inferApp context t e = throwError $ "Cannot inferApp for " ++ show (context, t, 
 
 
 -- Tests
--- putStrLn $ groom $ runChecker $ inferBinding [] $ Binding "id" ["x"] (EVar "x")
--- putStrLn $ groom $ runChecker $ inferBinding [] $ Binding "id" ["x", "f"] (EApp (EVar "f") (EVar "x"))
--- putStrLn $ groom $ runChecker $ checkBinding [] (Binding "id" ["x"] (EVar "x")) (TyForall "a" $ TyVar "a" `TyFun` TyVar "a")
+-- putStrLn $ groom $ runChecker $ modifyContext (|> ContextEVar "a") >> instantiateRight (TyForall "b" $ TyVar "b" `TyFun` TyVar "b") "a" >> getContext
+-- putStrLn $ groom $ runChecker $ inferBinding $ Binding "id" ["x"] (EVar "x")
+-- putStrLn $ groom $ runChecker $ inferBinding $ Binding "id" ["x", "f"] (EApp (EVar "f") (EVar "x"))
+-- putStrLn $ groom $ runChecker $ checkBinding (Binding "id" ["x"] (EVar "x")) (TyForall "a" $ TyVar "a" `TyFun` TyVar "a")
