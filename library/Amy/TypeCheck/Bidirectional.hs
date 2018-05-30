@@ -206,9 +206,11 @@ findTEVarHole var = do
     pure
     (contextHole (ContextEVar var) context)
 
-findMarkerHole :: Context -> TEVar -> (Context, Context)
-findMarkerHole context var =
-  fromMaybe
+findMarkerHole :: TEVar -> Checker (Context, Context)
+findMarkerHole var = do
+  context <- getContext
+  pure $
+    fromMaybe
     (error $ "Couldn't find marker in context " ++ show (var, context))
     (contextHole (ContextMarker var) context)
 
@@ -321,7 +323,7 @@ checkExpr :: Expr -> Type -> Checker ()
 checkExpr EUnit TyUnit = pure ()
 checkExpr e (TyForall a t) =
   withContextUntil (ContextVar a) $
-    checkExpr  e t
+    checkExpr e t
 checkExpr (ELam x e) (TyFun t1 t2) =
   withContextUntil (ContextAssump x t1) $
     checkExpr e t2
@@ -346,9 +348,8 @@ inferBinding (Binding _ args expr) = do
   checkExpr expr (TyEVar exprVar)
 
   -- Generalize (the Hindley-Milner extension in the paper)
-  context <- getContext
+  (contextL, contextR) <- findMarkerHole marker
   let
-    (contextL, contextR) = findMarkerHole context marker
     unsolvedEVars = contextUnsolved contextR
     tyVars = TVar . unTEVar <$> unsolvedEVars  -- Would probably use letters and a substitution here
     ty = contextSubst contextR $ foldr1 TyFun $ TyEVar <$> allVars
