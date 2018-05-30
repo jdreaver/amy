@@ -22,7 +22,7 @@ import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.Foldable (toList)
 import Data.List (lookup)
-import Data.Maybe (isJust, mapMaybe)
+import Data.Maybe (fromMaybe, isJust, mapMaybe)
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import Data.Set (Set)
@@ -128,6 +128,12 @@ contextSolution (Context context) var = lookup var solutionPairs
   solutionPair (ContextSolved var' ty) = Just (var', ty)
   solutionPair _ = Nothing
 
+contextUnsolved :: Context -> [TEVar]
+contextUnsolved (Context context) = mapMaybe getEVar $ toList context
+ where
+  getEVar (ContextEVar var) = Just var
+  getEVar _ = Nothing
+
 contextUntil :: ContextMember -> Context -> Context
 contextUntil member (Context context) = Context $ Seq.takeWhileL (/= member) context
 
@@ -161,6 +167,12 @@ findTEVarHole context var =
     (throwError $ "Couldn't find existential variable in context " ++ show (var, context))
     pure
     (contextHole (ContextEVar var) context)
+
+findMarkerHole :: Context -> TEVar -> (Context, Context)
+findMarkerHole context var =
+  fromMaybe
+    (error $ "Couldn't find marker in context " ++ show (var, context))
+    (contextHole (ContextMarker var) context)
 
 --
 -- Instantiate
@@ -272,12 +284,20 @@ inferBinding context (Binding _ args expr) = do
   let
     allVars = (snd <$> argsAndVars) ++ [exprVar]
     argAssumps = uncurry ContextAssump . fmap TyEVar <$> argsAndVars
-  marker <- ContextMarker <$> freshTEVar
+  marker <- freshTEVar
   let
-    contextExtension = Context $ Seq.fromList $ (ContextEVar <$> allVars) ++ [marker] ++ argAssumps
+    contextExtension = Context $ Seq.fromList $ ContextMarker marker : (ContextEVar <$> allVars) ++ argAssumps
   context' <- checkExpr (context <> contextExtension) expr (TyEVar exprVar)
-  let ty = contextSubst context' $ foldr1 TyFun $ TyEVar <$> allVars
-  pure (ty, contextUntil marker context')
+
+  -- Generalize (the Hindley-Milner extension in the paper)
+  let
+    (contextL, contextR) = findMarkerHole context' marker
+    ty = contextSubst contextR $ foldr1 TyFun $ TyEVar <$> allVars
+    unsolvedEVars = contextUnsolved contextR
+    tyVars = TVar . unTEVar <$> unsolvedEVars  -- Would probably use letters and a substitution here
+    tyForall = foldr TyForall ty tyVars
+
+  pure (tyForall, contextL)
 
 inferExpr :: Context -> Expr -> Checker (Type, Context)
 inferExpr context EUnit = pure (TyUnit, context)
