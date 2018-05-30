@@ -57,6 +57,15 @@ freeTEVars (TyEVar v) = Set.singleton v
 freeTEVars (TyFun a b) = freeTEVars a <> freeTEVars b
 freeTEVars (TyForall _ t) = freeTEVars t
 
+substituteTEVar :: TEVar -> Type -> Type -> Type
+substituteTEVar _ _ TyUnit = TyUnit
+substituteTEVar v s t@(TyEVar v')
+  | v == v' = s
+  | otherwise = t
+substituteTEVar _ _ t@(TyVar _) = t
+substituteTEVar v s (TyFun a b) = TyFun (substituteTEVar v s a) (substituteTEVar v s b)
+substituteTEVar v s (TyForall a t) = TyForall a (substituteTEVar v s t)
+
 --
 -- Expr
 --
@@ -292,10 +301,11 @@ inferBinding context (Binding _ args expr) = do
   -- Generalize (the Hindley-Milner extension in the paper)
   let
     (contextL, contextR) = findMarkerHole context' marker
-    ty = contextSubst contextR $ foldr1 TyFun $ TyEVar <$> allVars
     unsolvedEVars = contextUnsolved contextR
     tyVars = TVar . unTEVar <$> unsolvedEVars  -- Would probably use letters and a substitution here
-    tyForall = foldr TyForall ty tyVars
+    ty = contextSubst contextR $ foldr1 TyFun $ TyEVar <$> allVars
+    ty' = foldl' (\t (TEVar var) -> substituteTEVar (TEVar var) (TyVar $ TVar var) t) ty unsolvedEVars
+    tyForall = foldr TyForall ty' tyVars
 
   pure (tyForall, contextL)
 
@@ -344,3 +354,9 @@ inferApp context t e = throwError $ "Cannot inferApp for " ++ show (context, t, 
 
 -- inferExpr :: Expr -> Either String Type
 -- inferExpr expr = fst <$> runChecker (inferExpr (Context Seq.empty) expr)
+
+
+-- Tests
+-- putStrLn $ groom $ runChecker $ inferBinding [] $ Binding "id" ["x"] (EVar "x")
+-- putStrLn $ groom $ runChecker $ inferBinding [] $ Binding "id" ["x", "f"] (EApp (EVar "f") (EVar "x"))
+-- putStrLn $ groom $ runChecker $ checkBinding [] (Binding "id" ["x"] (EVar "x")) (TyForall "a" $ TyVar "a" `TyFun` TyVar "a")
