@@ -183,6 +183,11 @@ getContext = gets stateContext
 putContext :: Context -> Checker ()
 putContext context = modify' (\s -> s { stateContext = context })
 
+currentContextSubst :: Type -> Checker Type
+currentContextSubst t = do
+  context <- getContext
+  pure $ contextSubst context t
+
 modifyContext :: (Context -> Context) -> Checker ()
 modifyContext f = modify' (\s -> s { stateContext = f (stateContext s) })
 
@@ -238,8 +243,8 @@ instantiateRight (TyEVar b) a = instantiateReach a b
 instantiateRight (TyFun t1 t2) a = do
   (a1, a2) <- instantiateTyFunContext a
   instantiateLeft a1 t1
-  context' <- getContext
-  instantiateRight (contextSubst context' t2) a2
+  t2' <- currentContextSubst t2
+  instantiateRight t2' a2
 instantiateRight (TyForall b t) a = do
   b' <- freshTEVar
   withContextUntil (ContextMarker b') $ do
@@ -278,8 +283,9 @@ subType (TyVar a) (TyVar b) | a == b = pure ()
 subType (TyEVar a) (TyEVar b) | a == b = pure ()
 subType (TyFun t1 t2) (TyFun t1' t2') = do
   subType t1' t1
-  context <- getContext
-  subType (contextSubst context t2) (contextSubst context t2')
+  t2Sub <- currentContextSubst t2
+  t2Sub' <- currentContextSubst t2'
+  subType t2Sub t2Sub'
 subType (TyForall a t1) t2 = do
   a' <- freshTEVar
   withContextUntil (ContextMarker a') $ do
@@ -308,8 +314,8 @@ checkBinding binding (TyForall a t) =
     checkBinding binding t
 checkBinding binding t = do
   t' <- inferBinding binding
-  context <- getContext
-  subType (contextSubst context t') (contextSubst context t)
+  tSub <- currentContextSubst t
+  subType t' tSub
 
 checkExpr :: Expr -> Type -> Checker ()
 checkExpr EUnit TyUnit = pure ()
@@ -321,8 +327,8 @@ checkExpr (ELam x e) (TyFun t1 t2) =
     checkExpr e t2
 checkExpr e t = do
   t' <- inferExpr e
-  context <- getContext
-  subType (contextSubst context t') (contextSubst context t)
+  tSub <- currentContextSubst t
+  subType t' tSub
 
 --
 -- Infer
@@ -363,20 +369,18 @@ inferExpr (EAnn e t) = do
   context <- getContext
   liftEither (typeWellFormed context t)
   checkExpr e t
-  context' <- getContext
-  pure (contextSubst context' t)
+  currentContextSubst t
 inferExpr (ELam x e) = do
   a <- freshTEVar
   b <- freshTEVar
   modifyContext $ \context -> context |> ContextEVar a |> ContextEVar b
   withContextUntil (ContextAssump x (TyEVar a)) $ do
     checkExpr e (TyEVar b)
-    context <- getContext
-    pure $ contextSubst context (TyEVar a `TyFun` TyEVar b)
+    currentContextSubst (TyEVar a `TyFun` TyEVar b)
 inferExpr (EApp f e) = do
   tf <- inferExpr f
-  context <- getContext
-  inferApp (contextSubst context tf) e
+  tfSub <- currentContextSubst tf
+  inferApp tfSub e
 
 inferApp :: Type -> Expr -> Checker Type
 inferApp (TyForall a t) e = do
@@ -386,24 +390,11 @@ inferApp (TyForall a t) e = do
 inferApp (TyEVar a) e = do
   (a1, a2) <- instantiateTyFunContext a
   checkExpr e (TyEVar a1)
-  context <- getContext
-  pure $ contextSubst context (TyEVar a2)
+  currentContextSubst (TyEVar a2)
 inferApp (TyFun t1 t2) e = do
   checkExpr e t1
-  context <- getContext
-  pure $ contextSubst context t2
+  currentContextSubst t2
 inferApp t e = throwError $ "Cannot inferApp for " ++ show (t, e)
-
---
--- Top Level
---
-
--- checkExpr :: Expr -> Type -> Either String ()
--- checkExpr expr ty = void $ runChecker (checkExpr (Context Seq.empty) expr ty)
-
--- inferExpr :: Expr -> Either String Type
--- inferExpr expr = fst <$> runChecker (inferExpr (Context Seq.empty) expr)
-
 
 -- Tests
 -- putStrLn $ groom $ runChecker $ modifyContext (|> ContextEVar "a") >> instantiateRight (TyForall "b" $ TyVar "b" `TyFun` TyVar "b") "a" >> getContext
