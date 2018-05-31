@@ -216,6 +216,20 @@ findMarkerHole var = do
     (error $ "Couldn't find marker in context " ++ show (var, context))
     (contextHole (ContextMarker var) context)
 
+findAssumptionHole :: Var -> Checker (Context, Context)
+findAssumptionHole var = do
+  context <- getContext
+  let ty = fromMaybe (error $ "Assumption couldn't be found for " ++ show var) $ contextAssumption context var
+  pure $
+    fromMaybe
+    (error $ "Couldn't find assumption in context " ++ show (var, ty, context))
+    (contextHole (ContextAssump var ty) context)
+
+changeAssumption :: Var -> Type -> Checker ()
+changeAssumption var ty = do
+  (contextL, contextR) <- findAssumptionHole var
+  putContext $ contextL |> ContextAssump var ty <> contextR
+
 --
 -- Instantiate
 --
@@ -346,8 +360,13 @@ inferBindingGroup bindings = do
     modifyContext $ \context -> context |> ContextEVar ty |> ContextAssump name (TyEVar ty)
 
   -- Infer each binding individually
-  for bindings $ \binding ->
-    (binding,) <$> inferBinding binding
+  for bindings $ \binding@(Binding name _ _) -> do
+    ty <- inferBinding binding
+    -- Edit context to change assumption
+    -- TODO: Proper binding dependency analysis so this is done in the proper
+    -- order
+    changeAssumption name ty
+    pure (binding, ty)
 
 inferBinding :: Binding -> Checker Type
 inferBinding (Binding _ args expr) = do
