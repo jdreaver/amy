@@ -49,6 +49,8 @@ data Type
   | TyForall TVar Type
   deriving (Show, Eq, Ord)
 
+infixr 0 `TyFun`
+
 newtype TVar = TVar { unTVar :: Text }
   deriving (Show, Eq, Ord, IsString)
 
@@ -444,4 +446,6 @@ inferApp t e = throwError $ "Cannot inferApp for " ++ show (t, e)
 -- putStrLn $ groom $ runChecker $ inferBinding $ Binding "id" ["x"] (EVar "x")
 -- putStrLn $ groom $ runChecker $ inferBinding $ Binding "id" ["x", "f"] (EApp (EVar "f") (EVar "x"))
 -- putStrLn $ groom $ runChecker $ checkBinding (Binding "id" ["x"] (EVar "x")) (TyForall "a" $ TyVar "a" `TyFun` TyVar "a")
+-- putStrLn $ groom $ runChecker $ inferBinding (Binding "g" ["g", "x"] (EApp (EVar "g") (EVar "x")))
+-- putStrLn $ groom $ runChecker $ checkBinding (Binding "g" ["g", "x"] (EApp (EVar "g") (EVar "x"))) (TyForall "a" $ (TyForall "b" $ TyVar "b" `TyFun` TyVar "b") `TyFun` TyVar "a" `TyFun` TyVar "a")
 -- putStrLn $ groom $ runChecker $ inferBindingGroup $ [Binding "id" ["x"] (EVar "x"), Binding "f" ["x"] (EApp (EVar "id") (EVar "x"))]
