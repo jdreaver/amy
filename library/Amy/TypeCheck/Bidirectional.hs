@@ -7,7 +7,8 @@
 -- Higher-Rank Polymorphism (Dunfield/Krishnaswami 2013)
 
 module Amy.TypeChecking.Bidirectional
-  ( inferBinding
+  ( inferBindingGroup
+  , inferBinding
   , checkBinding
   , inferExpr
   , checkExpr
@@ -21,7 +22,7 @@ module Amy.TypeChecking.Bidirectional
 
 import Control.Monad.Except
 import Control.Monad.State.Strict
-import Data.Foldable (toList)
+import Data.Foldable (for_, toList)
 import Data.List (foldl', lookup)
 import Data.Maybe (fromMaybe, isJust, mapMaybe)
 import Data.Sequence (Seq)
@@ -29,7 +30,7 @@ import qualified Data.Sequence as Seq
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text, pack)
-import Data.Traversable (traverse)
+import Data.Traversable (for, traverse)
 import GHC.Exts (IsList, IsString)
 import qualified GHC.Exts as GHC
 
@@ -83,6 +84,7 @@ newtype Var = Var { unVar :: Text }
   deriving (Show, Eq, Ord, IsString)
 
 data Binding = Binding Var [Var] Expr
+  deriving (Show, Eq)
 
 --
 -- Context
@@ -336,6 +338,17 @@ checkExpr e t = do
 -- Infer
 --
 
+inferBindingGroup :: [Binding] -> Checker [(Binding, Type)]
+inferBindingGroup bindings = do
+  -- Add all binding group types to context
+  for_ bindings $ \(Binding name _ _) -> do
+    ty <- freshTEVar
+    modifyContext $ \context -> context |> ContextEVar ty |> ContextAssump name (TyEVar ty)
+
+  -- Infer each binding individually
+  for bindings $ \binding ->
+    (binding,) <$> inferBinding binding
+
 inferBinding :: Binding -> Checker Type
 inferBinding (Binding _ args expr) = do
   argsAndVars <- traverse (\a -> (a,) <$> freshTEVar) args
@@ -402,3 +415,4 @@ inferApp t e = throwError $ "Cannot inferApp for " ++ show (t, e)
 -- putStrLn $ groom $ runChecker $ inferBinding $ Binding "id" ["x"] (EVar "x")
 -- putStrLn $ groom $ runChecker $ inferBinding $ Binding "id" ["x", "f"] (EApp (EVar "f") (EVar "x"))
 -- putStrLn $ groom $ runChecker $ checkBinding (Binding "id" ["x"] (EVar "x")) (TyForall "a" $ TyVar "a" `TyFun` TyVar "a")
+-- putStrLn $ groom $ runChecker $ inferBindingGroup $ [Binding "id" ["x"] (EVar "x"), Binding "f" ["x"] (EApp (EVar "id") (EVar "x"))]
