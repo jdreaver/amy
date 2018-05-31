@@ -1,13 +1,14 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 
 -- | Test implementation of Complete and Easy Bidirectional Typechecking for
 -- Higher-Rank Polymorphism (Dunfield/Krishnaswami 2013)
 
 module Amy.TypeChecking.Bidirectional
-  ( inferBindingGroup
+  ( Checker
+  , runChecker
+  , inferBindingGroup
   , inferBinding
   , checkBinding
   , inferExpr
@@ -24,13 +25,15 @@ import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.Foldable (for_, toList)
 import Data.List (foldl', lookup)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe, isJust, mapMaybe)
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text, pack)
-import Data.Traversable (for, traverse)
+import Data.Traversable (for)
 import GHC.Exts (IsList, IsString)
 import qualified GHC.Exts as GHC
 
@@ -92,10 +95,13 @@ data Binding = Binding Var [Var] Expr
 
 data ContextMember
   = ContextVar TVar
-  | ContextAssump Var Type
   | ContextEVar TEVar
   | ContextSolved TEVar Type
   | ContextMarker TEVar
+    -- We store context assumptions in a Map for efficiency, but a lot of the
+    -- typing judgements use the assumptions for scoping. We add this
+    -- ContextScopeMarker to take the place of that.
+  | ContextScopeMarker Var
   deriving (Show, Eq, Ord)
 
 -- TODO: Could this just be a stack (reversed List) instead of a Seq?
@@ -125,13 +131,6 @@ contextHole :: ContextMember -> Context -> Maybe (Context, Context)
 contextHole member (Context context) = (\(cl, cr) -> (Context cl, Context (Seq.drop 1 cr))) . flip Seq.splitAt context <$> mIndex
  where
   mIndex = Seq.elemIndexR member context
-
-contextAssumption :: Context -> Var -> Maybe Type
-contextAssumption (Context context) var = lookup var assumpPairs
- where
-  assumpPairs = mapMaybe assumpPair $ toList context
-  assumpPair (ContextAssump var' ty) = Just (var', ty)
-  assumpPair _ = Nothing
 
 contextSolution :: Context -> TEVar -> Maybe Type
 contextSolution (Context context) var = lookup var solutionPairs
@@ -168,10 +167,11 @@ data CheckState
   = CheckState
   { latestId :: !Int
   , stateContext :: !Context
+  , valueTypes :: !(Map Var Type)
   } deriving (Show, Eq)
 
 runChecker :: Checker a -> Either String a
-runChecker (Checker action) = evalState (runExceptT action) (CheckState 0 (Context Seq.empty))
+runChecker (Checker action) = evalState (runExceptT action) (CheckState 0 (Context Seq.empty) Map.empty)
 
 freshId :: Checker Int
 freshId = modify' (\s -> s { latestId = latestId s + 1 }) >> gets latestId
@@ -216,19 +216,20 @@ findMarkerHole var = do
     (error $ "Couldn't find marker in context " ++ show (var, context))
     (contextHole (ContextMarker var) context)
 
-findAssumptionHole :: Var -> Checker (Context, Context)
-findAssumptionHole var = do
-  context <- getContext
-  let ty = fromMaybe (error $ "Assumption couldn't be found for " ++ show var) $ contextAssumption context var
-  pure $
-    fromMaybe
-    (error $ "Couldn't find assumption in context " ++ show (var, ty, context))
-    (contextHole (ContextAssump var ty) context)
+withNewNameScope :: Checker a -> Checker a
+withNewNameScope action = do
+  orig <- gets valueTypes
+  result <- action
+  modify' $ \s -> s { valueTypes = orig }
+  pure result
 
-changeAssumption :: Var -> Type -> Checker ()
-changeAssumption var ty = do
-  (contextL, contextR) <- findAssumptionHole var
-  putContext $ contextL |> ContextAssump var ty <> contextR
+addTypeToScope :: Var -> Type -> Checker ()
+addTypeToScope name ty = modify' $ \s -> s { valueTypes = Map.insert name ty (valueTypes s) }
+
+lookupValueType :: Var -> Checker Type
+lookupValueType name = do
+  mTy <- Map.lookup name <$> gets valueTypes
+  maybe (throwError $ "Unbound variable " ++ show name) pure mTy
 
 --
 -- Instantiate
@@ -341,8 +342,10 @@ checkExpr e (TyForall a t) =
   withContextUntil (ContextVar a) $
     checkExpr e t
 checkExpr (ELam x e) (TyFun t1 t2) =
-  withContextUntil (ContextAssump x t1) $
-    checkExpr e t2
+  withNewNameScope $ do
+    addTypeToScope x t1
+    withContextUntil (ContextScopeMarker x) $
+      checkExpr e t2
 checkExpr e t = do
   t' <- inferExpr e
   tSub <- currentContextSubst t
@@ -357,26 +360,29 @@ inferBindingGroup bindings = do
   -- Add all binding group types to context
   for_ bindings $ \(Binding name _ _) -> do
     ty <- freshTEVar
-    modifyContext $ \context -> context |> ContextEVar ty |> ContextAssump name (TyEVar ty)
+    addTypeToScope name (TyEVar ty)
+    modifyContext (|> ContextEVar ty)
 
   -- Infer each binding individually
   for bindings $ \binding@(Binding name _ _) -> do
     ty <- inferBinding binding
-    -- Edit context to change assumption
+    -- Update type of binding name in State
     -- TODO: Proper binding dependency analysis so this is done in the proper
     -- order
-    changeAssumption name ty
+    addTypeToScope name ty
     pure (binding, ty)
 
 inferBinding :: Binding -> Checker Type
-inferBinding (Binding _ args expr) = do
-  argsAndVars <- traverse (\a -> (a,) <$> freshTEVar) args
+inferBinding (Binding _ args expr) = withNewNameScope $ do
+  argVars <- for args $ \arg -> do
+    ty <- freshTEVar
+    addTypeToScope arg (TyEVar ty)
+    pure ty
   exprVar <- freshTEVar
   let
-    allVars = (snd <$> argsAndVars) ++ [exprVar]
-    argAssumps = uncurry ContextAssump . fmap TyEVar <$> argsAndVars
+    allVars = argVars ++ [exprVar]
   marker <- freshTEVar
-  modifyContext (<> Context (Seq.fromList $ ContextMarker marker : (ContextEVar <$> allVars) ++ argAssumps))
+  modifyContext (<> Context (Seq.fromList $ ContextMarker marker : (ContextEVar <$> allVars)))
   checkExpr expr (TyEVar exprVar)
 
   -- Generalize (the Hindley-Milner extension in the paper)
@@ -392,12 +398,7 @@ inferBinding (Binding _ args expr) = do
 
 inferExpr :: Expr -> Checker Type
 inferExpr EUnit = pure TyUnit
-inferExpr (EVar x) = do
-  context <- getContext
-  maybe
-    (throwError $ "Unbound variable " ++ show x)
-    pure
-    (contextAssumption context x)
+inferExpr (EVar x) = lookupValueType x
 inferExpr (EAnn e t) = do
   context <- getContext
   liftEither (typeWellFormed context t)
@@ -407,9 +408,11 @@ inferExpr (ELam x e) = do
   a <- freshTEVar
   b <- freshTEVar
   modifyContext $ \context -> context |> ContextEVar a |> ContextEVar b
-  withContextUntil (ContextAssump x (TyEVar a)) $ do
-    checkExpr e (TyEVar b)
-    currentContextSubst (TyEVar a `TyFun` TyEVar b)
+  withNewNameScope $ do
+    addTypeToScope x (TyEVar a)
+    withContextUntil (ContextScopeMarker x) $ do
+      checkExpr e (TyEVar b)
+      currentContextSubst (TyEVar a `TyFun` TyEVar b)
 inferExpr (EApp f e) = do
   tf <- inferExpr f
   tfSub <- currentContextSubst tf
