@@ -109,7 +109,8 @@ data ContextMember
   | ContextScopeMarker Var
   deriving (Show, Eq, Ord)
 
--- TODO: Could this just be a stack (reversed List) instead of a Seq?
+-- TODO: Could this just be a stack (reversed List) instead of a Seq? I don't
+-- think that would be more efficient when dealing with holes.
 newtype Context = Context (Seq ContextMember)
   deriving (Show, Eq, Ord, Semigroup)
 
