@@ -52,8 +52,8 @@ data Type
 newtype TVar = TVar { unTVar :: Text }
   deriving (Show, Eq, Ord, IsString)
 
-newtype TEVar = TEVar { unTEVar :: Text }
-  deriving (Show, Eq, Ord, IsString)
+newtype TEVar = TEVar { unTEVar :: Int }
+  deriving (Show, Eq, Ord, Num)
 
 freeTEVars :: Type -> Set TEVar
 freeTEVars TyUnit = Set.empty
@@ -177,7 +177,7 @@ freshId :: Checker Int
 freshId = modify' (\s -> s { latestId = latestId s + 1 }) >> gets latestId
 
 freshTEVar :: Checker TEVar
-freshTEVar = TEVar . ("a" <>) . pack . show <$> freshId
+freshTEVar = TEVar <$> freshId
 
 getContext :: Checker Context
 getContext = gets stateContext
@@ -389,9 +389,10 @@ inferBinding (Binding _ args expr) = withNewNameScope $ do
   (contextL, contextR) <- findMarkerHole marker
   let
     unsolvedEVars = contextUnsolved contextR
-    tyVars = TVar . unTEVar <$> unsolvedEVars  -- Would probably use letters and a substitution here
+    mkTVar = TVar . ("a" <>) . pack . show . unTEVar
+    tyVars = mkTVar <$> unsolvedEVars  -- Would probably use letters and a substitution here
     ty = contextSubst contextR $ foldr1 TyFun $ TyEVar <$> allVars
-    ty' = foldl' (\t (TEVar var) -> substituteTEVar (TEVar var) (TyVar $ TVar var) t) ty unsolvedEVars
+    ty' = foldl' (\t evar -> substituteTEVar evar (TyVar $ mkTVar evar) t) ty unsolvedEVars
     tyForall = foldr TyForall ty' tyVars
   putContext contextL
   pure tyForall
