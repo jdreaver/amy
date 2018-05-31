@@ -101,6 +101,11 @@ data ContextMember
     -- We store context assumptions in a Map for efficiency, but a lot of the
     -- typing judgements use the assumptions for scoping. We add this
     -- ContextScopeMarker to take the place of that.
+
+    -- TODO: Should we just use ContextAssump like in the paper for names in
+    -- the current binding group or expression, and only fall back to the Map
+    -- for globally known names? Diverging from the paper is a bit scary since
+    -- there are lots of subtle implications for the scoping rules.
   | ContextScopeMarker Var
   deriving (Show, Eq, Ord)
 
