@@ -1,3 +1,5 @@
+{-# LANGUAGE TupleSections #-}
+
 module Amy.Bidirectional.Subtyping
   ( subtype
   , instantiate
@@ -6,6 +8,7 @@ module Amy.Bidirectional.Subtyping
   ) where
 
 import Control.Monad.Except
+import Data.Foldable (for_)
 import Data.List (foldl', nub)
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
@@ -141,9 +144,11 @@ instantiateLeft a (TyApp t1 t2) = do
 instantiateLeft a (TyForall bs t) =
   withContextUntilNE (ContextVar <$> bs) $
     instantiateLeft a t
-instantiateLeft a (TyRecord rows (Just tailVar)) = do
-  tailVar' <- articulateRecord a rows
-  instantiateLeft tailVar' tailVar
+instantiateLeft a (TyRecord rows mTail) = do
+  tysAndVars <- articulateRecord a rows mTail
+  for_ tysAndVars $ \(ty, rowVar) -> do
+    ty' <- currentContextSubst ty
+    instantiateLeft rowVar ty'
 -- Catch-all for all monotypes and reach
 instantiateLeft a t = instantiateMonoType a t
 
@@ -164,9 +169,11 @@ instantiateRight (TyForall bs t) a = do
     modifyContext $ \context -> context <> (Context $ Seq.fromList $ NE.toList $ ContextEVar <$> bs')
     let t' = foldl' (\ty (b, b') -> instantiate b (TyExistVar b') ty) t $ NE.zip bs bs'
     instantiateRight t' a
-instantiateRight (TyRecord rows (Just tailVar)) a = do
-  tailVar' <- articulateRecord a rows
-  instantiateRight tailVar tailVar'
+instantiateRight (TyRecord rows mTail) a = do
+  tysAndVars <- articulateRecord a rows mTail
+  for_ tysAndVars $ \(ty, rowVar) -> do
+    ty' <- currentContextSubst ty
+    instantiateRight ty' rowVar
 -- Catch-all for all monotypes and reach
 instantiateRight t a = instantiateMonoType a t
 
@@ -184,12 +191,19 @@ articulateTyAppExist' f a = do
   putContext $ contextL |> ContextEVar a2 |> ContextEVar a1 |> ContextSolved a (f (TyExistVar a1) (TyExistVar a2)) <> contextR
   pure (a1, a2)
 
-articulateRecord :: TyExistVarName -> Map RowLabel Type -> Checker TyExistVarName
-articulateRecord a rows = do
+articulateRecord :: TyExistVarName -> Map RowLabel Type -> Maybe Type -> Checker [(Type, TyExistVarName)]
+articulateRecord a rows mTail = do
   (contextL, contextR) <- findTEVarHole a
-  tailVar' <- freshTEVar
-  putContext $ contextL |> ContextEVar tailVar' |> ContextSolved a (TyRecord rows (Just $ TyExistVar tailVar')) <> contextR
-  pure tailVar'
+  rowsAndVars <- traverse (\t -> (t,) <$> freshTEVar) rows
+  mTailAndVar <- traverse (\t -> (t,) <$> freshTEVar) mTail
+  let
+    rowVars = snd <$> rowsAndVars
+    mTailVar = snd <$> mTailAndVar
+    newContextVars = Context $ Seq.fromList $ ContextEVar <$> Map.elems rowVars ++ maybeToList mTailVar
+    rows' = TyExistVar <$> rowVars
+  putContext $ contextL <> newContextVars |> ContextSolved a (TyRecord rows' (TyExistVar <$> mTailVar)) <> contextR
+
+  pure $ Map.elems rowsAndVars ++ maybeToList mTailAndVar
 
 instantiateMonoType :: TyExistVarName -> Type -> Checker ()
 instantiateMonoType a t = do
