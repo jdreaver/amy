@@ -177,14 +177,20 @@ inferApp t e = error $ "Cannot inferApp for " ++ show (t, e)
 --
 
 checkBinding :: R.Binding -> T.Type -> Checker T.Binding
-checkBinding binding (TyForall as t) =
-  withContextUntilNE (ContextVar <$> as) $
-    checkBinding binding t
 checkBinding binding t = do
+  binding' <- checkBinding' binding t
+  -- Restore original type so it looks exactly like the user typed it
+  pure $ binding' { T.bindingType = t }
+
+checkBinding' :: R.Binding -> T.Type -> Checker T.Binding
+checkBinding' binding (TyForall as t) =
+  withContextUntilNE (ContextVar <$> as) $
+    checkBinding' binding t
+checkBinding' binding t = do
   binding' <- inferUntypedBinding binding
   tSub <- currentContextSubst t
   subtype (T.bindingType binding') tSub
-  pure binding' { T.bindingType = tSub }
+  pure binding'
 
 checkExpr :: R.Expr -> T.Type -> Checker T.Expr
 --checkExpr EUnit TyUnit = pure ()
