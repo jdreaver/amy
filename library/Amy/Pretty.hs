@@ -18,6 +18,7 @@ module Amy.Pretty
   , prettyDataConName
   , prettyTyConName
   , prettyTyVarName
+  , prettyTyExistVarName
   , prettyRowLabel
 
     -- Kinds
@@ -105,6 +106,9 @@ prettyTyConName = pretty . unTyConName
 
 prettyTyVarName :: TyVarName -> Doc ann
 prettyTyVarName = pretty . unTyVarName
+
+prettyTyExistVarName :: TyExistVarName -> Doc ann
+prettyTyExistVarName = ("$t" <>) . pretty . unTyExistVarName
 
 prettyRowLabel :: RowLabel -> Doc ann
 prettyRowLabel = pretty . unRowLabel
