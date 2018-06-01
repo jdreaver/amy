@@ -9,8 +9,9 @@ module Amy.Bidirectional.TypeCheck
   , checkExpr
   ) where
 
-import Data.Foldable (for_)
+import Data.Foldable (for_, traverse_)
 import Data.List (foldl')
+import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import Data.Maybe (maybeToList)
@@ -116,7 +117,9 @@ inferExpr (R.EVar var) =
       pure (T.EVar $ T.VCons (T.Typed t con))
 inferExpr (R.EIf (R.If pred' then' else')) = do
   -- TODO: Is this the right way to do this? Should we actually infer the types
-  -- and then unify with expected types?
+  -- and then unify with expected types? I'm thinking instead we should
+  -- instantiate a variable for then/else and check both of them against it,
+  -- instead of inferring "then" and using that type to check "else".
   pred'' <- checkExpr pred' (T.TyCon boolTyCon)
   then'' <- inferExpr then'
   else'' <- checkExpr else' (expressionType then'')
@@ -161,6 +164,13 @@ inferExpr (R.ERecordSelect expr (Located _ label)) = do
   retTy <- currentContextSubst $ T.TyExistVar retVar
   pure $ T.ERecordSelect expr' label retTy
 inferExpr (R.EParens expr) = T.EParens <$> inferExpr expr
+inferExpr (R.ECase (R.Case scrutinee matches)) = do
+  scrutineeVar <- freshTEVar
+  matchVar <- freshTEVar
+  modifyContext $ \context -> context |> ContextEVar scrutineeVar |> ContextEVar matchVar
+  scrutinee' <- checkExpr scrutinee (T.TyExistVar scrutineeVar)
+  matches' <- for matches $ \match -> checkMatch (T.TyExistVar scrutineeVar) match (T.TyExistVar matchVar)
+  pure $ T.ECase $ T.Case scrutinee' matches'
 
 inferApp :: T.Type -> R.Expr -> Checker (T.Expr, T.Type)
 inferApp (TyForall as t) e = do
@@ -178,6 +188,42 @@ inferApp (T.TyFun t1 t2) e = do
   t <- currentContextSubst t2
   pure (e', t)
 inferApp t e = error $ "Cannot inferApp for " ++ show (t, e)
+
+inferMatch :: T.Type ->  R.Match -> Checker T.Match
+inferMatch scrutineeTy (R.Match pat body) = do
+  pat' <- checkPattern pat scrutineeTy
+  body' <- withNewValueTypeScope $ do
+    traverse_ (uncurry addValueTypeToScope) (patternBinderType pat')
+    inferExpr body
+  pure $ T.Match pat' body'
+
+inferPattern :: R.Pattern -> Checker T.Pattern
+inferPattern (R.PLit (Located _ lit)) = pure $ T.PLit lit
+inferPattern (R.PVar (Located _ ident)) = do
+  tvar <- freshTEVar
+  modifyContext (|> ContextEVar tvar)
+  pure $ T.PVar $ T.Typed (T.TyExistVar tvar) ident
+inferPattern (R.PCons (R.PatCons (Located _ con) mArg)) = do
+  conTy <- currentContextSubst =<< lookupDataConType con
+  case mArg of
+    -- Convert argument and add a constraint on argument plus constructor
+    Just arg -> do
+      arg' <- inferPattern arg
+      let argTy = patternType arg'
+      retTy <- freshTEVar
+      modifyContext (|> ContextEVar retTy)
+      subtype conTy (argTy `T.TyFun` T.TyExistVar retTy) -- Is this right?
+      pure $ T.PCons $ T.PatCons con (Just arg') (T.TyExistVar retTy)
+    -- No argument. The return type is just the data constructor type.
+    Nothing ->
+      pure $ T.PCons $ T.PatCons con Nothing conTy
+inferPattern (R.PParens pat) = T.PParens <$> inferPattern pat
+
+patternBinderType :: T.Pattern -> Maybe (IdentName, T.Type)
+patternBinderType (T.PLit _) = Nothing
+patternBinderType (T.PVar (T.Typed ty ident)) = Just (ident, ty)
+patternBinderType (T.PCons (T.PatCons _ mArg _)) = patternBinderType =<< mArg
+patternBinderType (T.PParens pat) = patternBinderType pat
 
 --
 -- Checking
@@ -215,6 +261,22 @@ checkExpr e t = do
   eTy' <- currentContextSubst $ expressionType e'
   subtype eTy' tSub
   pure e'
+
+checkMatch :: T.Type -> R.Match -> T.Type -> Checker T.Match
+checkMatch scrutineeTy m t = do
+  m' <- inferMatch scrutineeTy m
+  tSub <- currentContextSubst t
+  mTy' <- currentContextSubst $ matchType m'
+  subtype mTy' tSub
+  pure m'
+
+checkPattern :: R.Pattern -> T.Type -> Checker T.Pattern
+checkPattern pat t = do
+  pat' <- inferPattern pat
+  tSub <- currentContextSubst t
+  mTy' <- currentContextSubst $ patternType pat'
+  subtype mTy' tSub
+  pure pat'
 
 --
 -- Converting types

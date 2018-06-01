@@ -19,6 +19,7 @@ module Amy.Bidirectional.AST
   , Let(..)
   , App(..)
   , expressionType
+  , matchType
   , patternType
 
   , Type(..)
@@ -171,10 +172,13 @@ expressionType (EVar var) =
     VVal (Typed ty _) -> ty
     VCons (Typed ty _) -> ty
 expressionType (EIf if') = expressionType (ifThen if') -- Checker ensure "then" and "else" types match
-expressionType (ECase (Case _ (Match _ expr :| _))) = expressionType expr
+expressionType (ECase (Case _ (match :| _))) = matchType match
 expressionType (ELet let') = expressionType (letExpression let')
 expressionType (EApp app) = appReturnType app
 expressionType (EParens expr) = expressionType expr
+
+matchType :: Match -> Type
+matchType (Match _ expr) = expressionType expr
 
 patternType :: Pattern -> Type
 patternType (PLit lit) = literalType' lit
