@@ -9,18 +9,12 @@ module Amy.Bidirectional.TypeCheck
   ) where
 
 import Control.Monad.Except
-import Control.Monad.State.Strict
-import Data.Foldable (for_, toList)
-import Data.List (foldl', lookup)
+import Data.Foldable (for_)
+import Data.List (foldl')
 import qualified Data.List.NonEmpty as NE
-import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe, isJust, mapMaybe)
-import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
-import Data.Set (Set)
-import qualified Data.Set as Set
-import Data.Text (Text, pack)
+import Data.Text (pack)
 import Data.Traversable (for)
 
 import Amy.Bidirectional.AST as T
@@ -184,10 +178,10 @@ convertType :: R.Type -> T.Type
 convertType (R.TyCon (Located _ con)) = T.TyCon con
 convertType (R.TyVar var) = T.TyVar (convertTyVarInfo var)
 convertType (R.TyApp f arg) = T.TyApp (convertType f) (convertType arg)
-convertType (R.TyRecord rows mVar) =
+convertType (R.TyRecord rows mTail) =
   T.TyRecord
     (Map.mapKeys locatedValue $ convertType <$> rows)
-    (locatedValue <$> mVar)
+    (T.TyVar . locatedValue <$> mTail)
 convertType (R.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
 
 convertTyConDefinition :: R.TyConDefinition -> T.TyConDefinition
