@@ -61,13 +61,17 @@ inferBindingGroup bindings = do
     modifyContext (|> ContextEVar ty)
 
   -- Infer each binding individually
-  for bindings $ \binding -> do
+  bindings' <- for bindings $ \binding -> do
     binding' <- inferBinding binding
     -- Update type of binding name in State
     -- TODO: Proper binding dependency analysis so this is done in the proper
     -- order
     addValueTypeToScope (T.bindingName binding') (T.bindingType binding')
     pure binding'
+
+  -- Apply substitutions to bindings
+  context <- getContext
+  pure $ contextSubstBinding context <$> bindings'
 
 inferBinding :: R.Binding -> Checker T.Binding
 inferBinding binding@(R.Binding _ mTy _ _) =
@@ -100,10 +104,7 @@ inferUntypedBinding (R.Binding (Located _ name) _ args expr) = withNewLexicalSco
     pure $ T.Typed argTy arg
   retTy <- currentContextSubst (T.TyExistVar exprVar)
 
-  -- TODO: This huge substitution seems expensive and wasteful. Expressions
-  -- should probably already be fully substituted when they are
-  -- inferred/checked, just like types are.
-  pure $ contextSubstBinding (contextL <> contextR') $ T.Binding name tyForall args' retTy expr'
+  pure $ contextSubstBinding contextR' $ T.Binding name tyForall args' retTy expr'
 
 generalize :: Context -> T.Type -> (T.Type, Context)
 generalize context ty =

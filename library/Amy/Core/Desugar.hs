@@ -6,12 +6,14 @@ module Amy.Core.Desugar
 
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (maybeToList)
+import Data.Monoid ((<>))
+import Data.Text (pack)
 
 import Amy.Core.AST as C
 import Amy.Core.Monad
 import Amy.Core.PatternCompiler as PC
 import Amy.Prim
-import Amy.TypeCheck.AST as T
+import Amy.Bidirectional.AST as T
 
 desugarModule :: T.Module -> C.Module
 desugarModule (T.Module bindings externs typeDeclarations) = do
@@ -36,10 +38,10 @@ desugarDataConDefinition (T.DataConDefinition conName mTyArg) =
   }
 
 desugarBinding :: T.Binding -> Desugar C.Binding
-desugarBinding (T.Binding ident scheme args retTy body) =
+desugarBinding (T.Binding ident ty args retTy body) =
   C.Binding
     ident
-    (desugarScheme scheme)
+    (desugarType ty)
     (desugarTypedIdent <$> args)
     (desugarType retTy)
     <$> desugarExpr body
@@ -70,7 +72,7 @@ desugarExpr (T.ECase (T.Case scrutinee matches)) = do
           scrutineeBinding =
             C.Binding
             { C.bindingName = scrutineeIdent
-            , C.bindingType = desugarScheme $ T.Forall [] $ T.expressionType scrutinee
+            , C.bindingType = desugarType $ T.expressionType scrutinee
             , C.bindingArgs = []
             , C.bindingReturnType = desugarType $ T.expressionType scrutinee
             , C.bindingBody = scrutinee'
@@ -105,21 +107,17 @@ desugarVar (T.VCons (T.Typed ty con)) = C.VCons $ C.Typed (desugarType ty) con
 desugarTypedIdent :: T.Typed IdentName -> C.Typed IdentName
 desugarTypedIdent (T.Typed ty ident) = C.Typed (desugarType ty) ident
 
-desugarScheme :: T.Scheme -> C.Scheme
-desugarScheme (T.Forall vars ty) = C.Forall (desugarTyVarInfo <$> vars) (desugarType ty)
-
 desugarType :: T.Type -> C.Type
 desugarType (T.TyCon con) = C.TyCon con
-desugarType (T.TyRecord rows mVar) = C.TyRecord (desugarType <$> rows) (T.tyVarInfoName <$> mVar)
-desugarType (T.TyVar var) = C.TyVar (desugarTyVarInfo var)
+desugarType (T.TyRecord rows mTail) = C.TyRecord (desugarType <$> rows) (desugarType <$> mTail)
+desugarType (T.TyVar var) = C.TyVar var
+desugarType (T.TyExistVar i) = C.TyVar $ TyVarName $ "te" <> pack (show i)
 desugarType (T.TyApp f arg) = C.TyApp (desugarType f) (desugarType arg)
 desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)
+desugarType (T.TyForall vars ty) = C.TyForall vars (desugarType ty)
 
 desugarTyConDefinition :: T.TyConDefinition -> C.TyConDefinition
 desugarTyConDefinition (T.TyConDefinition name args) = C.TyConDefinition name args
-
-desugarTyVarInfo :: T.TyVarInfo -> TyVarName
-desugarTyVarInfo (T.TyVarInfo name _) = name
 
 --
 -- Case Expressions

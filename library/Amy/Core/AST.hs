@@ -23,7 +23,6 @@ module Amy.Core.AST
   , substExpr
   , Type(..)
   , unfoldTyApp
-  , Scheme(..)
   , Typed(..)
 
     -- Re-export
@@ -50,7 +49,7 @@ data Module
 data Binding
   = Binding
   { bindingName :: !IdentName
-  , bindingType :: !Scheme
+  , bindingType :: !Type
     -- ^ Type for whole function
   , bindingArgs :: ![Typed IdentName]
     -- ^ Argument names and types split out from 'bindingType'
@@ -215,8 +214,9 @@ data Type
   = TyCon !TyConName
   | TyVar !TyVarName
   | TyApp !Type !Type
-  | TyRecord !(Map RowLabel Type) !(Maybe TyVarName)
+  | TyRecord !(Map RowLabel Type) !(Maybe Type)
   | TyFun !Type !Type
+  | TyForall !(NonEmpty TyVarName) !Type
   deriving (Show, Eq, Ord)
 
 infixr 0 `TyFun`
@@ -225,10 +225,6 @@ unfoldTyApp :: Type -> NonEmpty Type
 unfoldTyApp (TyApp app@(TyApp _ _) arg) = unfoldTyApp app <> (arg :| [])
 unfoldTyApp (TyApp f arg) = f :| [arg]
 unfoldTyApp t = t :| []
-
-data Scheme
-  = Forall ![TyVarName] Type
-  deriving (Show, Eq)
 
 data Typed a
   = Typed

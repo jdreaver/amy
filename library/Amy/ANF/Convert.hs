@@ -77,6 +77,7 @@ convertType ty = go (typeToNonEmpty ty)
       -- N.B. ANF/LLVM doesn't care about polymorphic records
       C.TyRecord rows _ -> mkRecordType rows
       C.TyFun{} -> mkFunctionType ty
+      C.TyForall _ ty'' -> convertType ty''
   go _ = mkFunctionType ty
 
 mkRecordType :: Map RowLabel C.Type -> ANFConvert ANF.Type
@@ -206,7 +207,7 @@ normalizeBinding mName (C.Binding ident _ args retTy body) = do
   pure $ ANF.Binding ident args' retTy' body'
 
 normalizeLetBinding :: C.Binding -> ANFConvert ANF.LetValBinding
-normalizeLetBinding (C.Binding ident (C.Forall _ ty) [] _ body) = do
+normalizeLetBinding (C.Binding ident ty [] _ body) = do
   body' <- normalizeExpr (unIdentName ident) body
   ty' <- convertType ty
   pure $ ANF.LetValBinding ident ty' body'
