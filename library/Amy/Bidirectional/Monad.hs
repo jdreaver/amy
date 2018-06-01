@@ -37,8 +37,9 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe, isJust, mapMaybe, maybeToList)
+import Data.Maybe (fromMaybe, isJust, mapMaybe)
 import Data.Sequence (Seq)
+import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
 
 import Amy.Bidirectional.AST
@@ -80,7 +81,17 @@ contextSubst _ t@(TyCon _) = t
 contextSubst _ t@(TyVar _) = t
 contextSubst ctx t@(TyExistVar v) = maybe t (contextSubst ctx) (contextSolution ctx v)
 contextSubst ctx (TyApp a b) = TyApp (contextSubst ctx a) (contextSubst ctx b)
-contextSubst ctx (TyRecord rows mVar) = TyRecord (contextSubst ctx <$> rows) mVar
+contextSubst ctx record@(TyRecord rows mTail) =
+  let rows' = contextSubst ctx <$> rows
+  in case contextSubst ctx <$> mTail of
+    Nothing -> TyRecord rows' mTail
+    Just record'@(TyRecord newRows mTail') ->
+      -- Ensure no overlap in rows. If there was overlap then unification
+      -- shouldn't have allowed i
+      if null $ Set.intersection (Map.keysSet rows') (Map.keysSet newRows)
+      then TyRecord (Map.union rows' newRows) mTail'
+      else error $ "Found duplicate keys in record substitution: " ++ show (record, record')
+    Just t -> TyRecord rows' (Just t)
 contextSubst ctx (TyFun a b) = TyFun (contextSubst ctx a) (contextSubst ctx b)
 contextSubst ctx (TyForall vs t) = TyForall vs (contextSubst ctx t)
 
