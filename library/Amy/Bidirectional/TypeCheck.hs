@@ -9,13 +9,14 @@ module Amy.Bidirectional.TypeCheck
   , checkExpr
   ) where
 
+import Control.Monad (replicateM)
 import Data.Foldable (for_, traverse_)
 import Data.List (foldl')
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import Data.Maybe (maybeToList)
 import qualified Data.Sequence as Seq
-import Data.Text (pack)
+import Data.Text (Text, pack)
 import Data.Traversable (for)
 
 import Amy.Bidirectional.AST as T
@@ -90,12 +91,7 @@ inferUntypedBinding (R.Binding (Located _ name) _ args expr) = withNewLexicalSco
   -- Generalize (the Hindley-Milner extension in the paper)
   (contextL, contextR) <- findMarkerHole marker
   let
-    unsolvedEVars = contextUnsolved contextR
-    mkTVar = TyVarName . ("a" <>) . pack . show . unTyExistVarName
-    tyVars = mkTVar <$> unsolvedEVars  -- Would probably use letters and a substitution here
-    ty = contextSubst contextR $ foldr1 T.TyFun $ T.TyExistVar <$> allVars
-    ty' = foldl' (\t evar -> substituteTEVar evar (T.TyVar $ mkTVar evar) t) ty unsolvedEVars
-    tyForall = maybe ty' (\varsNE -> TyForall varsNE ty') $ NE.nonEmpty tyVars
+    (tyForall, contextR') = generalize contextR $ foldr1 T.TyFun $ T.TyExistVar <$> allVars
   putContext contextL
 
   -- Convert binding
@@ -104,6 +100,31 @@ inferUntypedBinding (R.Binding (Located _ name) _ args expr) = withNewLexicalSco
     pure $ T.Typed argTy arg
   retTy <- currentContextSubst (T.TyExistVar exprVar)
   pure $ T.Binding name tyForall args' retTy expr'
+
+generalize :: Context -> T.Type -> (T.Type, Context)
+generalize context ty =
+  let
+    -- Find unsolved existential variables in the order found in the type. Note
+    -- that in general there can be more unsolved existential variables in the
+    -- context then there actually are in the type.
+    freeVars = freeTEVars $ contextSubst context ty
+    unsolvedEVars = contextUnsolved context
+    unsolvedFreeEVars = filter (`elem` freeVars) unsolvedEVars
+
+    -- Replace these with nice letters. TODO: Make sure these letters aren't
+    -- already in scope.
+    varsWithLetters = zip unsolvedFreeEVars (TyVarName <$> letters)
+    solutions = uncurry ContextSolved . fmap T.TyVar <$> varsWithLetters
+    context' = context <> (Context $ Seq.fromList solutions)
+
+    -- Build the forall type
+    tyVars = snd <$> varsWithLetters
+    ty' = contextSubst context' ty
+    tyForall = maybe ty' (\varsNE -> TyForall varsNE ty') $ NE.nonEmpty tyVars
+  in (tyForall, context')
+
+letters :: [Text]
+letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
 
 inferExpr :: R.Expr -> Checker T.Expr
 inferExpr (R.ELit (Located _ lit)) = pure $ T.ELit lit
@@ -335,18 +356,3 @@ convertTyConDefinition (R.TyConDefinition name' args _) = T.TyConDefinition name
 
 convertTyVarInfo :: Located TyVarName -> T.TyVarName
 convertTyVarInfo (Located _ name') = name'
-
---
--- Substitute
---
-
-substituteTEVar :: TyExistVarName -> T.Type -> T.Type -> T.Type
-substituteTEVar _ _ t@(T.TyCon _) = t
-substituteTEVar v s t@(TyExistVar v')
-  | v == v' = s
-  | otherwise = t
-substituteTEVar _ _ t@(T.TyVar _) = t
-substituteTEVar v s (T.TyApp a b) = T.TyApp (substituteTEVar v s a) (substituteTEVar v s b)
-substituteTEVar v s (T.TyRecord rows mTail) = T.TyRecord (substituteTEVar v s <$> rows) (substituteTEVar v s <$> mTail)
-substituteTEVar v s (T.TyFun a b) = T.TyFun (substituteTEVar v s a) (substituteTEVar v s b)
-substituteTEVar v s (T.TyForall a t) = T.TyForall a (substituteTEVar v s t)

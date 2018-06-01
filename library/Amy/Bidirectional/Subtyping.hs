@@ -2,16 +2,16 @@ module Amy.Bidirectional.Subtyping
   ( subtype
   , instantiate
   , articulateTyFunExist
+  , freeTEVars
   ) where
 
 import Control.Monad.Except
-import Data.List (foldl')
+import Data.List (foldl', nub)
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (maybeToList)
 import qualified Data.Sequence as Seq
-import Data.Set (Set)
-import qualified Data.Set as Set
 
 import Amy.Bidirectional.AST
 import Amy.Bidirectional.Monad
@@ -98,14 +98,19 @@ occursCheck a t =
   then throwError $ OtherTodoError $ "Infinite type " ++ show (a, t)
   else pure ()
 
-freeTEVars :: Type -> Set TyExistVarName
-freeTEVars (TyCon _) = Set.empty
-freeTEVars (TyVar _) = Set.empty
-freeTEVars (TyExistVar v) = Set.singleton v
-freeTEVars (TyApp a b) = freeTEVars a <> freeTEVars b
-freeTEVars (TyRecord rows _) = Set.unions $ freeTEVars <$> Map.elems rows
-freeTEVars (TyFun a b) = freeTEVars a <> freeTEVars b
-freeTEVars (TyForall _ t) = freeTEVars t
+-- N.B. We use nub here so we can easily preserve the order in which the vars
+-- were found.
+freeTEVars :: Type -> [TyExistVarName]
+freeTEVars = nub . freeTEVars'
+
+freeTEVars' :: Type -> [TyExistVarName]
+freeTEVars' (TyCon _) = []
+freeTEVars' (TyVar _) = []
+freeTEVars' (TyExistVar v) = [v]
+freeTEVars' (TyApp a b) = freeTEVars a ++ freeTEVars b
+freeTEVars' (TyRecord rows mTail) = concat $ (freeTEVars <$> Map.elems rows) ++ maybeToList (freeTEVars <$> mTail)
+freeTEVars' (TyFun a b) = freeTEVars a ++ freeTEVars b
+freeTEVars' (TyForall _ t) = freeTEVars t
 
 --
 -- Instantiate
