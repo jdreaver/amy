@@ -145,6 +145,19 @@ inferExpr (R.EApp f e) = do
   tfSub <- currentContextSubst (expressionType f')
   (e', retTy) <- inferApp tfSub e
   pure (T.EApp $ T.App f' e' retTy)
+inferExpr (R.ERecord rows) = do
+  rows' <- for (Map.mapKeys locatedValue rows) $ \expr -> do
+    expr' <- inferExpr expr
+    pure (T.Typed (expressionType expr') expr')
+  pure $ T.ERecord rows'
+inferExpr (R.ERecordSelect expr (Located _ label)) = do
+  retVar <- freshTEVar
+  polyVar <- freshTEVar
+  modifyContext $ \context -> context |> ContextEVar retVar |> ContextEVar polyVar
+  let exprTy = T.TyRecord (Map.singleton label $ T.TyExistVar retVar) (Just $ T.TyExistVar polyVar)
+  expr' <- checkExpr expr exprTy
+  retTy <- currentContextSubst $ T.TyExistVar retVar
+  pure $ T.ERecordSelect expr' label retTy
 inferExpr (R.EParens expr) = T.EParens <$> inferExpr expr
 
 inferApp :: T.Type -> R.Expr -> Checker (T.Expr, T.Type)
@@ -219,7 +232,10 @@ convertDataConDefinition (R.DataConDefinition (Located _ conName) mTyArg) =
   }
 
 convertScheme :: R.Scheme -> T.Type
-convertScheme (R.Forall vars ty) = T.TyForall (NE.fromList $ convertTyVarInfo <$> vars) (convertType ty)
+convertScheme (R.Forall vars ty) =
+  case NE.nonEmpty vars of
+    Just vars' -> T.TyForall (convertTyVarInfo <$> vars') (convertType ty)
+    Nothing -> convertType ty
 
 convertType :: R.Type -> T.Type
 convertType (R.TyCon (Located _ con)) = T.TyCon con
@@ -248,6 +264,6 @@ substituteTEVar v s t@(TyExistVar v')
   | otherwise = t
 substituteTEVar _ _ t@(T.TyVar _) = t
 substituteTEVar v s (T.TyApp a b) = T.TyApp (substituteTEVar v s a) (substituteTEVar v s b)
-substituteTEVar v s (T.TyRecord rows mVar) = T.TyRecord (substituteTEVar v s <$> rows) mVar
+substituteTEVar v s (T.TyRecord rows mTail) = T.TyRecord (substituteTEVar v s <$> rows) (substituteTEVar v s <$> mTail)
 substituteTEVar v s (T.TyFun a b) = T.TyFun (substituteTEVar v s a) (substituteTEVar v s b)
 substituteTEVar v s (T.TyForall a t) = T.TyForall a (substituteTEVar v s t)

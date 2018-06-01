@@ -117,7 +117,7 @@ instantiate v s t@(TyVar v')
   | otherwise = t
 instantiate _ _ t@(TyExistVar _) = t
 instantiate v s (TyApp a b) = TyApp (instantiate v s a) (instantiate v s b)
-instantiate v s (TyRecord rows mVar) = TyRecord (instantiate v s <$> rows) mVar -- TODO: What to do with mVar?
+instantiate v s (TyRecord rows mTail) = TyRecord (instantiate v s <$> rows) (instantiate v s <$> mTail)
 instantiate v s (TyFun a b) = TyFun (instantiate v s a) (instantiate v s b)
 instantiate v s (TyForall a t) = TyForall a (instantiate v s t)
 
@@ -125,11 +125,16 @@ instantiateLeft :: TyExistVarName -> Type -> Checker ()
 instantiateLeft a (TyFun t1 t2) = do
   (a1, a2) <- instantiateTyFunContext a
   instantiateRight t1 a1
-  context' <- getContext
-  instantiateLeft a2 (contextSubst context' t2)
+  t2' <- currentContextSubst t2
+  instantiateLeft a2 t2'
 instantiateLeft a (TyForall bs t) =
   withContextUntilNE (ContextVar <$> bs) $
     instantiateLeft a t
+instantiateLeft a (TyRecord rows (Just tailVar)) = do
+  (contextL, contextR) <- findTEVarHole a
+  tailVar' <- freshTEVar
+  putContext $ contextL |> ContextEVar tailVar' |> ContextSolved a (TyRecord rows (Just $ TyExistVar tailVar')) <> contextR
+  instantiateLeft tailVar' tailVar
 -- Catch-all for all monotypes and reach
 instantiateLeft a t = instantiateMonoType a t
 
@@ -145,6 +150,11 @@ instantiateRight (TyForall bs t) a = do
     modifyContext $ \context -> context <> (Context $ Seq.fromList $ NE.toList $ ContextEVar <$> bs')
     let t' = foldl' (\ty (b, b') -> instantiate b (TyExistVar b') ty) t $ NE.zip bs bs'
     instantiateRight t' a
+instantiateRight (TyRecord rows (Just tailVar)) a = do
+  (contextL, contextR) <- findTEVarHole a
+  tailVar' <- freshTEVar
+  putContext $ contextL |> ContextEVar tailVar' |> ContextSolved a (TyRecord rows (Just $ TyExistVar tailVar')) <> contextR
+  instantiateRight tailVar tailVar'
 -- Catch-all for all monotypes and reach
 instantiateRight t a = instantiateMonoType a t
 

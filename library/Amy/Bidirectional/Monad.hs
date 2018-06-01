@@ -112,7 +112,7 @@ typeWellFormed context (TyExistVar v) = ContextEVar v `contextElem` context || h
   where hasSolution = isJust (contextSolution context v)
 typeWellFormed context (TyApp x y) = typeWellFormed context x && typeWellFormed context y
 typeWellFormed context (TyFun x y) = typeWellFormed context x && typeWellFormed context y
-typeWellFormed context (TyRecord rows _) = all (typeWellFormed context) rows
+typeWellFormed context (TyRecord rows mTy) = all (typeWellFormed context) rows && maybe True (typeWellFormed context) mTy
 typeWellFormed context (TyForall vs t) = typeWellFormed (context <> Context (Seq.fromList $ NE.toList $ ContextVar <$> vs)) t
 
 --
