@@ -176,7 +176,7 @@ checkBinding binding t = do
   binding' <- inferUntypedBinding binding
   tSub <- currentContextSubst t
   subtype (T.bindingType binding') tSub
-  pure binding'
+  pure binding' { T.bindingType = tSub }
 
 checkExpr :: R.Expr -> T.Type -> Checker T.Expr
 --checkExpr EUnit TyUnit = pure ()
@@ -191,7 +191,7 @@ checkExpr e (TyForall as t) =
 checkExpr e t = do
   e' <- inferExpr e
   tSub <- currentContextSubst t
-  subtype t tSub
+  subtype (expressionType e') tSub
   pure e'
 
 --
