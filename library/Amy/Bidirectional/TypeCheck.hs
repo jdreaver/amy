@@ -1,5 +1,11 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Amy.Bidirectional.TypeCheck
-  (
+  ( inferBindingGroup
+  , inferBinding
+  , inferExpr
+  , checkBinding
+  , checkExpr
   ) where
 
 import Control.Monad.Except
@@ -20,83 +26,67 @@ import Data.Traversable (for)
 import Amy.Bidirectional.AST as T
 import Amy.Bidirectional.Monad
 import Amy.Bidirectional.Subtyping
+import Amy.Prim
 import Amy.Renamer.AST as R
 import Amy.Syntax.Located
-
---
--- Checking
---
-
--- checkBinding :: Binding -> Type -> Checker ()
--- checkBinding binding (TyForall a t) =
---   withContextUntil (ContextVar a) $
---     checkBinding binding t
--- checkBinding binding t = do
---   t' <- inferBinding binding
---   tSub <- currentContextSubst t
---   subType t' tSub
-
-checkExpr :: R.Expr -> T.Type -> Checker T.Expr
---checkExpr EUnit TyUnit = pure ()
-checkExpr e (TyForall as t) =
-  withContextUntilNE (ContextVar <$> as) $
-    checkExpr e t
--- checkExpr (ELam x e) (TyFun t1 t2) =
---   withNewNameScope $ do
---     addTypeToScope x t1
---     withContextUntil (ContextScopeMarker x) $
---       checkExpr e t2
-checkExpr e t = do
-  e' <- inferExpr e
-  tSub <- currentContextSubst t
-  subtype t tSub
-  pure e'
 
 --
 -- Infer
 --
 
--- inferBindingGroup :: [Binding] -> Checker [(Binding, Type)]
--- inferBindingGroup bindings = do
---   -- Add all binding group types to context
---   for_ bindings $ \(Binding name _ _) -> do
---     ty <- freshTEVar
---     addTypeToScope name (TyEVar ty)
---     modifyContext (|> ContextEVar ty)
+inferBindingGroup :: [R.Binding] -> Checker [T.Binding]
+inferBindingGroup bindings = do
+  -- Add all binding group types to context
+  for_ bindings $ \(R.Binding (Located _ name) _ _ _) -> do
+    ty <- freshTEVar
+    addValueTypeToScope name (T.TyExistVar ty)
+    modifyContext (|> ContextEVar ty)
 
---   -- Infer each binding individually
---   for bindings $ \binding@(Binding name _ _) -> do
---     ty <- inferBinding binding
---     -- Update type of binding name in State
---     -- TODO: Proper binding dependency analysis so this is done in the proper
---     -- order
---     addTypeToScope name ty
---     pure (binding, ty)
+  -- Infer each binding individually
+  for bindings $ \binding -> do
+    binding' <- inferBinding binding
+    -- Update type of binding name in State
+    -- TODO: Proper binding dependency analysis so this is done in the proper
+    -- order
+    addValueTypeToScope (T.bindingName binding') (T.bindingType binding')
+    pure binding'
 
--- inferBinding :: Binding -> Checker Type
--- inferBinding (Binding _ args expr) = withNewNameScope $ do
---   argVars <- for args $ \arg -> do
---     ty <- freshTEVar
---     addTypeToScope arg (TyEVar ty)
---     pure ty
---   exprVar <- freshTEVar
---   let
---     allVars = argVars ++ [exprVar]
---   marker <- freshTEVar
---   modifyContext (<> Context (Seq.fromList $ ContextMarker marker : (ContextEVar <$> allVars)))
---   checkExpr expr (TyEVar exprVar)
+inferBinding :: R.Binding -> Checker T.Binding
+inferBinding binding@(R.Binding _ mTy _ _) =
+  case mTy of
+    Just ty -> checkBinding binding (convertScheme ty)
+    Nothing -> inferUntypedBinding binding
 
---   -- Generalize (the Hindley-Milner extension in the paper)
---   (contextL, contextR) <- findMarkerHole marker
---   let
---     unsolvedEVars = contextUnsolved contextR
---     mkTVar = TVar . ("a" <>) . pack . show . unTEVar
---     tyVars = mkTVar <$> unsolvedEVars  -- Would probably use letters and a substitution here
---     ty = contextSubst contextR $ foldr1 TyFun $ TyEVar <$> allVars
---     ty' = foldl' (\t evar -> substituteTEVar evar (TyVar $ mkTVar evar) t) ty unsolvedEVars
---     tyForall = foldr TyForall ty' tyVars
---   putContext contextL
---   pure tyForall
+inferUntypedBinding :: R.Binding -> Checker T.Binding
+inferUntypedBinding (R.Binding (Located _ name) _ args expr) = withNewValueTypeScope $ do
+  argsAndVars <- for args $ \(Located _ arg) -> do
+    ty <- freshTEVar
+    addValueTypeToScope arg (TyExistVar ty)
+    pure (arg, ty)
+  exprVar <- freshTEVar
+  let
+    allVars = (snd <$> argsAndVars) ++ [exprVar]
+  marker <- freshTEVar
+  modifyContext (<> Context (Seq.fromList $ ContextMarker marker : (ContextEVar <$> allVars)))
+  expr' <- checkExpr expr (TyExistVar exprVar)
+
+  -- Generalize (the Hindley-Milner extension in the paper)
+  (contextL, contextR) <- findMarkerHole marker
+  let
+    unsolvedEVars = contextUnsolved contextR
+    mkTVar = TyVarName . ("a" <>) . pack . show . unTyExistVarName
+    tyVars = mkTVar <$> unsolvedEVars  -- Would probably use letters and a substitution here
+    ty = contextSubst contextR $ foldr1 T.TyFun $ T.TyExistVar <$> allVars
+    ty' = foldl' (\t evar -> substituteTEVar evar (T.TyVar $ mkTVar evar) t) ty unsolvedEVars
+    tyForall = maybe ty' (\varsNE -> TyForall varsNE ty') $ NE.nonEmpty tyVars
+  putContext contextL
+
+  -- Convert binding
+  args' <- for argsAndVars $ \(arg, var) -> do
+    argTy <- currentContextSubst (T.TyExistVar var)
+    pure $ T.Typed argTy arg
+  retTy <- currentContextSubst (T.TyExistVar exprVar)
+  pure $ T.Binding name tyForall args' retTy expr'
 
 inferExpr :: R.Expr -> Checker T.Expr
 inferExpr (R.ELit (Located _ lit)) = pure $ T.ELit lit
@@ -108,7 +98,13 @@ inferExpr (R.EVar var) =
     -- R.VCons (Located _ con) -> do
     --   t <- instantiate =<< dataConstructorScheme con
     --   pure (T.EVar $ T.VCons (T.Typed t con), [])
-
+inferExpr (R.EIf (R.If pred' then' else')) = do
+  -- TODO: Is this the right way to do this? Should we actually infer the types
+  -- and then unify with expected types?
+  pred'' <- checkExpr pred' (T.TyCon boolTyCon)
+  then'' <- inferExpr then'
+  else'' <- checkExpr else' (expressionType then'')
+  pure $ T.EIf $ T.If pred'' then'' else''
 -- inferExpr (EAnn e t) = do
 --   context <- getContext
 --   liftEither (typeWellFormed context t)
@@ -128,6 +124,7 @@ inferExpr (R.EApp f e) = do
   tfSub <- currentContextSubst (expressionType f')
   (e', retTy) <- inferApp tfSub e
   pure (T.EApp $ T.App f' e' retTy)
+inferExpr (R.EParens expr) = T.EParens <$> inferExpr expr
 
 inferApp :: T.Type -> R.Expr -> Checker (T.Expr, T.Type)
 inferApp (TyForall as t) e = do
@@ -145,6 +142,36 @@ inferApp (T.TyFun t1 t2) e = do
   t <- currentContextSubst t2
   pure (e', t)
 inferApp t e = throwError $ "Cannot inferApp for " ++ show (t, e)
+
+--
+-- Checking
+--
+
+checkBinding :: R.Binding -> T.Type -> Checker T.Binding
+checkBinding binding (TyForall as t) =
+  withContextUntilNE (ContextVar <$> as) $
+    checkBinding binding t
+checkBinding binding t = do
+  binding' <- inferUntypedBinding binding
+  tSub <- currentContextSubst t
+  subtype (T.bindingType binding') tSub
+  pure binding'
+
+checkExpr :: R.Expr -> T.Type -> Checker T.Expr
+--checkExpr EUnit TyUnit = pure ()
+checkExpr e (TyForall as t) =
+  withContextUntilNE (ContextVar <$> as) $
+    checkExpr e t
+-- checkExpr (ELam x e) (TyFun t1 t2) =
+--   withNewNameScope $ do
+--     addTypeToScope x t1
+--     withContextUntil (ContextScopeMarker x) $
+--       checkExpr e t2
+checkExpr e t = do
+  e' <- inferExpr e
+  tSub <- currentContextSubst t
+  subtype t tSub
+  pure e'
 
 --
 -- Converting types
@@ -168,3 +195,18 @@ convertTyConDefinition (R.TyConDefinition name' args _) = T.TyConDefinition name
 
 convertTyVarInfo :: Located TyVarName -> T.TyVarName
 convertTyVarInfo (Located _ name') = name'
+
+--
+-- Substitute
+--
+
+substituteTEVar :: TyExistVarName -> T.Type -> T.Type -> T.Type
+substituteTEVar _ _ t@(T.TyCon _) = t
+substituteTEVar v s t@(TyExistVar v')
+  | v == v' = s
+  | otherwise = t
+substituteTEVar _ _ t@(T.TyVar _) = t
+substituteTEVar v s (T.TyApp a b) = T.TyApp (substituteTEVar v s a) (substituteTEVar v s b)
+substituteTEVar v s (T.TyRecord rows mVar) = T.TyRecord (substituteTEVar v s <$> rows) mVar
+substituteTEVar v s (T.TyFun a b) = T.TyFun (substituteTEVar v s a) (substituteTEVar v s b)
+substituteTEVar v s (T.TyForall a t) = T.TyForall a (substituteTEVar v s t)
