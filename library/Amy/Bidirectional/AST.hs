@@ -187,7 +187,7 @@ data Type
   | TyVar !TyVarName
   | TyExistVar !TyExistVarName
   | TyApp !Type !Type
-  | TyRecord !(Map RowLabel Type) !(Maybe TyVarName)
+  | TyRecord !(Map RowLabel Type) !(Maybe Type)
   | TyFun !Type !Type
   | TyForall !(NonEmpty TyVarName) !Type
   deriving (Show, Eq, Ord)

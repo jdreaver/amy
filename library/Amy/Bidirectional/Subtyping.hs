@@ -23,11 +23,8 @@ subtype :: Type -> Type -> Checker ()
 subtype (TyCon a) (TyCon b) | a == b = pure ()
 subtype (TyVar a) (TyVar b) | a == b = pure ()
 subtype (TyExistVar a) (TyExistVar b) | a == b = pure ()
-subtype (TyFun t1 t2) (TyFun t1' t2') = do
-  subtype t1' t1
-  t2Sub <- currentContextSubst t2
-  t2Sub' <- currentContextSubst t2'
-  subtype t2Sub t2Sub'
+subtype (TyApp t1 t2) (TyApp t1' t2') = subtypeMany [t1, t1'] [t2, t2']
+subtype (TyFun t1 t2) (TyFun t1' t2') = subtypeMany [t1, t1'] [t2, t2']
 subtype (TyForall as t1) t2 = do
   as' <- traverse (const freshTEVar) as
   withContextUntilNE (ContextMarker <$> as') $ do
@@ -39,7 +36,62 @@ subtype t1 (TyForall as t2) =
     subtype t1 t2
 subtype (TyExistVar a) t = occursCheck a t >> instantiateLeft a t
 subtype t (TyExistVar a) = occursCheck a t >> instantiateRight t a
+subtype t1@(TyRecord rows1 mTail1) t2@(TyRecord rows2 mTail2) = do
+  -- TODO: This logic was copy/pasted and modified from old unification code.
+  -- This probably needs to be audited to make sure it is actually checking for
+  -- subtyping in the correct order (that is, t1 is a subtype of t2) and we
+  -- aren't accidentally switching things around.
+  let
+    commonFields = Map.intersectionWith (,) rows1 rows2
+    justFields1 = Map.difference rows1 rows2
+    justFields2 = Map.difference rows2 rows1
+    -- We only need fresh type variables for record tails if there are
+    -- differences between the records.
+    maybeFreshTail distinctRows x =
+      if Map.null distinctRows
+      then pure x
+      else TyExistVar <$> freshTEVar
+    subtypeRecordWithVar rows mTail mUnifyVar = do
+      recordTy <- currentContextSubst $ TyRecord rows mTail
+      mTail' <- traverse currentContextSubst mTail
+      mUnifyVar' <- traverse currentContextSubst mUnifyVar
+      case (Map.null rows, mTail', mUnifyVar') of
+        -- Rows are empty and unify variable is empty. This corresponds to
+        -- unifying an empty row with an empty row.
+        (True, Nothing, Nothing) -> pure ()
+        -- Distinct rows are empty but there are type variables so unify them
+        (True, Just tail', Just unifyVar) -> subtype tail' unifyVar
+        -- Rows are empty and we are unifying with the empty row.
+        (True, Just tail', Nothing) -> subtype tail' (TyRecord Map.empty Nothing)
+        -- Base case, unify the record with the unify var
+        (_, _, Just unifyVar) -> subtype recordTy unifyVar
+        --(_, _, _) -> throwError $ UnificationFail t1 t2
+        (_, _, _) -> throwError $ "subtype mismatch record " ++ show (t1, t2)
+
+  -- Unify common fields
+  uncurry subtypeMany $ unzip $ snd <$> Map.toAscList commonFields
+  -- Unify fields unique first record with second variable.
+  mTail1' <- traverse (maybeFreshTail justFields2) mTail1
+  subtypeRecordWithVar justFields1 mTail1' mTail2
+  -- Vice versa, unifying rows from second record with first variable.
+  mTail2' <- traverse (maybeFreshTail justFields1) mTail2
+  subtypeRecordWithVar justFields2 mTail2' mTail1
 subtype t1 t2 = throwError $ "subtype mismatch " ++ show (t1, t2)
+
+-- TODO: Fix this subtype case for TyRecord
+-- runChecker $ modifyContext (|> ContextEVar (TyExistVarName 1)) >> subtype (TyRecord [("x", TyCon "Int"), ("y", TyCon "Bool")] Nothing) (TyRecord [("x", TyCon "Int")] (Just $ TyExistVar (TyExistVarName 1)))
+--
+-- Note that the following works with the old unification code
+-- runInference (TyEnv Map.empty Map.empty Map.empty Map.empty 0) $ unifies (T.TyRecord [("x", T.TyCon "Int")] (Just $ T.TyVarInfo "a" TyVarGenerated)) (T.TyRecord [("x", T.TyCon "Int"), ("y", T.TyCon "Bool")] Nothing)
+
+subtypeMany :: [Type] -> [Type] -> Checker ()
+subtypeMany [] [] = pure ()
+subtypeMany (t1 : ts1) (t2 : ts2) = do
+  subtype t1 t2
+  ts1' <- traverse currentContextSubst ts1
+  ts2' <- traverse currentContextSubst ts2
+  subtypeMany ts1' ts2'
+subtypeMany t1 t2 = error $ "subtypeMany lists different length " ++ show (t1, t2)
 
 occursCheck :: TyExistVarName -> Type -> Checker ()
 occursCheck a t =
