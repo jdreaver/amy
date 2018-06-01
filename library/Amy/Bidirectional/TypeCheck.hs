@@ -1,14 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Amy.Bidirectional.TypeCheck
-  ( inferBindingGroup
+  ( inferModule
+  , inferBindingGroup
   , inferBinding
   , inferExpr
   , checkBinding
   , checkExpr
   ) where
 
-import Control.Monad.Except
 import Data.Foldable (for_)
 import Data.List (foldl')
 import qualified Data.List.NonEmpty as NE
@@ -20,6 +20,7 @@ import Data.Traversable (for)
 import Amy.Bidirectional.AST as T
 import Amy.Bidirectional.Monad
 import Amy.Bidirectional.Subtyping
+import Amy.Errors
 import Amy.Prim
 import Amy.Renamer.AST as R
 import Amy.Syntax.Located
@@ -27,6 +28,32 @@ import Amy.Syntax.Located
 --
 -- Infer
 --
+
+inferModule :: R.Module -> Either Error T.Module
+inferModule (R.Module bindings externs typeDeclarations) = do
+  let
+    externs' = convertExtern <$> externs
+    --externTypes = (\(T.Extern name ty) -> (name, ty)) <$> externs'
+    typeDeclarations' = (convertTypeDeclaration <$> typeDeclarations) ++ (T.fromPrimTypeDef <$> allPrimTypeDefinitions)
+    --primFuncTypes = primitiveFunctionType' <$> allPrimitiveFunctions
+    -- env =
+    --   TyEnv
+    --   { identTypes = Map.fromList $ externTypes ++ primFuncTypes
+    --   , dataConstructorTypes = Map.fromList $ concatMap mkDataConTypes typeDeclarations'
+    --   , tyVarKinds = Map.empty
+    --   , tyConKinds = Map.empty
+    --   , maxId = 0
+    --   }
+  runChecker $ do
+    -- Infer type declaration kinds and add to scope
+    -- for_ typeDeclarations' $ \decl@(T.TypeDeclaration (T.TyConDefinition tyCon _) _) -> do
+    --   kind <- inferTypeDeclarationKind decl
+    --   addTyConKindToScope tyCon kind
+
+    -- Infer all bindings
+    bindings' <- inferBindingGroup bindings
+    pure (T.Module bindings' externs' typeDeclarations')
+
 
 inferBindingGroup :: [R.Binding] -> Checker [T.Binding]
 inferBindingGroup bindings = do
@@ -170,6 +197,26 @@ checkExpr e t = do
 --
 -- Converting types
 --
+
+primitiveFunctionType' :: PrimitiveFunction -> (IdentName, T.Type)
+primitiveFunctionType' (PrimitiveFunction _ name ty) =
+  ( name
+  , foldr1 T.TyFun $ T.TyCon <$> ty
+  )
+
+convertExtern :: R.Extern -> T.Extern
+convertExtern (R.Extern (Located _ name) ty) = T.Extern name (convertType ty)
+
+convertTypeDeclaration :: R.TypeDeclaration -> T.TypeDeclaration
+convertTypeDeclaration (R.TypeDeclaration tyName cons) =
+  T.TypeDeclaration (convertTyConDefinition tyName) (convertDataConDefinition <$> cons)
+
+convertDataConDefinition :: R.DataConDefinition -> T.DataConDefinition
+convertDataConDefinition (R.DataConDefinition (Located _ conName) mTyArg) =
+  T.DataConDefinition
+  { T.dataConDefinitionName = conName
+  , T.dataConDefinitionArgument = convertType <$> mTyArg
+  }
 
 convertScheme :: R.Scheme -> T.Type
 convertScheme (R.Forall vars ty) = T.TyForall (NE.fromList $ convertTyVarInfo <$> vars) (convertType ty)

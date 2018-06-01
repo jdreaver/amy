@@ -22,6 +22,7 @@ import System.IO (hPutStrLn, stderr)
 import Text.Megaparsec
 
 import Amy.ANF as ANF
+import Amy.Bidirectional as B
 import Amy.Codegen
 import Amy.Core as C
 import Amy.Errors
@@ -51,8 +52,10 @@ process filePath DumpFlags{..} input = do
     renamed <- liftEither $ rename parsed
 
     -- Type checking
-    typeChecked <- liftEither $ first (:[]) $ inferModule renamed
-    when dfDumpTypeChecked $
+    bidir <- liftEither $ first (:[]) $ B.inferModule renamed
+    typeChecked <- liftEither $ first (:[]) $ T.inferModule renamed
+    when dfDumpTypeChecked $ do
+      lift $ putStrLn "\n Bidirectional Type Checked:" >> print (B.prettyModule bidir)
       lift $ putStrLn "\nType Checked:" >> print (T.prettyModule typeChecked)
 
     -- Desugar to Core
