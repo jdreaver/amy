@@ -14,7 +14,7 @@ import Data.Foldable (for_, traverse_)
 import Data.List (foldl')
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
-import Data.Maybe (maybeToList)
+import Data.Maybe (isJust, maybeToList)
 import qualified Data.Sequence as Seq
 import Data.Text (Text, pack)
 import Data.Traversable (for)
@@ -67,11 +67,18 @@ inferBindingGroup bindings = do
     -- TODO: Proper binding dependency analysis so this is done in the proper
     -- order
     addValueTypeToScope (T.bindingName binding') (T.bindingType binding')
-    pure binding'
+    pure (binding', isJust (R.bindingType binding))
 
-  -- Apply substitutions to bindings
+  -- Generalize and apply substitutions to bindings
   context <- getContext
-  pure $ contextSubstBinding context <$> bindings'
+  pure $ flip fmap bindings' $ \(binding, isUserDefinedType) ->
+    let
+      ty = T.bindingType binding
+      (ty', context') = generalize context ty
+    in
+      if isUserDefinedType
+      then contextSubstBinding context binding
+      else contextSubstBinding context' $ binding { T.bindingType = ty' }
 
 inferBinding :: R.Binding -> Checker T.Binding
 inferBinding binding@(R.Binding _ mTy _ _) =
@@ -89,13 +96,12 @@ inferUntypedBinding (R.Binding (Located _ name) _ args expr) = withNewLexicalSco
   let
     allVars = (snd <$> argsAndVars) ++ [exprVar]
   marker <- freshTEVar
-  modifyContext (<> Context (Seq.fromList $ ContextMarker marker : (ContextEVar <$> allVars)))
+  modifyContext (<> Context (Seq.fromList $ (ContextEVar <$> allVars) ++ [ContextMarker marker]))
   expr' <- checkExpr expr (TyExistVar exprVar)
 
   -- Generalize (the Hindley-Milner extension in the paper)
   (contextL, contextR) <- findMarkerHole marker
-  let
-    (tyForall, contextR') = generalize contextR $ foldr1 T.TyFun $ T.TyExistVar <$> allVars
+  let ty = foldr1 T.TyFun $ T.TyExistVar <$> allVars
   putContext contextL
 
   -- Convert binding
@@ -104,7 +110,7 @@ inferUntypedBinding (R.Binding (Located _ name) _ args expr) = withNewLexicalSco
     pure $ T.Typed argTy arg
   retTy <- currentContextSubst (T.TyExistVar exprVar)
 
-  pure $ contextSubstBinding contextR' $ T.Binding name tyForall args' retTy expr'
+  pure $ contextSubstBinding (contextL <> contextR) $ T.Binding name ty args' retTy expr'
 
 generalize :: Context -> T.Type -> (T.Type, Context)
 generalize context ty =
@@ -113,12 +119,12 @@ generalize context ty =
     -- that in general there can be more unsolved existential variables in the
     -- context then there actually are in the type.
     freeVars = freeTEVars $ contextSubst context ty
-    unsolvedEVars = contextUnsolved context
-    unsolvedFreeEVars = filter (`elem` freeVars) unsolvedEVars
+    -- unsolvedEVars = contextUnsolved context
+    -- unsolvedFreeEVars = filter (`elem` freeVars) unsolvedEVars
 
     -- Replace these with nice letters. TODO: Make sure these letters aren't
     -- already in scope.
-    varsWithLetters = zip unsolvedFreeEVars (TyVarName <$> letters)
+    varsWithLetters = zip freeVars (TyVarName <$> letters)
     solutions = uncurry ContextSolved . fmap T.TyVar <$> varsWithLetters
     context' = context <> (Context $ Seq.fromList solutions)
 
