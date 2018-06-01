@@ -94,3 +94,21 @@ case.end.ret:                                     ; preds = %case.1.ret, %case.0
   ret { i64, i1 }* %ret
 }
 
+define private { i64*, i64*, i64* }* @q({ i64*, i64*, i64* }* %r) {
+entry:
+  %0 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %r, i32 0, i32 0
+  %x8 = load i64*, i64** %0
+  %1 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %r, i32 0, i32 1
+  %y9 = load i64*, i64** %1
+  %2 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %r, i32 0, i32 2
+  %z10 = load i64*, i64** %2
+  %ret = alloca { i64*, i64*, i64* }
+  %3 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %ret, i32 0, i32 0
+  store i64* %x8, i64** %3
+  %4 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %ret, i32 0, i32 1
+  store i64* %y9, i64** %4
+  %5 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %ret, i32 0, i32 2
+  store i64* %z10, i64** %5
+  ret { i64*, i64*, i64* }* %ret
+}
+
