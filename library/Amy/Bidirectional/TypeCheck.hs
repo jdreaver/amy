@@ -135,6 +135,13 @@ inferExpr (R.EIf (R.If pred' then' else')) = do
 --     withContextUntil (ContextScopeMarker x) $ do
 --       checkExpr e (TyEVar b)
 --       currentContextSubst (TyEVar a `TyFun` TyEVar b)
+inferExpr (R.ELet (R.Let bindings expression)) = do
+  bindings' <- inferBindingGroup bindings
+  expression' <- withNewValueTypeScope $ do
+    for_ bindings' $ \binding ->
+      addValueTypeToScope (T.bindingName binding) (T.bindingType binding)
+    inferExpr expression
+  pure $ T.ELet (T.Let bindings' expression')
 inferExpr (R.EApp f e) = do
   f' <- inferExpr f
   tfSub <- currentContextSubst (expressionType f')
