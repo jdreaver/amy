@@ -128,6 +128,11 @@ instantiateLeft a (TyFun t1 t2) = do
   instantiateRight t1 a1
   t2' <- currentContextSubst t2
   instantiateLeft a2 t2'
+instantiateLeft a (TyApp t1 t2) = do
+  (a1, a2) <- articulateTyAppExist a
+  instantiateLeft a1 t1
+  t2' <- currentContextSubst t2
+  instantiateLeft a2 t2'
 instantiateLeft a (TyForall bs t) =
   withContextUntilNE (ContextVar <$> bs) $
     instantiateLeft a t
@@ -143,6 +148,11 @@ instantiateRight (TyFun t1 t2) a = do
   instantiateLeft a1 t1
   t2' <- currentContextSubst t2
   instantiateRight t2' a2
+instantiateRight (TyApp t1 t2) a = do
+  (a1, a2) <- articulateTyAppExist a
+  instantiateRight t1 a1
+  t2' <- currentContextSubst t2
+  instantiateRight t2' a2
 instantiateRight (TyForall bs t) a = do
   bs' <- traverse (const freshTEVar) bs
   withContextUntilNE (ContextMarker <$> bs') $ do
@@ -156,11 +166,17 @@ instantiateRight (TyRecord rows (Just tailVar)) a = do
 instantiateRight t a = instantiateMonoType a t
 
 articulateTyFunExist :: TyExistVarName -> Checker (TyExistVarName, TyExistVarName)
-articulateTyFunExist a = do
+articulateTyFunExist = articulateTyAppExist' TyFun
+
+articulateTyAppExist :: TyExistVarName -> Checker (TyExistVarName, TyExistVarName)
+articulateTyAppExist = articulateTyAppExist' TyApp
+
+articulateTyAppExist' :: (Type -> Type -> Type) -> TyExistVarName -> Checker (TyExistVarName, TyExistVarName)
+articulateTyAppExist' f a = do
   (contextL, contextR) <- findTEVarHole a
   a1 <- freshTEVar
   a2 <- freshTEVar
-  putContext $ contextL |> ContextEVar a2 |> ContextEVar a1 |> ContextSolved a (TyFun (TyExistVar a1) (TyExistVar a2)) <> contextR
+  putContext $ contextL |> ContextEVar a2 |> ContextEVar a1 |> ContextSolved a (f (TyExistVar a1) (TyExistVar a2)) <> contextR
   pure (a1, a2)
 
 articulateRecord :: TyExistVarName -> Map RowLabel Type -> Checker TyExistVarName
@@ -177,7 +193,7 @@ instantiateMonoType a t = do
     (_, True) -> putContext $ contextL |> ContextSolved a t <> contextR
     -- Special reach rule for existentials
     (TyExistVar b, False) -> instantiateReach a b
-    _ -> error $ "Type not well-formed " ++ show (a, t)
+    _ -> error $ "Type not well-formed " ++ show (a, t, contextL, contextR)
 
 instantiateReach :: TyExistVarName -> TyExistVarName -> Checker ()
 instantiateReach a b = do

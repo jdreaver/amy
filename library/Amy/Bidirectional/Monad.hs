@@ -26,6 +26,7 @@ module Amy.Bidirectional.Monad
   , withNewValueTypeScope
   , addValueTypeToScope
   , lookupValueType
+  , lookupDataConType
   ) where
 
 import Control.Monad.Except
@@ -36,7 +37,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe, isJust, mapMaybe)
+import Data.Maybe (fromMaybe, isJust, mapMaybe, maybeToList)
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 
@@ -129,10 +130,22 @@ data CheckState
   { latestId :: !Int
   , stateContext :: !Context
   , valueTypes :: !(Map IdentName Type)
+  , dataConstructorTypes :: !(Map DataConName Type)
   } deriving (Show, Eq)
 
-runChecker :: Checker a -> Either Error a
-runChecker (Checker action) = evalState (runExceptT action) (CheckState 0 (Context Seq.empty) Map.empty)
+runChecker
+  :: [(IdentName, Type)]
+  -> [(DataConName, Type)]
+  -> Checker a -> Either Error a
+runChecker identTypes dataConTypes (Checker action) = evalState (runExceptT action) checkState
+ where
+  checkState =
+    CheckState
+    { latestId = 0
+    , stateContext = Context Seq.empty
+    , valueTypes = Map.fromList identTypes
+    , dataConstructorTypes = Map.fromList dataConTypes
+    }
 
 freshId :: Checker Int
 freshId = modify' (\s -> s { latestId = latestId s + 1 }) >> gets latestId
@@ -198,3 +211,9 @@ lookupValueType :: IdentName -> Checker Type
 lookupValueType name = do
   mTy <- Map.lookup name <$> gets valueTypes
   maybe (throwError $ UnboundVariable name) pure mTy
+
+lookupDataConType :: DataConName -> Checker Type
+lookupDataConType con =
+  fromMaybe (error $ "No type definition for " ++ show con)
+    . Map.lookup con
+    <$> gets dataConstructorTypes

@@ -13,6 +13,7 @@ import Data.Foldable (for_)
 import Data.List (foldl')
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
+import Data.Maybe (maybeToList)
 import qualified Data.Sequence as Seq
 import Data.Text (pack)
 import Data.Traversable (for)
@@ -33,18 +34,13 @@ inferModule :: R.Module -> Either Error T.Module
 inferModule (R.Module bindings externs typeDeclarations) = do
   let
     externs' = convertExtern <$> externs
-    --externTypes = (\(T.Extern name ty) -> (name, ty)) <$> externs'
     typeDeclarations' = (convertTypeDeclaration <$> typeDeclarations) ++ (T.fromPrimTypeDef <$> allPrimTypeDefinitions)
-    --primFuncTypes = primitiveFunctionType' <$> allPrimitiveFunctions
-    -- env =
-    --   TyEnv
-    --   { identTypes = Map.fromList $ externTypes ++ primFuncTypes
-    --   , dataConstructorTypes = Map.fromList $ concatMap mkDataConTypes typeDeclarations'
-    --   , tyVarKinds = Map.empty
-    --   , tyConKinds = Map.empty
-    --   , maxId = 0
-    --   }
-  runChecker $ do
+
+    externTypes = (\(T.Extern name ty) -> (name, ty)) <$> externs'
+    primFuncTypes = primitiveFunctionType' <$> allPrimitiveFunctions
+    identTypes = externTypes ++ primFuncTypes
+    dataConstructorTypes = concatMap mkDataConTypes typeDeclarations'
+  runChecker identTypes dataConstructorTypes $ do
     -- Infer type declaration kinds and add to scope
     -- for_ typeDeclarations' $ \decl@(T.TypeDeclaration (T.TyConDefinition tyCon _) _) -> do
     --   kind <- inferTypeDeclarationKind decl
@@ -53,7 +49,6 @@ inferModule (R.Module bindings externs typeDeclarations) = do
     -- Infer all bindings
     bindings' <- inferBindingGroup bindings
     pure (T.Module bindings' externs' typeDeclarations')
-
 
 inferBindingGroup :: [R.Binding] -> Checker [T.Binding]
 inferBindingGroup bindings = do
@@ -116,9 +111,9 @@ inferExpr (R.EVar var) =
     R.VVal (Located _ valVar) -> do
       t <- lookupValueType valVar
       pure $ T.EVar $ T.VVal (T.Typed t valVar)
-    -- R.VCons (Located _ con) -> do
-    --   t <- instantiate =<< dataConstructorScheme con
-    --   pure (T.EVar $ T.VCons (T.Typed t con), [])
+    R.VCons (Located _ con) -> do
+      t <- lookupDataConType con
+      pure (T.EVar $ T.VCons (T.Typed t con))
 inferExpr (R.EIf (R.If pred' then' else')) = do
   -- TODO: Is this the right way to do this? Should we actually infer the types
   -- and then unify with expected types?
@@ -230,6 +225,17 @@ convertDataConDefinition (R.DataConDefinition (Located _ conName) mTyArg) =
   { T.dataConDefinitionName = conName
   , T.dataConDefinitionArgument = convertType <$> mTyArg
   }
+
+mkDataConTypes :: T.TypeDeclaration -> [(DataConName, T.Type)]
+mkDataConTypes (T.TypeDeclaration (T.TyConDefinition tyConName tyVars) dataConDefs) = mkDataConPair <$> dataConDefs
+ where
+  mkDataConPair (T.DataConDefinition name mTyArg) =
+    let
+      tyVars' = T.TyVar <$> tyVars
+      tyApp = foldl1 T.TyApp (T.TyCon tyConName : tyVars')
+      ty = foldl1 T.TyFun (maybeToList mTyArg ++ [tyApp])
+      tyForall = maybe ty (\varsNE -> TyForall varsNE ty) (NE.nonEmpty tyVars)
+    in (name, tyForall)
 
 convertScheme :: R.Scheme -> T.Type
 convertScheme (R.Forall vars ty) =
