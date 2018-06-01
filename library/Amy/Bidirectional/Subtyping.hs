@@ -50,7 +50,10 @@ subtype t1@(TyRecord rows1 mTail1) t2@(TyRecord rows2 mTail2) = do
     maybeFreshTail distinctRows x =
       if Map.null distinctRows
       then pure x
-      else TyExistVar <$> freshTEVar
+      else do
+        var <- freshTEVar
+        modifyContext (|> ContextEVar var)
+        pure $ TyExistVar var
     subtypeRecordWithVar rows mTail mUnifyVar = do
       recordTy <- currentContextSubst $ TyRecord rows mTail
       mTail' <- traverse currentContextSubst mTail
@@ -77,12 +80,6 @@ subtype t1@(TyRecord rows1 mTail1) t2@(TyRecord rows2 mTail2) = do
   mTail2' <- traverse (maybeFreshTail justFields1) mTail2
   subtypeRecordWithVar justFields2 mTail2' mTail1
 subtype t1 t2 = throwError $ "subtype mismatch " ++ show (t1, t2)
-
--- TODO: Fix this subtype case for TyRecord
--- runChecker $ modifyContext (|> ContextEVar (TyExistVarName 1)) >> subtype (TyRecord [("x", TyCon "Int"), ("y", TyCon "Bool")] Nothing) (TyRecord [("x", TyCon "Int")] (Just $ TyExistVar (TyExistVarName 1)))
---
--- Note that the following works with the old unification code
--- runInference (TyEnv Map.empty Map.empty Map.empty Map.empty 0) $ unifies (T.TyRecord [("x", T.TyCon "Int")] (Just $ T.TyVarInfo "a" TyVarGenerated)) (T.TyRecord [("x", T.TyCon "Int"), ("y", T.TyCon "Bool")] Nothing)
 
 subtypeMany :: [Type] -> [Type] -> Checker ()
 subtypeMany [] [] = pure ()
