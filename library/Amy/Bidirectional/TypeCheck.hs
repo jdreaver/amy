@@ -11,7 +11,6 @@ module Amy.Bidirectional.TypeCheck
 
 import Data.Foldable (for_, traverse_)
 import Data.List (foldl')
-import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import Data.Maybe (maybeToList)
@@ -20,6 +19,7 @@ import Data.Text (pack)
 import Data.Traversable (for)
 
 import Amy.Bidirectional.AST as T
+import Amy.Bidirectional.KindInference
 import Amy.Bidirectional.Monad
 import Amy.Bidirectional.Subtyping
 import Amy.Errors
@@ -43,9 +43,9 @@ inferModule (R.Module bindings externs typeDeclarations) = do
     dataConstructorTypes = concatMap mkDataConTypes typeDeclarations'
   runChecker identTypes dataConstructorTypes $ do
     -- Infer type declaration kinds and add to scope
-    -- for_ typeDeclarations' $ \decl@(T.TypeDeclaration (T.TyConDefinition tyCon _) _) -> do
-    --   kind <- inferTypeDeclarationKind decl
-    --   addTyConKindToScope tyCon kind
+    for_ typeDeclarations' $ \decl@(T.TypeDeclaration (T.TyConDefinition tyCon _) _) -> do
+      kind <- inferTypeDeclarationKind decl
+      addTyConKindToScope tyCon kind
 
     -- Infer all bindings
     bindings' <- inferBindingGroup bindings
@@ -75,7 +75,7 @@ inferBinding binding@(R.Binding _ mTy _ _) =
     Nothing -> inferUntypedBinding binding
 
 inferUntypedBinding :: R.Binding -> Checker T.Binding
-inferUntypedBinding (R.Binding (Located _ name) _ args expr) = withNewValueTypeScope $ do
+inferUntypedBinding (R.Binding (Located _ name) _ args expr) = withNewLexicalScope $ do
   argsAndVars <- for args $ \(Located _ arg) -> do
     ty <- freshTEVar
     addValueTypeToScope arg (TyExistVar ty)
@@ -140,7 +140,7 @@ inferExpr (R.EIf (R.If pred' then' else')) = do
 --       currentContextSubst (TyEVar a `TyFun` TyEVar b)
 inferExpr (R.ELet (R.Let bindings expression)) = do
   bindings' <- inferBindingGroup bindings
-  expression' <- withNewValueTypeScope $ do
+  expression' <- withNewLexicalScope $ do
     for_ bindings' $ \binding ->
       addValueTypeToScope (T.bindingName binding) (T.bindingType binding)
     inferExpr expression
@@ -192,7 +192,7 @@ inferApp t e = error $ "Cannot inferApp for " ++ show (t, e)
 inferMatch :: T.Type ->  R.Match -> Checker T.Match
 inferMatch scrutineeTy (R.Match pat body) = do
   pat' <- checkPattern pat scrutineeTy
-  body' <- withNewValueTypeScope $ do
+  body' <- withNewLexicalScope $ do
     traverse_ (uncurry addValueTypeToScope) (patternBinderType pat')
     inferExpr body
   pure $ T.Match pat' body'
@@ -231,6 +231,7 @@ patternBinderType (T.PParens pat) = patternBinderType pat
 
 checkBinding :: R.Binding -> T.Type -> Checker T.Binding
 checkBinding binding t = do
+  checkTypeKind t
   binding' <- checkBinding' binding t
   -- Restore original type so it looks exactly like the user typed it
   pure $ binding' { T.bindingType = t }

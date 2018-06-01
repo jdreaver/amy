@@ -14,6 +14,7 @@ module Amy.Bidirectional.Monad
     -- * Monad
   , Checker
   , runChecker
+  , freshId
   , freshTEVar
   , getContext
   , putContext
@@ -23,10 +24,15 @@ module Amy.Bidirectional.Monad
   , withContextUntilNE
   , findTEVarHole
   , findMarkerHole
-  , withNewValueTypeScope
+  , withNewLexicalScope
   , addValueTypeToScope
   , lookupValueType
   , lookupDataConType
+  , addUnknownTyVarKindToScope
+  , lookupTyVarKind
+  , addTyConKindToScope
+  , addUnknownTyConKindToScope
+  , lookupTyConKind
   ) where
 
 import Control.Monad.Except
@@ -44,6 +50,7 @@ import qualified Data.Sequence as Seq
 
 import Amy.Bidirectional.AST
 import Amy.Errors
+import Amy.Kind
 
 --
 -- Context
@@ -142,6 +149,8 @@ data CheckState
   , stateContext :: !Context
   , valueTypes :: !(Map IdentName Type)
   , dataConstructorTypes :: !(Map DataConName Type)
+  , tyVarKinds :: !(Map TyVarName Kind)
+  , tyConKinds :: !(Map TyConName Kind)
   } deriving (Show, Eq)
 
 runChecker
@@ -156,6 +165,8 @@ runChecker identTypes dataConTypes (Checker action) = evalState (runExceptT acti
     , stateContext = Context Seq.empty
     , valueTypes = Map.fromList identTypes
     , dataConstructorTypes = Map.fromList dataConTypes
+    , tyVarKinds = Map.empty
+    , tyConKinds = Map.empty
     }
 
 freshId :: Checker Int
@@ -208,11 +219,15 @@ findMarkerHole var = do
     (error $ "Couldn't find marker in context " ++ show (var, context))
     (contextHole (ContextMarker var) context)
 
-withNewValueTypeScope :: Checker a -> Checker a
-withNewValueTypeScope action = do
-  orig <- gets valueTypes
+withNewLexicalScope :: Checker a -> Checker a
+withNewLexicalScope action = do
+  orig <- get
   result <- action
-  modify' $ \s -> s { valueTypes = orig }
+  modify' $ \s ->
+    s
+    { valueTypes = valueTypes orig
+    , tyVarKinds = tyVarKinds orig
+    }
   pure result
 
 addValueTypeToScope :: IdentName -> Type -> Checker ()
@@ -228,3 +243,31 @@ lookupDataConType con =
   fromMaybe (error $ "No type definition for " ++ show con)
     . Map.lookup con
     <$> gets dataConstructorTypes
+
+addUnknownTyVarKindToScope :: TyVarName -> Checker Int
+addUnknownTyVarKindToScope name = do
+  i <- freshId
+  modify' (\s -> s { tyVarKinds = Map.insert name (KUnknown i) (tyVarKinds s) })
+  pure i
+
+lookupTyVarKind :: TyVarName -> Checker Kind
+lookupTyVarKind name =
+  fromMaybe (error $ "Can't find kind for name, Renamer must have messed up " ++ show name)
+  . Map.lookup name
+  <$> gets tyVarKinds
+
+addTyConKindToScope :: TyConName -> Kind -> Checker ()
+addTyConKindToScope name kind =
+  modify' (\s -> s { tyConKinds = Map.insert name kind (tyConKinds s) })
+
+addUnknownTyConKindToScope :: TyConName -> Checker Int
+addUnknownTyConKindToScope name = do
+  i <- freshId
+  addTyConKindToScope name $ KUnknown i
+  pure i
+
+lookupTyConKind :: TyConName -> Checker Kind
+lookupTyConKind name =
+  fromMaybe (error $ "Can't find kind for name, Renamer must have messed up " ++ show name)
+  . Map.lookup name
+  <$> gets tyConKinds
