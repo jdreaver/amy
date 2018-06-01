@@ -99,7 +99,11 @@ inferUntypedBinding (R.Binding (Located _ name) _ args expr) = withNewLexicalSco
     argTy <- currentContextSubst (T.TyExistVar var)
     pure $ T.Typed argTy arg
   retTy <- currentContextSubst (T.TyExistVar exprVar)
-  pure $ T.Binding name tyForall args' retTy expr'
+
+  -- TODO: This huge substitution seems expensive and wasteful. Expressions
+  -- should probably already be fully substituted when they are
+  -- inferred/checked, just like types are.
+  pure $ contextSubstBinding (contextL <> contextR') $ T.Binding name tyForall args' retTy expr'
 
 generalize :: Context -> T.Type -> (T.Type, Context)
 generalize context ty =
@@ -356,3 +360,55 @@ convertTyConDefinition (R.TyConDefinition name' args _) = T.TyConDefinition name
 
 convertTyVarInfo :: Located TyVarName -> T.TyVarName
 convertTyVarInfo (Located _ name') = name'
+
+--
+-- Substitution
+--
+
+contextSubstBinding :: Context -> T.Binding -> T.Binding
+contextSubstBinding context (T.Binding name ty args retTy body) =
+  T.Binding
+  { T.bindingName = name
+  , T.bindingType = contextSubst context ty
+  , T.bindingArgs = contextSubstTyped context <$> args
+  , T.bindingReturnType = contextSubst context retTy
+  , T.bindingBody = contextSubstExpr context body
+  }
+
+contextSubstExpr :: Context -> T.Expr -> T.Expr
+contextSubstExpr _ lit@T.ELit{} = lit
+contextSubstExpr context (T.ERecord rows) =
+  T.ERecord $ (\(Typed ty expr) -> Typed (contextSubst context ty) (contextSubstExpr context expr)) <$> rows
+contextSubstExpr context (T.ERecordSelect expr label ty) =
+  T.ERecordSelect (contextSubstExpr context expr) label (contextSubst context ty)
+contextSubstExpr context (T.EVar var) =
+  T.EVar $
+    case var of
+      T.VVal var' -> T.VVal $ contextSubstTyped context var'
+      T.VCons (T.Typed ty con) -> T.VCons (T.Typed (contextSubst context ty) con)
+contextSubstExpr context (T.EIf (T.If pred' then' else')) =
+  T.EIf (T.If (contextSubstExpr context pred') (contextSubstExpr context then') (contextSubstExpr context else'))
+contextSubstExpr context (T.ECase (T.Case scrutinee matches)) =
+  T.ECase (T.Case (contextSubstExpr context scrutinee) (contextSubstMatch context <$> matches))
+contextSubstExpr context (T.ELet (T.Let bindings expr)) =
+  T.ELet (T.Let (contextSubstBinding context <$> bindings) (contextSubstExpr context expr))
+contextSubstExpr context (T.EApp (T.App f arg returnType)) =
+  T.EApp (T.App (contextSubstExpr context f) (contextSubstExpr context arg) (contextSubst context returnType))
+contextSubstExpr context (T.EParens expr) = T.EParens (contextSubstExpr context expr)
+
+contextSubstTyped :: Context -> T.Typed a -> T.Typed a
+contextSubstTyped subst (T.Typed ty x) = T.Typed (contextSubst subst ty) x
+
+contextSubstMatch :: Context -> T.Match -> T.Match
+contextSubstMatch context (T.Match pat body) =
+  T.Match (contextSubstPattern context pat) (contextSubstExpr context body)
+
+contextSubstPattern :: Context -> T.Pattern -> T.Pattern
+contextSubstPattern _ pat@(T.PLit _) = pat
+contextSubstPattern context (T.PVar var) = T.PVar $ contextSubstTyped context var
+contextSubstPattern context (T.PCons (T.PatCons con mArg retTy)) =
+  let
+    mArg' = contextSubstPattern context <$> mArg
+    retTy' = contextSubst context retTy
+  in T.PCons (T.PatCons con mArg' retTy')
+contextSubstPattern context (T.PParens pat) = T.PParens (contextSubstPattern context pat)
