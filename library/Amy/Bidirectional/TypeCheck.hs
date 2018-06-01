@@ -167,7 +167,7 @@ inferApp (TyForall as t) e = do
   let t' = foldl' (\ty (a, a') -> instantiate a (TyExistVar a') ty) t $ NE.zip as as'
   inferApp t' e
 inferApp (TyExistVar a) e = do
-  (a1, a2) <- instantiateTyFunContext a
+  (a1, a2) <- articulateTyFunExist a
   e' <- checkExpr e (TyExistVar a1)
   t <- currentContextSubst (TyExistVar a2)
   pure (e', t)

@@ -1,12 +1,13 @@
 module Amy.Bidirectional.Subtyping
   ( subtype
   , instantiate
-  , instantiateTyFunContext
+  , articulateTyFunExist
   ) where
 
 import Control.Monad.Except
 import Data.List (foldl')
 import qualified Data.List.NonEmpty as NE
+import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import Data.Set (Set)
@@ -123,7 +124,7 @@ instantiate v s (TyForall a t) = TyForall a (instantiate v s t)
 
 instantiateLeft :: TyExistVarName -> Type -> Checker ()
 instantiateLeft a (TyFun t1 t2) = do
-  (a1, a2) <- instantiateTyFunContext a
+  (a1, a2) <- articulateTyFunExist a
   instantiateRight t1 a1
   t2' <- currentContextSubst t2
   instantiateLeft a2 t2'
@@ -131,16 +132,14 @@ instantiateLeft a (TyForall bs t) =
   withContextUntilNE (ContextVar <$> bs) $
     instantiateLeft a t
 instantiateLeft a (TyRecord rows (Just tailVar)) = do
-  (contextL, contextR) <- findTEVarHole a
-  tailVar' <- freshTEVar
-  putContext $ contextL |> ContextEVar tailVar' |> ContextSolved a (TyRecord rows (Just $ TyExistVar tailVar')) <> contextR
+  tailVar' <- articulateRecord a rows
   instantiateLeft tailVar' tailVar
 -- Catch-all for all monotypes and reach
 instantiateLeft a t = instantiateMonoType a t
 
 instantiateRight :: Type -> TyExistVarName -> Checker ()
 instantiateRight (TyFun t1 t2) a = do
-  (a1, a2) <- instantiateTyFunContext a
+  (a1, a2) <- articulateTyFunExist a
   instantiateLeft a1 t1
   t2' <- currentContextSubst t2
   instantiateRight t2' a2
@@ -151,20 +150,25 @@ instantiateRight (TyForall bs t) a = do
     let t' = foldl' (\ty (b, b') -> instantiate b (TyExistVar b') ty) t $ NE.zip bs bs'
     instantiateRight t' a
 instantiateRight (TyRecord rows (Just tailVar)) a = do
-  (contextL, contextR) <- findTEVarHole a
-  tailVar' <- freshTEVar
-  putContext $ contextL |> ContextEVar tailVar' |> ContextSolved a (TyRecord rows (Just $ TyExistVar tailVar')) <> contextR
+  tailVar' <- articulateRecord a rows
   instantiateRight tailVar tailVar'
 -- Catch-all for all monotypes and reach
 instantiateRight t a = instantiateMonoType a t
 
-instantiateTyFunContext :: TyExistVarName -> Checker (TyExistVarName, TyExistVarName)
-instantiateTyFunContext a = do
+articulateTyFunExist :: TyExistVarName -> Checker (TyExistVarName, TyExistVarName)
+articulateTyFunExist a = do
   (contextL, contextR) <- findTEVarHole a
   a1 <- freshTEVar
   a2 <- freshTEVar
   putContext $ contextL |> ContextEVar a2 |> ContextEVar a1 |> ContextSolved a (TyFun (TyExistVar a1) (TyExistVar a2)) <> contextR
   pure (a1, a2)
+
+articulateRecord :: TyExistVarName -> Map RowLabel Type -> Checker TyExistVarName
+articulateRecord a rows = do
+  (contextL, contextR) <- findTEVarHole a
+  tailVar' <- freshTEVar
+  putContext $ contextL |> ContextEVar tailVar' |> ContextSolved a (TyRecord rows (Just $ TyExistVar tailVar')) <> contextR
+  pure tailVar'
 
 instantiateMonoType :: TyExistVarName -> Type -> Checker ()
 instantiateMonoType a t = do
