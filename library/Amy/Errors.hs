@@ -38,6 +38,8 @@ data Error
   | InfiniteKind !Int !Kind
   | UnboundVariable !IdentName
 
+  | OtherTodoError !String
+
   -- | BindingLacksTypeSignature !RBinding
   -- | TypeMismatch !(Type PrimitiveType) !(Type PrimitiveType)
   -- | CantFindType !(Located Name)
@@ -65,6 +67,8 @@ errorLocation e =
     InfiniteType{} -> Nothing
     InfiniteKind{} -> Nothing
     UnboundVariable{} -> Nothing
+
+    OtherTodoError{} -> Nothing
 
     -- BindingLacksTypeSignature bind -> Just $ locatedSpan $ rBindingName bind
     -- TypeMismatch{} -> Nothing

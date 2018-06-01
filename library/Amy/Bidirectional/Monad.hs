@@ -30,7 +30,7 @@ module Amy.Bidirectional.Monad
 
 import Control.Monad.Except
 import Control.Monad.State.Strict
-import Data.Foldable (toList, traverse_)
+import Data.Foldable (toList)
 import Data.List (lookup)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
@@ -41,6 +41,7 @@ import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 
 import Amy.Bidirectional.AST
+import Amy.Errors
 
 --
 -- Context
@@ -104,22 +105,24 @@ contextUnsolved (Context context) = mapMaybe getEVar $ toList context
 contextUntil :: ContextMember -> Context -> Context
 contextUntil member (Context context) = Context $ Seq.takeWhileL (/= member) context
 
-typeWellFormed :: Context -> Type -> Either String ()
-typeWellFormed _ (TyCon _)  = pure ()
-typeWellFormed context (TyVar v) = unless (ContextVar v `contextElem` context) $ Left $ "unbound type variable " ++ show v
-typeWellFormed context (TyExistVar v) = unless (ContextEVar v `contextElem` context || hasSolution) $ Left $ "unbound existential variable " ++ show v
+typeWellFormed :: Context -> Type -> Bool
+typeWellFormed _ (TyCon _) = True
+typeWellFormed context (TyVar v) = ContextVar v `contextElem` context
+typeWellFormed context (TyExistVar v) = ContextEVar v `contextElem` context || hasSolution
   where hasSolution = isJust (contextSolution context v)
-typeWellFormed context (TyApp x y) = typeWellFormed context x >> typeWellFormed context y
-typeWellFormed context (TyFun x y) = typeWellFormed context x >> typeWellFormed context y
-typeWellFormed context (TyRecord rows _) = traverse_ (typeWellFormed context) rows
+typeWellFormed context (TyApp x y) = typeWellFormed context x && typeWellFormed context y
+typeWellFormed context (TyFun x y) = typeWellFormed context x && typeWellFormed context y
+typeWellFormed context (TyRecord rows _) = all (typeWellFormed context) rows
 typeWellFormed context (TyForall vs t) = typeWellFormed (context <> Context (Seq.fromList $ NE.toList $ ContextVar <$> vs)) t
 
 --
 -- Monad
 --
 
-newtype Checker a = Checker (ExceptT String (State CheckState) a)
-  deriving (Functor, Applicative, Monad, MonadState CheckState, MonadError String)
+-- TODO: Use Validation instead of ExceptT
+
+newtype Checker a = Checker (ExceptT Error (State CheckState) a)
+  deriving (Functor, Applicative, Monad, MonadState CheckState, MonadError Error)
 
 data CheckState
   = CheckState
@@ -128,7 +131,7 @@ data CheckState
   , valueTypes :: !(Map IdentName Type)
   } deriving (Show, Eq)
 
-runChecker :: Checker a -> Either String a
+runChecker :: Checker a -> Either Error a
 runChecker (Checker action) = evalState (runExceptT action) (CheckState 0 (Context Seq.empty) Map.empty)
 
 freshId :: Checker Int
@@ -168,9 +171,9 @@ withContextUntilNE members action = do
 findTEVarHole :: TyExistVarName -> Checker (Context, Context)
 findTEVarHole var = do
   context <- getContext
-  maybe
-    (throwError $ "Couldn't find existential variable in context " ++ show (var, context))
-    pure
+  pure $
+    fromMaybe
+    (error $ "Couldn't find existential variable in context " ++ show (var, context))
     (contextHole (ContextEVar var) context)
 
 findMarkerHole :: TyExistVarName -> Checker (Context, Context)
@@ -194,4 +197,4 @@ addValueTypeToScope name ty = modify' $ \s -> s { valueTypes = Map.insert name t
 lookupValueType :: IdentName -> Checker Type
 lookupValueType name = do
   mTy <- Map.lookup name <$> gets valueTypes
-  maybe (throwError $ "Unbound variable " ++ show name) pure mTy
+  maybe (throwError $ UnboundVariable name) pure mTy

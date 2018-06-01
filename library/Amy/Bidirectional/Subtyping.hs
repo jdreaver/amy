@@ -14,6 +14,7 @@ import qualified Data.Set as Set
 
 import Amy.Bidirectional.AST
 import Amy.Bidirectional.Monad
+import Amy.Errors
 
 --
 -- Subtyping
@@ -69,7 +70,7 @@ subtype t1@(TyRecord rows1 mTail1) t2@(TyRecord rows2 mTail2) = do
         -- Base case, unify the record with the unify var
         (_, _, Just unifyVar) -> subtype recordTy unifyVar
         --(_, _, _) -> throwError $ UnificationFail t1 t2
-        (_, _, _) -> throwError $ "subtype mismatch record " ++ show (t1, t2)
+        (_, _, _) -> throwError $ OtherTodoError $ "UnificationFail " ++ show (t1, t2)
 
   -- Unify common fields
   uncurry subtypeMany $ unzip $ snd <$> Map.toAscList commonFields
@@ -79,7 +80,7 @@ subtype t1@(TyRecord rows1 mTail1) t2@(TyRecord rows2 mTail2) = do
   -- Vice versa, unifying rows from second record with first variable.
   mTail2' <- traverse (maybeFreshTail justFields1) mTail2
   subtypeRecordWithVar justFields2 mTail2' mTail1
-subtype t1 t2 = throwError $ "subtype mismatch " ++ show (t1, t2)
+subtype t1 t2 = throwError $ OtherTodoError $ "UnificationFail " ++ show (t1, t2)
 
 subtypeMany :: [Type] -> [Type] -> Checker ()
 subtypeMany [] [] = pure ()
@@ -93,7 +94,7 @@ subtypeMany t1 t2 = error $ "subtypeMany lists different length " ++ show (t1, t
 occursCheck :: TyExistVarName -> Type -> Checker ()
 occursCheck a t =
   if a `elem` freeTEVars t
-  then throwError $ "Infinite type " ++ show (a, t)
+  then throwError $ OtherTodoError $ "Infinite type " ++ show (a, t)
   else pure ()
 
 freeTEVars :: Type -> Set TyExistVarName
@@ -121,7 +122,6 @@ instantiate v s (TyFun a b) = TyFun (instantiate v s a) (instantiate v s b)
 instantiate v s (TyForall a t) = TyForall a (instantiate v s t)
 
 instantiateLeft :: TyExistVarName -> Type -> Checker ()
-instantiateLeft a (TyExistVar b) = instantiateReach a b
 instantiateLeft a (TyFun t1 t2) = do
   (a1, a2) <- instantiateTyFunContext a
   instantiateRight t1 a1
@@ -130,11 +130,10 @@ instantiateLeft a (TyFun t1 t2) = do
 instantiateLeft a (TyForall bs t) =
   withContextUntilNE (ContextVar <$> bs) $
     instantiateLeft a t
--- Catch-all for all monotypes
+-- Catch-all for all monotypes and reach
 instantiateLeft a t = instantiateMonoType a t
 
 instantiateRight :: Type -> TyExistVarName -> Checker ()
-instantiateRight (TyExistVar b) a = instantiateReach a b
 instantiateRight (TyFun t1 t2) a = do
   (a1, a2) <- instantiateTyFunContext a
   instantiateLeft a1 t1
@@ -146,14 +145,8 @@ instantiateRight (TyForall bs t) a = do
     modifyContext $ \context -> context <> (Context $ Seq.fromList $ NE.toList $ ContextEVar <$> bs')
     let t' = foldl' (\ty (b, b') -> instantiate b (TyExistVar b') ty) t $ NE.zip bs bs'
     instantiateRight t' a
--- Catch-all for all monotypes
+-- Catch-all for all monotypes and reach
 instantiateRight t a = instantiateMonoType a t
-
-instantiateReach :: TyExistVarName -> TyExistVarName -> Checker ()
-instantiateReach a b =
-  catchError (instantiateMonoType a (TyExistVar b)) $ \_ -> do
-    (contextL, contextR) <- findTEVarHole b
-    putContext $ contextL |> ContextSolved b (TyExistVar a) <> contextR
 
 instantiateTyFunContext :: TyExistVarName -> Checker (TyExistVarName, TyExistVarName)
 instantiateTyFunContext a = do
@@ -166,5 +159,13 @@ instantiateTyFunContext a = do
 instantiateMonoType :: TyExistVarName -> Type -> Checker ()
 instantiateMonoType a t = do
   (contextL, contextR) <- findTEVarHole a
-  liftEither $ typeWellFormed contextL t
-  putContext $ contextL |> ContextSolved a t <> contextR
+  case (t, typeWellFormed contextL t) of
+    (_, True) -> putContext $ contextL |> ContextSolved a t <> contextR
+    -- Special reach rule for existentials
+    (TyExistVar b, False) -> instantiateReach a b
+    _ -> error $ "Type not well-formed " ++ show (a, t)
+
+instantiateReach :: TyExistVarName -> TyExistVarName -> Checker ()
+instantiateReach a b = do
+  (contextL, contextR) <- findTEVarHole b
+  putContext $ contextL |> ContextSolved b (TyExistVar a) <> contextR

@@ -135,7 +135,7 @@ inferApp (T.TyFun t1 t2) e = do
   e' <- checkExpr e t1
   t <- currentContextSubst t2
   pure (e', t)
-inferApp t e = throwError $ "Cannot inferApp for " ++ show (t, e)
+inferApp t e = error $ "Cannot inferApp for " ++ show (t, e)
 
 --
 -- Checking
