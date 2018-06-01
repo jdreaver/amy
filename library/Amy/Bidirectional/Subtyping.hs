@@ -24,8 +24,8 @@ subtype :: Type -> Type -> Checker ()
 subtype (TyCon a) (TyCon b) | a == b = pure ()
 subtype (TyVar a) (TyVar b) | a == b = pure ()
 subtype (TyExistVar a) (TyExistVar b) | a == b = pure ()
-subtype (TyApp t1 t2) (TyApp t1' t2') = subtypeMany [t1, t1'] [t2, t2']
-subtype (TyFun t1 t2) (TyFun t1' t2') = subtypeMany [t1, t1'] [t2, t2']
+subtype (TyApp t1 t2) (TyApp t1' t2') = subtypeMany [t1, t2] [t1', t2']
+subtype (TyFun t1 t2) (TyFun t1' t2') = subtypeMany [t1, t2] [t1', t2']
 subtype (TyForall as t1) t2 = do
   as' <- traverse (const freshTEVar) as
   withContextUntilNE (ContextMarker <$> as') $ do
