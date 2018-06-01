@@ -109,10 +109,10 @@ inferExpr (R.ELit (Located _ lit)) = pure $ T.ELit lit
 inferExpr (R.EVar var) =
   case var of
     R.VVal (Located _ valVar) -> do
-      t <- lookupValueType valVar
+      t <- currentContextSubst =<< lookupValueType valVar
       pure $ T.EVar $ T.VVal (T.Typed t valVar)
     R.VCons (Located _ con) -> do
-      t <- lookupDataConType con
+      t <- currentContextSubst =<< lookupDataConType con
       pure (T.EVar $ T.VCons (T.Typed t con))
 inferExpr (R.EIf (R.If pred' then' else')) = do
   -- TODO: Is this the right way to do this? Should we actually infer the types
@@ -205,7 +205,8 @@ checkExpr e (TyForall as t) =
 checkExpr e t = do
   e' <- inferExpr e
   tSub <- currentContextSubst t
-  subtype (expressionType e') tSub
+  eTy' <- currentContextSubst $ expressionType e'
+  subtype eTy' tSub
   pure e'
 
 --
