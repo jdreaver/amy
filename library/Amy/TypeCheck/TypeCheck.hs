@@ -3,7 +3,6 @@
 module Amy.TypeCheck.TypeCheck
   ( inferModule
   , inferBindingGroup
-  , inferBinding
   , inferExpr
   , checkBinding
   , checkExpr
@@ -14,7 +13,7 @@ import Data.Foldable (for_, traverse_)
 import Data.List (foldl')
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
-import Data.Maybe (isJust, maybeToList)
+import Data.Maybe (maybeToList)
 import qualified Data.Sequence as Seq
 import Data.Text (Text, pack)
 import Data.Traversable (for)
@@ -55,36 +54,35 @@ inferModule (R.Module bindings externs typeDeclarations) = do
 inferBindingGroup :: [R.Binding] -> Checker [T.Binding]
 inferBindingGroup bindings = do
   -- Add all binding group types to context
-  for_ bindings $ \(R.Binding (Located _ name) _ _ _) -> do
-    ty <- freshTEVar
-    addValueTypeToScope name (T.TyExistVar ty)
-    modifyContext (|> ContextEVar ty)
+  bindingsWithTypes <- for bindings $ \binding@(R.Binding (Located _ name) mTy _ _) -> do
+    ty <-
+      case mTy of
+        Just ty' -> do
+          let ty'' = convertScheme ty'
+          checkTypeKind ty''
+          pure ty''
+        Nothing -> do
+          var <- freshTEVar
+          modifyContext (|> ContextEVar var)
+          pure $ T.TyExistVar var
+    addValueTypeToScope name ty
+    pure (binding, ty)
 
   -- Infer each binding individually
-  bindings' <- for bindings $ \binding -> do
-    binding' <- inferBinding binding
-    -- Update type of binding name in State
-    -- TODO: Proper binding dependency analysis so this is done in the proper
-    -- order
-    addValueTypeToScope (T.bindingName binding') (T.bindingType binding')
-    pure (binding', isJust (R.bindingType binding))
+  bindings' <- for bindingsWithTypes $ \(binding, ty) -> do
+    binding' <- checkBinding binding ty
+    case R.bindingType binding of
+      Nothing -> pure binding'
+      Just ty' -> pure binding' { T.bindingType = convertScheme ty' }
 
   -- Generalize and apply substitutions to bindings
   context <- getContext
-  pure $ flip fmap bindings' $ \(binding, isUserDefinedType) ->
+  pure $ flip fmap bindings' $ \binding ->
     let
       ty = T.bindingType binding
       (ty', context') = generalize context ty
     in
-      if isUserDefinedType
-      then contextSubstBinding context binding
-      else contextSubstBinding context' $ binding { T.bindingType = ty' }
-
-inferBinding :: R.Binding -> Checker T.Binding
-inferBinding binding@(R.Binding _ mTy _ _) =
-  case mTy of
-    Just ty -> checkBinding binding (convertScheme ty)
-    Nothing -> inferUntypedBinding binding
+      contextSubstBinding context' $ binding { T.bindingType = ty' }
 
 inferUntypedBinding :: R.Binding -> Checker T.Binding
 inferUntypedBinding (R.Binding (Located _ name) _ args expr) = withNewLexicalScope $ do
@@ -262,21 +260,15 @@ patternBinderType (T.PParens pat) = patternBinderType pat
 --
 
 checkBinding :: R.Binding -> T.Type -> Checker T.Binding
-checkBinding binding t = do
-  checkTypeKind t
-  binding' <- checkBinding' binding t
-  -- Restore original type so it looks exactly like the user typed it
-  pure $ binding' { T.bindingType = t }
-
-checkBinding' :: R.Binding -> T.Type -> Checker T.Binding
-checkBinding' binding (TyForall as t) =
+checkBinding binding (TyForall as t) =
   withContextUntilNE (ContextVar <$> as) $
-    checkBinding' binding t
-checkBinding' binding t = do
+    checkBinding binding t
+checkBinding binding t = do
   binding' <- inferUntypedBinding binding
   tSub <- currentContextSubst t
   subtype (T.bindingType binding') tSub
-  pure binding'
+  context <- getContext
+  pure $ contextSubstBinding context binding'
 
 checkExpr :: R.Expr -> T.Type -> Checker T.Expr
 --checkExpr EUnit TyUnit = pure ()
@@ -307,8 +299,8 @@ checkPattern :: R.Pattern -> T.Type -> Checker T.Pattern
 checkPattern pat t = do
   pat' <- inferPattern pat
   tSub <- currentContextSubst t
-  mTy' <- currentContextSubst $ patternType pat'
-  subtype mTy' tSub
+  patTy' <- currentContextSubst $ patternType pat'
+  subtype patTy' tSub
   pure pat'
 
 --
