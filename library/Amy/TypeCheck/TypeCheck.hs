@@ -154,20 +154,6 @@ inferExpr (R.EIf (R.If pred' then' else')) = do
   then'' <- inferExpr then'
   else'' <- checkExpr else' (expressionType then'')
   pure $ T.EIf $ T.If pred'' then'' else''
--- inferExpr (EAnn e t) = do
---   context <- getContext
---   liftEither (typeWellFormed context t)
---   checkExpr e t
---   currentContextSubst t
--- inferExpr (ELam x e) = do
---   a <- freshTEVar
---   b <- freshTEVar
---   modifyContext $ \context -> context |> ContextEVar a |> ContextEVar b
---   withNewNameScope $ do
---     addTypeToScope x (TyEVar a)
---     withContextUntil (ContextScopeMarker x) $ do
---       checkExpr e (TyEVar b)
---       currentContextSubst (TyEVar a `TyFun` TyEVar b)
 inferExpr (R.ELet (R.Let bindings expression)) = do
   bindings' <- inferBindingGroup bindings
   expression' <- withNewLexicalScope $ do
@@ -271,15 +257,9 @@ checkBinding binding t = do
   pure $ contextSubstBinding context binding'
 
 checkExpr :: R.Expr -> T.Type -> Checker T.Expr
---checkExpr EUnit TyUnit = pure ()
 checkExpr e (TyForall as t) =
   withContextUntilNE (ContextVar <$> as) $
     checkExpr e t
--- checkExpr (ELam x e) (TyFun t1 t2) =
---   withNewNameScope $ do
---     addTypeToScope x t1
---     withContextUntil (ContextScopeMarker x) $
---       checkExpr e t2
 checkExpr e t = do
   e' <- inferExpr e
   tSub <- currentContextSubst t
