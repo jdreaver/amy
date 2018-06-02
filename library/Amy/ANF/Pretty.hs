@@ -79,7 +79,7 @@ prettyExpr (EPrimOp (App (PrimitiveFunction _ name _) args _)) =
   "$primOp" <+> prettyIdent name <+> list (prettyVal <$> args)
 
 prettyRow :: RowLabel -> Val -> Doc ann
-prettyRow label val = prettyRowLabel label <+> "=" <> groupOrHang (prettyVal val)
+prettyRow label val = prettyRowLabel label <> ":" <> groupOrHang (prettyVal val)
 
 prettyLetValBinding :: LetValBinding -> Doc ann
 prettyLetValBinding (LetValBinding ident ty body) =

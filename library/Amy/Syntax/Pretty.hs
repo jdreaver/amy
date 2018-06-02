@@ -84,7 +84,7 @@ prettyExpr (EApp f arg) = prettyExpr f <+> prettyExpr arg
 prettyExpr (EParens expr) = parens $ prettyExpr expr
 
 prettyRow :: Located RowLabel -> Expr -> Doc ann
-prettyRow (Located _ label) expr = prettyRowLabel label <+> "=" <+> prettyExpr expr
+prettyRow (Located _ label) expr = prettyRowLabel label <> ":" <+> prettyExpr expr
 
 prettyVar :: Var -> Doc ann
 prettyVar (VVal (Located _ var)) = prettyIdent var

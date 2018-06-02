@@ -84,7 +84,7 @@ prettyExpr (EApp (App f arg _)) = prettyExpr f <+> prettyExpr arg
 prettyExpr (EParens expr) = parens $ prettyExpr expr
 
 prettyRow :: RowLabel -> Expr -> Doc ann
-prettyRow label expr = prettyRowLabel label <+> "=" <+> prettyExpr expr
+prettyRow label expr = prettyRowLabel label <> ":" <+> prettyExpr expr
 
 prettyVar :: Var -> Doc ann
 prettyVar (VVal (Typed _ var)) = prettyIdent var
