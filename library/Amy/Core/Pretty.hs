@@ -72,10 +72,10 @@ prettyExpr (ELit lit) = pretty $ showLiteral lit
 prettyExpr (ERecord rows) = bracketed $ uncurry prettyRow <$> Map.toList (typedValue <$> rows)
 prettyExpr (ERecordSelect expr field _) = prettyExpr expr <> "." <> prettyRowLabel field
 prettyExpr (EVar var) = prettyVar var
-prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault)) =
+prettyExpr (ECase (Case scrutinee bind matches mDefault)) =
   prettyCase
     (prettyExpr scrutinee)
-    (Just $ prettyIdent bind)
+    (Just $ prettyTypedIdent bind)
     (toList (mkMatch <$> matches) ++ defaultMatch)
  where
   mkMatch (Match pat body) = (prettyPattern pat, prettyExpr body)

@@ -111,7 +111,7 @@ desugarType :: T.Type -> C.Type
 desugarType (T.TyCon con) = C.TyCon con
 desugarType (T.TyRecord rows mTail) = C.TyRecord (desugarType <$> rows) (desugarType <$> mTail)
 desugarType (T.TyVar var) = C.TyVar var
-desugarType (T.TyExistVar i) = C.TyVar $ TyVarName $ "te" <> pack (show i)
+desugarType (T.TyExistVar (TyExistVarName i)) = C.TyVar $ TyVarName $ "$t" <> pack (show i)
 desugarType (T.TyApp f arg) = C.TyApp (desugarType f) (desugarType arg)
 desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)
 desugarType (T.TyForall vars ty) = C.TyForall vars (desugarType ty)
