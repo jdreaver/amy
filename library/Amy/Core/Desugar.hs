@@ -13,7 +13,7 @@ import Amy.Core.AST as C
 import Amy.Core.Monad
 import Amy.Core.PatternCompiler as PC
 import Amy.Prim
-import Amy.Bidirectional.AST as T
+import Amy.TypeCheck.AST as T
 
 desugarModule :: T.Module -> C.Module
 desugarModule (T.Module bindings externs typeDeclarations) = do

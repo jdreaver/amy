@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Amy.Bidirectional.TypeCheck
+module Amy.TypeCheck.TypeCheck
   ( inferModule
   , inferBindingGroup
   , inferBinding
@@ -19,14 +19,14 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text, pack)
 import Data.Traversable (for)
 
-import Amy.Bidirectional.AST as T
-import Amy.Bidirectional.KindInference
-import Amy.Bidirectional.Monad
-import Amy.Bidirectional.Subtyping
 import Amy.Errors
 import Amy.Prim
 import Amy.Renamer.AST as R
 import Amy.Syntax.Located
+import Amy.TypeCheck.AST as T
+import Amy.TypeCheck.KindInference
+import Amy.TypeCheck.Monad
+import Amy.TypeCheck.Subtyping
 
 --
 -- Infer

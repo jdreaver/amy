@@ -3,5 +3,5 @@ module Amy.TypeCheck
   ) where
 
 import Amy.TypeCheck.AST as X
-import Amy.TypeCheck.Inference as X
 import Amy.TypeCheck.Pretty as X
+import Amy.TypeCheck.TypeCheck as X

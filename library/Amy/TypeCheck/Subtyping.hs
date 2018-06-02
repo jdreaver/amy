@@ -1,6 +1,6 @@
 {-# LANGUAGE TupleSections #-}
 
-module Amy.Bidirectional.Subtyping
+module Amy.TypeCheck.Subtyping
   ( subtype
   , instantiate
   , articulateTyFunExist
@@ -16,9 +16,9 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (maybeToList)
 import qualified Data.Sequence as Seq
 
-import Amy.Bidirectional.AST
-import Amy.Bidirectional.Monad
 import Amy.Errors
+import Amy.TypeCheck.AST
+import Amy.TypeCheck.Monad
 
 --
 -- Subtyping
@@ -74,7 +74,7 @@ subtype t1@(TyRecord rows1 mTail1) t2@(TyRecord rows2 mTail2) = do
         -- Base case, unify the record with the unify var
         (_, _, Just unifyVar) -> subtype recordTy unifyVar
         --(_, _, _) -> throwError $ UnificationFail t1 t2
-        (_, _, _) -> throwError $ OtherTodoError $ "UnificationFail " ++ show (t1, t2)
+        (_, _, _) -> throwError $ UnificationFail t1 t2
 
   -- Unify common fields
   uncurry subtypeMany $ unzip $ snd <$> Map.toAscList commonFields
@@ -84,7 +84,7 @@ subtype t1@(TyRecord rows1 mTail1) t2@(TyRecord rows2 mTail2) = do
   -- Vice versa, unifying rows from second record with first variable.
   mTail2' <- traverse (maybeFreshTail justFields1) mTail2
   subtypeRecordWithVar justFields2 mTail2' mTail1
-subtype t1 t2 = throwError $ OtherTodoError $ "UnificationFail " ++ show (t1, t2)
+subtype t1 t2 = throwError $ UnificationFail t1 t2
 
 subtypeMany :: [Type] -> [Type] -> Checker ()
 subtypeMany [] [] = pure ()
@@ -98,7 +98,7 @@ subtypeMany t1 t2 = error $ "subtypeMany lists different length " ++ show (t1, t
 occursCheck :: TyExistVarName -> Type -> Checker ()
 occursCheck a t =
   if a `elem` freeTEVars t
-  then throwError $ OtherTodoError $ "Infinite type " ++ show (a, t)
+  then throwError $ InfiniteType a t
   else pure ()
 
 -- N.B. We use nub here so we can easily preserve the order in which the vars

@@ -34,11 +34,9 @@ data Error
   | UnificationFail !T.Type !T.Type
   | KindUnificationFail !Kind ! Kind
   | KindMismatch !T.TyConName !Kind !T.TyConDefinition !Kind
-  | InfiniteType !T.TyVarInfo !T.Type
+  | InfiniteType !TyExistVarName !T.Type
   | InfiniteKind !Int !Kind
   | UnboundVariable !IdentName
-
-  | OtherTodoError !String
 
   -- | BindingLacksTypeSignature !RBinding
   -- | TypeMismatch !(Type PrimitiveType) !(Type PrimitiveType)
@@ -67,8 +65,6 @@ errorLocation e =
     InfiniteType{} -> Nothing
     InfiniteKind{} -> Nothing
     UnboundVariable{} -> Nothing
-
-    OtherTodoError{} -> Nothing
 
     -- BindingLacksTypeSignature bind -> Just $ locatedSpan $ rBindingName bind
     -- TypeMismatch{} -> Nothing
