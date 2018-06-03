@@ -24,9 +24,6 @@ module Amy.Pretty
     -- Kinds
   , prettyKind
 
-    -- Types
-  , prettyScheme
-
     -- General AST
   , prettyIf
   , prettyCase
@@ -34,7 +31,6 @@ module Amy.Pretty
   , prettyLetVal
   , prettyBinding
   , prettyBindingType
-  , prettyBindingScheme
   , prettyExtern
   , prettyTypeDeclaration
   , prettyDataConstructor
@@ -128,16 +124,6 @@ isKFun KFun{} = True
 isKFun _ = False
 
 --
--- Types
---
-
-prettyScheme :: [Doc ann] -> Doc ann -> Doc ann
-prettyScheme vars ty =
-  case vars of
-    [] -> ty
-    _ -> "forall" <+> hcat (punctuate space vars) <> "." <+> ty
-
---
 -- General AST Helpers
 --
 
@@ -179,9 +165,6 @@ prettyBinding name args body =
 
 prettyBindingType :: Doc ann -> Doc ann -> Doc ann
 prettyBindingType name ty = name <+> "::" <> groupOrHang ty
-
-prettyBindingScheme :: Doc ann -> Doc ann -> Doc ann
-prettyBindingScheme name scheme = name <+> "::" <> groupOrHang scheme
 
 prettyExtern :: Doc ann -> Doc ann -> Doc ann
 prettyExtern name ty = "extern" <+> prettyBindingType name ty

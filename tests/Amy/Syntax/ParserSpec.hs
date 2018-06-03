@@ -43,13 +43,12 @@ spec = do
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
-          (Forall [] $ TyCon (Located (SourceSpan "" 1 6 1 8) "Int"))
+          (TyCon (Located (SourceSpan "" 1 6 1 8) "Int"))
       parse' bindingType "f :: Int -> Double"
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
-          ( Forall [] $
-            TyCon (Located (SourceSpan "" 1 6 1 8) "Int")
+          ( TyCon (Located (SourceSpan "" 1 6 1 8) "Int")
             `TyFun`
             TyCon (Located (SourceSpan "" 1 13 1 18) "Double")
           )
@@ -59,12 +58,12 @@ spec = do
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
-          (Forall [Located (SourceSpan "" 1 13 1 13) "a"] $ TyVar (Located (SourceSpan "" 1 16 1 16) "a"))
+          (TyForall [Located (SourceSpan "" 1 13 1 13) "a"] $ TyVar (Located (SourceSpan "" 1 16 1 16) "a"))
       parse' bindingType "f :: forall a b. a -> b -> a"
         `shouldParse`
         BindingType
           (Located (SourceSpan "" 1 1 1 1) "f")
-          ( Forall
+          ( TyForall
               [ Located (SourceSpan "" 1 13 1 13) "a"
               , Located (SourceSpan "" 1 15 1 15) "b"] $
             TyVar (Located (SourceSpan "" 1 18 1 18) "a")

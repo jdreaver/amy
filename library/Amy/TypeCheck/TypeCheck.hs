@@ -59,7 +59,7 @@ inferBindingGroup bindings = do
     ty <-
       case mTy of
         Just ty' -> do
-          let ty'' = convertScheme ty'
+          let ty'' = convertType ty'
           checkTypeKind ty''
           pure ty''
         Nothing -> T.TyExistVar <$> freshTyExistVar
@@ -71,7 +71,7 @@ inferBindingGroup bindings = do
     binding' <- checkBinding binding ty
     case R.bindingType binding of
       Nothing -> pure binding'
-      Just ty' -> pure binding' { T.bindingType = convertScheme ty' }
+      Just ty' -> pure binding' { T.bindingType = convertType ty' }
 
   -- Generalize and apply substitutions to bindings
   context <- getContext
@@ -125,7 +125,7 @@ generalize context ty =
     -- Build the forall type
     tyVars = snd <$> varsWithLetters
     ty' = contextSubst context' ty
-    tyForall = maybe ty' (\varsNE -> TyForall varsNE ty') $ NE.nonEmpty tyVars
+    tyForall = maybe ty' (\varsNE -> T.TyForall varsNE ty') $ NE.nonEmpty tyVars
   in (tyForall, context')
 
 letters :: [Text]
@@ -183,7 +183,7 @@ inferExpr (R.ECase (R.Case scrutinee matches)) = do
   pure $ T.ECase $ T.Case scrutinee' matches'
 
 inferApp :: T.Type -> R.Expr -> Checker (T.Expr, T.Type)
-inferApp (TyForall as t) e = do
+inferApp (T.TyForall as t) e = do
   as' <- traverse (const freshTyExistVar) as
   let t' = foldl' (\ty (a, a') -> instantiate a (TyExistVar a') ty) t $ NE.zip as as'
   inferApp t' e
@@ -237,7 +237,7 @@ patternBinderType (T.PParens pat) = patternBinderType pat
 --
 
 checkBinding :: R.Binding -> T.Type -> Checker T.Binding
-checkBinding binding (TyForall as t) =
+checkBinding binding (T.TyForall as t) =
   withContextUntilNE (ContextVar <$> as) $
     checkBinding binding t
 checkBinding binding t = do
@@ -248,7 +248,7 @@ checkBinding binding t = do
   pure $ contextSubstBinding context binding'
 
 checkExpr :: R.Expr -> T.Type -> Checker T.Expr
-checkExpr e (TyForall as t) =
+checkExpr e (T.TyForall as t) =
   withContextUntilNE (ContextVar <$> as) $
     checkExpr e t
 checkExpr e t = do
@@ -306,14 +306,8 @@ mkDataConTypes (T.TypeDeclaration (T.TyConDefinition tyConName tyVars) dataConDe
       tyVars' = T.TyVar <$> tyVars
       tyApp = foldl1 T.TyApp (T.TyCon tyConName : tyVars')
       ty = foldl1 T.TyFun (maybeToList mTyArg ++ [tyApp])
-      tyForall = maybe ty (\varsNE -> TyForall varsNE ty) (NE.nonEmpty tyVars)
+      tyForall = maybe ty (\varsNE -> T.TyForall varsNE ty) (NE.nonEmpty tyVars)
     in (name, tyForall)
-
-convertScheme :: R.Scheme -> T.Type
-convertScheme (R.Forall vars ty) =
-  case NE.nonEmpty vars of
-    Just vars' -> T.TyForall (convertTyVarInfo <$> vars') (convertType ty)
-    Nothing -> convertType ty
 
 convertType :: R.Type -> T.Type
 convertType (R.TyCon (Located _ con)) = T.TyCon con
@@ -324,6 +318,7 @@ convertType (R.TyRecord rows mTail) =
     (Map.mapKeys locatedValue $ convertType <$> rows)
     (T.TyVar . locatedValue <$> mTail)
 convertType (R.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
+convertType (R.TyForall vars ty) = T.TyForall (convertTyVarInfo <$> vars) (convertType ty)
 
 convertTyConDefinition :: R.TyConDefinition -> T.TyConDefinition
 convertTyConDefinition (R.TyConDefinition name' args _) = T.TyConDefinition name' (locatedValue <$> args)

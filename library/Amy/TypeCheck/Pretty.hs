@@ -65,7 +65,7 @@ prettyBinding' (Binding ident ty args _ body) =
   prettyBinding (prettyIdent ident) (prettyIdent . typedValue <$> args) (prettyExpr body)
 
 prettyBindingType' :: IdentName -> Type -> Doc ann
-prettyBindingType' ident scheme = prettyBindingType (prettyIdent ident) (prettyType scheme)
+prettyBindingType' ident ty = prettyBindingType (prettyIdent ident) (prettyType ty)
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit lit) = pretty $ showLiteral lit
