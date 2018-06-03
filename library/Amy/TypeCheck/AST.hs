@@ -1,7 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
 
--- | Version of a renamer 'RModule' after type checking.
-
 module Amy.TypeCheck.AST
   ( Module(..)
   , Binding(..)
@@ -21,13 +19,11 @@ module Amy.TypeCheck.AST
   , Let(..)
   , App(..)
   , expressionType
+  , matchType
   , patternType
 
   , Type(..)
-  , unfoldTyApp
-  , TyVarInfo(..)
-  , TyVarGenerated(..)
-  , Scheme(..)
+  , unfoldTyFun
   , Typed(..)
 
     -- Re-export
@@ -37,6 +33,7 @@ module Amy.TypeCheck.AST
   ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 
 import Amy.ASTCommon
@@ -56,7 +53,7 @@ data Module
 data Binding
   = Binding
   { bindingName :: !IdentName
-  , bindingType :: !Scheme
+  , bindingType :: !Type
     -- ^ Type for whole function
   , bindingArgs :: ![Typed IdentName]
     -- ^ Argument names and types split out from 'bindingType'
@@ -176,10 +173,13 @@ expressionType (EVar var) =
     VVal (Typed ty _) -> ty
     VCons (Typed ty _) -> ty
 expressionType (EIf if') = expressionType (ifThen if') -- Checker ensure "then" and "else" types match
-expressionType (ECase (Case _ (Match _ expr :| _))) = expressionType expr
+expressionType (ECase (Case _ (match :| _))) = matchType match
 expressionType (ELet let') = expressionType (letExpression let')
 expressionType (EApp app) = appReturnType app
 expressionType (EParens expr) = expressionType expr
+
+matchType :: Match -> Type
+matchType (Match _ expr) = expressionType expr
 
 patternType :: Pattern -> Type
 patternType (PLit lit) = literalType' lit
@@ -189,33 +189,19 @@ patternType (PParens pat) = patternType pat
 
 data Type
   = TyCon !TyConName
-  | TyVar !TyVarInfo
+  | TyVar !TyVarName
+  | TyExistVar !TyExistVarName
   | TyApp !Type !Type
-  | TyRecord !(Map RowLabel Type) !(Maybe TyVarInfo)
+  | TyRecord !(Map RowLabel Type) !(Maybe Type)
   | TyFun !Type !Type
+  | TyForall !(NonEmpty TyVarName) !Type
   deriving (Show, Eq, Ord)
 
 infixr 0 `TyFun`
 
-unfoldTyApp :: Type -> NonEmpty Type
-unfoldTyApp (TyApp app@(TyApp _ _) arg) = unfoldTyApp app <> (arg :| [])
-unfoldTyApp (TyApp f arg) = f :| [arg]
-unfoldTyApp t = t :| []
-
-data TyVarInfo
-  = TyVarInfo
-  { tyVarInfoName :: !TyVarName
-  , tyVarInfoGenerated :: !TyVarGenerated
-  } deriving (Show, Eq, Ord)
-
-data TyVarGenerated
-  = TyVarGenerated
-  | TyVarNotGenerated
-  deriving (Show, Eq, Ord)
-
-data Scheme
-  = Forall ![TyVarInfo] Type
-  deriving (Show, Eq)
+unfoldTyFun :: Type -> NonEmpty Type
+unfoldTyFun (t1 `TyFun` t2) = NE.cons t1 (unfoldTyFun t2)
+unfoldTyFun ty = ty :| []
 
 data Typed a
   = Typed

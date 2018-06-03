@@ -6,7 +6,6 @@ module Amy.Syntax.Parser
   , declaration
   , externDecl
   , bindingType
-  , parseScheme
   , parseType
   , typeTerm
   , binding
@@ -18,9 +17,9 @@ module Amy.Syntax.Parser
   , literal
   ) where
 
+import qualified Control.Applicative.Combinators.NonEmpty as CNE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe)
 import Text.Megaparsec
 import Text.Megaparsec.Char as C
 import Text.Megaparsec.Expr
@@ -57,25 +56,12 @@ bindingType :: AmyParser BindingType
 bindingType = do
   name <- identifier
   doubleColon
-  scheme <- parseScheme <?> "type scheme"
+  ty <- parseType <?> "binding type"
   pure
     BindingType
     { bindingTypeName = name
-    , bindingTypeScheme = scheme
+    , bindingTypeType = ty
     }
-
-parseScheme :: AmyParser Scheme
-parseScheme = do
-  vars <- optional parseSchemeVars
-  ty <- parseType <?> "type"
-  pure $ Forall (fromMaybe [] vars) ty
-
-parseSchemeVars :: AmyParser [Located TyVarName]
-parseSchemeVars = do
-  forall
-  vars <- many tyVarName
-  dot
-  pure vars
 
 parseType :: AmyParser Type
 parseType = makeExprParser typeTerm table
@@ -88,9 +74,18 @@ parseType = makeExprParser typeTerm table
 typeTerm :: AmyParser Type
 typeTerm =
   (parens parseType <?> "type parens")
+  <|> (tyForall <?> "forall type")
   <|> (TyVar <$> tyVarName <?> "type variable")
   <|> (TyCon <$> tyConName <?> "type constructor")
   <|> (uncurry TyRecord <$> tyRecord <?> "record")
+
+tyForall :: AmyParser Type
+tyForall = do
+  forall
+  vars <- CNE.some tyVarName
+  dot
+  ty <- parseType <?> "type"
+  pure $ TyForall vars ty
 
 tyRecord :: AmyParser (Map (Located RowLabel) Type, Maybe (Located TyVarName))
 tyRecord =

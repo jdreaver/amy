@@ -21,6 +21,7 @@ prettyType (TyCon con) = prettyTyConName (locatedValue con)
 prettyType (TyVar var) = prettyTyVarName (locatedValue var)
 prettyType (TyRecord rows mVar) = prettyTyRecord (uncurry prettyTyRow <$> Map.toList rows) (prettyTyVarName . locatedValue <$> mVar)
 prettyType (TyApp f arg) = prettyType f <+> parensIf (isTyApp arg) (prettyType arg)
+prettyType (TyForall vars ty) = "forall" <+> hcat (punctuate space $ prettyTyVarName . locatedValue <$> toList vars) <> "." <+> prettyType ty
 
 prettyTyRow :: Located RowLabel -> Type -> Doc ann
 prettyTyRow (Located _ label) ty = prettyRowLabel label <+> "::" <+> prettyType ty
@@ -33,9 +34,6 @@ isTyApp _ = False
 isTyFun :: Type -> Bool
 isTyFun TyFun{} = True
 isTyFun _ = False
-
-prettyScheme' :: Scheme -> Doc ann
-prettyScheme' (Forall vars ty) = prettyScheme (pretty . unTyVarName . locatedValue <$> vars) (prettyType ty)
 
 prettyModule :: Module -> Doc ann
 prettyModule (Module decls) = vcatTwoHardLines (prettyDeclaration <$> decls)
@@ -62,7 +60,7 @@ prettyBinding' (Binding (Located _ name) args body) =
 
 prettyBindingType' :: BindingType -> Doc ann
 prettyBindingType' (BindingType (Located _ name) ty) =
-  prettyBindingScheme (prettyIdent name) (prettyScheme' ty)
+  prettyBindingType (prettyIdent name) (prettyType ty)
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
@@ -84,7 +82,7 @@ prettyExpr (EApp f arg) = prettyExpr f <+> prettyExpr arg
 prettyExpr (EParens expr) = parens $ prettyExpr expr
 
 prettyRow :: Located RowLabel -> Expr -> Doc ann
-prettyRow (Located _ label) expr = prettyRowLabel label <+> "=" <+> prettyExpr expr
+prettyRow (Located _ label) expr = prettyRowLabel label <> ":" <+> prettyExpr expr
 
 prettyVar :: Var -> Doc ann
 prettyVar (VVal (Located _ var)) = prettyIdent var

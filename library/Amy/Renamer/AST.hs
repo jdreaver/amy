@@ -16,7 +16,6 @@ module Amy.Renamer.AST
   , Let(..)
 
   , Type(..)
-  , Scheme(..)
 
     -- Re-export
   , Literal(..)
@@ -45,7 +44,7 @@ data Module
 data Binding
   = Binding
   { bindingName :: !(Located IdentName)
-  , bindingType :: !(Maybe Scheme)
+  , bindingType :: !(Maybe Type)
   , bindingArgs :: ![Located IdentName]
   , bindingBody :: !Expr
   } deriving (Show, Eq)
@@ -149,10 +148,7 @@ data Type
   | TyApp !Type !Type
   | TyRecord !(Map (Located RowLabel) Type) !(Maybe (Located TyVarName))
   | TyFun !Type !Type
+  | TyForall !(NonEmpty (Located TyVarName)) !Type
   deriving (Show, Eq)
 
 infixr 0 `TyFun`
-
-data Scheme
-  = Forall ![Located TyVarName] Type
-  deriving (Show, Eq)

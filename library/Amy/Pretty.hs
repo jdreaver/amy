@@ -18,13 +18,11 @@ module Amy.Pretty
   , prettyDataConName
   , prettyTyConName
   , prettyTyVarName
+  , prettyTyExistVarName
   , prettyRowLabel
 
     -- Kinds
   , prettyKind
-
-    -- Types
-  , prettyScheme
 
     -- General AST
   , prettyIf
@@ -33,7 +31,6 @@ module Amy.Pretty
   , prettyLetVal
   , prettyBinding
   , prettyBindingType
-  , prettyBindingScheme
   , prettyExtern
   , prettyTypeDeclaration
   , prettyDataConstructor
@@ -106,6 +103,9 @@ prettyTyConName = pretty . unTyConName
 prettyTyVarName :: TyVarName -> Doc ann
 prettyTyVarName = pretty . unTyVarName
 
+prettyTyExistVarName :: TyExistVarName -> Doc ann
+prettyTyExistVarName = ("$t" <>) . pretty . unTyExistVarName
+
 prettyRowLabel :: RowLabel -> Doc ann
 prettyRowLabel = pretty . unRowLabel
 
@@ -122,16 +122,6 @@ prettyKind (KFun k1 k2) = parensIf (isKFun k1) (prettyKind k1) <+> "->" <+> pret
 isKFun :: Kind -> Bool
 isKFun KFun{} = True
 isKFun _ = False
-
---
--- Types
---
-
-prettyScheme :: [Doc ann] -> Doc ann -> Doc ann
-prettyScheme vars ty =
-  case vars of
-    [] -> ty
-    _ -> "forall" <+> hcat (punctuate space vars) <> "." <+> ty
 
 --
 -- General AST Helpers
@@ -175,9 +165,6 @@ prettyBinding name args body =
 
 prettyBindingType :: Doc ann -> Doc ann -> Doc ann
 prettyBindingType name ty = name <+> "::" <> groupOrHang ty
-
-prettyBindingScheme :: Doc ann -> Doc ann -> Doc ann
-prettyBindingScheme name scheme = name <+> "::" <> groupOrHang scheme
 
 prettyExtern :: Doc ann -> Doc ann -> Doc ann
 prettyExtern name ty = "extern" <+> prettyBindingType name ty

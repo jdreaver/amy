@@ -4,7 +4,6 @@ module Amy.TypeCheck.Pretty
   ( prettyModule
   , prettyExpr
 
-  , prettyScheme'
   , prettyType
   ) where
 
@@ -18,9 +17,11 @@ import Amy.TypeCheck.AST
 prettyType :: Type -> Doc ann
 prettyType (TyFun ty1 ty2) = parensIf (isTyFun ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
 prettyType (TyCon con) = prettyTyConName con
-prettyType (TyVar var) = prettyTyVarInfo var
-prettyType (TyRecord rows mVar) = prettyTyRecord (uncurry prettyTyRow <$> Map.toList rows) (prettyTyVarInfo <$> mVar)
+prettyType (TyVar var) = prettyTyVarName var
+prettyType (TyExistVar var) = prettyTyExistVarName var
+prettyType (TyRecord rows mVar) = prettyTyRecord (uncurry prettyTyRow <$> Map.toList rows) (prettyType <$> mVar)
 prettyType (TyApp f arg) = prettyType f <+> parensIf (isTyApp arg) (prettyType arg)
+prettyType (TyForall vars ty) = "forall" <+> hcat (punctuate space $ prettyTyVarName <$> toList vars) <> "." <+> prettyType ty
 
 prettyTyRow :: RowLabel -> Type -> Doc ann
 prettyTyRow label ty = prettyRowLabel label <+> "::" <+> prettyType ty
@@ -33,12 +34,6 @@ isTyApp _ = False
 isTyFun :: Type -> Bool
 isTyFun TyFun{} = True
 isTyFun _ = False
-
-prettyTyVarInfo :: TyVarInfo -> Doc ann
-prettyTyVarInfo (TyVarInfo name _) = prettyTyVarName name
-
-prettyScheme' :: Scheme -> Doc ann
-prettyScheme' (Forall vars ty) = prettyScheme (prettyTyVarInfo <$> vars) (prettyType ty)
 
 prettyModule :: Module -> Doc ann
 prettyModule (Module bindings externs typeDeclarations) =
@@ -64,13 +59,13 @@ prettyTyConDefinition (TyConDefinition name args) = prettyTyConName name <> args
   args' = if null args then mempty else space <> sep (prettyTyVarName <$> args)
 
 prettyBinding' :: Binding -> Doc ann
-prettyBinding' (Binding ident scheme args _ body) =
-  prettyBindingScheme' ident scheme <>
+prettyBinding' (Binding ident ty args _ body) =
+  prettyBindingType' ident ty <>
   hardline <>
   prettyBinding (prettyIdent ident) (prettyIdent . typedValue <$> args) (prettyExpr body)
 
-prettyBindingScheme' :: IdentName -> Scheme -> Doc ann
-prettyBindingScheme' ident scheme = prettyBindingScheme (prettyIdent ident) (prettyScheme' scheme)
+prettyBindingType' :: IdentName -> Type -> Doc ann
+prettyBindingType' ident ty = prettyBindingType (prettyIdent ident) (prettyType ty)
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit lit) = pretty $ showLiteral lit
@@ -89,7 +84,7 @@ prettyExpr (EApp (App f arg _)) = prettyExpr f <+> prettyExpr arg
 prettyExpr (EParens expr) = parens $ prettyExpr expr
 
 prettyRow :: RowLabel -> Expr -> Doc ann
-prettyRow label expr = prettyRowLabel label <+> "=" <+> prettyExpr expr
+prettyRow label expr = prettyRowLabel label <> ":" <+> prettyExpr expr
 
 prettyVar :: Var -> Doc ann
 prettyVar (VVal (Typed _ var)) = prettyIdent var

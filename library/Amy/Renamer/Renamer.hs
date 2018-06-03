@@ -83,6 +83,13 @@ renameTypeDeclaration (S.TypeDeclaration (S.TyConDefinition name args span') con
             $ R.TyApp
             <$> f'
             <*> arg'
+        renameArg (S.TyForall vars ty) = do
+          vars' <- sequenceA <$> traverse renameTyVar vars
+          ty' <- renameArg ty
+          pure
+            $ R.TyForall
+            <$> vars'
+            <*> ty'
       mArgTy' <- traverse renameArg mArgTy
       liftValidation (sequenceA mArgTy') $ \mArgTy'' ->
         addDataConDefinitionToScope $ R.DataConDefinition con mArgTy''
@@ -125,16 +132,16 @@ renameBindingGroup bindings bindingTypes = do
   bindings' <- traverse (uncurry $ renameBinding (bindingTypesMap bindingTypes)) (zip bindingNames bindings)
   pure $ sequenceA bindings'
 
-bindingTypesMap :: [BindingType] -> Map IdentName S.Scheme
+bindingTypesMap :: [BindingType] -> Map IdentName S.Type
 bindingTypesMap = Map.fromList . fmap (\(BindingType (Located _ name) ts) -> (name, ts))
 
 renameBinding
-  :: Map IdentName S.Scheme
+  :: Map IdentName S.Type
   -> Validation [Error] (Located IdentName)
   -> S.Binding
   -> Renamer (Validation [Error] R.Binding)
 renameBinding typeMap name binding = withNewScope $ do -- Begin new scope
-  type' <- traverse renameScheme $ Map.lookup (locatedValue $ S.bindingName binding) typeMap
+  type' <- traverse renameType $ Map.lookup (locatedValue $ S.bindingName binding) typeMap
   args <- traverse addValueToScope (S.bindingArgs binding)
   body <- renameExpression (S.bindingBody binding)
   pure $
@@ -143,15 +150,6 @@ renameBinding typeMap name binding = withNewScope $ do -- Begin new scope
     <*> sequenceA type'
     <*> sequenceA args
     <*> body
-
-renameScheme :: S.Scheme -> Renamer (Validation [Error] R.Scheme)
-renameScheme (S.Forall vars ty) = do
-  vars' <- traverse addTypeVariableToScope vars
-  ty' <- renameType ty
-  pure $
-    R.Forall
-    <$> sequenceA vars'
-    <*> ty'
 
 renameType :: S.Type -> Renamer (Validation [Error] R.Type)
 renameType (S.TyCon con) = fmap R.TyCon <$> lookupTypeConstructorInScopeOrError con
@@ -177,6 +175,13 @@ renameType (S.TyFun ty1 ty2) = do
     R.TyFun
     <$> ty1'
     <*> ty2'
+renameType (S.TyForall vars ty) = withNewScope $ do
+  vars' <- traverse addTypeVariableToScope vars
+  ty' <- renameType ty
+  pure $
+    R.TyForall
+    <$> sequenceA vars'
+    <*> ty'
 
 renameExpression :: S.Expr -> Renamer (Validation [Error] R.Expr)
 renameExpression (S.ELit lit) = pure $ Success $ R.ELit lit

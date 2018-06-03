@@ -5,6 +5,7 @@ module Amy.Names
   , DataConName(..)
   , TyConName(..)
   , TyVarName(..)
+  , TyExistVarName(..)
   , RowLabel(..)
   ) where
 
@@ -22,6 +23,9 @@ newtype TyConName = TyConName { unTyConName :: Text }
 
 newtype TyVarName = TyVarName { unTyVarName :: Text }
   deriving (Show, Eq, Ord, IsString)
+
+newtype TyExistVarName = TyExistVarName { unTyExistVarName :: Int }
+  deriving (Show, Eq, Ord)
 
 newtype RowLabel = RowLabel { unRowLabel :: Text }
   deriving (Show, Eq, Ord, IsString)

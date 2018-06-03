@@ -25,7 +25,6 @@ module Amy.Syntax.AST
   , letBindingType
   , LetBinding(..)
   , Type(..)
-  , Scheme(..)
 
     -- Re-export
   , Literal(..)
@@ -82,7 +81,7 @@ data Binding
 data BindingType
   = BindingType
   { bindingTypeName :: !(Located IdentName)
-  , bindingTypeScheme :: !Scheme
+  , bindingTypeType :: !Type
   } deriving (Show, Eq)
 
 -- | A 'BindingType' is a top-level declaration of a 'Binding' type, like @x ::
@@ -186,10 +185,7 @@ data Type
   | TyApp !Type !Type
   | TyRecord !(Map (Located RowLabel) Type) !(Maybe (Located TyVarName))
   | TyFun !Type !Type
+  | TyForall !(NonEmpty (Located TyVarName)) !Type
   deriving (Show, Eq)
 
 infixr 0 `TyFun`
-
-data Scheme
-  = Forall ![Located TyVarName] Type
-  deriving (Show, Eq)

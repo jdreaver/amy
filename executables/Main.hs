@@ -51,7 +51,7 @@ process filePath DumpFlags{..} input = do
     renamed <- liftEither $ rename parsed
 
     -- Type checking
-    typeChecked <- liftEither $ first (:[]) $ inferModule renamed
+    typeChecked <- liftEither $ first (:[]) $ T.inferModule renamed
     when dfDumpTypeChecked $
       lift $ putStrLn "\nType Checked:" >> print (T.prettyModule typeChecked)
 

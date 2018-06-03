@@ -17,3 +17,6 @@ a =
   if True
   then { x: 1, y: True }
   else { y: False, x: 2 }
+
+# q :: forall a b c d. { x :: a, y :: b, z :: c | d } -> { x :: a, y :: b, z :: c }
+q r = { x: r.x, y: r.y, z: r.z }
