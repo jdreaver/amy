@@ -49,11 +49,11 @@ inferModule (R.Module bindings externs typeDeclarations) = do
       addTyConKindToScope tyCon kind
 
     -- Infer all bindings
-    bindings' <- inferBindingGroup bindings
+    bindings' <- inferBindingGroup True bindings
     pure (T.Module bindings' externs' typeDeclarations')
 
-inferBindingGroup :: [R.Binding] -> Checker [T.Binding]
-inferBindingGroup bindings = do
+inferBindingGroup :: Bool -> [R.Binding] -> Checker [T.Binding]
+inferBindingGroup isTopLevel bindings = do
   -- Add all binding group types to context
   bindingsWithTypes <- for bindings $ \binding@(R.Binding (Located _ name) mTy _ _) -> do
     ty <-
@@ -79,12 +79,16 @@ inferBindingGroup bindings = do
         binding' <- checkBinding binding ty''
         pure $ binding' { T.bindingType = ty'' }
 
-  -- Generalize and apply substitutions to bindings
+  -- Generalize and apply substitutions to bindings. N.B. we only generalize
+  -- top-level bindings, not let bindings.
   context <- getContext
   pure $ flip fmap bindings' $ \binding ->
     let
       ty = T.bindingType binding
-      (ty', context') = generalize context ty
+      (ty', context') =
+        if isTopLevel
+        then generalize context ty
+        else (ty, context)
     in
       contextSubstBinding context' $ binding { T.bindingType = ty' }
 
@@ -119,8 +123,6 @@ generalize context ty =
     -- that in general there can be more unsolved existential variables in the
     -- context then there actually are in the type.
     freeVars = freeTEVars $ contextSubst context ty
-    -- unsolvedEVars = contextUnsolved context
-    -- unsolvedFreeEVars = filter (`elem` freeVars) unsolvedEVars
 
     -- Replace these with nice letters. TODO: Make sure these letters aren't
     -- already in scope.
@@ -157,7 +159,7 @@ inferExpr (R.EIf (R.If pred' then' else')) = do
   else'' <- checkExpr else' (expressionType then'')
   pure $ T.EIf $ T.If pred'' then'' else''
 inferExpr (R.ELet (R.Let bindings expression)) = do
-  bindings' <- inferBindingGroup bindings
+  bindings' <- inferBindingGroup False bindings
   expression' <- withNewLexicalScope $ do
     for_ bindings' $ \binding ->
       addValueTypeToScope (T.bindingName binding) (T.bindingType binding)
