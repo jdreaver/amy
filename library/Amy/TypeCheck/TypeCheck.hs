@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 module Amy.TypeCheck.TypeCheck
   ( inferModule
@@ -61,10 +62,7 @@ inferBindingGroup bindings = do
           let ty'' = convertScheme ty'
           checkTypeKind ty''
           pure ty''
-        Nothing -> do
-          var <- freshTEVar
-          modifyContext (|> ContextEVar var)
-          pure $ T.TyExistVar var
+        Nothing -> T.TyExistVar <$> freshTyExistVar
     addValueTypeToScope name ty
     pure (binding, ty)
 
@@ -87,19 +85,17 @@ inferBindingGroup bindings = do
 inferUntypedBinding :: R.Binding -> Checker T.Binding
 inferUntypedBinding (R.Binding (Located _ name) _ args expr) = withNewLexicalScope $ do
   argsAndVars <- for args $ \(Located _ arg) -> do
-    ty <- freshTEVar
+    ty <- freshTyExistVar
     addValueTypeToScope arg (TyExistVar ty)
     pure (arg, ty)
-  exprVar <- freshTEVar
-  let
-    allVars = (snd <$> argsAndVars) ++ [exprVar]
-  marker <- freshTEVar
-  modifyContext (<> Context (Seq.fromList $ (ContextEVar <$> allVars) ++ [ContextMarker marker]))
+  exprVar <- freshTyExistVar
+  marker <- freshTyExistMarkerVar
+
   expr' <- checkExpr expr (TyExistVar exprVar)
 
   -- Generalize (the Hindley-Milner extension in the paper)
   (contextL, contextR) <- findMarkerHole marker
-  let ty = foldr1 T.TyFun $ T.TyExistVar <$> allVars
+  let ty = foldr1 T.TyFun $ T.TyExistVar <$> ((snd <$> argsAndVars) ++ [exprVar])
   putContext contextL
 
   -- Convert binding
@@ -172,26 +168,23 @@ inferExpr (R.ERecord rows) = do
     pure (T.Typed (expressionType expr') expr')
   pure $ T.ERecord rows'
 inferExpr (R.ERecordSelect expr (Located _ label)) = do
-  retVar <- freshTEVar
-  polyVar <- freshTEVar
-  modifyContext $ \context -> context |> ContextEVar retVar |> ContextEVar polyVar
+  retVar <- freshTyExistVar
+  polyVar <- freshTyExistVar
   let exprTy = T.TyRecord (Map.singleton label $ T.TyExistVar retVar) (Just $ T.TyExistVar polyVar)
   expr' <- checkExpr expr exprTy
   retTy <- currentContextSubst $ T.TyExistVar retVar
   pure $ T.ERecordSelect expr' label retTy
 inferExpr (R.EParens expr) = T.EParens <$> inferExpr expr
 inferExpr (R.ECase (R.Case scrutinee matches)) = do
-  scrutineeVar <- freshTEVar
-  matchVar <- freshTEVar
-  modifyContext $ \context -> context |> ContextEVar scrutineeVar |> ContextEVar matchVar
+  scrutineeVar <- freshTyExistVar
+  matchVar <- freshTyExistVar
   scrutinee' <- checkExpr scrutinee (T.TyExistVar scrutineeVar)
   matches' <- for matches $ \match -> checkMatch (T.TyExistVar scrutineeVar) match (T.TyExistVar matchVar)
   pure $ T.ECase $ T.Case scrutinee' matches'
 
 inferApp :: T.Type -> R.Expr -> Checker (T.Expr, T.Type)
 inferApp (TyForall as t) e = do
-  as' <- traverse (const freshTEVar) as
-  modifyContext $ \context -> context <> (Context $ Seq.fromList $ NE.toList $ ContextEVar <$> as')
+  as' <- traverse (const freshTyExistVar) as
   let t' = foldl' (\ty (a, a') -> instantiate a (TyExistVar a') ty) t $ NE.zip as as'
   inferApp t' e
 inferApp (TyExistVar a) e = do
@@ -216,8 +209,7 @@ inferMatch scrutineeTy (R.Match pat body) = do
 inferPattern :: R.Pattern -> Checker T.Pattern
 inferPattern (R.PLit (Located _ lit)) = pure $ T.PLit lit
 inferPattern (R.PVar (Located _ ident)) = do
-  tvar <- freshTEVar
-  modifyContext (|> ContextEVar tvar)
+  tvar <- freshTyExistVar
   pure $ T.PVar $ T.Typed (T.TyExistVar tvar) ident
 inferPattern (R.PCons (R.PatCons (Located _ con) mArg)) = do
   conTy <- currentContextSubst =<< lookupDataConType con
@@ -226,8 +218,7 @@ inferPattern (R.PCons (R.PatCons (Located _ con) mArg)) = do
     Just arg -> do
       arg' <- inferPattern arg
       let argTy = patternType arg'
-      retTy <- freshTEVar
-      modifyContext (|> ContextEVar retTy)
+      retTy <- freshTyExistVar
       subtype conTy (argTy `T.TyFun` T.TyExistVar retTy) -- Is this right?
       pure $ T.PCons $ T.PatCons con (Just arg') (T.TyExistVar retTy)
     -- No argument. The return type is just the data constructor type.

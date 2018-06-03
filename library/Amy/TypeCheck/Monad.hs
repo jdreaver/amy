@@ -15,13 +15,16 @@ module Amy.TypeCheck.Monad
   , Checker
   , runChecker
   , freshId
-  , freshTEVar
+  , freshTyExistVarNoContext
+  , freshTyExistVar
+  , freshTyExistMarkerVar
   , getContext
   , putContext
   , modifyContext
   , currentContextSubst
   , withContextUntil
   , withContextUntilNE
+  , withNewContextScope
   , findTEVarHole
   , findMarkerHole
   , withNewLexicalScope
@@ -61,15 +64,6 @@ data ContextMember
   | ContextEVar TyExistVarName
   | ContextSolved TyExistVarName Type
   | ContextMarker TyExistVarName
-    -- We store context assumptions in a Map for efficiency, but a lot of the
-    -- typing judgements use the assumptions for scoping. We add this
-    -- ContextScopeMarker to take the place of that.
-
-    -- TODO: Should we just use ContextAssump like in the paper for names in
-    -- the current binding group or expression, and only fall back to the Map
-    -- for globally known names? Diverging from the paper is a bit scary since
-    -- there are lots of subtle implications for the scoping rules.
-  | ContextScopeMarker IdentName
   deriving (Show, Eq, Ord)
 
 -- TODO: Could this just be a stack (reversed List) instead of a Seq? I don't
@@ -172,8 +166,20 @@ runChecker identTypes dataConTypes (Checker action) = evalState (runExceptT acti
 freshId :: Checker Int
 freshId = modify' (\s -> s { latestId = latestId s + 1 }) >> gets latestId
 
-freshTEVar :: Checker TyExistVarName
-freshTEVar = TyExistVarName <$> freshId
+freshTyExistVarNoContext :: Checker TyExistVarName
+freshTyExistVarNoContext = TyExistVarName <$> freshId
+
+freshTyExistVar :: Checker TyExistVarName
+freshTyExistVar = do
+  var <- freshTyExistVarNoContext
+  modifyContext (|> ContextEVar var)
+  pure var
+
+freshTyExistMarkerVar :: Checker TyExistVarName
+freshTyExistMarkerVar = do
+  var <- freshTyExistVarNoContext
+  modifyContext (|> ContextMarker var)
+  pure var
 
 getContext :: Checker Context
 getContext = gets stateContext
@@ -200,7 +206,14 @@ withContextUntilNE :: NonEmpty ContextMember -> Checker a -> Checker a
 withContextUntilNE members action = do
   modifyContext $ \context -> context <> (Context $ Seq.fromList $ NE.toList members)
   result <- action
-  modifyContext $ contextUntil (NE.head members)
+  modifyContext $ contextUntil $ NE.head members
+  pure result
+
+withNewContextScope :: Checker a -> Checker a
+withNewContextScope action = do
+  marker <- freshTyExistMarkerVar
+  result <- action
+  modifyContext $ contextUntil (ContextMarker marker)
   pure result
 
 findTEVarHole :: TyExistVarName -> Checker (Context, Context)

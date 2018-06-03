@@ -30,10 +30,9 @@ subtype (TyVar a) (TyVar b) | a == b = pure ()
 subtype (TyExistVar a) (TyExistVar b) | a == b = pure ()
 subtype (TyApp t1 t2) (TyApp t1' t2') = subtypeMany [t1, t2] [t1', t2']
 subtype (TyFun t1 t2) (TyFun t1' t2') = subtypeMany [t1, t2] [t1', t2']
-subtype (TyForall as t1) t2 = do
-  as' <- traverse (const freshTEVar) as
-  withContextUntilNE (ContextMarker <$> as') $ do
-    modifyContext $ \context -> context <> (Context $ Seq.fromList $ NE.toList $ ContextEVar <$> as')
+subtype (TyForall as t1) t2 =
+  withNewContextScope $ do
+    as' <- traverse (const freshTyExistVar) as
     let t1' = foldl' (\t (a, a') -> instantiate a (TyExistVar a') t) t1 $ NE.zip as as'
     subtype t1' t2
 subtype t1 (TyForall as t2) =
@@ -55,10 +54,7 @@ subtype t1@(TyRecord rows1 mTail1) t2@(TyRecord rows2 mTail2) = do
     maybeFreshTail distinctRows x =
       if Map.null distinctRows
       then pure x
-      else do
-        var <- freshTEVar
-        modifyContext (|> ContextEVar var)
-        pure $ TyExistVar var
+      else TyExistVar <$> freshTyExistVar
     subtypeRecordWithVar rows mTail mUnifyVar = do
       recordTy <- currentContextSubst $ TyRecord rows mTail
       mTail' <- traverse currentContextSubst mTail
@@ -163,10 +159,9 @@ instantiateRight (TyApp t1 t2) a = do
   instantiateRight t1 a1
   t2' <- currentContextSubst t2
   instantiateRight t2' a2
-instantiateRight (TyForall bs t) a = do
-  bs' <- traverse (const freshTEVar) bs
-  withContextUntilNE (ContextMarker <$> bs') $ do
-    modifyContext $ \context -> context <> (Context $ Seq.fromList $ NE.toList $ ContextEVar <$> bs')
+instantiateRight (TyForall bs t) a =
+  withNewContextScope $ do
+    bs' <- traverse (const freshTyExistVar) bs
     let t' = foldl' (\ty (b, b') -> instantiate b (TyExistVar b') ty) t $ NE.zip bs bs'
     instantiateRight t' a
 instantiateRight (TyRecord rows mTail) a = do
@@ -186,16 +181,16 @@ articulateTyAppExist = articulateTyAppExist' TyApp
 articulateTyAppExist' :: (Type -> Type -> Type) -> TyExistVarName -> Checker (TyExistVarName, TyExistVarName)
 articulateTyAppExist' f a = do
   (contextL, contextR) <- findTEVarHole a
-  a1 <- freshTEVar
-  a2 <- freshTEVar
+  a1 <- freshTyExistVarNoContext
+  a2 <- freshTyExistVarNoContext
   putContext $ contextL |> ContextEVar a2 |> ContextEVar a1 |> ContextSolved a (f (TyExistVar a1) (TyExistVar a2)) <> contextR
   pure (a1, a2)
 
 articulateRecord :: TyExistVarName -> Map RowLabel Type -> Maybe Type -> Checker [(Type, TyExistVarName)]
 articulateRecord a rows mTail = do
   (contextL, contextR) <- findTEVarHole a
-  rowsAndVars <- traverse (\t -> (t,) <$> freshTEVar) rows
-  mTailAndVar <- traverse (\t -> (t,) <$> freshTEVar) mTail
+  rowsAndVars <- traverse (\t -> (t,) <$> freshTyExistVarNoContext) rows
+  mTailAndVar <- traverse (\t -> (t,) <$> freshTyExistVarNoContext) mTail
   let
     rowVars = snd <$> rowsAndVars
     mTailVar = snd <$> mTailAndVar
