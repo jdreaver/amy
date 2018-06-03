@@ -93,28 +93,29 @@ inferBindingGroup isTopLevel bindings = do
       contextSubstBinding context' $ binding { T.bindingType = ty' }
 
 inferBinding :: R.Binding -> Checker T.Binding
-inferBinding (R.Binding (Located _ name) _ args expr) = withNewLexicalScope $ do
+inferBinding (R.Binding (Located _ name) _ args body) = withNewLexicalScope $ do
   argsAndVars <- for args $ \(Located _ arg) -> do
     ty <- freshTyExistVar
     addValueTypeToScope arg (TyExistVar ty)
     pure (arg, ty)
-  exprVar <- freshTyExistVar
+  bodyVar <- freshTyExistVar
   marker <- freshTyExistMarkerVar
 
-  expr' <- checkExpr expr (TyExistVar exprVar)
+  -- Infer body
+  body' <- checkExpr body (TyExistVar bodyVar)
 
-  -- Generalize (the Hindley-Milner extension in the paper)
-  (contextL, contextR) <- findMarkerHole marker
-  let ty = foldr1 T.TyFun $ T.TyExistVar <$> ((snd <$> argsAndVars) ++ [exprVar])
-  putContext contextL
+  -- Construct the type from arg/body variables
+  let ty = foldr1 T.TyFun $ T.TyExistVar <$> ((snd <$> argsAndVars) ++ [bodyVar])
 
   -- Convert binding
   args' <- for argsAndVars $ \(arg, var) -> do
     argTy <- currentContextSubst (T.TyExistVar var)
     pure $ T.Typed argTy arg
-  retTy <- currentContextSubst (T.TyExistVar exprVar)
+  retTy <- currentContextSubst (T.TyExistVar bodyVar)
 
-  pure $ contextSubstBinding (contextL <> contextR) $ T.Binding name ty args' retTy expr'
+  (contextL, contextR) <- findMarkerHole marker
+  putContext contextL
+  pure $ contextSubstBinding (contextL <> contextR) $ T.Binding name ty args' retTy body'
 
 generalize :: Context -> T.Type -> (T.Type, Context)
 generalize context ty =

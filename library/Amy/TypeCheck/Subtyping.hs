@@ -69,7 +69,6 @@ subtype t1@(TyRecord rows1 mTail1) t2@(TyRecord rows2 mTail2) = do
         (True, Just tail', Nothing) -> subtype tail' (TyRecord Map.empty Nothing)
         -- Base case, unify the record with the unify var
         (_, _, Just unifyVar) -> subtype recordTy unifyVar
-        --(_, _, _) -> throwError $ UnificationFail t1 t2
         (_, _, _) -> throwError $ UnificationFail t1 t2
 
   -- Unify common fields
@@ -97,8 +96,8 @@ occursCheck a t =
   then throwError $ InfiniteType a t
   else pure ()
 
--- N.B. We use nub here so we can easily preserve the order in which the vars
--- were found.
+-- N.B. We use a list + nub here so we can easily preserve the order in which
+-- the vars were found, versus using something like a Set.
 freeTEVars :: Type -> [TyExistVarName]
 freeTEVars = nub . freeTEVars'
 
