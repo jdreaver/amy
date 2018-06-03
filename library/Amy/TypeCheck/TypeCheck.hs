@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
 
 module Amy.TypeCheck.TypeCheck
   ( inferModule
@@ -10,6 +9,7 @@ module Amy.TypeCheck.TypeCheck
   ) where
 
 import Control.Monad (replicateM)
+import Control.Monad.Except
 import Data.Foldable (for_, traverse_)
 import Data.List (foldl')
 import qualified Data.List.NonEmpty as NE
@@ -67,11 +67,17 @@ inferBindingGroup bindings = do
     pure (binding, ty)
 
   -- Infer each binding individually
-  bindings' <- for bindingsWithTypes $ \(binding, ty) -> do
-    binding' <- checkBinding binding ty
+  bindings' <- for bindingsWithTypes $ \(binding, ty) ->
     case R.bindingType binding of
-      Nothing -> pure binding'
-      Just ty' -> pure binding' { T.bindingType = convertType ty' }
+      Nothing -> do
+        binding' <- inferBinding binding
+        tySub <- currentContextSubst ty
+        subtype (T.bindingType binding') tySub
+        pure binding'
+      Just ty' -> do
+        let ty'' = convertType ty'
+        binding' <- checkBinding binding ty''
+        pure $ binding' { T.bindingType = ty'' }
 
   -- Generalize and apply substitutions to bindings
   context <- getContext
@@ -82,8 +88,8 @@ inferBindingGroup bindings = do
     in
       contextSubstBinding context' $ binding { T.bindingType = ty' }
 
-inferUntypedBinding :: R.Binding -> Checker T.Binding
-inferUntypedBinding (R.Binding (Located _ name) _ args expr) = withNewLexicalScope $ do
+inferBinding :: R.Binding -> Checker T.Binding
+inferBinding (R.Binding (Located _ name) _ args expr) = withNewLexicalScope $ do
   argsAndVars <- for args $ \(Located _ arg) -> do
     ty <- freshTyExistVar
     addValueTypeToScope arg (TyExistVar ty)
@@ -240,12 +246,29 @@ checkBinding :: R.Binding -> T.Type -> Checker T.Binding
 checkBinding binding (T.TyForall as t) =
   withContextUntilNE (ContextVar <$> as) $
     checkBinding binding t
-checkBinding binding t = do
-  binding' <- inferUntypedBinding binding
-  tSub <- currentContextSubst t
-  subtype (T.bindingType binding') tSub
-  context <- getContext
-  pure $ contextSubstBinding context binding'
+checkBinding binding@(R.Binding (Located _ name) _ args body) t = do
+  -- Split out argument and body types
+  let
+    unfoldedTy = unfoldTyFun t
+    numArgs = length args
+  when (length unfoldedTy < numArgs + 1) $
+    throwError $ TooManyBindingArguments binding
+  let
+    (argTys, bodyTys) = NE.splitAt numArgs unfoldedTy
+    bodyTy = foldr1 T.TyFun bodyTys
+
+  withNewLexicalScope $ withNewContextScope $ do
+    -- Add argument types to scope
+    args' <- for (zip args argTys) $ \(Located _ arg, ty) -> do
+      addValueTypeToScope arg ty
+      pure $ Typed ty arg
+
+    -- Check body
+    body' <- checkExpr body bodyTy
+
+    -- Substitute and return new binding
+    context <- getContext
+    pure $ contextSubstBinding context $ T.Binding name t args' bodyTy body'
 
 checkExpr :: R.Expr -> T.Type -> Checker T.Expr
 checkExpr e (T.TyForall as t) =

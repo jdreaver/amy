@@ -23,7 +23,7 @@ module Amy.TypeCheck.AST
   , patternType
 
   , Type(..)
-  , unfoldTyApp
+  , unfoldTyFun
   , Typed(..)
 
     -- Re-export
@@ -33,6 +33,7 @@ module Amy.TypeCheck.AST
   ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 
 import Amy.ASTCommon
@@ -198,10 +199,9 @@ data Type
 
 infixr 0 `TyFun`
 
-unfoldTyApp :: Type -> NonEmpty Type
-unfoldTyApp (TyApp app@(TyApp _ _) arg) = unfoldTyApp app <> (arg :| [])
-unfoldTyApp (TyApp f arg) = f :| [arg]
-unfoldTyApp t = t :| []
+unfoldTyFun :: Type -> NonEmpty Type
+unfoldTyFun (t1 `TyFun` t2) = NE.cons t1 (unfoldTyFun t2)
+unfoldTyFun ty = ty :| []
 
 data Typed a
   = Typed
