@@ -21,7 +21,6 @@ module Amy.Renamer.Monad
 
     -- * Type Declarations
   , addTypeDeclarationToScope
-  , lookupTypeDeclaration
 
     -- * Type Variables
   , addTypeVariableToScope
@@ -38,7 +37,6 @@ module Amy.Renamer.Monad
 import Control.Monad.State.Strict
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Validation
@@ -171,12 +169,6 @@ addTypeDeclarationToScope decl span' = do
 
 isTypeDeclarationInScope :: TyConName -> Renamer Bool
 isTypeDeclarationInScope name = Map.member name <$> gets renamerStateTypeDeclarations
-
-lookupTypeDeclaration :: TyConName -> Renamer R.TypeDeclaration
-lookupTypeDeclaration name =
-  fromMaybe (error $ "Couldn't find declaration for " ++ show name)
-  . Map.lookup name
-  <$> gets renamerStateTypeDeclarations
 
 addTypeVariableToScope :: Located TyVarName -> Renamer (Validation [Error] (Located TyVarName))
 addTypeVariableToScope lname@(Located _ name) = do
