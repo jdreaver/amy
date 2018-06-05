@@ -1,25 +1,24 @@
 name: amy
 
-dependencies:
-  - base
-  - bytestring
-  - containers
-  - groom
-  - llvm-hs
-  - llvm-hs-pretty
-  - llvm-hs-pure
-  - megaparsec
-  - mtl
-  - parser-combinators
-  - prettyprinter
-  - scientific
-  - text
-  - validation
 
 ghc-options: -Wall
 
 library:
   source-dirs: library
+  dependencies:
+    - base
+    - bytestring
+    - containers
+    - groom
+    - llvm-hs
+    - llvm-hs-pure
+    - megaparsec
+    - mtl
+    - parser-combinators
+    - prettyprinter
+    - scientific
+    - text
+    - validation
 
 tests:
   spec:
@@ -28,9 +27,11 @@ tests:
       - tests
     dependencies:
       - amy
+      - base
       - hspec
-      - hspec-discover
       - hspec-megaparsec
+      - megaparsec
+      - text
 
 executables:
   amy:
@@ -38,5 +39,12 @@ executables:
     main: Main.hs
     dependencies:
       - amy
+      - base
+      - bytestring
       - haskeline
+      - llvm-hs-pretty
+      - megaparsec
+      - mtl
       - optparse-applicative
+      - prettyprinter
+      - text
