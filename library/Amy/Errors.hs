@@ -43,7 +43,7 @@ data Error
   | KindMismatch !T.TyConName !Kind !T.TyConDefinition !Kind
   | InfiniteType !TyExistVarName !T.Type
   | InfiniteKind !Int !Kind
-  | TooManyBindingArguments !R.Binding
+  | TooManyBindingArguments !S.Binding
 
   -- | BindingLacksTypeSignature !RBinding
   -- | TypeMismatch !(Type PrimitiveType) !(Type PrimitiveType)

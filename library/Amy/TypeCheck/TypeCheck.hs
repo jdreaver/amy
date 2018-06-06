@@ -14,15 +14,14 @@ import Data.Foldable (for_, traverse_)
 import Data.List (foldl')
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
-import Data.Maybe (maybeToList)
+import Data.Maybe (mapMaybe, maybeToList)
 import qualified Data.Sequence as Seq
 import Data.Text (Text, pack)
 import Data.Traversable (for)
 
 import Amy.Errors
 import Amy.Prim
-import Amy.Renamer.AST as R
-import Amy.Syntax.Located
+import Amy.Syntax.AST as S
 import Amy.TypeCheck.AST as T
 import Amy.TypeCheck.KindInference
 import Amy.TypeCheck.Monad
@@ -32,9 +31,14 @@ import Amy.TypeCheck.Subtyping
 -- Infer
 --
 
-inferModule :: R.Module -> Either Error T.Module
-inferModule (R.Module bindings externs typeDeclarations) = do
+inferModule :: S.Module -> Either Error T.Module
+inferModule (S.Module declarations) = do
   let
+    typeDeclarations = mapMaybe declType declarations
+    externs = mapMaybe declExtern declarations
+    bindings = mapMaybe declBinding declarations
+    bindingTypes = mapMaybe declBindingType declarations
+
     externs' = convertExtern <$> externs
     typeDeclarations' = (T.fromPrimTypeDef <$> allPrimTypeDefinitions) ++ (convertTypeDeclaration <$> typeDeclarations)
 
@@ -49,13 +53,17 @@ inferModule (R.Module bindings externs typeDeclarations) = do
       addTyConKindToScope tyCon kind
 
     -- Infer all bindings
-    bindings' <- inferBindingGroup True bindings
+    bindings' <- inferBindingGroup True bindings bindingTypes
     pure (T.Module bindings' externs' typeDeclarations')
 
-inferBindingGroup :: Bool -> [R.Binding] -> Checker [T.Binding]
-inferBindingGroup isTopLevel bindings = do
+inferBindingGroup :: Bool -> [S.Binding] -> [S.BindingType] -> Checker [T.Binding]
+inferBindingGroup isTopLevel bindings bindingTypes = do
+  let
+    bindingTypeMap = Map.fromList $ (\(BindingType (Located _ name) ty) -> (name, ty)) <$> bindingTypes
+
   -- Add all binding group types to context
-  bindingsWithTypes <- for bindings $ \binding@(R.Binding (Located _ name) mTy _ _) -> do
+  bindingsWithTypes <- for bindings $ \binding@(S.Binding (Located _ name) _ _) -> do
+    let mTy = Map.lookup name bindingTypeMap
     ty <-
       case mTy of
         Just ty' -> do
@@ -68,16 +76,15 @@ inferBindingGroup isTopLevel bindings = do
 
   -- Infer each binding individually
   bindings' <- for bindingsWithTypes $ \(binding, ty) ->
-    case R.bindingType binding of
-      Nothing -> do
+    case ty of
+      T.TyExistVar _ -> do
         binding' <- inferBinding binding
         tySub <- currentContextSubst ty
         subtype (T.bindingType binding') tySub
         pure binding'
-      Just ty' -> do
-        let ty'' = convertType ty'
-        binding' <- checkBinding binding ty''
-        pure $ binding' { T.bindingType = ty'' }
+      ty' -> do
+        binding' <- checkBinding binding ty'
+        pure $ binding' { T.bindingType = ty' }
 
   -- Generalize and apply substitutions to bindings. N.B. we only generalize
   -- top-level bindings, not let bindings.
@@ -92,8 +99,8 @@ inferBindingGroup isTopLevel bindings = do
     in
       contextSubstBinding context' $ binding { T.bindingType = ty' }
 
-inferBinding :: R.Binding -> Checker T.Binding
-inferBinding (R.Binding (Located _ name) _ args body) = withNewLexicalScope $ do
+inferBinding :: S.Binding -> Checker T.Binding
+inferBinding (S.Binding (Located _ name) args body) = withNewLexicalScope $ do
   argsAndVars <- for args $ \(Located _ arg) -> do
     ty <- freshTyExistVar
     addValueTypeToScope arg (TyExistVar ty)
@@ -140,17 +147,17 @@ generalize context ty =
 letters :: [Text]
 letters = [1..] >>= fmap pack . flip replicateM ['a'..'z']
 
-inferExpr :: R.Expr -> Checker T.Expr
-inferExpr (R.ELit (Located _ lit)) = pure $ T.ELit lit
-inferExpr (R.EVar var) =
+inferExpr :: S.Expr -> Checker T.Expr
+inferExpr (S.ELit (Located _ lit)) = pure $ T.ELit lit
+inferExpr (S.EVar var) =
   case var of
-    R.VVal (Located _ valVar) -> do
+    S.VVal (Located _ valVar) -> do
       t <- currentContextSubst =<< lookupValueType valVar
       pure $ T.EVar $ T.VVal (T.Typed t valVar)
-    R.VCons (Located _ con) -> do
+    S.VCons (Located _ con) -> do
       t <- currentContextSubst =<< lookupDataConType con
       pure (T.EVar $ T.VCons (T.Typed t con))
-inferExpr (R.EIf (R.If pred' then' else')) = do
+inferExpr (S.EIf (S.If pred' then' else')) = do
   -- TODO: Is this the right way to do this? Should we actually infer the types
   -- and then unify with expected types? I'm thinking instead we should
   -- instantiate a variable for then/else and check both of them against it,
@@ -159,37 +166,40 @@ inferExpr (R.EIf (R.If pred' then' else')) = do
   then'' <- inferExpr then'
   else'' <- checkExpr else' (expressionType then'')
   pure $ T.EIf $ T.If pred'' then'' else''
-inferExpr (R.ELet (R.Let bindings expression)) =
+inferExpr (S.ELet (S.Let bindings expression)) = do
+  let
+    bindings' = mapMaybe letBinding bindings
+    bindingTypes = mapMaybe letBindingType bindings
   withNewLexicalScope $ do
-    bindings' <- inferBindingGroup False bindings
+    bindings'' <- inferBindingGroup False bindings' bindingTypes
     expression' <- inferExpr expression
-    pure $ T.ELet (T.Let bindings' expression')
-inferExpr (R.EApp f e) = do
+    pure $ T.ELet (T.Let bindings'' expression')
+inferExpr (S.EApp f e) = do
   f' <- inferExpr f
   tfSub <- currentContextSubst (expressionType f')
   (e', retTy) <- inferApp tfSub e
   pure (T.EApp $ T.App f' e' retTy)
-inferExpr (R.ERecord rows) = do
+inferExpr (S.ERecord rows) = do
   rows' <- for (Map.mapKeys locatedValue rows) $ \expr -> do
     expr' <- inferExpr expr
     pure (T.Typed (expressionType expr') expr')
   pure $ T.ERecord rows'
-inferExpr (R.ERecordSelect expr (Located _ label)) = do
+inferExpr (S.ERecordSelect expr (Located _ label)) = do
   retVar <- freshTyExistVar
   polyVar <- freshTyExistVar
   let exprTy = T.TyRecord (Map.singleton label $ T.TyExistVar retVar) (Just $ T.TyExistVar polyVar)
   expr' <- checkExpr expr exprTy
   retTy <- currentContextSubst $ T.TyExistVar retVar
   pure $ T.ERecordSelect expr' label retTy
-inferExpr (R.EParens expr) = T.EParens <$> inferExpr expr
-inferExpr (R.ECase (R.Case scrutinee matches)) = do
+inferExpr (S.EParens expr) = T.EParens <$> inferExpr expr
+inferExpr (S.ECase (S.Case scrutinee matches)) = do
   scrutineeVar <- freshTyExistVar
   matchVar <- freshTyExistVar
   scrutinee' <- checkExpr scrutinee (T.TyExistVar scrutineeVar)
   matches' <- for matches $ \match -> checkMatch (T.TyExistVar scrutineeVar) match (T.TyExistVar matchVar)
   pure $ T.ECase $ T.Case scrutinee' matches'
 
-inferApp :: T.Type -> R.Expr -> Checker (T.Expr, T.Type)
+inferApp :: T.Type -> S.Expr -> Checker (T.Expr, T.Type)
 inferApp (T.TyForall as t) e = do
   as' <- traverse (const freshTyExistVar) as
   let t' = foldl' (\ty (a, a') -> instantiate a (TyExistVar a') ty) t $ NE.zip as as'
@@ -205,20 +215,20 @@ inferApp (T.TyFun t1 t2) e = do
   pure (e', t)
 inferApp t e = error $ "Cannot inferApp for " ++ show (t, e)
 
-inferMatch :: T.Type ->  R.Match -> Checker T.Match
-inferMatch scrutineeTy (R.Match pat body) = do
+inferMatch :: T.Type ->  S.Match -> Checker T.Match
+inferMatch scrutineeTy (S.Match pat body) = do
   pat' <- checkPattern pat scrutineeTy
   body' <- withNewLexicalScope $ do
     traverse_ (uncurry addValueTypeToScope) (patternBinderType pat')
     inferExpr body
   pure $ T.Match pat' body'
 
-inferPattern :: R.Pattern -> Checker T.Pattern
-inferPattern (R.PLit (Located _ lit)) = pure $ T.PLit lit
-inferPattern (R.PVar (Located _ ident)) = do
+inferPattern :: S.Pattern -> Checker T.Pattern
+inferPattern (S.PLit (Located _ lit)) = pure $ T.PLit lit
+inferPattern (S.PVar (Located _ ident)) = do
   tvar <- freshTyExistVar
   pure $ T.PVar $ T.Typed (T.TyExistVar tvar) ident
-inferPattern (R.PCons (R.PatCons (Located _ con) mArg)) = do
+inferPattern (S.PCons (S.PatCons (Located _ con) mArg)) = do
   conTy <- currentContextSubst =<< lookupDataConType con
   case mArg of
     -- Convert argument and add a constraint on argument plus constructor
@@ -231,7 +241,7 @@ inferPattern (R.PCons (R.PatCons (Located _ con) mArg)) = do
     -- No argument. The return type is just the data constructor type.
     Nothing ->
       pure $ T.PCons $ T.PatCons con Nothing conTy
-inferPattern (R.PParens pat) = T.PParens <$> inferPattern pat
+inferPattern (S.PParens pat) = T.PParens <$> inferPattern pat
 
 patternBinderType :: T.Pattern -> Maybe (IdentName, T.Type)
 patternBinderType (T.PLit _) = Nothing
@@ -243,11 +253,11 @@ patternBinderType (T.PParens pat) = patternBinderType pat
 -- Checking
 --
 
-checkBinding :: R.Binding -> T.Type -> Checker T.Binding
+checkBinding :: S.Binding -> T.Type -> Checker T.Binding
 checkBinding binding (T.TyForall as t) =
   withContextUntilNE (ContextVar <$> as) $
     checkBinding binding t
-checkBinding binding@(R.Binding (Located _ name) _ args body) t = do
+checkBinding binding@(S.Binding (Located _ name) args body) t = do
   -- Split out argument and body types
   let
     unfoldedTy = unfoldTyFun t
@@ -271,7 +281,7 @@ checkBinding binding@(R.Binding (Located _ name) _ args body) t = do
     context <- getContext
     pure $ contextSubstBinding context $ T.Binding name t args' bodyTy body'
 
-checkExpr :: R.Expr -> T.Type -> Checker T.Expr
+checkExpr :: S.Expr -> T.Type -> Checker T.Expr
 checkExpr e (T.TyForall as t) =
   withContextUntilNE (ContextVar <$> as) $
     checkExpr e t
@@ -282,7 +292,7 @@ checkExpr e t = do
   subtype eTy' tSub
   pure e'
 
-checkMatch :: T.Type -> R.Match -> T.Type -> Checker T.Match
+checkMatch :: T.Type -> S.Match -> T.Type -> Checker T.Match
 checkMatch scrutineeTy m t = do
   m' <- inferMatch scrutineeTy m
   tSub <- currentContextSubst t
@@ -290,7 +300,7 @@ checkMatch scrutineeTy m t = do
   subtype mTy' tSub
   pure m'
 
-checkPattern :: R.Pattern -> T.Type -> Checker T.Pattern
+checkPattern :: S.Pattern -> T.Type -> Checker T.Pattern
 checkPattern pat t = do
   pat' <- inferPattern pat
   tSub <- currentContextSubst t
@@ -308,15 +318,15 @@ primitiveFunctionType' (PrimitiveFunction _ name ty) =
   , foldr1 T.TyFun $ T.TyCon <$> ty
   )
 
-convertExtern :: R.Extern -> T.Extern
-convertExtern (R.Extern (Located _ name) ty) = T.Extern name (convertType ty)
+convertExtern :: S.Extern -> T.Extern
+convertExtern (S.Extern (Located _ name) ty) = T.Extern name (convertType ty)
 
-convertTypeDeclaration :: R.TypeDeclaration -> T.TypeDeclaration
-convertTypeDeclaration (R.TypeDeclaration tyName cons) =
+convertTypeDeclaration :: S.TypeDeclaration -> T.TypeDeclaration
+convertTypeDeclaration (S.TypeDeclaration tyName cons) =
   T.TypeDeclaration (convertTyConDefinition tyName) (convertDataConDefinition <$> cons)
 
-convertDataConDefinition :: R.DataConDefinition -> T.DataConDefinition
-convertDataConDefinition (R.DataConDefinition (Located _ conName) mTyArg) =
+convertDataConDefinition :: S.DataConDefinition -> T.DataConDefinition
+convertDataConDefinition (S.DataConDefinition (Located _ conName) mTyArg) =
   T.DataConDefinition
   { T.dataConDefinitionName = conName
   , T.dataConDefinitionArgument = convertType <$> mTyArg
@@ -333,19 +343,19 @@ mkDataConTypes (T.TypeDeclaration (T.TyConDefinition tyConName tyVars) dataConDe
       tyForall = maybe ty (\varsNE -> T.TyForall varsNE ty) (NE.nonEmpty tyVars)
     in (name, tyForall)
 
-convertType :: R.Type -> T.Type
-convertType (R.TyCon (Located _ con)) = T.TyCon con
-convertType (R.TyVar var) = T.TyVar (convertTyVarInfo var)
-convertType (R.TyApp f arg) = T.TyApp (convertType f) (convertType arg)
-convertType (R.TyRecord rows mTail) =
+convertType :: S.Type -> T.Type
+convertType (S.TyCon (Located _ con)) = T.TyCon con
+convertType (S.TyVar var) = T.TyVar (convertTyVarInfo var)
+convertType (S.TyApp f arg) = T.TyApp (convertType f) (convertType arg)
+convertType (S.TyRecord rows mTail) =
   T.TyRecord
     (Map.mapKeys locatedValue $ convertType <$> rows)
     (T.TyVar . locatedValue <$> mTail)
-convertType (R.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
-convertType (R.TyForall vars ty) = T.TyForall (convertTyVarInfo <$> vars) (convertType ty)
+convertType (S.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
+convertType (S.TyForall vars ty) = T.TyForall (convertTyVarInfo <$> vars) (convertType ty)
 
-convertTyConDefinition :: R.TyConDefinition -> T.TyConDefinition
-convertTyConDefinition (R.TyConDefinition name' args _) = T.TyConDefinition name' (locatedValue <$> args)
+convertTyConDefinition :: S.TyConDefinition -> T.TyConDefinition
+convertTyConDefinition (S.TyConDefinition name' args _) = T.TyConDefinition name' (locatedValue <$> args)
 
 convertTyVarInfo :: Located TyVarName -> T.TyVarName
 convertTyVarInfo (Located _ name') = name'
