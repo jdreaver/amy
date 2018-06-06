@@ -40,7 +40,7 @@ module Amy.TypeCheck.Monad
 
 import Control.Monad.Except
 import Control.Monad.State.Strict
-import Data.Foldable (toList)
+import Data.Foldable (asum, toList)
 import Data.List (lookup)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
@@ -118,14 +118,20 @@ contextUnsolved (Context context) = mapMaybe getEVar $ toList context
 contextUntil :: ContextMember -> Context -> Context
 contextUntil member (Context context) = Context $ Seq.takeWhileL (/= member) context
 
-typeWellFormed :: Context -> Type -> Bool
-typeWellFormed _ (TyCon _) = True
-typeWellFormed context (TyVar v) = ContextVar v `contextElem` context
-typeWellFormed context (TyExistVar v) = ContextEVar v `contextElem` context || hasSolution
-  where hasSolution = isJust (contextSolution context v)
-typeWellFormed context (TyApp x y) = typeWellFormed context x && typeWellFormed context y
-typeWellFormed context (TyFun x y) = typeWellFormed context x && typeWellFormed context y
-typeWellFormed context (TyRecord rows mTy) = all (typeWellFormed context) rows && maybe True (typeWellFormed context) mTy
+typeWellFormed :: Context -> Type -> Maybe Error
+typeWellFormed _ (TyCon _) = Nothing
+typeWellFormed context (TyVar v) = do
+  guard $ not $ ContextVar v `contextElem` context
+  Just $ UnknownTypeVariable' v
+typeWellFormed context (TyExistVar v) = do
+  let hasSolution = isJust (contextSolution context v)
+  guard $ not $ ContextEVar v `contextElem` context || hasSolution
+  -- N.B. This is an internal error because this should never be the user's
+  -- fault.
+  Just $ error $ "Unknown TyExistVar " ++ show v
+typeWellFormed context (TyApp x y) = typeWellFormed context x >> typeWellFormed context y
+typeWellFormed context (TyFun x y) = typeWellFormed context x >> typeWellFormed context y
+typeWellFormed context (TyRecord rows mTy) = asum (typeWellFormed context <$> rows) >> (mTy >>= typeWellFormed context)
 typeWellFormed context (TyForall vs t) = typeWellFormed (context <> Context (Seq.fromList $ NE.toList $ ContextVar <$> vs)) t
 
 --
@@ -249,7 +255,7 @@ addValueTypeToScope name ty = modify' $ \s -> s { valueTypes = Map.insert name t
 lookupValueType :: IdentName -> Checker Type
 lookupValueType name = do
   mTy <- Map.lookup name <$> gets valueTypes
-  maybe (throwError $ UnboundVariable name) pure mTy
+  maybe (throwError $ UnknownVariable' name) pure mTy
 
 lookupDataConType :: DataConName -> Checker Type
 lookupDataConType con =
@@ -264,10 +270,9 @@ addUnknownTyVarKindToScope name = do
   pure i
 
 lookupTyVarKind :: TyVarName -> Checker Kind
-lookupTyVarKind name =
-  fromMaybe (error $ "Can't find kind for name, Renamer must have messed up " ++ show name)
-  . Map.lookup name
-  <$> gets tyVarKinds
+lookupTyVarKind name = do
+  mKind <- Map.lookup name <$> gets tyVarKinds
+  maybe (throwError $ UnknownTypeVariable' name) pure mKind
 
 addTyConKindToScope :: TyConName -> Kind -> Checker ()
 addTyConKindToScope name kind =
@@ -280,7 +285,6 @@ addUnknownTyConKindToScope name = do
   pure i
 
 lookupTyConKind :: TyConName -> Checker Kind
-lookupTyConKind name =
-  fromMaybe (error $ "Can't find kind for name, Renamer must have messed up " ++ show name)
-  . Map.lookup name
-  <$> gets tyConKinds
+lookupTyConKind name = do
+  mKind <- Map.lookup name <$> gets tyConKinds
+  maybe (throwError $ UnknownTypeConstructor' name) pure mKind

@@ -31,12 +31,15 @@ data Error
 
   -- Type checker
   -- TODO: Add source spans here
+  | UnknownVariable' !IdentName
+  | UnknownDataCon' !DataConName
+  | UnknownTypeVariable' !TyVarName
+  | UnknownTypeConstructor' !TyConName
   | UnificationFail !T.Type !T.Type
   | KindUnificationFail !Kind ! Kind
   | KindMismatch !T.TyConName !Kind !T.TyConDefinition !Kind
   | InfiniteType !TyExistVarName !T.Type
   | InfiniteKind !Int !Kind
-  | UnboundVariable !IdentName
   | TooManyBindingArguments !R.Binding
 
   -- | BindingLacksTypeSignature !RBinding
@@ -60,12 +63,15 @@ errorLocation e =
     UnknownTypeConstructor (Located s _) -> Just s
     UnknownTypeVariable (Located s _) -> Just s
 
+    UnknownVariable'{} -> Nothing
+    UnknownDataCon'{} -> Nothing
+    UnknownTypeVariable'{} -> Nothing
+    UnknownTypeConstructor'{} -> Nothing
     UnificationFail{} -> Nothing
     KindUnificationFail{} -> Nothing
     KindMismatch{} -> Nothing
     InfiniteType{} -> Nothing
     InfiniteKind{} -> Nothing
-    UnboundVariable{} -> Nothing
     TooManyBindingArguments{} -> Nothing
 
     -- BindingLacksTypeSignature bind -> Just $ locatedSpan $ rBindingName bind

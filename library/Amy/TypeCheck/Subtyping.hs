@@ -203,10 +203,10 @@ instantiateMonoType :: TyExistVarName -> Type -> Checker ()
 instantiateMonoType a t = do
   (contextL, contextR) <- findTEVarHole a
   case (t, typeWellFormed contextL t) of
-    (_, True) -> putContext $ contextL |> ContextSolved a t <> contextR
+    (_, Nothing) -> putContext $ contextL |> ContextSolved a t <> contextR
     -- Special reach rule for existentials
-    (TyExistVar b, False) -> instantiateReach a b
-    _ -> error $ "Type not well-formed " ++ show (a, t, contextL, contextR)
+    (TyExistVar b, Just _) -> instantiateReach a b
+    (_, Just err) -> throwError err
 
 instantiateReach :: TyExistVarName -> TyExistVarName -> Checker ()
 instantiateReach a b = do

@@ -36,7 +36,7 @@ inferModule :: R.Module -> Either Error T.Module
 inferModule (R.Module bindings externs typeDeclarations) = do
   let
     externs' = convertExtern <$> externs
-    typeDeclarations' = (convertTypeDeclaration <$> typeDeclarations) ++ (T.fromPrimTypeDef <$> allPrimTypeDefinitions)
+    typeDeclarations' = (T.fromPrimTypeDef <$> allPrimTypeDefinitions) ++ (convertTypeDeclaration <$> typeDeclarations)
 
     externTypes = (\(T.Extern name ty) -> (name, ty)) <$> externs'
     primFuncTypes = primitiveFunctionType' <$> allPrimitiveFunctions
