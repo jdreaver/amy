@@ -122,7 +122,7 @@ typeWellFormed :: Context -> Type -> Maybe Error
 typeWellFormed _ (TyCon _) = Nothing
 typeWellFormed context (TyVar v) = do
   guard $ not $ ContextVar v `contextElem` context
-  Just $ UnknownTypeVariable' v
+  Just $ UnknownTypeVariable v
 typeWellFormed context (TyExistVar v) = do
   let hasSolution = isJust (contextSolution context v)
   guard $ not $ ContextEVar v `contextElem` context || hasSolution
@@ -275,18 +275,17 @@ insertMapDuplicateError getMap putMap name value mkError = do
     else modify' $ \s -> putMap s $ Map.insert name value (getMap s)
 
 addValueTypeToScope :: IdentName -> Type -> Checker ()
-addValueTypeToScope name ty = insertMapDuplicateError valueTypes (\s m -> s { valueTypes = m }) name ty VariableShadowed'
+addValueTypeToScope name ty = insertMapDuplicateError valueTypes (\s m -> s { valueTypes = m }) name ty VariableShadowed
 
 lookupValueType :: IdentName -> Checker Type
 lookupValueType name = do
   mTy <- Map.lookup name <$> gets valueTypes
-  maybe (throwError $ UnknownVariable' name) pure mTy
+  maybe (throwError $ UnknownVariable name) pure mTy
 
 lookupDataConType :: DataConName -> Checker Type
-lookupDataConType con =
-  fromMaybe (error $ "No type definition for " ++ show con)
-    . Map.lookup con
-    <$> gets dataConstructorTypes
+lookupDataConType con = do
+  mTy <- Map.lookup con <$> gets dataConstructorTypes
+  maybe (throwError $ UnknownDataCon con) pure mTy
 
 addUnknownTyVarKindToScope :: TyVarName -> Checker Int
 addUnknownTyVarKindToScope name = do
@@ -297,7 +296,7 @@ addUnknownTyVarKindToScope name = do
 lookupTyVarKind :: TyVarName -> Checker Kind
 lookupTyVarKind name = do
   mKind <- Map.lookup name <$> gets tyVarKinds
-  maybe (throwError $ UnknownTypeVariable' name) pure mKind
+  maybe (throwError $ UnknownTypeVariable name) pure mKind
 
 addTyConKindToScope :: TyConName -> Kind -> Checker ()
 addTyConKindToScope name kind = insertMapDuplicateError tyConKinds (\s m -> s { tyConKinds = m }) name kind DuplicateTypeConstructor
@@ -311,4 +310,4 @@ addUnknownTyConKindToScope name = do
 lookupTyConKind :: TyConName -> Checker Kind
 lookupTyConKind name = do
   mKind <- Map.lookup name <$> gets tyConKinds
-  maybe (throwError $ UnknownTypeConstructor' name) pure mKind
+  maybe (throwError $ UnknownTypeConstructor name) pure mKind

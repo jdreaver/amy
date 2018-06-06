@@ -20,16 +20,15 @@ data Error
 
   -- Type checker
   -- TODO: Add source spans here
-  | UnknownVariable' !IdentName
-  | UnknownDataCon' !DataConName
-  | UnknownTypeVariable' !TyVarName
-  | UnknownTypeConstructor' !TyConName
-  | VariableShadowed' !IdentName
+  | UnknownVariable !IdentName
+  | UnknownDataCon !DataConName
+  | UnknownTypeVariable !TyVarName
+  | UnknownTypeConstructor !TyConName
+  | VariableShadowed !IdentName
   | DuplicateDataConstructor !DataConName
   | DuplicateTypeConstructor !TyConName
   | UnificationFail !T.Type !T.Type
   | KindUnificationFail !Kind ! Kind
-  | KindMismatch !T.TyConName !Kind !T.TyConDefinition !Kind
   | InfiniteType !TyExistVarName !T.Type
   | InfiniteKind !Int !Kind
   | TooManyBindingArguments !S.Binding
@@ -40,16 +39,15 @@ errorLocation e =
   case e of
     ParserError{} -> Nothing
 
-    UnknownVariable'{} -> Nothing
-    UnknownDataCon'{} -> Nothing
-    UnknownTypeVariable'{} -> Nothing
-    UnknownTypeConstructor'{} -> Nothing
-    VariableShadowed'{} -> Nothing
+    UnknownVariable{} -> Nothing
+    UnknownDataCon{} -> Nothing
+    UnknownTypeVariable{} -> Nothing
+    UnknownTypeConstructor{} -> Nothing
+    VariableShadowed{} -> Nothing
     DuplicateDataConstructor{} -> Nothing
     DuplicateTypeConstructor{} -> Nothing
     UnificationFail{} -> Nothing
     KindUnificationFail{} -> Nothing
-    KindMismatch{} -> Nothing
     InfiniteType{} -> Nothing
     InfiniteKind{} -> Nothing
     TooManyBindingArguments{} -> Nothing
