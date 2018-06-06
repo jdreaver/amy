@@ -18,7 +18,6 @@ library:
     - prettyprinter
     - scientific
     - text
-    - validation
 
 tests:
   spec:
@@ -46,5 +45,4 @@ executables:
       - megaparsec
       - mtl
       - optparse-applicative
-      - prettyprinter
       - text
