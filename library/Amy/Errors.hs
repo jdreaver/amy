@@ -35,6 +35,9 @@ data Error
   | UnknownDataCon' !DataConName
   | UnknownTypeVariable' !TyVarName
   | UnknownTypeConstructor' !TyConName
+  | VariableShadowed' !IdentName
+  | DuplicateDataConstructor !DataConName
+  | DuplicateTypeConstructor !TyConName
   | UnificationFail !T.Type !T.Type
   | KindUnificationFail !Kind ! Kind
   | KindMismatch !T.TyConName !Kind !T.TyConDefinition !Kind
@@ -67,6 +70,9 @@ errorLocation e =
     UnknownDataCon'{} -> Nothing
     UnknownTypeVariable'{} -> Nothing
     UnknownTypeConstructor'{} -> Nothing
+    VariableShadowed'{} -> Nothing
+    DuplicateDataConstructor{} -> Nothing
+    DuplicateTypeConstructor{} -> Nothing
     UnificationFail{} -> Nothing
     KindUnificationFail{} -> Nothing
     KindMismatch{} -> Nothing

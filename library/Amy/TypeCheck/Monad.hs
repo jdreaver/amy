@@ -40,8 +40,8 @@ module Amy.TypeCheck.Monad
 
 import Control.Monad.Except
 import Control.Monad.State.Strict
-import Data.Foldable (asum, toList)
-import Data.List (lookup)
+import Data.Foldable (asum, for_, toList)
+import Data.List (lookup, sort)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
@@ -157,8 +157,18 @@ runChecker
   :: [(IdentName, Type)]
   -> [(DataConName, Type)]
   -> Checker a -> Either Error a
-runChecker identTypes dataConTypes (Checker action) = evalState (runExceptT action) checkState
+runChecker identTypes dataConTypes (Checker action) = do
+  -- Check for duplicate data con names
+  for_ groupedConNames $ \nameGroup ->
+    if length nameGroup == 1
+      then Right ()
+      else Left $ DuplicateDataConstructor $ NE.head nameGroup
+
+  -- Run action
+  evalState (runExceptT action) checkState
  where
+  dataConNames = fst <$> dataConTypes
+  groupedConNames = NE.group . sort $ dataConNames
   checkState =
     CheckState
     { latestId = 0
@@ -245,12 +255,27 @@ withNewLexicalScope action = do
   modify' $ \s ->
     s
     { valueTypes = valueTypes orig
+    , tyConKinds = tyConKinds orig
     , tyVarKinds = tyVarKinds orig
     }
   pure result
 
+insertMapDuplicateError
+  :: (Ord k)
+  => (CheckState -> Map k v)
+  -> (CheckState -> Map k v -> CheckState)
+  -> k
+  -> v
+  -> (k -> Error)
+  -> Checker ()
+insertMapDuplicateError getMap putMap name value mkError = do
+  theMap <- gets getMap
+  if Map.member name theMap
+    then throwError $ mkError name
+    else modify' $ \s -> putMap s $ Map.insert name value (getMap s)
+
 addValueTypeToScope :: IdentName -> Type -> Checker ()
-addValueTypeToScope name ty = modify' $ \s -> s { valueTypes = Map.insert name ty (valueTypes s) }
+addValueTypeToScope name ty = insertMapDuplicateError valueTypes (\s m -> s { valueTypes = m }) name ty VariableShadowed'
 
 lookupValueType :: IdentName -> Checker Type
 lookupValueType name = do
@@ -275,8 +300,7 @@ lookupTyVarKind name = do
   maybe (throwError $ UnknownTypeVariable' name) pure mKind
 
 addTyConKindToScope :: TyConName -> Kind -> Checker ()
-addTyConKindToScope name kind =
-  modify' (\s -> s { tyConKinds = Map.insert name kind (tyConKinds s) })
+addTyConKindToScope name kind = insertMapDuplicateError tyConKinds (\s m -> s { tyConKinds = m }) name kind DuplicateTypeConstructor
 
 addUnknownTyConKindToScope :: TyConName -> Checker Int
 addUnknownTyConKindToScope name = do

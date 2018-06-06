@@ -159,13 +159,11 @@ inferExpr (R.EIf (R.If pred' then' else')) = do
   then'' <- inferExpr then'
   else'' <- checkExpr else' (expressionType then'')
   pure $ T.EIf $ T.If pred'' then'' else''
-inferExpr (R.ELet (R.Let bindings expression)) = do
-  bindings' <- inferBindingGroup False bindings
-  expression' <- withNewLexicalScope $ do
-    for_ bindings' $ \binding ->
-      addValueTypeToScope (T.bindingName binding) (T.bindingType binding)
-    inferExpr expression
-  pure $ T.ELet (T.Let bindings' expression')
+inferExpr (R.ELet (R.Let bindings expression)) =
+  withNewLexicalScope $ do
+    bindings' <- inferBindingGroup False bindings
+    expression' <- inferExpr expression
+    pure $ T.ELet (T.Let bindings' expression')
 inferExpr (R.EApp f e) = do
   f' <- inferExpr f
   tfSub <- currentContextSubst (expressionType f')
