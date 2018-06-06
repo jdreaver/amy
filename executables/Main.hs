@@ -25,7 +25,6 @@ import Amy.ANF as ANF
 import Amy.Codegen
 import Amy.Core as C
 import Amy.Errors
-import Amy.Renamer
 import Amy.Syntax as S
 import Amy.TypeCheck as T
 
@@ -47,11 +46,8 @@ process filePath DumpFlags{..} input = do
     when dfDumpParsed $
       lift $ putStrLn "\nParsed:" >> print (S.prettyModule parsed)
 
-    -- Rename
-    renamed <- liftEither $ rename parsed
-
     -- Type checking
-    typeChecked <- liftEither $ first (:[]) $ T.inferModule renamed
+    typeChecked <- liftEither $ first (:[]) $ T.inferModule parsed
     when dfDumpTypeChecked $
       lift $ putStrLn "\nType Checked:" >> print (T.prettyModule typeChecked)
 

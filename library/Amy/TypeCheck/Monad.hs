@@ -40,8 +40,8 @@ module Amy.TypeCheck.Monad
 
 import Control.Monad.Except
 import Control.Monad.State.Strict
-import Data.Foldable (toList)
-import Data.List (lookup)
+import Data.Foldable (asum, for_, toList)
+import Data.List (lookup, sort)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
@@ -118,14 +118,20 @@ contextUnsolved (Context context) = mapMaybe getEVar $ toList context
 contextUntil :: ContextMember -> Context -> Context
 contextUntil member (Context context) = Context $ Seq.takeWhileL (/= member) context
 
-typeWellFormed :: Context -> Type -> Bool
-typeWellFormed _ (TyCon _) = True
-typeWellFormed context (TyVar v) = ContextVar v `contextElem` context
-typeWellFormed context (TyExistVar v) = ContextEVar v `contextElem` context || hasSolution
-  where hasSolution = isJust (contextSolution context v)
-typeWellFormed context (TyApp x y) = typeWellFormed context x && typeWellFormed context y
-typeWellFormed context (TyFun x y) = typeWellFormed context x && typeWellFormed context y
-typeWellFormed context (TyRecord rows mTy) = all (typeWellFormed context) rows && maybe True (typeWellFormed context) mTy
+typeWellFormed :: Context -> Type -> Maybe Error
+typeWellFormed _ (TyCon _) = Nothing
+typeWellFormed context (TyVar v) = do
+  guard $ not $ ContextVar v `contextElem` context
+  Just $ UnknownTypeVariable v
+typeWellFormed context (TyExistVar v) = do
+  let hasSolution = isJust (contextSolution context v)
+  guard $ not $ ContextEVar v `contextElem` context || hasSolution
+  -- N.B. This is an internal error because this should never be the user's
+  -- fault.
+  Just $ error $ "Unknown TyExistVar " ++ show v
+typeWellFormed context (TyApp x y) = typeWellFormed context x >> typeWellFormed context y
+typeWellFormed context (TyFun x y) = typeWellFormed context x >> typeWellFormed context y
+typeWellFormed context (TyRecord rows mTy) = asum (typeWellFormed context <$> rows) >> (mTy >>= typeWellFormed context)
 typeWellFormed context (TyForall vs t) = typeWellFormed (context <> Context (Seq.fromList $ NE.toList $ ContextVar <$> vs)) t
 
 --
@@ -151,8 +157,18 @@ runChecker
   :: [(IdentName, Type)]
   -> [(DataConName, Type)]
   -> Checker a -> Either Error a
-runChecker identTypes dataConTypes (Checker action) = evalState (runExceptT action) checkState
+runChecker identTypes dataConTypes (Checker action) = do
+  -- Check for duplicate data con names
+  for_ groupedConNames $ \nameGroup ->
+    if length nameGroup == 1
+      then Right ()
+      else Left $ DuplicateDataConstructor $ NE.head nameGroup
+
+  -- Run action
+  evalState (runExceptT action) checkState
  where
+  dataConNames = fst <$> dataConTypes
+  groupedConNames = NE.group . sort $ dataConNames
   checkState =
     CheckState
     { latestId = 0
@@ -239,23 +255,37 @@ withNewLexicalScope action = do
   modify' $ \s ->
     s
     { valueTypes = valueTypes orig
+    , tyConKinds = tyConKinds orig
     , tyVarKinds = tyVarKinds orig
     }
   pure result
 
+insertMapDuplicateError
+  :: (Ord k)
+  => (CheckState -> Map k v)
+  -> (CheckState -> Map k v -> CheckState)
+  -> k
+  -> v
+  -> (k -> Error)
+  -> Checker ()
+insertMapDuplicateError getMap putMap name value mkError = do
+  theMap <- gets getMap
+  if Map.member name theMap
+    then throwError $ mkError name
+    else modify' $ \s -> putMap s $ Map.insert name value (getMap s)
+
 addValueTypeToScope :: IdentName -> Type -> Checker ()
-addValueTypeToScope name ty = modify' $ \s -> s { valueTypes = Map.insert name ty (valueTypes s) }
+addValueTypeToScope name ty = insertMapDuplicateError valueTypes (\s m -> s { valueTypes = m }) name ty VariableShadowed
 
 lookupValueType :: IdentName -> Checker Type
 lookupValueType name = do
   mTy <- Map.lookup name <$> gets valueTypes
-  maybe (throwError $ UnboundVariable name) pure mTy
+  maybe (throwError $ UnknownVariable name) pure mTy
 
 lookupDataConType :: DataConName -> Checker Type
-lookupDataConType con =
-  fromMaybe (error $ "No type definition for " ++ show con)
-    . Map.lookup con
-    <$> gets dataConstructorTypes
+lookupDataConType con = do
+  mTy <- Map.lookup con <$> gets dataConstructorTypes
+  maybe (throwError $ UnknownDataCon con) pure mTy
 
 addUnknownTyVarKindToScope :: TyVarName -> Checker Int
 addUnknownTyVarKindToScope name = do
@@ -264,14 +294,12 @@ addUnknownTyVarKindToScope name = do
   pure i
 
 lookupTyVarKind :: TyVarName -> Checker Kind
-lookupTyVarKind name =
-  fromMaybe (error $ "Can't find kind for name, Renamer must have messed up " ++ show name)
-  . Map.lookup name
-  <$> gets tyVarKinds
+lookupTyVarKind name = do
+  mKind <- Map.lookup name <$> gets tyVarKinds
+  maybe (throwError $ UnknownTypeVariable name) pure mKind
 
 addTyConKindToScope :: TyConName -> Kind -> Checker ()
-addTyConKindToScope name kind =
-  modify' (\s -> s { tyConKinds = Map.insert name kind (tyConKinds s) })
+addTyConKindToScope name kind = insertMapDuplicateError tyConKinds (\s m -> s { tyConKinds = m }) name kind DuplicateTypeConstructor
 
 addUnknownTyConKindToScope :: TyConName -> Checker Int
 addUnknownTyConKindToScope name = do
@@ -280,7 +308,6 @@ addUnknownTyConKindToScope name = do
   pure i
 
 lookupTyConKind :: TyConName -> Checker Kind
-lookupTyConKind name =
-  fromMaybe (error $ "Can't find kind for name, Renamer must have messed up " ++ show name)
-  . Map.lookup name
-  <$> gets tyConKinds
+lookupTyConKind name = do
+  mKind <- Map.lookup name <$> gets tyConKinds
+  maybe (throwError $ UnknownTypeConstructor name) pure mKind
