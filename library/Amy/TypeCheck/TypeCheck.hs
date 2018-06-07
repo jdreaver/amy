@@ -63,17 +63,18 @@ inferBindingGroup isTopLevel bindings bindingTypes = do
     bindingTypeMap = Map.fromList $ (\(BindingType (Located _ name) ty) -> (name, ty)) <$> bindingTypes
 
   -- Add all binding group types to context
-  bindingsWithTypes <- for bindings $ \binding@(S.Binding (Located _ name) _ _) -> do
-    let mTy = Map.lookup name bindingTypeMap
-    ty <-
-      case mTy of
-        Just ty' -> do
-          let ty'' = convertType ty'
-          checkTypeKind ty''
-          pure ty''
-        Nothing -> T.TyExistVar <$> freshTyExistVar
-    addValueTypeToScope name ty
-    pure (binding, ty)
+  bindingsWithTypes <- for bindings $ \binding@(S.Binding (Located span' name) _ _) ->
+    withSourceSpan span' $ do
+      let mTy = Map.lookup name bindingTypeMap
+      ty <-
+        case mTy of
+          Just ty' -> do
+            let ty'' = convertType ty'
+            checkTypeKind ty''
+            pure ty''
+          Nothing -> T.TyExistVar <$> freshTyExistVar
+      addValueTypeToScope name ty
+      pure (binding, ty)
 
   -- Infer each binding individually
   bindings' <- for bindingsWithTypes $ \(binding, ty) ->
@@ -101,16 +102,18 @@ inferBindingGroup isTopLevel bindings bindingTypes = do
       contextSubstBinding context' $ binding { T.bindingType = ty' }
 
 inferBinding :: S.Binding -> Checker T.Binding
-inferBinding (S.Binding (Located _ name) args body) = withNewLexicalScope $ do
-  argsAndVars <- for args $ \(Located _ arg) -> do
-    ty <- freshTyExistVar
-    addValueTypeToScope arg (TyExistVar ty)
-    pure (arg, ty)
+inferBinding (S.Binding (Located nameSpan name) args body) = withNewLexicalScope $ do
+  argsAndVars <- for args $ \(Located argSpan arg) ->
+    withSourceSpan argSpan $ do
+      ty <- freshTyExistVar
+      addValueTypeToScope arg (TyExistVar ty)
+      pure (arg, ty)
   bodyVar <- freshTyExistVar
   marker <- freshTyExistMarkerVar
 
   -- Infer body
-  body' <- checkExpr body (TyExistVar bodyVar)
+  body' <- withSourceSpan nameSpan $
+    checkExpr body (TyExistVar bodyVar)
 
   -- Construct the type from arg/body variables
   let ty = foldr1 T.TyFun $ T.TyExistVar <$> ((snd <$> argsAndVars) ++ [bodyVar])
@@ -152,12 +155,14 @@ inferExpr :: S.Expr -> Checker T.Expr
 inferExpr (S.ELit (Located _ lit)) = pure $ T.ELit lit
 inferExpr (S.EVar var) =
   case var of
-    S.VVal (Located _ valVar) -> do
-      t <- currentContextSubst =<< lookupValueType valVar
-      pure $ T.EVar $ T.VVal (T.Typed t valVar)
-    S.VCons (Located _ con) -> do
-      t <- currentContextSubst =<< lookupDataConType con
-      pure (T.EVar $ T.VCons (T.Typed t con))
+    S.VVal (Located span' valVar) ->
+      withSourceSpan span' $ do
+        t <- currentContextSubst =<< lookupValueType valVar
+        pure $ T.EVar $ T.VVal (T.Typed t valVar)
+    S.VCons (Located span' con) ->
+      withSourceSpan span' $ do
+        t <- currentContextSubst =<< lookupDataConType con
+        pure (T.EVar $ T.VCons (T.Typed t con))
 inferExpr (S.EIf (S.If pred' then' else')) = do
   -- TODO: Is this the right way to do this? Should we actually infer the types
   -- and then unify with expected types? I'm thinking instead we should
@@ -181,15 +186,17 @@ inferExpr (S.EApp f e) = do
   (e', retTy) <- inferApp tfSub e
   pure (T.EApp $ T.App f' e' retTy)
 inferExpr (S.ERecord rows) = do
-  rows' <- for (Map.mapKeys locatedValue rows) $ \expr -> do
-    expr' <- inferExpr expr
-    pure (T.Typed (expressionType expr') expr')
+  rows' <- fmap Map.fromList $ for (Map.toList rows) $ \(Located span' label, expr) ->
+    withSourceSpan span' $ do
+      expr' <- inferExpr expr
+      pure (label, T.Typed (expressionType expr') expr')
   pure $ T.ERecord rows'
-inferExpr (S.ERecordSelect expr (Located _ label)) = do
+inferExpr (S.ERecordSelect expr (Located span' label)) = do
   retVar <- freshTyExistVar
   polyVar <- freshTyExistVar
   let exprTy = T.TyRecord (Map.singleton label $ T.TyExistVar retVar) (Just $ T.TyExistVar polyVar)
-  expr' <- checkExpr expr exprTy
+  expr' <- withSourceSpan span' $
+    checkExpr expr exprTy
   retTy <- currentContextSubst $ T.TyExistVar retVar
   pure $ T.ERecordSelect expr' label retTy
 inferExpr (S.EParens expr) = T.EParens <$> inferExpr expr
@@ -229,19 +236,20 @@ inferPattern (S.PLit (Located _ lit)) = pure $ T.PLit lit
 inferPattern (S.PVar (Located _ ident)) = do
   tvar <- freshTyExistVar
   pure $ T.PVar $ T.Typed (T.TyExistVar tvar) ident
-inferPattern (S.PCons (S.PatCons (Located _ con) mArg)) = do
-  conTy <- currentContextSubst =<< lookupDataConType con
-  case mArg of
-    -- Convert argument and add a constraint on argument plus constructor
-    Just arg -> do
-      arg' <- inferPattern arg
-      let argTy = patternType arg'
-      retTy <- freshTyExistVar
-      subtype conTy (argTy `T.TyFun` T.TyExistVar retTy) -- Is this right?
-      pure $ T.PCons $ T.PatCons con (Just arg') (T.TyExistVar retTy)
-    -- No argument. The return type is just the data constructor type.
-    Nothing ->
-      pure $ T.PCons $ T.PatCons con Nothing conTy
+inferPattern (S.PCons (S.PatCons (Located span' con) mArg)) =
+  withSourceSpan span' $ do
+    conTy <- currentContextSubst =<< lookupDataConType con
+    case mArg of
+      -- Convert argument and add a constraint on argument plus constructor
+      Just arg -> do
+        arg' <- inferPattern arg
+        let argTy = patternType arg'
+        retTy <- freshTyExistVar
+        subtype conTy (argTy `T.TyFun` T.TyExistVar retTy) -- Is this right?
+        pure $ T.PCons $ T.PatCons con (Just arg') (T.TyExistVar retTy)
+      -- No argument. The return type is just the data constructor type.
+      Nothing ->
+        pure $ T.PCons $ T.PatCons con Nothing conTy
 inferPattern (S.PParens pat) = T.PParens <$> inferPattern pat
 
 patternBinderType :: T.Pattern -> Maybe (IdentName, T.Type)
@@ -258,29 +266,31 @@ checkBinding :: S.Binding -> T.Type -> Checker T.Binding
 checkBinding binding (T.TyForall as t) =
   withContextUntilNE (ContextVar <$> as) $
     checkBinding binding t
-checkBinding binding@(S.Binding (Located _ name) args body) t = do
-  -- Split out argument and body types
-  let
-    unfoldedTy = unfoldTyFun t
-    numArgs = length args
-  when (length unfoldedTy < numArgs + 1) $
-    throwAmyError $ TooManyBindingArguments binding
-  let
-    (argTys, bodyTys) = NE.splitAt numArgs unfoldedTy
-    bodyTy = foldr1 T.TyFun bodyTys
+checkBinding binding@(S.Binding (Located span' name) args body) t =
+  withSourceSpan span' $ do
+    -- Split out argument and body types
+    let
+      unfoldedTy = unfoldTyFun t
+      numArgs = length args
+    when (length unfoldedTy < numArgs + 1) $
+      throwAmyError $ TooManyBindingArguments binding
+    let
+      (argTys, bodyTys) = NE.splitAt numArgs unfoldedTy
+      bodyTy = foldr1 T.TyFun bodyTys
 
-  withNewLexicalScope $ withNewContextScope $ do
-    -- Add argument types to scope
-    args' <- for (zip args argTys) $ \(Located _ arg, ty) -> do
-      addValueTypeToScope arg ty
-      pure $ Typed ty arg
+    withNewLexicalScope $ withNewContextScope $ do
+      -- Add argument types to scope
+      args' <- for (zip args argTys) $ \(Located argSpan arg, ty) ->
+        withSourceSpan argSpan $ do
+          addValueTypeToScope arg ty
+          pure $ Typed ty arg
 
-    -- Check body
-    body' <- checkExpr body bodyTy
+      -- Check body
+      body' <- checkExpr body bodyTy
 
-    -- Substitute and return new binding
-    context <- getContext
-    pure $ contextSubstBinding context $ T.Binding name t args' bodyTy body'
+      -- Substitute and return new binding
+      context <- getContext
+      pure $ contextSubstBinding context $ T.Binding name t args' bodyTy body'
 
 checkExpr :: S.Expr -> T.Type -> Checker T.Expr
 checkExpr e (T.TyForall as t) =

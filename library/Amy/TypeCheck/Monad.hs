@@ -18,6 +18,7 @@ module Amy.TypeCheck.Monad
   , freshTyExistVarNoContext
   , freshTyExistVar
   , freshTyExistMarkerVar
+  , withSourceSpan
   , throwAmyError
   , getContext
   , putContext
@@ -202,6 +203,14 @@ freshTyExistMarkerVar = do
   var <- freshTyExistVarNoContext
   modifyContext (|> ContextMarker var)
   pure var
+
+withSourceSpan :: SourceSpan -> Checker a -> Checker a
+withSourceSpan span' action = do
+  orig <- gets sourceSpan
+  modify' $ \s -> s { sourceSpan = span' }
+  result <- action
+  modify' $ \s -> s { sourceSpan = orig }
+  pure result
 
 throwAmyError :: ErrorMessage -> Checker a
 throwAmyError message = do
