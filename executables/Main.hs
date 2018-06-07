@@ -75,8 +75,8 @@ process filePath DumpFlags{..} input = do
 
   either showErrors BS8.putStrLn eCodegenString
 
-showErrors :: [Error] -> IO ()
-showErrors = hPutStrLn stderr . intercalate "\n" . fmap showError
+showErrors :: [ErrorMessage] -> IO ()
+showErrors = hPutStrLn stderr . intercalate "\n" . fmap showErrorMessage
 
 runRepl :: IO ()
 runRepl = runInputT defaultSettings loop

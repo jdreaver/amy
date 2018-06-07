@@ -118,7 +118,7 @@ contextUnsolved (Context context) = mapMaybe getEVar $ toList context
 contextUntil :: ContextMember -> Context -> Context
 contextUntil member (Context context) = Context $ Seq.takeWhileL (/= member) context
 
-typeWellFormed :: Context -> Type -> Maybe Error
+typeWellFormed :: Context -> Type -> Maybe ErrorMessage
 typeWellFormed _ (TyCon _) = Nothing
 typeWellFormed context (TyVar v) = do
   guard $ not $ ContextVar v `contextElem` context
@@ -140,8 +140,8 @@ typeWellFormed context (TyForall vs t) = typeWellFormed (context <> Context (Seq
 
 -- TODO: Use Validation instead of ExceptT
 
-newtype Checker a = Checker (ExceptT Error (State CheckState) a)
-  deriving (Functor, Applicative, Monad, MonadState CheckState, MonadError Error)
+newtype Checker a = Checker (ExceptT ErrorMessage (State CheckState) a)
+  deriving (Functor, Applicative, Monad, MonadState CheckState, MonadError ErrorMessage)
 
 data CheckState
   = CheckState
@@ -156,7 +156,7 @@ data CheckState
 runChecker
   :: [(IdentName, Type)]
   -> [(DataConName, Type)]
-  -> Checker a -> Either Error a
+  -> Checker a -> Either ErrorMessage a
 runChecker identTypes dataConTypes (Checker action) = do
   -- Check for duplicate data con names
   for_ groupedConNames $ \nameGroup ->
@@ -266,7 +266,7 @@ insertMapDuplicateError
   -> (CheckState -> Map k v -> CheckState)
   -> k
   -> v
-  -> (k -> Error)
+  -> (k -> ErrorMessage)
   -> Checker ()
 insertMapDuplicateError getMap putMap name value mkError = do
   theMap <- gets getMap

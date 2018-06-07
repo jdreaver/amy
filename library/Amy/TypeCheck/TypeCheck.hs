@@ -31,7 +31,7 @@ import Amy.TypeCheck.Subtyping
 -- Infer
 --
 
-inferModule :: S.Module -> Either Error T.Module
+inferModule :: S.Module -> Either ErrorMessage T.Module
 inferModule (S.Module declarations) = do
   let
     typeDeclarations = mapMaybe declType declarations
