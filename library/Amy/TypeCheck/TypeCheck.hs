@@ -276,14 +276,14 @@ checkBinding :: S.Binding -> T.Type -> Checker T.Binding
 checkBinding binding (T.TyForall as t) =
   withContextUntilNE (ContextVar <$> as) $
     checkBinding binding t
-checkBinding binding@(S.Binding (Located span' name) args body) t =
+checkBinding (S.Binding (Located span' name) args body) t =
   withSourceSpan span' $ do
     -- Split out argument and body types
     let
       unfoldedTy = unfoldTyFun t
       numArgs = length args
     when (length unfoldedTy < numArgs + 1) $
-      throwAmyError $ TooManyBindingArguments binding
+      throwAmyError $ TooManyBindingArguments (length unfoldedTy - 1) numArgs
     let
       (argTys, bodyTys) = NE.splitAt numArgs unfoldedTy
       bodyTy = foldr1 T.TyFun bodyTys
