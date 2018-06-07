@@ -178,12 +178,14 @@ spec = do
           (EVar (VCons $ Located (SourceSpan "" 1 4 1 7) "True"))
           (ELit (Located (SourceSpan "" 1 14 1 14) (LiteralInt 1)))
           (ELit (Located (SourceSpan "" 1 21 1 21) (LiteralInt 2)))
+          (SourceSpan "" 1 1 1 21)
       parse' ifExpression "if f x then f y else g 2"
         `shouldParse`
         If
           (EApp (EVar (VVal $ Located (SourceSpan "" 1 4 1 4) "f")) (EVar (VVal $ Located (SourceSpan "" 1 6 1 6) "x")))
           (EApp (EVar (VVal $ Located (SourceSpan "" 1 13 1 13) "f")) (EVar (VVal $ Located (SourceSpan "" 1 15 1 15) "y")))
           (EApp (EVar (VVal $ Located (SourceSpan "" 1 22 1 22) "g")) (ELit (Located (SourceSpan "" 1 24 1 24) (LiteralInt 2))))
+          (SourceSpan "" 1 1 1 24)
 
   describe "literal" $ do
     it "can discriminate between integer and double" $ do

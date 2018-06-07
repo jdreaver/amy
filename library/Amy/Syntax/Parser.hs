@@ -18,6 +18,7 @@ module Amy.Syntax.Parser
   ) where
 
 import qualified Control.Applicative.Combinators.NonEmpty as CNE
+import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Text.Megaparsec
@@ -26,6 +27,7 @@ import Text.Megaparsec.Expr
 
 import Amy.Syntax.AST as S
 import Amy.Syntax.Lexer as L
+import Amy.Syntax.Located
 import Amy.Syntax.Monad
 
 parseModule :: AmyParser Module
@@ -193,29 +195,33 @@ variable =
 
 ifExpression :: AmyParser If
 ifExpression = do
-  _ <- if'
+  startSpan <- if'
   predicate <- expression
   _ <- then'
   thenExpression <- expression
   _ <- else'
   elseExpression <- expression
+  let endSpan = expressionSpan elseExpression
   pure
     If
     { ifPredicate = predicate
     , ifThen = thenExpression
     , ifElse = elseExpression
+    , ifSpan = mergeSpans startSpan endSpan
     }
 
 caseExpression :: AmyParser Case
 caseExpression = do
-  _ <- case'
+  startSpan <- case'
   scrutinee <- expression <?> "case scrutinee expression"
   _ <- of'
   matches <- indentedBlockNonEmpty (caseMatch <?> "case match")
+  let endSpan = (\(Match _ expr) -> expressionSpan expr) $ NE.last matches
   pure
     Case
     { caseScrutinee = scrutinee
     , caseAlternatives = matches
+    , caseSpan = mergeSpans startSpan endSpan
     }
 
 caseMatch :: AmyParser Match
@@ -248,7 +254,7 @@ patCons = do
 
 letExpression' :: AmyParser Let
 letExpression' = do
-  _ <- let'
+  startSpan <- let'
   let
     parser =
       try (LetBinding <$> binding)
@@ -260,4 +266,5 @@ letExpression' = do
     Let
     { letBindings = bindings
     , letExpression = expr
+    , letSpan = mergeSpans startSpan (expressionSpan expr)
     }

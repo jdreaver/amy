@@ -67,13 +67,13 @@ prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
 prettyExpr (ERecord rows) = bracketed $ uncurry prettyRow <$> Map.toList rows
 prettyExpr (ERecordSelect expr field) = prettyExpr expr <> "." <> prettyRowLabel (locatedValue field)
 prettyExpr (EVar var) = prettyVar var
-prettyExpr (EIf (If pred' then' else')) =
+prettyExpr (EIf (If pred' then' else' _)) =
   prettyIf (prettyExpr pred') (prettyExpr then') (prettyExpr else')
-prettyExpr (ECase (Case scrutinee matches)) =
+prettyExpr (ECase (Case scrutinee matches _)) =
   prettyCase (prettyExpr scrutinee) Nothing (toList $ mkMatch <$> matches)
  where
   mkMatch (Match pat body) = (prettyPattern pat, prettyExpr body)
-prettyExpr (ELet (Let bindings body)) =
+prettyExpr (ELet (Let bindings body _)) =
   prettyLet (prettyLetBinding <$> bindings) (prettyExpr body)
  where
   prettyLetBinding (LetBinding binding) = prettyBinding' binding

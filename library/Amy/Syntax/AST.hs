@@ -23,6 +23,7 @@ module Amy.Syntax.AST
   , Let(..)
   , letBinding
   , letBindingType
+  , expressionSpan
   , LetBinding(..)
   , Type(..)
 
@@ -133,12 +134,14 @@ data If
   { ifPredicate :: !Expr
   , ifThen :: !Expr
   , ifElse :: !Expr
+  , ifSpan :: !SourceSpan
   } deriving (Show, Eq)
 
 data Case
   = Case
   { caseScrutinee :: !Expr
   , caseAlternatives :: !(NonEmpty Match)
+  , caseSpan :: !SourceSpan
   } deriving (Show, Eq)
 
 data Match
@@ -164,6 +167,7 @@ data Let
   = Let
   { letBindings :: ![LetBinding]
   , letExpression :: !Expr
+  , letSpan :: !SourceSpan
   } deriving (Show, Eq)
 
 data LetBinding
@@ -178,6 +182,18 @@ letBinding _ = Nothing
 letBindingType :: LetBinding -> Maybe BindingType
 letBindingType (LetBindingType x) = Just x
 letBindingType _ = Nothing
+
+expressionSpan :: Expr -> SourceSpan
+expressionSpan (ELit (Located s _)) = s
+expressionSpan (ERecord _) = undefined
+expressionSpan (ERecordSelect expr (Located end _)) = mergeSpans (expressionSpan expr) end
+expressionSpan (EVar (VVal (Located s _))) = s
+expressionSpan (EVar (VCons (Located s _))) = s
+expressionSpan (EIf (If _ _ _ s)) = s
+expressionSpan (ECase (Case _ _ s)) = s
+expressionSpan (ELet (Let _ _ s)) = s
+expressionSpan (EApp e1 e2) = mergeSpans (expressionSpan e1) (expressionSpan e2)
+expressionSpan (EParens e) = expressionSpan e
 
 data Type
   = TyCon !(Located TyConName)

@@ -163,7 +163,7 @@ inferExpr (S.EVar var) =
       withSourceSpan span' $ do
         t <- currentContextSubst =<< lookupDataConType con
         pure (T.EVar $ T.VCons (T.Typed t con))
-inferExpr (S.EIf (S.If pred' then' else')) = do
+inferExpr (S.EIf (S.If pred' then' else' _)) = do
   -- TODO: Is this the right way to do this? Should we actually infer the types
   -- and then unify with expected types? I'm thinking instead we should
   -- instantiate a variable for then/else and check both of them against it,
@@ -172,7 +172,7 @@ inferExpr (S.EIf (S.If pred' then' else')) = do
   then'' <- inferExpr then'
   else'' <- checkExpr else' (expressionType then'')
   pure $ T.EIf $ T.If pred'' then'' else''
-inferExpr (S.ELet (S.Let bindings expression)) = do
+inferExpr (S.ELet (S.Let bindings expression _)) = do
   let
     bindings' = mapMaybe letBinding bindings
     bindingTypes = mapMaybe letBindingType bindings
@@ -200,7 +200,7 @@ inferExpr (S.ERecordSelect expr (Located span' label)) = do
   retTy <- currentContextSubst $ T.TyExistVar retVar
   pure $ T.ERecordSelect expr' label retTy
 inferExpr (S.EParens expr) = T.EParens <$> inferExpr expr
-inferExpr (S.ECase (S.Case scrutinee matches)) = do
+inferExpr (S.ECase (S.Case scrutinee matches _)) = do
   scrutineeVar <- freshTyExistVar
   matchVar <- freshTyExistVar
   scrutinee' <- checkExpr scrutinee (T.TyExistVar scrutineeVar)
