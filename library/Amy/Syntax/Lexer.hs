@@ -55,7 +55,7 @@ lexeme p = do
   (SourcePos fp startLine startCol) <- getPosition
   val <- p
   (SourcePos _ endLine endCol) <- getPosition
-  spaceConsumer
+  spaceConsumerNewlines
   let
     sourceSpan =
       SourceSpan
@@ -110,32 +110,32 @@ reservedWords =
   , "in"
   ]
 
-extern :: AmyParser ()
-extern = void $ symbol "extern"
+extern :: AmyParser SourceSpan
+extern = fmap locatedSpan . lexeme $ symbol "extern"
 
-forall :: AmyParser ()
-forall = void $ symbol "forall"
+forall :: AmyParser SourceSpan
+forall = fmap locatedSpan . lexeme $ symbol "forall"
 
-if' :: AmyParser ()
-if' = void $ symbol "if"
+if' :: AmyParser SourceSpan
+if' = fmap locatedSpan . lexeme $ symbol "if"
 
-then' :: AmyParser ()
-then' = void $ symbol "then"
+then' :: AmyParser SourceSpan
+then' = fmap locatedSpan . lexeme $ symbol "then"
 
-else' :: AmyParser ()
-else' = void $ symbol "else"
+else' :: AmyParser SourceSpan
+else' = fmap locatedSpan . lexeme $ symbol "else"
 
-case' :: AmyParser ()
-case' = void $ symbol "case"
+case' :: AmyParser SourceSpan
+case' = fmap locatedSpan . lexeme $ symbol "case"
 
-of' :: AmyParser ()
-of' = void $ symbol "of"
+of' :: AmyParser SourceSpan
+of' = fmap locatedSpan . lexeme $ symbol "of"
 
-let' :: AmyParser ()
-let' = void $ symbol "let"
+let' :: AmyParser SourceSpan
+let' = fmap locatedSpan . lexeme $ symbol "let"
 
-in' :: AmyParser ()
-in' = void $ symbol "in"
+in' :: AmyParser SourceSpan
+in' = fmap locatedSpan . lexeme $ symbol "in"
 
 -- | Type names are upper-case, like Int and Double
 typeIdentifier :: AmyParser (Located Text)
@@ -153,14 +153,14 @@ tyVarName = fmap (TyVarName . unIdentName) <$> identifier
 rowLabel :: AmyParser (Located RowLabel)
 rowLabel = fmap (RowLabel . unIdentName) <$> identifier
 
-pipe :: AmyParser ()
-pipe = char '|' >> spaceConsumer
+pipe :: AmyParser SourceSpan
+pipe = fmap locatedSpan . lexeme $ char '|'
 
-lparen :: AmyParser ()
-lparen = char '(' >> spaceConsumer
+lparen :: AmyParser SourceSpan
+lparen = fmap locatedSpan . lexeme $ char '('
 
-rparen :: AmyParser ()
-rparen = char ')' >> spaceConsumer
+rparen :: AmyParser SourceSpan
+rparen = fmap locatedSpan . lexeme $ char ')'
 
 parens :: AmyParser a -> AmyParser a
 parens = between lparen rparen
@@ -168,37 +168,37 @@ parens = between lparen rparen
 optionalParens :: AmyParser a -> AmyParser a
 optionalParens p = parens p <|> p
 
-lbrace :: AmyParser ()
-lbrace = char '{' >> spaceConsumer
+lbrace :: AmyParser SourceSpan
+lbrace = fmap locatedSpan . lexeme $ char '{'
 
-rbrace :: AmyParser ()
-rbrace = char '}' >> spaceConsumer
+rbrace :: AmyParser SourceSpan
+rbrace = fmap locatedSpan . lexeme $ char '}'
 
 braces :: AmyParser a -> AmyParser a
 braces = between lbrace rbrace
 
-comma :: AmyParser ()
-comma = char ',' >> spaceConsumer
+comma :: AmyParser SourceSpan
+comma = fmap locatedSpan . lexeme $ char ','
 
-dot :: AmyParser ()
-dot = char '.' >> spaceConsumer
+dot :: AmyParser SourceSpan
+dot = fmap locatedSpan . lexeme $ char '.'
 
-colon :: AmyParser ()
-colon = char ':' >> spaceConsumer
+colon :: AmyParser SourceSpan
+colon = fmap locatedSpan . lexeme $ char ':'
 
-semiColon :: AmyParser ()
-semiColon = char ';' >> spaceConsumer
+semiColon :: AmyParser SourceSpan
+semiColon = fmap locatedSpan . lexeme $ char ';'
 
-doubleColon :: AmyParser ()
-doubleColon = char ':' >> char ':' >> spaceConsumer
+doubleColon :: AmyParser SourceSpan
+doubleColon = fmap locatedSpan . lexeme $ char ':' >> char ':'
 
-equals :: AmyParser ()
-equals = char '=' >> spaceConsumer
+equals :: AmyParser SourceSpan
+equals = fmap locatedSpan . lexeme $ char '='
 
-rightArrow :: AmyParser ()
-rightArrow = string "->" >> spaceConsumer
+rightArrow :: AmyParser SourceSpan
+rightArrow = fmap locatedSpan . lexeme $ string "->"
 
-typeSeparatorArrow :: AmyParser ()
+typeSeparatorArrow :: AmyParser SourceSpan
 typeSeparatorArrow = rightArrow
 
 text :: AmyParser Text

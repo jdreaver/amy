@@ -42,9 +42,9 @@ declaration =
 
 externDecl :: AmyParser Extern
 externDecl = do
-  extern
+  _ <- extern
   name <- identifier
-  doubleColon
+  _ <- doubleColon
   ty <- parseType <?> "type"
   pure
     Extern
@@ -55,7 +55,7 @@ externDecl = do
 bindingType :: AmyParser BindingType
 bindingType = do
   name <- identifier
-  doubleColon
+  _ <- doubleColon
   ty <- parseType <?> "binding type"
   pure
     BindingType
@@ -64,12 +64,13 @@ bindingType = do
     }
 
 parseType :: AmyParser Type
-parseType = makeExprParser typeTerm table
+parseType = makeExprParser term table
  where
   table =
-    [ [InfixL (TyApp <$ spaceConsumer)]
+    [ [InfixL (TyApp <$ spaceConsumerNewlines)]
     , [InfixR (TyFun <$ typeSeparatorArrow)]
     ]
+  term = assertIndented *> typeTerm <* spaceConsumerNewlines
 
 typeTerm :: AmyParser Type
 typeTerm =
@@ -81,9 +82,9 @@ typeTerm =
 
 tyForall :: AmyParser Type
 tyForall = do
-  forall
+  _ <- forall
   vars <- CNE.some tyVarName
-  dot
+  _ <- dot
   ty <- parseType <?> "type"
   pure $ TyForall vars ty
 
@@ -92,7 +93,7 @@ tyRecord =
   braces $ do
     fields <- (`sepBy` comma) $ do
       label' <- L.rowLabel
-      doubleColon
+      _ <- doubleColon
       ty <- parseType
       pure (label', ty)
     mTyVar <- optional $ pipe *> tyVarName
@@ -100,9 +101,9 @@ tyRecord =
 
 binding :: AmyParser Binding
 binding = do
-  name <- identifier <* spaceConsumerNewlines
+  name <- identifier
   args <- many (identifier <* spaceConsumerNewlines)
-  equals <* spaceConsumerNewlines
+  _ <- equals
   body <- expression <?> "expression"
   pure
     Binding
@@ -114,11 +115,11 @@ binding = do
 typeDeclaration :: AmyParser TypeDeclaration
 typeDeclaration = do
   tyName <- tyConDefinition
-  equals' <- optional $ equals <* spaceConsumerNewlines
+  equals' <- optional equals
   constructors <-
     case equals' of
       Nothing -> pure []
-      Just _ -> dataConDefinition `sepBy` (pipe <* spaceConsumerNewlines)
+      Just _ -> dataConDefinition `sepBy` pipe
   pure
     TypeDeclaration
     { typeDeclarationTypeName = tyName
@@ -139,7 +140,7 @@ tyConDefinition = do
 dataConDefinition :: AmyParser DataConDefinition
 dataConDefinition = do
   dataCon <- dataConName
-  mArg <- optional typeTerm
+  mArg <- optional parseType
   pure
     DataConDefinition
     { dataConDefinitionName = dataCon
@@ -181,7 +182,7 @@ record :: AmyParser (Map (Located RowLabel) Expr)
 record =
   fmap Map.fromList $ braces $ (`sepBy` comma) $ do
     label' <- L.rowLabel
-    colon
+    _ <- colon
     expr <- expression
     pure (label', expr)
 
@@ -192,11 +193,11 @@ variable =
 
 ifExpression :: AmyParser If
 ifExpression = do
-  if'
+  _ <- if'
   predicate <- expression
-  then'
+  _ <- then'
   thenExpression <- expression
-  else'
+  _ <- else'
   elseExpression <- expression
   pure
     If
@@ -207,9 +208,9 @@ ifExpression = do
 
 caseExpression :: AmyParser Case
 caseExpression = do
-  case' <* spaceConsumerNewlines
+  _ <- case'
   scrutinee <- expression <?> "case scrutinee expression"
-  of' <* spaceConsumerNewlines
+  _ <- of'
   matches <- indentedBlockNonEmpty (caseMatch <?> "case match")
   pure
     Case
@@ -220,7 +221,7 @@ caseExpression = do
 caseMatch :: AmyParser Match
 caseMatch = do
   pat <- parsePattern <?> "pattern"
-  rightArrow
+  _ <- rightArrow
   body <- expression <?> "expression"
   pure
     Match
@@ -247,13 +248,13 @@ patCons = do
 
 letExpression' :: AmyParser Let
 letExpression' = do
-  let' <* spaceConsumerNewlines
+  _ <- let'
   let
     parser =
       try (LetBinding <$> binding)
       <|> (LetBindingType <$> bindingType)
   bindings <- indentedBlock parser
-  in' <* spaceConsumerNewlines
+  _ <- in'
   expr <- expression
   pure
     Let
