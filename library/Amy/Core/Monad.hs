@@ -16,6 +16,7 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text, pack)
 
 import Amy.Core.AST as C
+import Amy.Prim
 
 newtype Desugar a = Desugar (ReaderT (Map DataConName (TypeDeclaration, DataConDefinition)) (State Int) a)
   deriving (Functor, Applicative, Monad, MonadReader (Map DataConName (TypeDeclaration, DataConDefinition)), MonadState Int)
@@ -23,7 +24,8 @@ newtype Desugar a = Desugar (ReaderT (Map DataConName (TypeDeclaration, DataConD
 runDesugar :: [TypeDeclaration] -> Desugar a -> a
 runDesugar decls (Desugar action) = evalState (runReaderT action dataConMap) 0
  where
-  dataConMap = Map.fromList $ concatMap mkDataConTypes decls
+  allTypeDecls = decls ++ (fromPrimTypeDefinition <$> allPrimTypeDefinitions)
+  dataConMap = Map.fromList $ concatMap mkDataConTypes allTypeDecls
 
 freshId :: Desugar Int
 freshId = do
