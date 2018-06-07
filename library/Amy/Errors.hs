@@ -5,20 +5,14 @@ module Amy.Errors
   , showErrorMessage
   ) where
 
-import Data.Void (Void)
 import Text.Groom
-import Text.Megaparsec
 
 import Amy.Kind
 import Amy.Syntax.AST as S
 import Amy.TypeCheck.AST as T
 
 data ErrorMessage
-  -- Parser
-  = ParserError !(ParseError Char Void)
-
-  -- Type checker
-  | UnknownVariable !IdentName
+  = UnknownVariable !IdentName
   | UnknownDataCon !DataConName
   | UnknownTypeVariable !TyVarName
   | UnknownTypeConstructor !TyConName
@@ -33,5 +27,4 @@ data ErrorMessage
   deriving (Show, Eq)
 
 showErrorMessage :: ErrorMessage -> String
-showErrorMessage (ParserError err) = parseErrorPretty err
-showErrorMessage err = groom err
+showErrorMessage = groom
