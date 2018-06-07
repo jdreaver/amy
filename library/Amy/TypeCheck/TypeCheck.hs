@@ -31,7 +31,7 @@ import Amy.TypeCheck.Subtyping
 -- Infer
 --
 
-inferModule :: S.Module -> Either ErrorMessage T.Module
+inferModule :: S.Module -> Either Error T.Module
 inferModule (S.Module declarations) = do
   let
     typeDeclarations = mapMaybe declType declarations
@@ -46,7 +46,7 @@ inferModule (S.Module declarations) = do
     primFuncTypes = primitiveFunctionType' <$> allPrimitiveFunctions
     identTypes = externTypes ++ primFuncTypes
     dataConstructorTypes = concatMap mkDataConTypes typeDeclarations'
-  runChecker identTypes dataConstructorTypes $ do
+  runChecker identTypes dataConstructorTypes "TODO" $ do
     -- Infer type declaration kinds and add to scope
     for_ typeDeclarations' $ \decl@(T.TypeDeclaration (T.TyConDefinition tyCon _) _) -> do
       kind <- inferTypeDeclarationKind decl
@@ -263,7 +263,7 @@ checkBinding binding@(S.Binding (Located _ name) args body) t = do
     unfoldedTy = unfoldTyFun t
     numArgs = length args
   when (length unfoldedTy < numArgs + 1) $
-    throwError $ TooManyBindingArguments binding
+    throwAmyError $ TooManyBindingArguments binding
   let
     (argTys, bodyTys) = NE.splitAt numArgs unfoldedTy
     bodyTy = foldr1 T.TyFun bodyTys

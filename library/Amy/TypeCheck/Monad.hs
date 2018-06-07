@@ -18,6 +18,7 @@ module Amy.TypeCheck.Monad
   , freshTyExistVarNoContext
   , freshTyExistVar
   , freshTyExistMarkerVar
+  , throwAmyError
   , getContext
   , putContext
   , modifyContext
@@ -54,6 +55,7 @@ import qualified Data.Sequence as Seq
 import Amy.TypeCheck.AST
 import Amy.Errors
 import Amy.Kind
+import Amy.Syntax.Located
 
 --
 -- Context
@@ -140,8 +142,8 @@ typeWellFormed context (TyForall vs t) = typeWellFormed (context <> Context (Seq
 
 -- TODO: Use Validation instead of ExceptT
 
-newtype Checker a = Checker (ExceptT ErrorMessage (State CheckState) a)
-  deriving (Functor, Applicative, Monad, MonadState CheckState, MonadError ErrorMessage)
+newtype Checker a = Checker (ExceptT Error (State CheckState) a)
+  deriving (Functor, Applicative, Monad, MonadState CheckState, MonadError Error)
 
 data CheckState
   = CheckState
@@ -151,18 +153,20 @@ data CheckState
   , dataConstructorTypes :: !(Map DataConName Type)
   , tyVarKinds :: !(Map TyVarName Kind)
   , tyConKinds :: !(Map TyConName Kind)
+  , sourceSpan :: !SourceSpan
   } deriving (Show, Eq)
 
 runChecker
   :: [(IdentName, Type)]
   -> [(DataConName, Type)]
-  -> Checker a -> Either ErrorMessage a
-runChecker identTypes dataConTypes (Checker action) = do
+  -> FilePath
+  -> Checker a -> Either Error a
+runChecker identTypes dataConTypes moduleFile (Checker action) = do
   -- Check for duplicate data con names
   for_ groupedConNames $ \nameGroup ->
     if length nameGroup == 1
       then Right ()
-      else Left $ DuplicateDataConstructor $ NE.head nameGroup
+      else Left $ Error (DuplicateDataConstructor $ NE.head nameGroup) undefined -- TODO
 
   -- Run action
   evalState (runExceptT action) checkState
@@ -177,6 +181,7 @@ runChecker identTypes dataConTypes (Checker action) = do
     , dataConstructorTypes = Map.fromList dataConTypes
     , tyVarKinds = Map.empty
     , tyConKinds = Map.empty
+    , sourceSpan = SourceSpan moduleFile 1 1 1 1
     }
 
 freshId :: Checker Int
@@ -196,6 +201,11 @@ freshTyExistMarkerVar = do
   var <- freshTyExistVarNoContext
   modifyContext (|> ContextMarker var)
   pure var
+
+throwAmyError :: ErrorMessage -> Checker a
+throwAmyError message = do
+  span' <- gets sourceSpan
+  throwError $ Error message span'
 
 getContext :: Checker Context
 getContext = gets stateContext
@@ -271,7 +281,7 @@ insertMapDuplicateError
 insertMapDuplicateError getMap putMap name value mkError = do
   theMap <- gets getMap
   if Map.member name theMap
-    then throwError $ mkError name
+    then throwAmyError $ mkError name
     else modify' $ \s -> putMap s $ Map.insert name value (getMap s)
 
 addValueTypeToScope :: IdentName -> Type -> Checker ()
@@ -280,12 +290,12 @@ addValueTypeToScope name ty = insertMapDuplicateError valueTypes (\s m -> s { va
 lookupValueType :: IdentName -> Checker Type
 lookupValueType name = do
   mTy <- Map.lookup name <$> gets valueTypes
-  maybe (throwError $ UnknownVariable name) pure mTy
+  maybe (throwAmyError $ UnknownVariable name) pure mTy
 
 lookupDataConType :: DataConName -> Checker Type
 lookupDataConType con = do
   mTy <- Map.lookup con <$> gets dataConstructorTypes
-  maybe (throwError $ UnknownDataCon con) pure mTy
+  maybe (throwAmyError $ UnknownDataCon con) pure mTy
 
 addUnknownTyVarKindToScope :: TyVarName -> Checker Int
 addUnknownTyVarKindToScope name = do
@@ -296,7 +306,7 @@ addUnknownTyVarKindToScope name = do
 lookupTyVarKind :: TyVarName -> Checker Kind
 lookupTyVarKind name = do
   mKind <- Map.lookup name <$> gets tyVarKinds
-  maybe (throwError $ UnknownTypeVariable name) pure mKind
+  maybe (throwAmyError $ UnknownTypeVariable name) pure mKind
 
 addTyConKindToScope :: TyConName -> Kind -> Checker ()
 addTyConKindToScope name kind = insertMapDuplicateError tyConKinds (\s m -> s { tyConKinds = m }) name kind DuplicateTypeConstructor
@@ -310,4 +320,4 @@ addUnknownTyConKindToScope name = do
 lookupTyConKind :: TyConName -> Checker Kind
 lookupTyConKind name = do
   mKind <- Map.lookup name <$> gets tyConKinds
-  maybe (throwError $ UnknownTypeConstructor name) pure mKind
+  maybe (throwAmyError $ UnknownTypeConstructor name) pure mKind

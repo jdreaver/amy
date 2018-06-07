@@ -6,7 +6,7 @@ module Amy.TypeCheck.KindInference
   , inferTypeKind
   ) where
 
-import Control.Monad.Except
+import Control.Monad (when)
 import Data.Foldable (traverse_)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -127,12 +127,12 @@ unifyKinds (KFun k1 k2) (KFun k3 k4) = do
   su1 <- unifyKinds k1 k3
   su2 <- unifyKinds (substituteKind su1 k2) (substituteKind su1 k4)
   pure (su2 `composeSubst` su1)
-unifyKinds k1 k2 = throwError $ KindUnificationFail k1 k2
+unifyKinds k1 k2 = throwAmyError $ KindUnificationFail k1 k2
 
 bind :: Int -> Kind -> Checker Subst
 bind i k
   | k == KUnknown i = pure emptySubst
-  | occursCheck i k = throwError $ InfiniteKind i k
+  | occursCheck i k = throwAmyError $ InfiniteKind i k
   | otherwise = pure (singletonSubst i k)
 
 occursCheck :: Int -> Kind -> Bool

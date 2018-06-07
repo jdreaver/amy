@@ -7,7 +7,6 @@ module Amy.TypeCheck.Subtyping
   , freeTEVars
   ) where
 
-import Control.Monad.Except
 import Data.Foldable (for_)
 import Data.List (foldl', nub)
 import qualified Data.List.NonEmpty as NE
@@ -69,7 +68,7 @@ subtype t1@(TyRecord rows1 mTail1) t2@(TyRecord rows2 mTail2) = do
         (True, Just tail', Nothing) -> subtype tail' (TyRecord Map.empty Nothing)
         -- Base case, unify the record with the unify var
         (_, _, Just unifyVar) -> subtype recordTy unifyVar
-        (_, _, _) -> throwError $ UnificationFail t1 t2
+        (_, _, _) -> throwAmyError $ UnificationFail t1 t2
 
   -- Unify common fields
   uncurry subtypeMany $ unzip $ snd <$> Map.toAscList commonFields
@@ -79,7 +78,7 @@ subtype t1@(TyRecord rows1 mTail1) t2@(TyRecord rows2 mTail2) = do
   -- Vice versa, unifying rows from second record with first variable.
   mTail2' <- traverse (maybeFreshTail justFields1) mTail2
   subtypeRecordWithVar justFields2 mTail2' mTail1
-subtype t1 t2 = throwError $ UnificationFail t1 t2
+subtype t1 t2 = throwAmyError $ UnificationFail t1 t2
 
 subtypeMany :: [Type] -> [Type] -> Checker ()
 subtypeMany [] [] = pure ()
@@ -93,7 +92,7 @@ subtypeMany t1 t2 = error $ "subtypeMany lists different length " ++ show (t1, t
 occursCheck :: TyExistVarName -> Type -> Checker ()
 occursCheck a t =
   if a `elem` freeTEVars t
-  then throwError $ InfiniteType a t
+  then throwAmyError $ InfiniteType a t
   else pure ()
 
 -- N.B. We use a list + nub here so we can easily preserve the order in which
@@ -206,7 +205,7 @@ instantiateMonoType a t = do
     (_, Nothing) -> putContext $ contextL |> ContextSolved a t <> contextR
     -- Special reach rule for existentials
     (TyExistVar b, Just _) -> instantiateReach a b
-    (_, Just err) -> throwError err
+    (_, Just err) -> throwAmyError err
 
 instantiateReach :: TyExistVarName -> TyExistVarName -> Checker ()
 instantiateReach a b = do

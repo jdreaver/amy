@@ -47,7 +47,7 @@ process filePath DumpFlags{..} input = do
       lift $ putStrLn "\nParsed:" >> print (S.prettyModule parsed)
 
     -- Type checking
-    typeChecked <- liftEither $ first ((:[]) . showErrorMessage) $ T.inferModule parsed
+    typeChecked <- liftEither $ first ((:[]) . showError) $ T.inferModule parsed
     when dfDumpTypeChecked $
       lift $ putStrLn "\nType Checked:" >> print (T.prettyModule typeChecked)
 
