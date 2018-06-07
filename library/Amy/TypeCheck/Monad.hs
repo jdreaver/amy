@@ -41,6 +41,7 @@ module Amy.TypeCheck.Monad
 
 import Control.Monad.Except
 import Control.Monad.State.Strict
+import Data.Bifunctor (first)
 import Data.Foldable (asum, for_, toList)
 import Data.List (lookup, sort)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -158,27 +159,27 @@ data CheckState
 
 runChecker
   :: [(IdentName, Type)]
-  -> [(DataConName, Type)]
+  -> [(Located DataConName, Type)]
   -> FilePath
   -> Checker a -> Either Error a
 runChecker identTypes dataConTypes moduleFile (Checker action) = do
   -- Check for duplicate data con names
   for_ groupedConNames $ \nameGroup ->
-    if length nameGroup == 1
-      then Right ()
-      else Left $ Error (DuplicateDataConstructor $ NE.head nameGroup) undefined -- TODO
+    case NE.tail nameGroup of
+      [] -> Right ()
+      (Located span' name : _) -> Left $ Error (DuplicateDataConstructor name) span'
 
   -- Run action
   evalState (runExceptT action) checkState
  where
   dataConNames = fst <$> dataConTypes
-  groupedConNames = NE.group . sort $ dataConNames
+  groupedConNames = NE.groupAllWith locatedValue . sort $ dataConNames
   checkState =
     CheckState
     { latestId = 0
     , stateContext = Context Seq.empty
     , valueTypes = Map.fromList identTypes
-    , dataConstructorTypes = Map.fromList dataConTypes
+    , dataConstructorTypes = Map.fromList (first locatedValue <$> dataConTypes)
     , tyVarKinds = Map.empty
     , tyConKinds = Map.empty
     , sourceSpan = SourceSpan moduleFile 1 1 1 1

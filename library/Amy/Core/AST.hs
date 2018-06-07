@@ -38,6 +38,8 @@ import Amy.ASTCommon
 import Amy.Literal
 import Amy.Names
 import Amy.Prim
+import qualified Amy.Syntax.AST as S
+import Amy.Syntax.Located
 
 data Module
   = Module
@@ -76,12 +78,12 @@ data TyConDefinition
   , tyConDefinitionArgs :: ![TyVarName]
   } deriving (Show, Eq, Ord)
 
-fromPrimTyDef :: TyConName -> TyConDefinition
-fromPrimTyDef name = TyConDefinition name []
+fromPrimTyDef :: S.TyConDefinition -> TyConDefinition
+fromPrimTyDef (S.TyConDefinition name args _) = TyConDefinition name (locatedValue <$> args)
 
-fromPrimTypeDefinition :: PrimTypeDefinition -> TypeDeclaration
-fromPrimTypeDefinition (PrimTypeDefinition tyName cons) =
-  TypeDeclaration (fromPrimTyDef tyName) (fromPrimDataCon <$> cons)
+fromPrimTypeDefinition :: S.TypeDeclaration -> TypeDeclaration
+fromPrimTypeDefinition (S.TypeDeclaration tyConDef dataCons) =
+  TypeDeclaration (fromPrimTyDef tyConDef) (fromPrimDataCon <$> dataCons)
 
 data DataConDefinition
   = DataConDefinition
@@ -89,8 +91,9 @@ data DataConDefinition
   , dataConDefinitionArgument :: !(Maybe Type)
   } deriving (Show, Eq, Ord)
 
-fromPrimDataCon :: DataConName -> DataConDefinition
-fromPrimDataCon name = DataConDefinition name Nothing
+fromPrimDataCon :: S.DataConDefinition -> DataConDefinition
+fromPrimDataCon (S.DataConDefinition (Located _ name) Nothing) = DataConDefinition name Nothing
+fromPrimDataCon (S.DataConDefinition _ (Just _)) = error "Couldn't convert data con definiton type."
 
 data Expr
   = ELit !Literal

@@ -40,15 +40,16 @@ inferModule (S.Module declarations) = do
     bindingTypes = mapMaybe declBindingType declarations
 
     externs' = convertExtern <$> externs
-    typeDeclarations' = (T.fromPrimTypeDef <$> allPrimTypeDefinitions) ++ (convertTypeDeclaration <$> typeDeclarations)
+    typeDeclarations' = convertTypeDeclaration <$> typeDeclarations
+    primTypeDeclarations = convertTypeDeclaration <$> allPrimTypeDefinitions
 
     externTypes = (\(T.Extern name ty) -> (name, ty)) <$> externs'
     primFuncTypes = primitiveFunctionType' <$> allPrimitiveFunctions
     identTypes = externTypes ++ primFuncTypes
-    dataConstructorTypes = concatMap mkDataConTypes typeDeclarations'
+    dataConstructorTypes = concatMap mkDataConTypes (allPrimTypeDefinitions ++ typeDeclarations)
   runChecker identTypes dataConstructorTypes "TODO" $ do
     -- Infer type declaration kinds and add to scope
-    for_ typeDeclarations' $ \decl@(T.TypeDeclaration (T.TyConDefinition tyCon _) _) -> do
+    for_ (primTypeDeclarations ++ typeDeclarations') $ \decl@(T.TypeDeclaration (T.TyConDefinition tyCon _) _) -> do
       kind <- inferTypeDeclarationKind decl
       addTyConKindToScope tyCon kind
 
@@ -332,15 +333,16 @@ convertDataConDefinition (S.DataConDefinition (Located _ conName) mTyArg) =
   , T.dataConDefinitionArgument = convertType <$> mTyArg
   }
 
-mkDataConTypes :: T.TypeDeclaration -> [(DataConName, T.Type)]
-mkDataConTypes (T.TypeDeclaration (T.TyConDefinition tyConName tyVars) dataConDefs) = mkDataConPair <$> dataConDefs
+mkDataConTypes :: S.TypeDeclaration -> [(Located DataConName, T.Type)]
+mkDataConTypes (S.TypeDeclaration (S.TyConDefinition tyConName tyVars _) dataConDefs) = mkDataConPair <$> dataConDefs
  where
-  mkDataConPair (T.DataConDefinition name mTyArg) =
+  mkDataConPair (S.DataConDefinition name mTyArg) =
     let
-      tyVars' = T.TyVar <$> tyVars
+      tyVars' = T.TyVar . locatedValue <$> tyVars
       tyApp = foldl1 T.TyApp (T.TyCon tyConName : tyVars')
-      ty = foldl1 T.TyFun (maybeToList mTyArg ++ [tyApp])
-      tyForall = maybe ty (\varsNE -> T.TyForall varsNE ty) (NE.nonEmpty tyVars)
+      mTyArg' = convertType <$> mTyArg
+      ty = foldl1 T.TyFun (maybeToList mTyArg' ++ [tyApp])
+      tyForall = maybe ty (\varsNE -> T.TyForall varsNE ty) (NE.nonEmpty $ locatedValue <$> tyVars)
     in (name, tyForall)
 
 convertType :: S.Type -> T.Type

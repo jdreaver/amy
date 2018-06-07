@@ -6,9 +6,7 @@ module Amy.TypeCheck.AST
   , Extern(..)
   , TypeDeclaration(..)
   , TyConDefinition(..)
-  , fromPrimTypeDef
   , DataConDefinition(..)
-  , fromPrimDataCon
   , Expr(..)
   , Var(..)
   , If(..)
@@ -81,21 +79,11 @@ data TyConDefinition
   , tyConDefinitionArgs :: ![TyVarName]
   } deriving (Show, Eq, Ord)
 
-fromPrimTyDef :: TyConName -> TyConDefinition
-fromPrimTyDef name = TyConDefinition name []
-
-fromPrimTypeDef :: PrimTypeDefinition -> TypeDeclaration
-fromPrimTypeDef (PrimTypeDefinition tyCon dataCons) =
-  TypeDeclaration (fromPrimTyDef tyCon) (fromPrimDataCon <$> dataCons)
-
 data DataConDefinition
   = DataConDefinition
   { dataConDefinitionName :: !DataConName
   , dataConDefinitionArgument :: !(Maybe Type)
   } deriving (Show, Eq, Ord)
-
-fromPrimDataCon :: DataConName -> DataConDefinition
-fromPrimDataCon name = DataConDefinition name Nothing
 
 -- | A renamed 'Expr'
 data Expr

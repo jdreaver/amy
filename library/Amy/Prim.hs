@@ -10,8 +10,8 @@
 
 module Amy.Prim
   ( -- * Types
-    PrimTypeDefinition(..)
-  , allPrimTypeDefinitions
+    allPrimTypeDefinitions
+  , literalType
 
   , intTypeDefinition
   , intTyCon
@@ -34,80 +34,59 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 
+import Amy.Literal
 import Amy.Names
-
---
--- Primitive Type ID Generation
---
-
-data PrimitiveType
-  = IntType
-  | DoubleType
-  | BoolType -- This isn't really primitive, just wired in
-  deriving (Show, Eq, Ord, Enum, Bounded)
-
-showPrimType :: PrimitiveType -> Text
-showPrimType IntType = "Int"
-showPrimType DoubleType = "Double"
-showPrimType BoolType = "Bool"
-
-data PrimitiveDataCon
-  = TrueDataCon
-  | FalseDataCon
-  deriving (Show, Eq, Ord, Enum, Bounded)
-
-showPrimDataCon :: PrimitiveDataCon -> Text
-showPrimDataCon TrueDataCon = "True"
-showPrimDataCon FalseDataCon = "False"
+import Amy.Syntax.AST
 
 --
 -- Wired-in Type Definitions
 --
 
-data PrimTypeDefinition
-  = PrimTypeDefinition
-  { primTypeDefinitionTypeName :: !TyConName
-  , primTypeDefinitionDataConstructors :: ![DataConName]
-  } deriving (Show, Eq)
-
-mkPrimTypeDef :: PrimitiveType -> [PrimitiveDataCon] -> PrimTypeDefinition
-mkPrimTypeDef tyCon dataCons =
+mkPrimTypeDef :: TyConName -> [DataConName] -> TypeDeclaration
+mkPrimTypeDef tyConName dataConNames =
   let
-    tyCon' = TyConName (showPrimType tyCon)
-    dataCons' = DataConName . showPrimDataCon <$> dataCons
-  in PrimTypeDefinition tyCon' dataCons'
+    span' = SourceSpan "<prim>" 1 1 1 1
+    tyConDef = TyConDefinition tyConName [] span'
+    mkDataConDef con = DataConDefinition (Located span' con) Nothing
+    dataCons = mkDataConDef <$> dataConNames
+  in TypeDeclaration tyConDef dataCons
 
 -- Int
-intTypeDefinition :: PrimTypeDefinition
-intTypeDefinition = mkPrimTypeDef IntType []
+intTypeDefinition :: TypeDeclaration
+intTypeDefinition = mkPrimTypeDef intTyCon []
 
 intTyCon :: TyConName
-intTyCon = primTypeDefinitionTypeName intTypeDefinition
+intTyCon = "Int"
 
 -- Double
-doubleTypeDefinition :: PrimTypeDefinition
-doubleTypeDefinition = mkPrimTypeDef DoubleType []
+doubleTypeDefinition :: TypeDeclaration
+doubleTypeDefinition = mkPrimTypeDef doubleTyCon []
 
 doubleTyCon :: TyConName
-doubleTyCon = primTypeDefinitionTypeName doubleTypeDefinition
+doubleTyCon = "Double"
 
 -- Bool
 
-boolTypeDefinition :: PrimTypeDefinition
-boolTypeDefinition = mkPrimTypeDef BoolType [FalseDataCon, TrueDataCon]
+boolTypeDefinition :: TypeDeclaration
+boolTypeDefinition = mkPrimTypeDef boolTyCon [falseDataCon, trueDataCon]
 
 boolTyCon :: TyConName
-boolTyCon = primTypeDefinitionTypeName boolTypeDefinition
+boolTyCon = "Bool"
 
 falseDataCon, trueDataCon :: DataConName
-[falseDataCon, trueDataCon] = primTypeDefinitionDataConstructors boolTypeDefinition
+falseDataCon = "False"
+trueDataCon = "True"
 
-allPrimTypeDefinitions :: [PrimTypeDefinition]
+allPrimTypeDefinitions :: [TypeDeclaration]
 allPrimTypeDefinitions =
   [ intTypeDefinition
   , doubleTypeDefinition
   , boolTypeDefinition
   ]
+
+literalType :: Literal -> TyConName
+literalType (LiteralInt _) = intTyCon
+literalType (LiteralDouble _) = doubleTyCon
 
 --
 -- Primitive Functions
