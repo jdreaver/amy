@@ -31,9 +31,11 @@ import Amy.Syntax.Located
 import Amy.Syntax.Monad
 
 parseModule :: AmyParser Module
-parseModule = Module <$> do
+parseModule = do
   spaceConsumerNewlines
-  noIndent (indentedBlock declaration) <* eof
+  declarations <- noIndent (indentedBlock declaration) <* eof
+  fileName <- sourceName <$> getPosition
+  pure $ Module fileName declarations
 
 declaration :: AmyParser Declaration
 declaration =

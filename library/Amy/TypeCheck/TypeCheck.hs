@@ -32,7 +32,7 @@ import Amy.TypeCheck.Subtyping
 --
 
 inferModule :: S.Module -> Either Error T.Module
-inferModule (S.Module declarations) = do
+inferModule (S.Module filePath declarations) = do
   let
     typeDeclarations = mapMaybe declType declarations
     externs = mapMaybe declExtern declarations
@@ -47,7 +47,7 @@ inferModule (S.Module declarations) = do
     primFuncTypes = primitiveFunctionType' <$> allPrimitiveFunctions
     identTypes = externTypes ++ primFuncTypes
     dataConstructorTypes = concatMap mkDataConTypes (allPrimTypeDefinitions ++ typeDeclarations)
-  runChecker identTypes dataConstructorTypes "TODO" $ do
+  runChecker identTypes dataConstructorTypes filePath $ do
     -- Infer type declaration kinds and add to scope
     for_ allTypeDeclarations $ \decl@(S.TypeDeclaration (S.TyConDefinition tyCon _) _) -> do
       kind <- inferTypeDeclarationKind (convertTypeDeclaration decl)

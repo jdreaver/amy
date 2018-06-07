@@ -44,8 +44,11 @@ import Amy.Names
 import Amy.Syntax.Located
 
 -- | A 'Module' is simply a list of 'Declaration' values.
-newtype Module = Module { unModule :: [Declaration] }
-  deriving (Show, Eq)
+data Module
+  = Module
+  { moduleFile :: !FilePath
+  , moduleDeclarations :: [Declaration]
+  } deriving (Show, Eq)
 
 data Declaration
   = DeclBinding !Binding

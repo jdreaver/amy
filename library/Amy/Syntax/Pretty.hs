@@ -36,7 +36,7 @@ isTyFun TyFun{} = True
 isTyFun _ = False
 
 prettyModule :: Module -> Doc ann
-prettyModule (Module decls) = vcatTwoHardLines (prettyDeclaration <$> decls)
+prettyModule (Module _ decls) = vcatTwoHardLines (prettyDeclaration <$> decls)
 
 prettyDeclaration :: Declaration -> Doc ann
 prettyDeclaration (DeclBinding binding) = prettyBinding' binding
