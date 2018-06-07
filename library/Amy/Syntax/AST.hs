@@ -24,6 +24,8 @@ module Amy.Syntax.AST
   , letBinding
   , letBindingType
   , expressionSpan
+  , matchSpan
+  , patternSpan
   , LetBinding(..)
   , Type(..)
 
@@ -101,9 +103,8 @@ data TypeDeclaration
 
 data TyConDefinition
   = TyConDefinition
-  { tyConDefinitionName :: !TyConName
+  { tyConDefinitionName :: !(Located TyConName)
   , tyConDefinitionArgs :: ![Located TyVarName]
-  , tyConDefinitionLocation :: !SourceSpan
   } deriving (Show, Eq)
 
 data DataConDefinition
@@ -114,7 +115,7 @@ data DataConDefinition
 
 data Expr
   = ELit !(Located Literal)
-  | ERecord !(Map (Located RowLabel) Expr)
+  | ERecord !SourceSpan !(Map (Located RowLabel) Expr)
   | ERecordSelect !Expr !(Located RowLabel)
   | EVar !Var
   | EIf !If
@@ -185,7 +186,7 @@ letBindingType _ = Nothing
 
 expressionSpan :: Expr -> SourceSpan
 expressionSpan (ELit (Located s _)) = s
-expressionSpan (ERecord _) = undefined
+expressionSpan (ERecord s _) = s
 expressionSpan (ERecordSelect expr (Located end _)) = mergeSpans (expressionSpan expr) end
 expressionSpan (EVar (VVal (Located s _))) = s
 expressionSpan (EVar (VCons (Located s _))) = s
@@ -194,6 +195,18 @@ expressionSpan (ECase (Case _ _ s)) = s
 expressionSpan (ELet (Let _ _ s)) = s
 expressionSpan (EApp e1 e2) = mergeSpans (expressionSpan e1) (expressionSpan e2)
 expressionSpan (EParens e) = expressionSpan e
+
+matchSpan :: Match -> SourceSpan
+matchSpan (Match pat expr) = mergeSpans (patternSpan pat) (expressionSpan expr)
+
+patternSpan :: Pattern -> SourceSpan
+patternSpan (PLit (Located s _)) = s
+patternSpan (PVar (Located s _)) = s
+patternSpan (PCons (PatCons (Located s _) mPat)) =
+  case mPat of
+    Nothing -> s
+    Just pat -> mergeSpans s (patternSpan pat)
+patternSpan (PParens pat) = patternSpan pat
 
 data Type
   = TyCon !(Located TyConName)

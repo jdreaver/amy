@@ -79,7 +79,7 @@ data TyConDefinition
   } deriving (Show, Eq, Ord)
 
 fromPrimTyDef :: S.TyConDefinition -> TyConDefinition
-fromPrimTyDef (S.TyConDefinition name args _) = TyConDefinition name (locatedValue <$> args)
+fromPrimTyDef (S.TyConDefinition (Located _ name) args) = TyConDefinition name (locatedValue <$> args)
 
 fromPrimTypeDefinition :: S.TypeDeclaration -> TypeDeclaration
 fromPrimTypeDefinition (S.TypeDeclaration tyConDef dataCons) =

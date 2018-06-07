@@ -294,18 +294,20 @@ insertMapDuplicateError getMap putMap name value mkError = do
     then throwAmyError $ mkError name
     else modify' $ \s -> putMap s $ Map.insert name value (getMap s)
 
-addValueTypeToScope :: IdentName -> Type -> Checker ()
-addValueTypeToScope name ty = insertMapDuplicateError valueTypes (\s m -> s { valueTypes = m }) name ty VariableShadowed
+addValueTypeToScope :: Located IdentName -> Type -> Checker ()
+addValueTypeToScope (Located span' name) ty =
+  withSourceSpan span' $
+    insertMapDuplicateError valueTypes (\s m -> s { valueTypes = m }) name ty VariableShadowed
 
-lookupValueType :: IdentName -> Checker Type
-lookupValueType name = do
+lookupValueType :: Located IdentName -> Checker Type
+lookupValueType (Located span' name) = do
   mTy <- Map.lookup name <$> gets valueTypes
-  maybe (throwAmyError $ UnknownVariable name) pure mTy
+  maybe (throwError $ Error (UnknownVariable name) span') pure mTy
 
-lookupDataConType :: DataConName -> Checker Type
-lookupDataConType con = do
+lookupDataConType :: Located DataConName -> Checker Type
+lookupDataConType (Located span' con) = do
   mTy <- Map.lookup con <$> gets dataConstructorTypes
-  maybe (throwAmyError $ UnknownDataCon con) pure mTy
+  maybe (throwError $ Error (UnknownDataCon con) span') pure mTy
 
 addUnknownTyVarKindToScope :: TyVarName -> Checker Int
 addUnknownTyVarKindToScope name = do
@@ -318,13 +320,18 @@ lookupTyVarKind name = do
   mKind <- Map.lookup name <$> gets tyVarKinds
   maybe (throwAmyError $ UnknownTypeVariable name) pure mKind
 
-addTyConKindToScope :: TyConName -> Kind -> Checker ()
-addTyConKindToScope name kind = insertMapDuplicateError tyConKinds (\s m -> s { tyConKinds = m }) name kind DuplicateTypeConstructor
+addTyConKindToScope :: Located TyConName -> Kind -> Checker ()
+addTyConKindToScope (Located span' name) kind =
+  withSourceSpan span' $
+    insertMapDuplicateError tyConKinds (\s m -> s { tyConKinds = m }) name kind DuplicateTypeConstructor
+
+addTyConKindToScope' :: TyConName -> Kind -> Checker ()
+addTyConKindToScope' name kind = insertMapDuplicateError tyConKinds (\s m -> s { tyConKinds = m }) name kind DuplicateTypeConstructor
 
 addUnknownTyConKindToScope :: TyConName -> Checker Int
 addUnknownTyConKindToScope name = do
   i <- freshId
-  addTyConKindToScope name $ KUnknown i
+  addTyConKindToScope' name $ KUnknown i
   pure i
 
 lookupTyConKind :: TyConName -> Checker Kind

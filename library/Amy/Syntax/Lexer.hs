@@ -22,8 +22,9 @@ module Amy.Syntax.Lexer
   , let'
   , in'
   , parens
-  , braces
   , optionalParens
+  , lbrace
+  , rbrace
   , comma
   , dot
   , colon
@@ -173,9 +174,6 @@ lbrace = fmap locatedSpan . lexeme $ char '{'
 
 rbrace :: AmyParser SourceSpan
 rbrace = fmap locatedSpan . lexeme $ char '}'
-
-braces :: AmyParser a -> AmyParser a
-braces = between lbrace rbrace
 
 comma :: AmyParser SourceSpan
 comma = fmap locatedSpan . lexeme $ char ','

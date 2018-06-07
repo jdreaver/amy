@@ -92,7 +92,7 @@ tyForall = do
 
 tyRecord :: AmyParser (Map (Located RowLabel) Type, Maybe (Located TyVarName))
 tyRecord =
-  braces $ do
+  between lbrace rbrace $ do
     fields <- (`sepBy` comma) $ do
       label' <- L.rowLabel
       _ <- doubleColon
@@ -130,13 +130,12 @@ typeDeclaration = do
 
 tyConDefinition :: AmyParser TyConDefinition
 tyConDefinition = do
-  Located span' name <- tyConName
+  name <- tyConName
   args <- many tyVarName
   pure
     TyConDefinition
     { tyConDefinitionName = name
     , tyConDefinitionArgs = args
-    , tyConDefinitionLocation = span'
     }
 
 dataConDefinition :: AmyParser DataConDefinition
@@ -162,7 +161,7 @@ expressionTerm :: AmyParser Expr
 expressionTerm =
   (expressionParens <?> "parens")
   <|> (ELit <$> literal <?> "literal")
-  <|> (ERecord <$> record <?> "record")
+  <|> (record <?> "record")
   <|> (EIf <$> ifExpression <?> "if expression")
   <|> (ECase <$> caseExpression <?> "case expression")
   <|> (ELet <$> letExpression' <?> "let expression")
@@ -180,13 +179,16 @@ literal :: AmyParser (Located Literal)
 literal =
   fmap (either LiteralDouble LiteralInt) <$> number
 
-record :: AmyParser (Map (Located RowLabel) Expr)
-record =
-  fmap Map.fromList $ braces $ (`sepBy` comma) $ do
+record :: AmyParser Expr
+record = do
+  startSpan <- lbrace
+  rows <- fmap Map.fromList $ (`sepBy` comma) $ do
     label' <- L.rowLabel
     _ <- colon
     expr <- expression
     pure (label', expr)
+  endSpan <- rbrace
+  pure $ ERecord (mergeSpans startSpan endSpan) rows
 
 variable :: AmyParser Var
 variable =
@@ -216,7 +218,7 @@ caseExpression = do
   scrutinee <- expression <?> "case scrutinee expression"
   _ <- of'
   matches <- indentedBlockNonEmpty (caseMatch <?> "case match")
-  let endSpan = (\(Match _ expr) -> expressionSpan expr) $ NE.last matches
+  let endSpan = matchSpan $ NE.last matches
   pure
     Case
     { caseScrutinee = scrutinee

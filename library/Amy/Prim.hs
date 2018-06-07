@@ -46,7 +46,7 @@ mkPrimTypeDef :: TyConName -> [DataConName] -> TypeDeclaration
 mkPrimTypeDef tyConName dataConNames =
   let
     span' = SourceSpan "<prim>" 1 1 1 1
-    tyConDef = TyConDefinition tyConName [] span'
+    tyConDef = TyConDefinition (Located span' tyConName) []
     mkDataConDef con = DataConDefinition (Located span' con) Nothing
     dataCons = mkDataConDef <$> dataConNames
   in TypeDeclaration tyConDef dataCons

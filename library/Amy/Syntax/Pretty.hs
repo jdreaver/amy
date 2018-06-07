@@ -50,7 +50,7 @@ prettyDeclaration (DeclType (TypeDeclaration info cons)) =
     prettyDataConstructor (prettyDataConName conName) (prettyType <$> mArg)
 
 prettyTyConDefinition :: TyConDefinition -> Doc ann
-prettyTyConDefinition (TyConDefinition name args _) = prettyTyConName name <> args'
+prettyTyConDefinition (TyConDefinition (Located _ name) args) = prettyTyConName name <> args'
  where
   args' = if null args then mempty else space <> sep (prettyTyVarName . locatedValue <$> args)
 
@@ -64,7 +64,7 @@ prettyBindingType' (BindingType (Located _ name) ty) =
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
-prettyExpr (ERecord rows) = bracketed $ uncurry prettyRow <$> Map.toList rows
+prettyExpr (ERecord _ rows) = bracketed $ uncurry prettyRow <$> Map.toList rows
 prettyExpr (ERecordSelect expr field) = prettyExpr expr <> "." <> prettyRowLabel (locatedValue field)
 prettyExpr (EVar var) = prettyVar var
 prettyExpr (EIf (If pred' then' else' _)) =
