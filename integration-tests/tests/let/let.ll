@@ -1,5 +1,3 @@
-; Generated from examples/let.amy
-
 ; ModuleID = 'amy-module'
 source_filename = "<string>"
 

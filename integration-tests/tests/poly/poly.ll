@@ -1,5 +1,3 @@
-; Generated from examples/poly.amy
-
 ; ModuleID = 'amy-module'
 source_filename = "<string>"
 

@@ -1,0 +1,28 @@
+---
+
+- name: data
+  program_exit_code: 7
+
+- name: fib
+  program_exit_code: 55
+
+- name: funcargs
+  program_exit_code: 3
+
+- name: higher-rank-poly
+  program_exit_code: 1
+
+- name: let
+  program_exit_code: 200
+
+- name: poly-data
+  program_exit_code: 42
+
+- name: poly
+  program_exit_code: 3
+
+- name: primops
+  program_exit_code: 200
+
+- name: records
+  program_exit_code: 3

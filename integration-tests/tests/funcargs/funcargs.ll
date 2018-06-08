@@ -1,5 +1,3 @@
-; Generated from examples/funcargs.amy
-
 ; ModuleID = 'amy-module'
 source_filename = "<string>"
 
