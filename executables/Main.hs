@@ -19,7 +19,6 @@ import LLVM.Pretty (ppllvm)
 import Options.Applicative
 import System.Console.Haskeline
 import System.Exit (die)
-import System.IO (hPutStrLn, stderr)
 import Text.Megaparsec
 
 import Amy.ANF as ANF
