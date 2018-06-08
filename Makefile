@@ -1,7 +1,5 @@
-examples_llvm: $(patsubst %.amy,%.ll,$(wildcard examples/*.amy))
-
 .PHONY: all
-all: build $(examples_llvm)
+all: build
 
 .PHONY: build
 build:
