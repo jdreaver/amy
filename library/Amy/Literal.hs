@@ -3,11 +3,7 @@
 module Amy.Literal
   ( Literal(..)
   , showLiteral
-  , literalType
   ) where
-
-import Amy.Names
-import Amy.Prim
 
 -- | A 'Literal' is any literal from the source code. This type is used in many
 -- ASTs since there is no need for renaming or annotating types to a literal.
@@ -19,7 +15,3 @@ data Literal
 showLiteral :: Literal -> String
 showLiteral (LiteralInt x) = show x
 showLiteral (LiteralDouble x) = show x
-
-literalType :: Literal -> TyConName
-literalType (LiteralInt _) = intTyCon
-literalType (LiteralDouble _) = doubleTyCon

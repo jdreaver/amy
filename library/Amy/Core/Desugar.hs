@@ -82,8 +82,7 @@ desugarExpr (T.ECase (T.Case scrutinee matches)) = do
 desugarExpr (T.EIf (T.If pred' then' else')) =
   let
     boolTyCon' = T.TyCon boolTyCon
-    mkBoolPatCons cons =
-      T.PatCons (T.dataConDefinitionName $ T.fromPrimDataCon cons) Nothing boolTyCon'
+    mkBoolPatCons cons = T.PatCons cons Nothing boolTyCon'
     matches =
       NE.fromList
       [ T.Match (T.PCons $ mkBoolPatCons trueDataCon) then'

@@ -42,12 +42,12 @@ process :: FilePath -> DumpFlags -> Text -> IO ()
 process filePath DumpFlags{..} input = do
   eCodegenString <- runExceptT $ do
     -- Parse
-    parsed <- liftEither $ first ((:[]) . ParserError) $ parse (runAmyParser parseModule) filePath input
+    parsed <- liftEither $ first ((:[]) . parseErrorPretty) $ parse (runAmyParser parseModule) filePath input
     when dfDumpParsed $
       lift $ putStrLn "\nParsed:" >> print (S.prettyModule parsed)
 
     -- Type checking
-    typeChecked <- liftEither $ first (:[]) $ T.inferModule parsed
+    typeChecked <- liftEither $ first ((:[]) . showError) $ T.inferModule parsed
     when dfDumpTypeChecked $
       lift $ putStrLn "\nType Checked:" >> print (T.prettyModule typeChecked)
 
@@ -75,8 +75,8 @@ process filePath DumpFlags{..} input = do
 
   either showErrors BS8.putStrLn eCodegenString
 
-showErrors :: [Error] -> IO ()
-showErrors = hPutStrLn stderr . intercalate "\n" . fmap showError
+showErrors :: [String] -> IO ()
+showErrors = hPutStrLn stderr . intercalate "\n"
 
 runRepl :: IO ()
 runRepl = runInputT defaultSettings loop

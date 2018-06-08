@@ -36,7 +36,7 @@ isTyFun TyFun{} = True
 isTyFun _ = False
 
 prettyModule :: Module -> Doc ann
-prettyModule (Module decls) = vcatTwoHardLines (prettyDeclaration <$> decls)
+prettyModule (Module _ decls) = vcatTwoHardLines (prettyDeclaration <$> decls)
 
 prettyDeclaration :: Declaration -> Doc ann
 prettyDeclaration (DeclBinding binding) = prettyBinding' binding
@@ -50,7 +50,7 @@ prettyDeclaration (DeclType (TypeDeclaration info cons)) =
     prettyDataConstructor (prettyDataConName conName) (prettyType <$> mArg)
 
 prettyTyConDefinition :: TyConDefinition -> Doc ann
-prettyTyConDefinition (TyConDefinition name args _) = prettyTyConName name <> args'
+prettyTyConDefinition (TyConDefinition (Located _ name) args) = prettyTyConName name <> args'
  where
   args' = if null args then mempty else space <> sep (prettyTyVarName . locatedValue <$> args)
 
@@ -64,16 +64,16 @@ prettyBindingType' (BindingType (Located _ name) ty) =
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
-prettyExpr (ERecord rows) = bracketed $ uncurry prettyRow <$> Map.toList rows
+prettyExpr (ERecord _ rows) = bracketed $ uncurry prettyRow <$> Map.toList rows
 prettyExpr (ERecordSelect expr field) = prettyExpr expr <> "." <> prettyRowLabel (locatedValue field)
 prettyExpr (EVar var) = prettyVar var
-prettyExpr (EIf (If pred' then' else')) =
+prettyExpr (EIf (If pred' then' else' _)) =
   prettyIf (prettyExpr pred') (prettyExpr then') (prettyExpr else')
-prettyExpr (ECase (Case scrutinee matches)) =
+prettyExpr (ECase (Case scrutinee matches _)) =
   prettyCase (prettyExpr scrutinee) Nothing (toList $ mkMatch <$> matches)
  where
   mkMatch (Match pat body) = (prettyPattern pat, prettyExpr body)
-prettyExpr (ELet (Let bindings body)) =
+prettyExpr (ELet (Let bindings body _)) =
   prettyLet (prettyLetBinding <$> bindings) (prettyExpr body)
  where
   prettyLetBinding (LetBinding binding) = prettyBinding' binding

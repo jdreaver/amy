@@ -5,6 +5,7 @@
 module Amy.Syntax.Located
   ( Located(..)
   , SourceSpan(..)
+  , mergeSpans
   ) where
 
 -- | Location of something in source code.
@@ -23,3 +24,7 @@ data SourceSpan
   , sourceSpanEndLine :: !Int
   , sourceSpanEndColumn :: !Int
   } deriving (Show, Eq, Ord)
+
+mergeSpans :: SourceSpan -> SourceSpan -> SourceSpan
+mergeSpans (SourceSpan file startLine startCol _ _) (SourceSpan _ _ _ endLine endCol) =
+  SourceSpan file startLine startCol endLine endCol
