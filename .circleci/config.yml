@@ -52,7 +52,7 @@ jobs:
 
       - run:
           name: Test
-          command: make test
+          command: LLI_COMMAND=lli-6.0 make test
           no_output_timeout: 30m
 
       - save_cache:

@@ -11,11 +11,12 @@ import Control.Monad (unless, when)
 import Control.Monad.Except
 import Data.Either (isRight)
 import Data.Foldable (for_)
-import Data.Maybe (isJust)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text, unpack)
 import Data.Traversable (traverse)
 import Data.Yaml
 import System.Directory (doesFileExist)
+import System.Environment (lookupEnv)
 import System.Exit (ExitCode(..), exitFailure)
 import System.Process
 
@@ -63,7 +64,8 @@ runTest' TestDefinition{..} = do
     liftIO $ writeFile llvmPath compilerStdout
 
     -- Run llvm program
-    (programExitCode, programStdout, programStderr) <- liftIO $ readProcessWithExitCode "lli" [llvmPath] ""
+    lliCommand <- liftIO $ fromMaybe "lli" <$> lookupEnv "LLI_COMMAND"
+    (programExitCode, programStdout, programStderr) <- liftIO $ readProcessWithExitCode lliCommand [llvmPath] ""
     when (programExitCode /= testProgramExitCode) $
       throwError $
         "Incorrect program exit code. Expected: " ++ show testProgramExitCode ++
