@@ -51,9 +51,8 @@ jobs:
             - test-v1-{{ checksum "stack.yaml" }}-
 
       - run:
-          name: Test
-          command: LLI_COMMAND=lli-6.0 make test
-          no_output_timeout: 30m
+          name: Build
+          command: stack build --pedantic --test --no-run-tests
 
       - save_cache:
           # yamllint disable-line rule:line-length
@@ -61,7 +60,11 @@ jobs:
           paths:
             - ~/amy/.stack-work
             - ~/amy/integration-tests/.stack-work
-          when: always  # Always upload cache, even if tests fail
+
+      - run:
+          name: Test
+          command: LLI_COMMAND=lli-6.0 make test
+          no_output_timeout: 30m
 
 workflows:
   version: 2
