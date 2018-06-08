@@ -1,6 +1,5 @@
 name: amy
 
-
 ghc-options: -Wall
 
 library:

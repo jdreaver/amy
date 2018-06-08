@@ -1,0 +1,73 @@
+---
+version: 2
+
+jobs:
+
+  test:
+    docker:
+      - image: jdreaver/circleci-amy
+    working_directory: ~/amy
+    steps:
+      - checkout:
+          path: ~/amy
+
+      - run:
+          name: Digest
+          command: |
+            # Dependencies
+            {
+              stack --version
+              md5sum stack.yaml
+              git ls-files --exclude="package.yaml" --ignore | xargs md5sum
+            } >> dependencies
+
+            # All files
+            git ls-files | xargs md5sum > file-md5sums
+
+      - restore_cache:
+          keys:
+            # yamllint disable-line rule:line-length
+            - test-deps-v1-{{ checksum "stack.yaml" }}-{{ checksum "dependencies" }}
+            - test-deps-v1-{{ checksum "stack.yaml" }}-
+
+      - run:
+          name: Dependencies
+          command: stack build --jobs=1 --only-dependencies --test --no-run-tests
+          no_output_timeout: 30m
+
+      - save_cache:
+          # yamllint disable-line rule:line-length
+          key: test-deps-v1-{{ checksum "stack.yaml" }}-{{ checksum "dependencies" }}
+          paths:
+            - ~/.stack
+
+      - restore_cache:
+          keys:
+            # yamllint disable-line rule:line-length
+            - test-v1-{{ checksum "stack.yaml" }}-{{ .Branch }}-{{ checksum "file-md5sums" }}
+            - test-v1-{{ checksum "stack.yaml" }}-master-{{ checksum "file-md5sums" }}
+            - test-v1-{{ checksum "stack.yaml" }}-{{ .Branch }}-
+            - test-v1-{{ checksum "stack.yaml" }}-master-
+            - test-v1-{{ checksum "stack.yaml" }}-
+
+      - run:
+          name: Build
+          command: stack build --pedantic --test --no-run-tests
+
+      - save_cache:
+          # yamllint disable-line rule:line-length
+          key: test-v1-{{ checksum "stack.yaml" }}-{{ .Branch }}-{{ checksum "file-md5sums" }}
+          paths:
+            - ~/amy/.stack-work
+            - ~/amy/integration-tests/.stack-work
+
+      - run:
+          name: Test
+          command: LLI_COMMAND=lli-6.0 make test
+          no_output_timeout: 30m
+
+workflows:
+  version: 2
+  test:
+    jobs:
+      - test

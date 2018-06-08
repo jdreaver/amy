@@ -1,0 +1,14 @@
+name: amy-integration-tests
+
+ghc-options: -Wall
+
+executables:
+  amy-integration-tests:
+    main: Main.hs
+    dependencies:
+      - base
+      - directory
+      - process
+      - mtl
+      - text
+      - yaml

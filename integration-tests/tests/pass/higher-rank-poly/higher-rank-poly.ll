@@ -1,5 +1,3 @@
-; Generated from examples/higher-rank-poly.amy
-
 ; ModuleID = 'amy-module'
 source_filename = "<string>"
 

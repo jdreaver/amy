@@ -1,7 +1,5 @@
-examples_llvm: $(patsubst %.amy,%.ll,$(wildcard examples/*.amy))
-
 .PHONY: all
-all: build $(examples_llvm)
+all: build
 
 .PHONY: build
 build:
@@ -10,6 +8,7 @@ build:
 .PHONY: test
 test:
 	stack test --pedantic
+	(cd integration-tests && stack exec amy-integration-tests)
 
 .PHONY: watch
 watch:
@@ -18,8 +17,3 @@ watch:
 .PHONY: clean
 clean:
 	git clean -xfd
-
-examples/%.ll: examples/%.amy build
-	@echo "; Generated from $<" > $@
-	@echo "" >> $@
-	stack exec amy -- compile $< >> $@
