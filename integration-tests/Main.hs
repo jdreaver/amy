@@ -10,9 +10,12 @@ import Control.Exception (throw)
 import Control.Monad (unless, when)
 import Control.Monad.Except
 import Data.Either (isRight)
+import Data.Foldable (for_)
+import Data.Maybe (isJust)
 import Data.Text (Text, unpack)
 import Data.Traversable (traverse)
 import Data.Yaml
+import System.Directory (doesFileExist)
 import System.Exit (ExitCode(..), exitFailure)
 import System.Process
 
@@ -30,42 +33,67 @@ runTest testDef = do
   pure $ isRight result
 
 runTest' :: TestDefinition -> ExceptT String IO ()
-runTest' (TestDefinition name expectProgExitCode) = do
+runTest' TestDefinition{..} = do
   let
-    testDir = "tests/" ++ unpack name ++ "/"
-    sourcePath = testDir ++ unpack name ++ ".amy"
-    llvmPath = testDir ++ unpack name ++ ".ll"
+    sourcePath = testSource </> unpack testName ++ ".amy"
+    llvmPath = testSource </> unpack testName ++ ".ll"
+
+  -- Ensure source file exists
+  exists <- liftIO $ doesFileExist sourcePath
+  unless exists $
+    throwError $ "File doesn't exist! " ++ sourcePath
 
   -- Compile program
   (compilerExitCode, compilerStdout, compilerStderr) <- liftIO $ readProcessWithExitCode "amy" ["compile", sourcePath] ""
-  when (compilerExitCode /= ExitSuccess) $
-    throwError $ "Compilation failed. stdout:\n" ++ compilerStdout ++ "\nstderr:\n" ++ compilerStderr
-
-  -- Print LLVM to file
-  liftIO $ writeFile llvmPath compilerStdout
-
-  -- Run llvm program
-  (programExitCode, programStdout, programStderr) <- liftIO $ readProcessWithExitCode "lli" [llvmPath] ""
-  when (programExitCode /= expectProgExitCode) $
+  let compilerExpectedExitCode = if isJust testCompilerStderr then ExitFailure 1 else ExitSuccess
+  when (compilerExitCode /= compilerExpectedExitCode) $
     throwError $
-    "Incorrect program exit code. Expected: " ++ show expectProgExitCode ++
-    " got: " ++ show programExitCode ++
-    (if null programStdout then "" else "\nstdout:\n" ++ programStdout) ++
-    (if null programStderr then "" else "\nstderr:\n" ++ programStderr)
+      "Incorrect compiler exit code. Expected: " ++ show compilerExpectedExitCode ++
+      " got: " ++ show compilerExitCode ++
+      (if null compilerStdout then "" else "\nstdout:\n" ++ compilerStdout) ++
+      (if null compilerStderr then "" else "\nstderr:\n" ++ compilerStderr)
+
+  for_ testCompilerStderr $ \expected ->
+    when (expected /= compilerStderr) $
+      throwError $
+        "Incorrect compiler stderr. Expected:\n" ++ expected ++ "\nGot:\n" ++ compilerStderr
+
+  when (compilerExitCode == ExitSuccess) $ do
+    -- Print LLVM to file
+    liftIO $ writeFile llvmPath compilerStdout
+
+    -- Run llvm program
+    (programExitCode, programStdout, programStderr) <- liftIO $ readProcessWithExitCode "lli" [llvmPath] ""
+    when (programExitCode /= testProgramExitCode) $
+      throwError $
+        "Incorrect program exit code. Expected: " ++ show testProgramExitCode ++
+        " got: " ++ show programExitCode ++
+        (if null programStdout then "" else "\nstdout:\n" ++ programStdout) ++
+        (if null programStderr then "" else "\nstderr:\n" ++ programStderr)
 
 data TestDefinition
   = TestDefinition
   { testName :: !Text
+  , testSource :: !FilePath
+  , testCompilerStderr :: !(Maybe String)
   , testProgramExitCode :: !ExitCode
   } deriving (Show, Eq)
 
 instance FromJSON TestDefinition where
   parseJSON = withObject "TestDefinition" $ \o -> do
     testName <- o .: "name"
-    exitCode <- o .: "program_exit_code"
-    let
-      testProgramExitCode =
-        case exitCode of
-          0 -> ExitSuccess
-          _ -> ExitFailure exitCode
+    testSource <- o .: "source"
+    testCompilerStderr <- o .:? "compiler_stderr"
+    testProgramExitCode <- mkExitCode <$> o .:? "program_exit_code" .!= 0
     pure TestDefinition{..}
+
+mkExitCode :: Int -> ExitCode
+mkExitCode 0 = ExitSuccess
+mkExitCode x = ExitFailure x
+
+(</>) :: FilePath -> FilePath -> FilePath
+"" </> fp2 = fp2
+fp1 </> fp2 =
+  if last fp1 == '/'
+  then fp1 ++ fp2
+  else fp1 ++ "/" ++ fp2

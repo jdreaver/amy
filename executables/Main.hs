@@ -18,6 +18,7 @@ import qualified Data.Text.Lazy.IO as TL
 import LLVM.Pretty (ppllvm)
 import Options.Applicative
 import System.Console.Haskeline
+import System.Exit (die)
 import System.IO (hPutStrLn, stderr)
 import Text.Megaparsec
 
@@ -73,10 +74,7 @@ process filePath DumpFlags{..} input = do
 
     pure llvm
 
-  either showErrors BS8.putStrLn eCodegenString
-
-showErrors :: [String] -> IO ()
-showErrors = hPutStrLn stderr . intercalate "\n"
+  either (die . intercalate "\n") BS8.putStrLn eCodegenString
 
 runRepl :: IO ()
 runRepl = runInputT defaultSettings loop

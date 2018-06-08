@@ -1,0 +1,2 @@
+f :: forall a b. { x :: Int | a } -> { x :: Int | b }
+f x = x

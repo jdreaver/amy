@@ -1,28 +1,48 @@
 ---
 
+# Passing tests
 - name: data
+  source: tests/pass/data
   program_exit_code: 7
 
 - name: fib
+  source: tests/pass/fib
   program_exit_code: 55
 
 - name: funcargs
+  source: tests/pass/funcargs
   program_exit_code: 3
 
 - name: higher-rank-poly
+  source: tests/pass/higher-rank-poly
   program_exit_code: 1
 
 - name: let
+  source: tests/pass/let
   program_exit_code: 200
 
 - name: poly-data
+  source: tests/pass/poly-data
   program_exit_code: 42
 
 - name: poly
+  source: tests/pass/poly
   program_exit_code: 3
 
 - name: primops
+  source: tests/pass/primops
   program_exit_code: 200
 
 - name: records
+  source: tests/pass/records
   program_exit_code: 3
+
+# Failing tests
+- name: record-poly
+  source: tests/fail
+  compiler_stderr: |
+    tests/fail/record-poly.amy:2:7:
+      Could not match type
+        a
+      with type
+        b
