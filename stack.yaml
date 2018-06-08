@@ -2,3 +2,4 @@ resolver: nightly-2018-05-14
 
 packages:
   - '.'
+  - integration-tests
