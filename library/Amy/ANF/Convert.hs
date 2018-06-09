@@ -168,9 +168,7 @@ normalizeLiteral (C.LiteralDouble d) = pure $ ANF.LiteralDouble d
 normalizeLiteral (C.LiteralText t) = ANF.LiteralTextPointer <$> makeTextPointer t
 
 normalizeName :: Text -> C.Expr -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
-normalizeName _ (C.ELit lit) c = do
-  lit' <- ANF.Lit <$> normalizeLiteral lit
-  c lit'
+normalizeName _ (C.ELit lit) c = c =<< ANF.Lit <$> normalizeLiteral lit
 normalizeName name (C.EVar var) c =
   case var of
     C.VVal (C.Typed ty ident) -> do
