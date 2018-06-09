@@ -8,6 +8,7 @@ module Amy.Codegen.CaseBlocks
   ) where
 
 import LLVM.AST as LLVM
+import LLVM.AST.AddrSpace
 import qualified LLVM.AST.Constant as C
 import LLVM.AST.Float as F
 
@@ -107,7 +108,7 @@ literalConstant lit =
   case lit of
     LiteralInt i -> C.Int 64 (fromIntegral i)
     LiteralDouble x -> C.Float (F.Double x)
-    LiteralTextPointer ptr -> C.GlobalReference (textPointerType ptr) (textPointerName ptr)
+    LiteralTextPointer ptr -> C.GlobalReference (LLVM.PointerType (textPointerType ptr) (AddrSpace 0)) (textPointerName ptr)
 
 constructorConstant :: DataCon -> C.Constant
 constructorConstant con =

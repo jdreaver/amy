@@ -1,0 +1,2 @@
+main :: Int
+main = let x = "Hello!" in 0

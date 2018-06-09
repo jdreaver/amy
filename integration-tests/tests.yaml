@@ -37,6 +37,10 @@
   source: tests/pass/records
   program_exit_code: 3
 
+- name: text
+  source: tests/pass/text
+  program_exit_code: 0
+
 # Failing tests
 - name: record-poly
   source: tests/fail

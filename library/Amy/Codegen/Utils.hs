@@ -11,7 +11,7 @@ module Amy.Codegen.Utils
 
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Short as BSS
-import Data.Char (digitToInt)
+import Data.Char (ord)
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
@@ -32,7 +32,7 @@ stringToName = Name . BSS.toShort . BS8.pack
 textPointerType :: TextPointer -> LLVM.Type
 textPointerType (TextPointer _ text) =
   -- Length of text plus one extra for null character string terminator
-  LLVM.ArrayType (fromIntegral $ T.length text) (LLVM.IntegerType 8)
+  LLVM.ArrayType (fromIntegral (T.length text) + 1) (LLVM.IntegerType 8)
 
 textPointerName :: TextPointer -> LLVM.Name
 textPointerName (TextPointer id' _) = textToName $ "$str." <> pack (show id')
@@ -40,5 +40,5 @@ textPointerName (TextPointer id' _) = textToName $ "$str." <> pack (show id')
 textPointerConstant :: TextPointer -> C.Constant
 textPointerConstant (TextPointer _ text) = C.Array (LLVM.IntegerType 8) array
  where
-  chars = (fromIntegral . digitToInt <$> unpack text) ++ [0]
+  chars = (fromIntegral . ord <$> unpack text) ++ [0]
   array = C.Int 8 <$> chars
