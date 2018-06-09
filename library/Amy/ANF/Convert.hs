@@ -32,7 +32,8 @@ normalizeModule (C.Module bindings externs typeDeclarations) =
     typeDeclarations' <- traverse convertTypeDeclaration typeDeclarations
     externs' <- traverse convertExtern externs
     bindings' <- traverse (normalizeBinding (Just "res")) bindings
-    pure $ ANF.Module bindings' externs' typeDeclarations'
+    textPointers <- getTextPointers
+    pure $ ANF.Module bindings' externs' typeDeclarations' textPointers
 
 convertExtern :: C.Extern -> ANFConvert ANF.Extern
 convertExtern (C.Extern name ty) = ANF.Extern name <$> convertType ty
@@ -108,7 +109,7 @@ normalizeExpr
   :: Text -- ^ Base name for generated variables
   -> C.Expr -- ^ Expression to normalize
   -> ANFConvert ANF.Expr
-normalizeExpr _ (C.ELit lit) = pure $ ANF.EVal $ ANF.Lit lit
+normalizeExpr _ (C.ELit lit) = ANF.EVal . ANF.Lit <$> normalizeLiteral lit
 normalizeExpr _ (C.ERecord rows) =
   normalizeRows (Map.toList rows) $ \rows' ->
     pure $ ANF.ERecord $ Map.fromList rows'
@@ -161,8 +162,13 @@ normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
                 Nothing -> pure $ ANF.EApp $ ANF.App tyIdent argVals retTy'
 normalizeExpr name (C.EParens expr) = normalizeExpr name expr
 
+normalizeLiteral :: C.Literal -> ANFConvert ANF.Literal
+normalizeLiteral (C.LiteralInt i) = pure $ ANF.LiteralInt i
+normalizeLiteral (C.LiteralDouble d) = pure $ ANF.LiteralDouble d
+normalizeLiteral (C.LiteralText t) = ANF.LiteralTextPointer <$> makeTextPointer t
+
 normalizeName :: Text -> C.Expr -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
-normalizeName _ (C.ELit lit) c = c $ ANF.Lit lit
+normalizeName _ (C.ELit lit) c = c =<< ANF.Lit <$> normalizeLiteral lit
 normalizeName name (C.EVar var) c =
   case var of
     C.VVal (C.Typed ty ident) -> do
@@ -221,7 +227,7 @@ normalizeMatch name (C.Match pat body) = do
   pure $ ANF.Match pat' body'
 
 convertPattern :: C.Pattern -> ANFConvert ANF.Pattern
-convertPattern (C.PLit lit) = pure $ ANF.PLit lit
+convertPattern (C.PLit lit) = ANF.PLit <$> normalizeLiteral lit
 convertPattern (C.PCons (C.PatCons cons mArg retTy)) = do
   cons' <- convertDataCon cons
   mArg' <- traverse convertTypedIdent mArg

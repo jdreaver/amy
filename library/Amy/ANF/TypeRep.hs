@@ -46,4 +46,5 @@ maybePrimitiveType (C.TyConDefinition name _)
   -- TODO: Something more robust here besides text name matching.
   | name == "Int" = Just PrimIntType
   | name == "Double" = Just PrimDoubleType
+  | name == "Text" = Just PrimTextType
   | otherwise = Nothing

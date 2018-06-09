@@ -6,13 +6,14 @@ module Amy.ANF.Monad
   , ANFConvertRead
   , anfConvertRead
   , ANFConvertState
-  , anfConvertState
   , freshId
   , freshIdent
   , getTyConDefinitionType
   , getTyConType
   , getDataConInfo
   , isIdentTopLevel
+  , makeTextPointer
+  , getTextPointers
   ) where
 
 import Control.Monad.Reader
@@ -34,7 +35,7 @@ newtype ANFConvert a = ANFConvert (ReaderT ANFConvertRead (State ANFConvertState
   deriving (Functor, Applicative, Monad, MonadReader ANFConvertRead, MonadState ANFConvertState)
 
 runANFConvert :: ANFConvertRead -> ANFConvert a -> a
-runANFConvert read' (ANFConvert action) = evalState (runReaderT action read') (anfConvertState 0)
+runANFConvert read' (ANFConvert action) = evalState (runReaderT action read') (ANFConvertState 0 [])
 
 data ANFConvertRead
   = ANFConvertRead
@@ -64,11 +65,9 @@ mkDataConInfo decl@(C.TypeDeclaration _ cons) = mkInfo <$> zip cons [0..]
 
 data ANFConvertState
   = ANFConvertState
-  { lastId :: Int
+  { lastId :: !Int
+  , textPointers :: ![TextPointer]
   } deriving (Show, Eq)
-
-anfConvertState :: Int -> ANFConvertState
-anfConvertState id' = ANFConvertState id'
 
 freshId :: ANFConvert Int
 freshId = do
@@ -99,3 +98,13 @@ getDataConInfo con = fromMaybe err . Map.lookup con <$> asks anfConvertReadDataC
 
 isIdentTopLevel :: IdentName -> ANFConvert Bool
 isIdentTopLevel ident = Set.member ident <$> asks anfConvertReadTopLevelNames
+
+makeTextPointer :: Text -> ANFConvert ANF.TextPointer
+makeTextPointer text = do
+  id' <- freshId
+  let ptr = ANF.TextPointer id' text
+  modify' $ \s -> s { textPointers = ptr : textPointers s }
+  pure ptr
+
+getTextPointers :: ANFConvert [TextPointer]
+getTextPointers = reverse <$> gets textPointers

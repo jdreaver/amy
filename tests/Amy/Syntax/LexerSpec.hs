@@ -30,10 +30,10 @@ spec = do
   describe "text" $ do
 
     it "parses strings properly" $ do
-      parse' text "\"Hello\"" `shouldParse` "Hello"
+      parse' text "\"Hello\"" `shouldParse` Located (SourceSpan "" 1 1 1 7) "Hello"
 
     it "parses strings with nested quotes" $ do
-      parse' text "\"Hello \\\"Bob\\\"\"" `shouldParse` "Hello \"Bob\""
+      parse' text "\"Hello \\\"Bob\\\"\"" `shouldParse` Located (SourceSpan "" 1 1 1 15) "Hello \"Bob\""
 
   let
     integer = fromRight (error "Not an integer") . locatedValue <$> number

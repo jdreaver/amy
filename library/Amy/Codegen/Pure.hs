@@ -14,7 +14,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Traversable (for)
 import GHC.Word (Word32)
-import LLVM.AST as LLVM
+import LLVM.AST as LLVM hiding (type')
 import LLVM.AST.AddrSpace
 import qualified LLVM.AST.CallingConvention as CC
 import qualified LLVM.AST.Constant as C
@@ -30,7 +30,7 @@ import Amy.Codegen.Utils
 import Amy.Prim
 
 codegenModule :: ANF.Module -> LLVM.Module
-codegenModule (ANF.Module bindings externs typeDeclarations) =
+codegenModule (ANF.Module bindings externs typeDeclarations textPointers) =
   let
     topLevelTypes =
       ((\(ANF.Binding name' argTys retTy _) -> (name', FuncType (typedType <$> argTys) retTy)) <$> bindings)
@@ -39,8 +39,9 @@ codegenModule (ANF.Module bindings externs typeDeclarations) =
       let
         externs' = codegenExtern <$> externs
         typeDefs = mapMaybe codegenTypeDeclaration typeDeclarations
+        textPointers' = codegenTextPointer <$> textPointers
       bindings' <- traverse codegenTopLevelBinding bindings
-      pure $ externs' ++ typeDefs ++ bindings'
+      pure $ externs' ++ typeDefs ++ textPointers' ++ bindings'
   in
     defaultModule
     { moduleName = "amy-module"
@@ -80,6 +81,16 @@ codegenTypeDeclaration (ANF.TypeDeclaration _ ty _) =
           ]
         )
     _ -> Nothing
+
+codegenTextPointer :: ANF.TextPointer -> Definition
+codegenTextPointer ptr =
+  GlobalDefinition
+  globalVariableDefaults
+  { name = textPointerName ptr
+  , LLVM.type' = textPointerType ptr
+  , initializer = Just $ textPointerConstant ptr
+  , linkage = L.Private
+  }
 
 codegenTopLevelBinding :: ANF.Binding -> CodeGen Definition
 codegenTopLevelBinding binding = do
@@ -357,6 +368,7 @@ primitiveFunctionInstruction (PrimitiveFunction primFuncName _ _) argumentOperan
 llvmType :: ANF.Type -> LLVM.Type
 llvmType PrimIntType = IntegerType 64
 llvmType PrimDoubleType = FloatingPointType DoubleFP
+llvmType PrimTextType = LLVM.PointerType (IntegerType 8) (AddrSpace 0)
 llvmType (ANF.PointerType ty) = LLVM.PointerType (llvmType ty) (AddrSpace 0)
 llvmType OpaquePointerType = LLVM.PointerType (IntegerType 64) (AddrSpace 0)
 llvmType (FuncType argTys retTy) =

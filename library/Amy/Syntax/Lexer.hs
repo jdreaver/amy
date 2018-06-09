@@ -199,8 +199,8 @@ rightArrow = fmap locatedSpan . lexeme $ string "->"
 typeSeparatorArrow :: AmyParser SourceSpan
 typeSeparatorArrow = rightArrow
 
-text :: AmyParser Text
-text = fmap pack $ char '"' >> manyTill L.charLiteral (char '"')
+text :: AmyParser (Located Text)
+text = lexeme $ fmap pack $ char '"' >> manyTill L.charLiteral (char '"')
 
 noIndent :: AmyParser a -> AmyParser a
 noIndent = L.nonIndented spaceConsumer

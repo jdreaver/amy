@@ -1,0 +1,7 @@
+extern puts :: Text -> Int
+
+main :: Int
+main = let x = puts hello in 0
+
+hello :: Text
+hello = "Hello\nwith\tescapes"
