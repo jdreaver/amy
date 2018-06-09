@@ -57,7 +57,7 @@ runTest' TestDefinition{..} = do
   for_ testCompilerStderr $ \expected ->
     when (expected /= compilerStderr) $
       throwError $
-        "Incorrect compiler stderr. Expected:\n" ++ expected ++ "\nGot:\n" ++ compilerStderr
+        "Incorrect compiler stderr.\nExpected:\n" ++ expected ++ "\nGot:\n" ++ compilerStderr
 
   when (compilerExitCode == ExitSuccess) $ do
     -- Print LLVM to file
@@ -75,7 +75,7 @@ runTest' TestDefinition{..} = do
 
     for_ testProgramStdout $ \expected ->
       when (expected /= programStdout) $
-        throwError $ "Incorrect program stdout. Expected:\n" ++ expected ++ "\nGot:\n" ++ programStdout
+        throwError $ "Incorrect program stdout.\nExpected:\n" ++ expected ++ "\nGot:\n" ++ programStdout
 
 data TestDefinition
   = TestDefinition
