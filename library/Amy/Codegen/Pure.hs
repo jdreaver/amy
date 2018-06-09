@@ -18,6 +18,7 @@ import LLVM.AST as LLVM hiding (type')
 import LLVM.AST.AddrSpace
 import qualified LLVM.AST.CallingConvention as CC
 import qualified LLVM.AST.Constant as C
+import LLVM.AST.Float as F
 import LLVM.AST.Global as LLVM
 import qualified LLVM.AST.IntegerPredicate as IP
 import qualified LLVM.AST.Linkage as L
@@ -121,7 +122,7 @@ codegenExpr' name' (ANF.EVal val) =
   -- well, and there is a primitive value being used by itself in an
   -- expression. No worries, LLVM will most certainly remove these redundant
   -- instructions.
-  bindOpToName name' (valOperand val)
+  bindOpToName name' =<< valOperand val
 codegenExpr' name' (ANF.ERecord rows) = do
   -- Allocate struct
   let
@@ -135,8 +136,8 @@ codegenExpr' name' (ANF.ERecord rows) = do
   let numberedRows = zip [0..] $ Map.toAscList rows
   for_ numberedRows $ \(i, (_, Typed _ val)) -> do
     rowPtrName <- freshUnName
+    rowOp <- valOperand val
     let
-      rowOp = valOperand val
       rowPtrOp = LocalReference (LLVM.PointerType (IntegerType 64) (AddrSpace 0)) rowPtrName
     addInstruction $ rowPtrName := GetElementPtr False allocOp [gepIndex 0, gepIndex i] []
     rowPtrOp' <- maybeConvertPointer Nothing rowPtrOp (LLVM.PointerType (operandType rowOp) (AddrSpace 0))
@@ -154,7 +155,7 @@ codegenExpr' name' (ANF.ERecordSelect val label retTy) = do
       fromMaybe (error $ "Couldn't find index for label in type " ++ show (label, tyRows))
       . elemIndex label
       $ fst <$> tyRows
-    valOp = valOperand val
+  valOp <- valOperand val
 
   -- Compute offset with getelementptr
   dataPtrName <- freshUnName
@@ -182,7 +183,7 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
     (CaseEndBlock endBlockName endType) = endBlock
 
   -- Generate the switch statement
-  let scrutineeOp = valOperand scrutinee
+  scrutineeOp <- valOperand scrutinee
 
   -- Extract tag from scrutinee op if we have to
   -- TODO: Should we extract the argument once here or extract it in every
@@ -237,10 +238,11 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
 codegenExpr' name' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = do
   topLevelTy <- topLevelType ident
   let
-    (ty, funcOperand) =
+    (ty, mkFuncOperand) =
       case topLevelTy of
         Nothing -> (originalTy, valOperand (ANF.Var (ANF.Typed originalTy ident) False))
         Just ty' -> (ty', valOperand (ANF.Var (ANF.Typed ty' ident) True))
+  funcOperand <- mkFuncOperand
   let
     (argTys', returnTy') =
       case ty of
@@ -248,7 +250,7 @@ codegenExpr' name' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnT
         _ -> error $ "Tried to EApp a non-function type " ++ show ty
   -- Convert arguments to pointers if we have to
   argOps <- for (zip args' argTys') $ \(arg, argTy) -> do
-    let originalOp = valOperand arg
+    originalOp <- valOperand arg
     maybeConvertPointer Nothing originalOp $ llvmType argTy
 
   -- Add call instruction
@@ -267,7 +269,7 @@ codegenExpr' name' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnT
 codegenExpr' name' (ANF.EConApp (ANF.ConApp con mArg structName intBits)) =
   packConstructor name' con mArg structName intBits
 codegenExpr' name' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
-  let argOps = valOperand <$> args'
+  argOps <- traverse valOperand args'
   addInstruction $ name' := primitiveFunctionInstruction prim argOps
   let returnTy' = llvmType returnTy
   pure $ LocalReference returnTy' name'
@@ -275,14 +277,18 @@ codegenExpr' name' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
 gepIndex :: Integer -> Operand
 gepIndex i = ConstantOperand $ C.Int 32 i
 
-valOperand :: ANF.Val -> Operand
-valOperand (ANF.Var (ANF.Typed ty ident) True) = ConstantOperand $ C.GlobalReference (llvmType ty) (identToName ident)
-valOperand (ANF.Var (ANF.Typed ty ident) False) = LocalReference (llvmType ty) (identToName ident)
-valOperand (ANF.Lit lit) = ConstantOperand $ literalConstant lit
+valOperand :: ANF.Val -> BlockGen Operand
+valOperand (ANF.Var (ANF.Typed ty ident) True) = pure $ ConstantOperand $ C.GlobalReference (llvmType ty) (identToName ident)
+valOperand (ANF.Var (ANF.Typed ty ident) False) = pure $ LocalReference (llvmType ty) (identToName ident)
+valOperand (ANF.Lit (LiteralInt i)) = pure $ ConstantOperand $ C.Int 64 (fromIntegral i)
+valOperand (ANF.Lit (LiteralDouble x)) = pure $ ConstantOperand $ C.Float (F.Double x)
+valOperand (ANF.Lit (LiteralTextPointer ptr)) = do
+  let ref = C.GlobalReference (LLVM.PointerType (textPointerType ptr) (AddrSpace 0)) (textPointerName ptr)
+  maybeConvertPointer Nothing (ConstantOperand ref) (llvmType ANF.PrimTextType)
 valOperand (ANF.ConEnum intBits con) =
   let
     (ConstructorIndex intIndex) = dataConIndex con
-  in ConstantOperand $ C.Int intBits (fromIntegral intIndex)
+  in pure $ ConstantOperand $ C.Int intBits (fromIntegral intIndex)
 
 packConstructor :: Name -> DataCon -> Maybe ANF.Val -> TyConName -> Word32 -> BlockGen Operand
 packConstructor name' con mArg (TyConName structName) intBits = do
@@ -304,7 +310,7 @@ packConstructor name' con mArg (TyConName structName) intBits = do
 
   -- Set data
   for_ mArg $ \arg -> do
-    let argOp = valOperand arg
+    argOp <- valOperand arg
     argOp' <- maybeConvertPointer Nothing argOp (LLVM.PointerType (IntegerType 64) (AddrSpace 0))
     dataPtrName <- freshUnName
     let dataPtrOp = LocalReference (LLVM.PointerType (LLVM.PointerType (IntegerType 64) (AddrSpace 0)) (AddrSpace 0)) dataPtrName

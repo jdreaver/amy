@@ -4,16 +4,13 @@ module Amy.Codegen.CaseBlocks
   , CaseLiteralBlock(..)
   , CaseDefaultBlock(..)
   , CaseEndBlock(..)
-  , literalConstant
   ) where
 
 import LLVM.AST as LLVM
-import LLVM.AST.AddrSpace
 import qualified LLVM.AST.Constant as C
 import LLVM.AST.Float as F
 
 import Amy.ANF.AST as ANF
-import Amy.Codegen.Utils
 
 data CaseBlocks
   = CaseBlocks
@@ -108,7 +105,7 @@ literalConstant lit =
   case lit of
     LiteralInt i -> C.Int 64 (fromIntegral i)
     LiteralDouble x -> C.Float (F.Double x)
-    LiteralTextPointer ptr -> C.GlobalReference (LLVM.PointerType (textPointerType ptr) (AddrSpace 0)) (textPointerName ptr)
+    LiteralTextPointer ptr -> error $ "Can't use Text in a case block " ++ show ptr
 
 constructorConstant :: DataCon -> C.Constant
 constructorConstant con =

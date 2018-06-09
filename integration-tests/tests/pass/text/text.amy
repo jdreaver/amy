@@ -1,2 +1,5 @@
 main :: Int
-main = let x = "Hello!" in 0
+main = let x = hello in 0
+
+hello :: Text
+hello = "Hello!"
