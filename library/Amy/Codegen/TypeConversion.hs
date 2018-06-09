@@ -69,6 +69,8 @@ constantType c =
     C.GlobalReference ty _ -> ty
     C.Int bits _ -> IntegerType bits
     C.Float ft -> FloatingPointType (someFloatType ft)
+    -- Text constant references
+    C.GetElementPtr _ (C.GlobalReference (PointerType (ArrayType _ ty) _) _) _ -> PointerType ty (AddrSpace 0)
     _ -> error $ "Unknown type for constant: " ++ show c
 
 someFloatType :: SomeFloat -> FloatingPointType
