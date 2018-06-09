@@ -10,7 +10,6 @@ import Data.Maybe (maybeToList)
 import qualified Data.Map.Strict as Map
 
 import Amy.ANF.AST
-import Amy.Literal
 import Amy.Pretty
 import Amy.Prim
 
@@ -26,7 +25,7 @@ prettyType (RecordType rows) =
   "RecordType" <> groupOrHang (bracketed ((\(RowLabel label, ty) -> pretty label <+> "::" <> groupOrHang (prettyType ty)) <$> rows))
 
 prettyModule :: Module -> Doc ann
-prettyModule (Module bindings externs typeDeclarations) =
+prettyModule (Module bindings externs typeDeclarations _) =
   vcatTwoHardLines
   $ (prettyExtern' <$> externs)
   ++ (prettyTypeDeclaration' <$> typeDeclarations)
@@ -51,7 +50,7 @@ prettyBinding' (Binding ident args retTy body) =
 
 prettyVal :: Val -> Doc ann
 prettyVal (Var (Typed _ ident) _) = prettyIdent ident
-prettyVal (Lit lit) = pretty $ showLiteral lit
+prettyVal (Lit lit) = pretty $ show lit
 prettyVal (ConEnum _ con) = prettyDataConName (dataConName con)
 
 prettyExpr :: Expr -> Doc ann
@@ -88,7 +87,7 @@ prettyLetValBinding (LetValBinding ident ty body) =
   prettyBinding (prettyIdent ident) [] (prettyExpr body)
 
 prettyPattern :: Pattern -> Doc ann
-prettyPattern (PLit lit) = pretty $ showLiteral lit
+prettyPattern (PLit lit) = pretty $ show lit
 prettyPattern (PCons (PatCons con mArg _)) =
   prettyDataConName (dataConName con)
   <> maybe mempty (\(Typed ty arg) -> space <> parens (prettyIdent arg <+> "::" <+> prettyType ty)) mArg

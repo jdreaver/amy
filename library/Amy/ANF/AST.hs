@@ -7,6 +7,8 @@ module Amy.ANF.AST
   , TypeDeclaration(..)
   , DataConDefinition(..)
   , Val(..)
+  , Literal(..)
+  , TextPointer(..)
   , DataCon(..)
   , Expr(..)
   , LetVal(..)
@@ -27,9 +29,9 @@ module Amy.ANF.AST
 
 import GHC.Word (Word32)
 import Data.Map.Strict (Map)
+import Data.Text (Text)
 
 import Amy.ASTCommon
-import Amy.Literal
 import Amy.Names
 import Amy.Prim
 
@@ -38,6 +40,7 @@ data Module
   { moduleBindings :: ![Binding]
   , moduleExterns :: ![Extern]
   , moduleTypeDeclarations :: ![TypeDeclaration]
+  , moduleTextPointers :: ![TextPointer]
   } deriving (Show, Eq)
 
 data Binding
@@ -72,6 +75,18 @@ data Val
   | Lit !Literal
   | ConEnum !Word32 !DataCon
   deriving (Show, Eq)
+
+data Literal
+  = LiteralInt !Int
+  | LiteralDouble !Double
+  | LiteralTextPointer !TextPointer
+  deriving (Show, Eq)
+
+data TextPointer
+  = TextPointer
+  { textPointerId :: !Int
+  , textPointerText :: !Text
+  } deriving (Show, Eq)
 
 data DataCon
   = DataCon

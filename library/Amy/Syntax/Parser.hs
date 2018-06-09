@@ -179,7 +179,8 @@ parseSelector = do
 
 literal :: AmyParser (Located Literal)
 literal =
-  fmap (either LiteralDouble LiteralInt) <$> number
+  try (fmap (either LiteralDouble LiteralInt) <$> number)
+  <|> fmap LiteralText <$> text
 
 record :: AmyParser Expr
 record = do

@@ -199,8 +199,21 @@ rightArrow = fmap locatedSpan . lexeme $ string "->"
 typeSeparatorArrow :: AmyParser SourceSpan
 typeSeparatorArrow = rightArrow
 
-text :: AmyParser Text
-text = fmap pack $ char '"' >> manyTill L.charLiteral (char '"')
+text :: AmyParser (Located Text)
+text = do
+  (SourcePos fp startLine startCol) <- getPosition
+  text' <- fmap pack $ char '"' >> manyTill L.charLiteral (char '"')
+  (SourcePos _ endLine endCol) <- getPosition
+  let
+    span' =
+      SourceSpan
+        fp
+        (unPos startLine)
+        (unPos startCol)
+        (unPos endLine)
+        (unPos endCol - 1)
+  spaceConsumerNewlines
+  pure $ Located span' text'
 
 noIndent :: AmyParser a -> AmyParser a
 noIndent = L.nonIndented spaceConsumer

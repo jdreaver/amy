@@ -17,6 +17,8 @@ module Amy.Prim
   , intTyCon
   , doubleTypeDefinition
   , doubleTyCon
+  , textTypeDefinition
+  , textTyCon
   , boolTypeDefinition
   , boolTyCon
   , falseDataCon
@@ -65,6 +67,13 @@ doubleTypeDefinition = mkPrimTypeDef doubleTyCon []
 doubleTyCon :: TyConName
 doubleTyCon = "Double"
 
+-- Text
+textTypeDefinition :: TypeDeclaration
+textTypeDefinition = mkPrimTypeDef textTyCon []
+
+textTyCon :: TyConName
+textTyCon = "Text"
+
 -- Bool
 
 boolTypeDefinition :: TypeDeclaration
@@ -81,12 +90,14 @@ allPrimTypeDefinitions :: [TypeDeclaration]
 allPrimTypeDefinitions =
   [ intTypeDefinition
   , doubleTypeDefinition
+  , textTypeDefinition
   , boolTypeDefinition
   ]
 
 literalType :: Literal -> TyConName
 literalType (LiteralInt _) = intTyCon
 literalType (LiteralDouble _) = doubleTyCon
+literalType (LiteralText _) = textTyCon
 
 --
 -- Primitive Functions
