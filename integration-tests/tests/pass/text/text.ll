@@ -1,7 +1,7 @@
 ; ModuleID = 'amy-module'
 source_filename = "<string>"
 
-@"$str.2" = private global [7 x i8] c"Hello!\00"
+@"$str.2" = private global [19 x i8] c"Hello\0Awith\09escapes\00"
 
 declare i64 @puts(i8*)
 
@@ -18,7 +18,7 @@ entry:
 define private i8* @hello() {
 entry:
   %0 = alloca i8*
-  store i8* getelementptr inbounds ([7 x i8], [7 x i8]* @"$str.2", i32 0, i32 0), i8** %0
+  store i8* getelementptr inbounds ([19 x i8], [19 x i8]* @"$str.2", i32 0, i32 0), i8** %0
   %ret = load i8*, i8** %0
   ret i8* %ret
 }

@@ -41,7 +41,8 @@
   source: tests/pass/text
   program_exit_code: 0
   program_stdout: |
-    Hello!
+    Hello
+    with	escapes
 
 # Failing tests
 - name: record-poly
