@@ -73,12 +73,17 @@ runTest' TestDefinition{..} = do
         (if null programStdout then "" else "\nstdout:\n" ++ programStdout) ++
         (if null programStderr then "" else "\nstderr:\n" ++ programStderr)
 
+    for_ testProgramStdout $ \expected ->
+      when (expected /= programStdout) $
+        throwError $ "Incorrect program stdout. Expected:\n" ++ expected ++ "\nGot:\n" ++ programStdout
+
 data TestDefinition
   = TestDefinition
   { testName :: !Text
   , testSource :: !FilePath
   , testCompilerStderr :: !(Maybe String)
   , testProgramExitCode :: !ExitCode
+  , testProgramStdout :: !(Maybe String)
   } deriving (Show, Eq)
 
 instance FromJSON TestDefinition where
@@ -87,6 +92,7 @@ instance FromJSON TestDefinition where
     testSource <- o .: "source"
     testCompilerStderr <- o .:? "compiler_stderr"
     testProgramExitCode <- mkExitCode <$> o .:? "program_exit_code" .!= 0
+    testProgramStdout <- o .:? "program_stdout"
     pure TestDefinition{..}
 
 mkExitCode :: Int -> ExitCode

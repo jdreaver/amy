@@ -3,15 +3,15 @@ source_filename = "<string>"
 
 @"$str.2" = private global [7 x i8] c"Hello!\00"
 
+declare i64 @puts(i8*)
+
 define i64 @main() {
 entry:
   %x1 = call i8* @hello()
-  %0 = alloca i8*
-  store i8* %x1, i8** %0
-  %x = load i8*, i8** %0
-  %1 = alloca i64
-  store i64 0, i64* %1
-  %ret = load i64, i64* %1
+  %x = call i64 @puts(i8* %x1)
+  %0 = alloca i64
+  store i64 0, i64* %0
+  %ret = load i64, i64* %0
   ret i64 %ret
 }
 

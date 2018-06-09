@@ -40,6 +40,8 @@
 - name: text
   source: tests/pass/text
   program_exit_code: 0
+  program_stdout: |
+    Hello!
 
 # Failing tests
 - name: record-poly
