@@ -164,6 +164,7 @@ data ConApp
 data Type
   = PrimIntType
   | PrimDoubleType
+  | PrimTextType
   | PointerType !Type
   | OpaquePointerType
     -- ^ Used for polymorphic types

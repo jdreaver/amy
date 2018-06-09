@@ -368,6 +368,7 @@ primitiveFunctionInstruction (PrimitiveFunction primFuncName _ _) argumentOperan
 llvmType :: ANF.Type -> LLVM.Type
 llvmType PrimIntType = IntegerType 64
 llvmType PrimDoubleType = FloatingPointType DoubleFP
+llvmType PrimTextType = LLVM.PointerType (IntegerType 8) (AddrSpace 0)
 llvmType (ANF.PointerType ty) = LLVM.PointerType (llvmType ty) (AddrSpace 0)
 llvmType OpaquePointerType = LLVM.PointerType (IntegerType 64) (AddrSpace 0)
 llvmType (FuncType argTys retTy) =

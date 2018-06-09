@@ -16,6 +16,7 @@ import Amy.Prim
 prettyType :: Type -> Doc ann
 prettyType PrimIntType = "PrimInt"
 prettyType PrimDoubleType = "PrimDouble"
+prettyType PrimTextType = "PrimText"
 prettyType (PointerType ty) = "Pointer" <+> parens (prettyType ty)
 prettyType OpaquePointerType = "OpaquePointer"
 prettyType (FuncType args retTy) = "Func" <> groupOrHang (tupled (prettyType <$> args) <+> "=>" <+> prettyType retTy)
