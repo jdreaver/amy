@@ -49,7 +49,6 @@ module Amy.Syntax.Lexer
   , noIndent
   ) where
 
-import Control.Monad (void)
 import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Proxy (Proxy(..))
@@ -177,9 +176,6 @@ lexer' = fmap AmyTokens $ spaceConsumerNewlines *> many lexToken <* eof
 -- Space consumption
 --
 
-spaceConsumer :: Lexer ()
-spaceConsumer = L.space (void $ char ' ') lineComment blockComment
-
 spaceConsumerNewlines :: Lexer ()
 spaceConsumerNewlines = L.space space1 lineComment blockComment
 
@@ -215,28 +211,28 @@ lexToken = lexeme lexToken'
 lexToken' :: Lexer AmyToken
 lexToken' =
   choice
-  [ try (symbol "extern" *> pure ExternToken)
-  , try (symbol "if" *> pure IfToken)
-  , try (symbol "then" *> pure ThenToken)
-  , try (symbol "else" *> pure ElseToken)
-  , try (symbol "case" *> pure CaseToken)
-  , try (symbol "of" *> pure OfToken)
-  , try (symbol "let" *> pure LetToken)
-  , try (symbol "in" *> pure InToken)
-  , try (symbol "forall" *> pure ForallToken)
-  , try (symbol "|" *> pure PipeToken)
-  , try (symbol "(" *> pure LParenToken)
-  , try (symbol ")" *> pure RParenToken)
-  , try (symbol "{" *> pure LBraceToken)
-  , try (symbol "}" *> pure RBraceToken)
-  , try (symbol "," *> pure CommaToken)
+  [ try (string "extern" *> pure ExternToken)
+  , try (string "if" *> pure IfToken)
+  , try (string "then" *> pure ThenToken)
+  , try (string "else" *> pure ElseToken)
+  , try (string "case" *> pure CaseToken)
+  , try (string "of" *> pure OfToken)
+  , try (string "let" *> pure LetToken)
+  , try (string "in" *> pure InToken)
+  , try (string "forall" *> pure ForallToken)
+  , try (string "|" *> pure PipeToken)
+  , try (string "(" *> pure LParenToken)
+  , try (string ")" *> pure RParenToken)
+  , try (string "{" *> pure LBraceToken)
+  , try (string "}" *> pure RBraceToken)
+  , try (string "," *> pure CommaToken)
   , try (RecordSelectorToken . RowLabel <$> (char '.' >> lexIdentifier))
-  , try (symbol "." *> pure DotToken)
-  , try (symbol "::" *> pure DoubleColonToken)
-  , try (symbol ":" *> pure ColonToken)
-  , try (symbol ";" *> pure SemiColonToken)
-  , try (symbol "=" *> pure EqualsToken)
-  , try (symbol "->" *> pure RArrowToken)
+  , try (string "." *> pure DotToken)
+  , try (string "::" *> pure DoubleColonToken)
+  , try (string ":" *> pure ColonToken)
+  , try (string ";" *> pure SemiColonToken)
+  , try (string "=" *> pure EqualsToken)
+  , try (string "->" *> pure RArrowToken)
   , try (either DoubleToken IntToken <$> lexNumber)
   , try (TextToken <$> lexText)
   , try (IdentToken <$> lexIdentifier)
@@ -277,9 +273,6 @@ reservedWords =
 
 lexTypeIdentifier :: Lexer Text
 lexTypeIdentifier = pack <$> ((:) <$> upperChar <*> many alphaNumChar) <?> "type identifier"
-
-symbol :: Text -> Lexer Text
-symbol sym = L.symbol spaceConsumer sym <?> unpack sym
 
 --
 -- Token parser helpers
