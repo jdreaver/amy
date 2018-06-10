@@ -37,12 +37,16 @@
   source: pass/records
   program_exit_code: 3
 
+- name: semicolons
+  source: pass/semicolons
+  program_exit_code: 1
+
 - name: text
   source: pass/text
   program_exit_code: 0
   program_stdout: |
     Hello
-    with	escapes
+    with	"escapes"
 
 # Failing tests
 - name: record-poly
