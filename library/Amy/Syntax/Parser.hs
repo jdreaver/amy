@@ -37,10 +37,12 @@ parseModule = do
 
 declaration :: AmyParser Declaration
 declaration =
-  (DeclExtern <$> externDecl <?> "extern")
-  <|> try (DeclBindingType <$> bindingType <?> "binding type")
-  <|> (DeclBinding <$> binding <?> "binding")
-  <|> (DeclType <$> typeDeclaration <?> "type declaration")
+  choice
+  [ DeclExtern <$> externDecl <?> "extern"
+  , try (DeclBindingType <$> bindingType <?> "binding type")
+  , DeclBinding <$> binding <?> "binding"
+  , DeclType <$> typeDeclaration <?> "type declaration"
+  ]
 
 externDecl :: AmyParser Extern
 externDecl = do
@@ -76,17 +78,19 @@ parseType = makeExprParser term table
 
 typeTerm :: AmyParser Type
 typeTerm =
-  (parens parseType <?> "type parens")
-  <|> (tyForall <?> "forall type")
-  <|> (TyVar <$> tyVar <?> "type variable")
-  <|> (TyCon <$> tyCon <?> "type constructor")
-  <|> (uncurry TyRecord <$> tyRecord <?> "record")
+  choice
+  [ parens parseType <?> "type parens"
+  , tyForall <?> "forall type"
+  , TyVar <$> tyVar <?> "type variable"
+  , TyCon <$> tyCon <?> "type constructor"
+  , uncurry TyRecord <$> tyRecord <?> "record"
+  ]
 
 tyForall :: AmyParser Type
 tyForall = do
   _ <- forall
-  vars <- CNE.some tyVar
-  _ <- dot
+  vars <- CNE.some (assertIndented *> tyVar)
+  _ <- assertIndented *> dot
   ty <- parseType <?> "type"
   pure $ TyForall vars ty
 
@@ -94,17 +98,17 @@ tyRecord :: AmyParser (Map (Located RowLabel) Type, Maybe (Located TyVarName))
 tyRecord =
   between lBrace rBrace $ do
     fields <- (`sepBy` comma) $ do
-      label' <- L.rowLabel
-      _ <- doubleColon
+      label' <- assertIndented *> L.rowLabel
+      _ <- assertIndented *> doubleColon
       ty <- parseType
       pure (label', ty)
-    mTyVar <- optional $ pipe *> tyVar
+    mTyVar <- optional $ assertIndented *> pipe *> assertIndented *> tyVar
     pure (Map.fromList fields, mTyVar)
 
 binding :: AmyParser Binding
 binding = do
   name <- ident
-  args <- many ident
+  args <- many $ assertIndented *> ident
   _ <- equals
   body <- expression <?> "expression"
   pure
@@ -121,7 +125,7 @@ typeDeclaration = do
   constructors <-
     case equals' of
       Nothing -> pure []
-      Just _ -> dataConDefinition `sepBy` pipe
+      Just _ -> assertIndented *> (dataConDefinition `sepBy` pipe)
   pure
     TypeDeclaration
     { typeDeclarationTypeName = tyName
@@ -131,7 +135,7 @@ typeDeclaration = do
 tyConDefinition :: AmyParser TyConDefinition
 tyConDefinition = do
   name <- tyCon
-  args <- many tyVar
+  args <- many $ assertIndented *> tyVar
   pure
     TyConDefinition
     { tyConDefinitionName = name
@@ -159,13 +163,15 @@ expression = makeExprParser term table
 
 expressionTerm :: AmyParser Expr
 expressionTerm =
-  (expressionParens <?> "parens")
-  <|> (ELit <$> literal <?> "literal")
-  <|> (record <?> "record")
-  <|> (EIf <$> ifExpression <?> "if expression")
-  <|> (ECase <$> caseExpression <?> "case expression")
-  <|> (ELet <$> letExpression' <?> "let expression")
-  <|> (EVar <$> variable <?> "variable")
+  choice
+  [ expressionParens <?> "parens"
+  , ELit <$> literal <?> "literal"
+  , record <?> "record"
+  , EIf <$> ifExpression <?> "if expression"
+  , ECase <$> caseExpression <?> "case expression"
+  , ELet <$> letExpression' <?> "let expression"
+  , EVar <$> variable <?> "variable"
+  ]
 
 expressionParens :: AmyParser Expr
 expressionParens = EParens <$> parens expression
@@ -187,25 +193,27 @@ record :: AmyParser Expr
 record = do
   startSpan <- lBrace
   rows <- fmap Map.fromList $ (`sepBy` comma) $ do
-    label' <- L.rowLabel
-    _ <- colon
+    label' <- assertIndented *> L.rowLabel
+    _ <- assertIndented *> colon
     expr <- expression
     pure (label', expr)
-  endSpan <- rBrace
+  endSpan <- assertIndented *> rBrace
   pure $ ERecord (mergeSpans startSpan endSpan) rows
 
 variable :: AmyParser Var
 variable =
-  (VVal <$> ident)
-  <|> (VCons <$> dataCon)
+  choice
+  [ VVal <$> ident
+  , VCons <$> dataCon
+  ]
 
 ifExpression :: AmyParser If
 ifExpression = do
   startSpan <- if'
-  predicate <- expression
-  _ <- then'
+  predicate <- assertIndented *> expression
+  _ <- assertIndented *> then'
   thenExpression <- expression
-  _ <- else'
+  _ <- assertIndented *> else'
   elseExpression <- expression
   let endSpan = expressionSpan elseExpression
   pure
@@ -220,7 +228,7 @@ caseExpression :: AmyParser Case
 caseExpression = do
   startSpan <- case'
   scrutinee <- expression <?> "case scrutinee expression"
-  _ <- of'
+  _ <- assertIndented *> of'
   matches <- indentedBlockNonEmpty (caseMatch <?> "case match")
   let endSpan = matchSpan $ NE.last matches
   pure
@@ -233,7 +241,7 @@ caseExpression = do
 caseMatch :: AmyParser Match
 caseMatch = do
   pat <- parsePattern <?> "pattern"
-  _ <- rArrow
+  _ <- assertIndented *> rArrow
   body <- expression <?> "expression"
   pure
     Match
@@ -243,15 +251,17 @@ caseMatch = do
 
 parsePattern :: AmyParser Pattern
 parsePattern =
-  try (PLit <$> literal <?> "pattern literal")
-  <|> (PVar <$> ident <?> "pattern variable")
-  <|> (PCons <$> patCons <?> "pattern constructor")
-  <|> (PParens <$> parens parsePattern <?> "parentheses")
+  choice
+  [ PLit <$> literal <?> "pattern literal"
+  , PVar <$> ident <?> "pattern variable"
+  , PCons <$> patCons <?> "pattern constructor"
+  , PParens <$> parens parsePattern <?> "parentheses"
+  ]
 
 patCons :: AmyParser PatCons
 patCons = do
   constructor <- dataCon
-  mArg <- optional parsePattern
+  mArg <- optional $ assertIndented *> parsePattern
   pure
     PatCons
     { patConsConstructor = constructor
