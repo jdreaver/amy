@@ -12,11 +12,14 @@ import Test.Hspec.Megaparsec
 import Text.Megaparsec
 
 import Amy.Syntax.AST
+import Amy.Syntax.Lexer
 import Amy.Syntax.Monad
 import Amy.Syntax.Parser
 
-parse' :: AmyParser a -> Text -> Either (ParseError Char Void) a
-parse' parser = parse (runAmyParser parser) ""
+parse' :: AmyParser a -> Text -> Either (ParseError (Located AmyToken) Void) a
+parse' parser input =
+  let (Right tokens') = lexer "" input
+  in parse (runAmyParser parser) "" tokens'
 
 spec :: Spec
 spec = do

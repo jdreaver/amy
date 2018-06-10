@@ -22,7 +22,6 @@ import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Text.Megaparsec
-import Text.Megaparsec.Char as C
 import Text.Megaparsec.Expr
 
 import Amy.Syntax.AST as S
@@ -32,7 +31,6 @@ import Amy.Syntax.Monad
 
 parseModule :: AmyParser Module
 parseModule = do
-  spaceConsumerNewlines
   declarations <- noIndent (indentedBlock declaration) <* eof
   fileName <- sourceName <$> getPosition
   pure $ Module fileName declarations
@@ -47,7 +45,7 @@ declaration =
 externDecl :: AmyParser Extern
 externDecl = do
   _ <- extern
-  name <- identifier
+  name <- ident
   _ <- doubleColon
   ty <- parseType <?> "type"
   pure
@@ -58,7 +56,7 @@ externDecl = do
 
 bindingType :: AmyParser BindingType
 bindingType = do
-  name <- identifier
+  name <- ident
   _ <- doubleColon
   ty <- parseType <?> "binding type"
   pure
@@ -71,42 +69,42 @@ parseType :: AmyParser Type
 parseType = makeExprParser term table
  where
   table =
-    [ [InfixL (TyApp <$ spaceConsumerNewlines)]
-    , [InfixR (TyFun <$ typeSeparatorArrow)]
+    [ [InfixL (pure TyApp)]
+    , [InfixR (TyFun <$ rArrow)]
     ]
-  term = assertIndented *> typeTerm <* spaceConsumerNewlines
+  term = assertIndented *> typeTerm
 
 typeTerm :: AmyParser Type
 typeTerm =
   (parens parseType <?> "type parens")
   <|> (tyForall <?> "forall type")
-  <|> (TyVar <$> tyVarName <?> "type variable")
-  <|> (TyCon <$> tyConName <?> "type constructor")
+  <|> (TyVar <$> tyVar <?> "type variable")
+  <|> (TyCon <$> tyCon <?> "type constructor")
   <|> (uncurry TyRecord <$> tyRecord <?> "record")
 
 tyForall :: AmyParser Type
 tyForall = do
   _ <- forall
-  vars <- CNE.some tyVarName
+  vars <- CNE.some tyVar
   _ <- dot
   ty <- parseType <?> "type"
   pure $ TyForall vars ty
 
 tyRecord :: AmyParser (Map (Located RowLabel) Type, Maybe (Located TyVarName))
 tyRecord =
-  between lbrace rbrace $ do
+  between lBrace rBrace $ do
     fields <- (`sepBy` comma) $ do
       label' <- L.rowLabel
       _ <- doubleColon
       ty <- parseType
       pure (label', ty)
-    mTyVar <- optional $ pipe *> tyVarName
+    mTyVar <- optional $ pipe *> tyVar
     pure (Map.fromList fields, mTyVar)
 
 binding :: AmyParser Binding
 binding = do
-  name <- identifier
-  args <- many (identifier <* spaceConsumerNewlines)
+  name <- ident
+  args <- many ident
   _ <- equals
   body <- expression <?> "expression"
   pure
@@ -132,8 +130,8 @@ typeDeclaration = do
 
 tyConDefinition :: AmyParser TyConDefinition
 tyConDefinition = do
-  name <- tyConName
-  args <- many tyVarName
+  name <- tyCon
+  args <- many tyVar
   pure
     TyConDefinition
     { tyConDefinitionName = name
@@ -142,11 +140,11 @@ tyConDefinition = do
 
 dataConDefinition :: AmyParser DataConDefinition
 dataConDefinition = do
-  dataCon <- dataConName
+  name <- dataCon
   mArg <- optional parseType
   pure
     DataConDefinition
-    { dataConDefinitionName = dataCon
+    { dataConDefinitionName = name
     , dataConDefinitionArgument = mArg
     }
 
@@ -154,10 +152,10 @@ expression :: AmyParser Expr
 expression = makeExprParser term table
  where
   table =
-    [ [Postfix (parseSelector <* spaceConsumerNewlines)]
-    , [InfixL (EApp <$ spaceConsumerNewlines)]
+    [ [Postfix parseSelector]
+    , [InfixL (pure EApp)]
     ]
-  term = assertIndented *> expressionTerm <* spaceConsumerNewlines
+  term = assertIndented *> expressionTerm
 
 expressionTerm :: AmyParser Expr
 expressionTerm =
@@ -174,29 +172,32 @@ expressionParens = EParens <$> parens expression
 
 parseSelector :: AmyParser (Expr -> Expr)
 parseSelector = do
-  label' <- C.char '.' >> L.rowLabel
+  label' <- recordSelector
   pure $ \expr -> ERecordSelect expr label'
 
 literal :: AmyParser (Located Literal)
 literal =
-  try (fmap (either LiteralDouble LiteralInt) <$> number)
-  <|> fmap LiteralText <$> text
+  choice
+  [ try (fmap LiteralInt <$> int)
+  , try (fmap LiteralDouble <$> double)
+  , fmap LiteralText <$> text
+  ]
 
 record :: AmyParser Expr
 record = do
-  startSpan <- lbrace
+  startSpan <- lBrace
   rows <- fmap Map.fromList $ (`sepBy` comma) $ do
     label' <- L.rowLabel
     _ <- colon
     expr <- expression
     pure (label', expr)
-  endSpan <- rbrace
+  endSpan <- rBrace
   pure $ ERecord (mergeSpans startSpan endSpan) rows
 
 variable :: AmyParser Var
 variable =
-  (VVal <$> identifier)
-  <|> (VCons <$> dataConName)
+  (VVal <$> ident)
+  <|> (VCons <$> dataCon)
 
 ifExpression :: AmyParser If
 ifExpression = do
@@ -232,7 +233,7 @@ caseExpression = do
 caseMatch :: AmyParser Match
 caseMatch = do
   pat <- parsePattern <?> "pattern"
-  _ <- rightArrow
+  _ <- rArrow
   body <- expression <?> "expression"
   pure
     Match
@@ -243,13 +244,13 @@ caseMatch = do
 parsePattern :: AmyParser Pattern
 parsePattern =
   try (PLit <$> literal <?> "pattern literal")
-  <|> (PVar <$> identifier <?> "pattern variable")
+  <|> (PVar <$> ident <?> "pattern variable")
   <|> (PCons <$> patCons <?> "pattern constructor")
   <|> (PParens <$> parens parsePattern <?> "parentheses")
 
 patCons :: AmyParser PatCons
 patCons = do
-  constructor <- dataConName
+  constructor <- dataCon
   mArg <- optional parsePattern
   pure
     PatCons

@@ -42,7 +42,8 @@ process :: FilePath -> DumpFlags -> Text -> IO ()
 process filePath DumpFlags{..} input = do
   eCodegenString <- runExceptT $ do
     -- Parse
-    parsed <- liftEither $ first ((:[]) . parseErrorPretty) $ parse (runAmyParser parseModule) filePath input
+    tokens' <- liftEither $ first ((:[]) . parseErrorPretty) $ lexer filePath input
+    parsed <- liftEither $ first ((:[]) . parseErrorPretty) $ parse (runAmyParser parseModule) filePath tokens'
     when dfDumpParsed $
       lift $ putStrLn "\nParsed:" >> print (S.prettyModule parsed)
 
