@@ -46,7 +46,7 @@
   program_exit_code: 0
   program_stdout: |
     Hello
-    with	escapes
+    with	"escapes"
 
 # Failing tests
 - name: record-poly
