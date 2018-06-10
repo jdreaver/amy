@@ -1,0 +1,10 @@
+# Ensure that blocks can be parsed with semicolons. These look really funny in
+# this module, but using semicolons is really nice in the REPL. This test
+# ensures block parsing with semicolons doesn't break.
+
+main :: Int; main =
+  let a = 1; b = 2 in
+  let
+    c = 3; d = 4
+    e = 5 in
+  a
