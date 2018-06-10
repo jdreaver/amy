@@ -32,8 +32,8 @@ runAmyParser (AmyParser action) = evalStateT action 0
 withBlockIndentation :: AmyParser a -> AmyParser a
 withBlockIndentation action = do
   originalIndent <- currentIndentation
-  nextPos <- maybe (unexpected EndOfInput) (pure . unPos . sourceColumn) =<< getNextTokenPosition
-  setIndentation nextPos
+  nextIndent <- maybe (unexpected EndOfInput) (pure . unPos . sourceColumn) =<< getNextTokenPosition
+  setIndentation nextIndent
   result <- action
   setIndentation originalIndent
   pure result
@@ -58,9 +58,9 @@ checkIndentation
   -> (Int -> Int -> Bool)
   -> AmyParser ()
 checkIndentation msg rel = do
-  col <- maybe (unexpected EndOfInput) (pure . unPos . sourceColumn) =<< getNextTokenPosition
-  current <- currentIndentation
-  guard (col `rel` current) <?> unpack (msg <> " " <> pack (show current))
+  currentIndent <- currentIndentation
+  nextIndent <- maybe (unexpected EndOfInput) (pure . unPos . sourceColumn) =<< getNextTokenPosition
+  guard (nextIndent `rel` currentIndent) <?> unpack (msg <> " " <> pack (show currentIndent))
 
 -- A block is defined as a group of things that are at the same indentation
 -- level. Block items can also be separated by semicolons.

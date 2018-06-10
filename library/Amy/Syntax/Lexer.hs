@@ -49,6 +49,7 @@ module Amy.Syntax.Lexer
   , noIndent
   ) where
 
+import Data.Functor (($>))
 import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Proxy (Proxy(..))
@@ -141,14 +142,12 @@ instance Stream AmyTokens where
   chunkToTokens Proxy = unAmyTokens
   chunkLength Proxy = length . unAmyTokens
   chunkEmpty Proxy = null . unAmyTokens
-  positionAt1 Proxy _ (Located (SourceSpan fp l c _ _) _) = SourcePos fp (mkPos l) (mkPos c)
+  positionAt1 Proxy _ = mkStartPos
   positionAtN Proxy pos (AmyTokens []) = pos
-  positionAtN Proxy _ (AmyTokens (Located (SourceSpan fp l c _ _) _ : _)) = SourcePos fp (mkPos l) (mkPos c)
-  advance1 Proxy _ _ (Located (SourceSpan fp _ _ l c) _) = SourcePos fp (mkPos l) (mkPos c)
+  positionAtN Proxy _ (AmyTokens (loc : _)) = mkStartPos loc
+  advance1 Proxy _ _ = mkEndPos
   advanceN Proxy _ pos (AmyTokens []) = pos
-  advanceN Proxy _ _ (AmyTokens ts) =
-    let (Located (SourceSpan fp _ _ l c) _) = last ts
-    in SourcePos fp (mkPos l) (mkPos c)
+  advanceN Proxy _ _ (AmyTokens ts) = mkEndPos $ last ts
   take1_ (AmyTokens []) = Nothing
   take1_ (AmyTokens (t:ts)) = Just (t, AmyTokens ts)
   takeN_ n (AmyTokens s)
@@ -159,6 +158,12 @@ instance Stream AmyTokens where
 
 instance ShowToken (Located AmyToken) where
   showTokens = unwords . fmap (unpack . prettyToken . locatedValue) . NE.toList
+
+mkStartPos :: Located a -> SourcePos
+mkStartPos (Located (SourceSpan fp l c _ _) _) = SourcePos fp (mkPos l) (mkPos c)
+
+mkEndPos :: Located a -> SourcePos
+mkEndPos (Located (SourceSpan fp _ _ l c) _) = SourcePos fp (mkPos l) (mkPos c)
 
 --
 -- Lexer
@@ -211,28 +216,28 @@ lexToken = lexeme lexToken'
 lexToken' :: Lexer AmyToken
 lexToken' =
   choice
-  [ try (string "extern" *> pure ExternToken)
-  , try (string "if" *> pure IfToken)
-  , try (string "then" *> pure ThenToken)
-  , try (string "else" *> pure ElseToken)
-  , try (string "case" *> pure CaseToken)
-  , try (string "of" *> pure OfToken)
-  , try (string "let" *> pure LetToken)
-  , try (string "in" *> pure InToken)
-  , try (string "forall" *> pure ForallToken)
-  , try (string "|" *> pure PipeToken)
-  , try (string "(" *> pure LParenToken)
-  , try (string ")" *> pure RParenToken)
-  , try (string "{" *> pure LBraceToken)
-  , try (string "}" *> pure RBraceToken)
-  , try (string "," *> pure CommaToken)
+  [ try (string "extern" $> ExternToken)
+  , try (string "if" $> IfToken)
+  , try (string "then" $> ThenToken)
+  , try (string "else" $> ElseToken)
+  , try (string "case" $> CaseToken)
+  , try (string "of" $> OfToken)
+  , try (string "let" $> LetToken)
+  , try (string "in" $> InToken)
+  , try (string "forall" $> ForallToken)
+  , try (string "|" $> PipeToken)
+  , try (string "(" $> LParenToken)
+  , try (string ")" $> RParenToken)
+  , try (string "{" $> LBraceToken)
+  , try (string "}" $> RBraceToken)
+  , try (string "," $> CommaToken)
   , try (RecordSelectorToken . RowLabel <$> (char '.' >> lexIdentifier))
-  , try (string "." *> pure DotToken)
-  , try (string "::" *> pure DoubleColonToken)
-  , try (string ":" *> pure ColonToken)
-  , try (string ";" *> pure SemiColonToken)
-  , try (string "=" *> pure EqualsToken)
-  , try (string "->" *> pure RArrowToken)
+  , try (string "." $> DotToken)
+  , try (string "::" $> DoubleColonToken)
+  , try (string ":" $> ColonToken)
+  , try (string ";" $> SemiColonToken)
+  , try (string "=" $> EqualsToken)
+  , try (string "->" $> RArrowToken)
   , try (either DoubleToken IntToken <$> lexNumber)
   , try (TextToken <$> lexText)
   , try (IdentToken <$> lexIdentifier)

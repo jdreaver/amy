@@ -184,8 +184,8 @@ parseSelector = do
 literal :: AmyParser (Located Literal)
 literal =
   choice
-  [ try (fmap LiteralInt <$> int)
-  , try (fmap LiteralDouble <$> double)
+  [ fmap LiteralInt <$> int
+  , fmap LiteralDouble <$> double
   , fmap LiteralText <$> text
   ]
 
@@ -273,8 +273,10 @@ letExpression' = do
   startSpan <- let'
   let
     parser =
-      try (LetBinding <$> binding)
-      <|> (LetBindingType <$> bindingType)
+      choice
+      [ try (LetBinding <$> binding)
+      , LetBindingType <$> bindingType
+      ]
   bindings <- indentedBlock parser
   _ <- in'
   expr <- expression
