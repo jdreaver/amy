@@ -32,8 +32,8 @@ runAmyParser (AmyParser action) = evalStateT action 0
 withBlockIndentation :: AmyParser a -> AmyParser a
 withBlockIndentation action = do
   originalIndent <- currentIndentation
-  currentIndent <- sourceColumn <$> getPosition
-  setIndentation (unPos currentIndent)
+  nextPos <- maybe (unexpected EndOfInput) (pure . unPos . sourceColumn) =<< getNextTokenPosition
+  setIndentation nextPos
   result <- action
   setIndentation originalIndent
   pure result
@@ -58,7 +58,7 @@ checkIndentation
   -> (Int -> Int -> Bool)
   -> AmyParser ()
 checkIndentation msg rel = do
-  col <- unPos . sourceColumn <$> getPosition
+  col <- maybe (unexpected EndOfInput) (pure . unPos . sourceColumn) =<< getNextTokenPosition
   current <- currentIndentation
   guard (col `rel` current) <?> unpack (msg <> " " <> pack (show current))
 
