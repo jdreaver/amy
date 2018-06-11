@@ -64,7 +64,7 @@ process filePath DumpFlags{..} input = do
 
     -- Codegen to pure LLVM
     let llvmAST = codegenModule anf
-    when dfDumpLLVMAST $
+    when dfDumpLLVMPretty $
       lift $ putStrLn "\nLLVM AST:" >> TL.putStrLn (ppllvm llvmAST)
 
     -- Generate LLVM IR using C++ API
@@ -121,7 +121,7 @@ data DumpFlags
   , dfDumpTypeChecked :: !Bool
   , dfDumpCore :: !Bool
   , dfDumpANF :: !Bool
-  , dfDumpLLVMAST :: !Bool
+  , dfDumpLLVMPretty :: !Bool
   , dfDumpLLVM :: !Bool
   } deriving (Show, Eq)
 
@@ -132,7 +132,7 @@ dumpFlags =
   , dfDumpTypeChecked = False
   , dfDumpCore = False
   , dfDumpANF = False
-  , dfDumpLLVMAST = False
+  , dfDumpLLVMPretty = False
   , dfDumpLLVM = False
   }
 
@@ -152,5 +152,5 @@ parseDumpFlags =
   <*> switch (long "dump-typechecked" <> helpDoc (Just "Dump type checked AST"))
   <*> switch (long "dump-core" <> helpDoc (Just "Dump Core AST"))
   <*> switch (long "dump-anf" <> helpDoc (Just "Dump ANF AST"))
-  <*> switch (long "dump-llvm-ast" <> helpDoc (Just "Dump pure LLVM AST"))
+  <*> switch (long "dump-llvm-pretty" <> helpDoc (Just "Dump pure LLVM AST from llvm-hs-pretty"))
   <*> switch (long "dump-llvm" <> helpDoc (Just "Dump LLVM IR"))
