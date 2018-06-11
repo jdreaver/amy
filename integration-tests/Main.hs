@@ -11,12 +11,11 @@ import Control.Monad (unless, when)
 import Control.Monad.Except
 import Data.Either (isRight)
 import Data.Foldable (for_)
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (isJust)
 import Data.Text (Text, unpack)
 import Data.Traversable (traverse)
 import Data.Yaml
 import System.Directory (doesFileExist)
-import System.Environment (lookupEnv)
 import System.Exit (ExitCode(..), exitFailure)
 import System.Process
 
@@ -37,7 +36,7 @@ runTest' :: TestDefinition -> ExceptT String IO ()
 runTest' TestDefinition{..} = do
   let
     sourcePath = testSource </> unpack testName ++ ".amy"
-    llvmPath = testSource </> unpack testName ++ ".ll"
+    exePath = testSource </> "a.out"
 
   -- Ensure source file exists
   exists <- liftIO $ doesFileExist sourcePath
@@ -46,7 +45,7 @@ runTest' TestDefinition{..} = do
 
   -- Compile program
   (compilerExitCode, compilerStdout, compilerStderr) <-
-    liftIO $ readProcessWithExitCode "amy" ["compile", sourcePath, "--dump-llvm"] ""
+    liftIO $ readProcessWithExitCode "amy" ["compile", sourcePath] ""
   let compilerExpectedExitCode = if isJust testCompilerStderr then ExitFailure 1 else ExitSuccess
   when (compilerExitCode /= compilerExpectedExitCode) $
     throwError $
@@ -62,8 +61,7 @@ runTest' TestDefinition{..} = do
 
   when (compilerExitCode == ExitSuccess) $ do
     -- Run llvm program
-    lliCommand <- liftIO $ fromMaybe "lli" <$> lookupEnv "LLI_COMMAND"
-    (programExitCode, programStdout, programStderr) <- liftIO $ readProcessWithExitCode lliCommand [llvmPath] ""
+    (programExitCode, programStdout, programStderr) <- liftIO $ readProcessWithExitCode exePath [] ""
     when (programExitCode /= testProgramExitCode) $
       throwError $
         "Incorrect program exit code. Expected: " ++ show testProgramExitCode ++

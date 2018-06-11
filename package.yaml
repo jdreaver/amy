@@ -45,4 +45,5 @@ executables:
       - megaparsec
       - mtl
       - optparse-applicative
+      - process
       - text
