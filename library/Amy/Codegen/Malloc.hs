@@ -17,7 +17,7 @@ mallocDefinition :: Definition
 mallocDefinition =
   GlobalDefinition
   functionDefaults
-  { name = "malloc"
+  { name = "GC_malloc"
   , parameters = ([Parameter mallocArgType (UnName 0) []], False)
   , LLVM.returnType = mallocReturnType
   }
@@ -46,7 +46,7 @@ callMalloc ptrName ty = do
   -- Call malloc
   mallocName <- freshUnName
   let
-    funcOp = ConstantOperand $ C.GlobalReference (PointerType mallocFunctionType (AddrSpace 0)) "malloc"
+    funcOp = ConstantOperand $ C.GlobalReference (PointerType mallocFunctionType (AddrSpace 0)) "GC_malloc"
     mallocOp = LocalReference mallocReturnType mallocName
   addInstruction $ mallocName := Call Nothing CC.C [] (Right funcOp) [(size, [])] [] []
 

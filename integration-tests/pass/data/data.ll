@@ -4,16 +4,16 @@ source_filename = "<string>"
 %MySum = type { i8, i64* }
 %Nat = type { i1, i64* }
 
-declare i8* @malloc(i64)
+declare i8* @GC_malloc(i64)
 
 define i64 @main() {
 entry:
-  %0 = call i8* @malloc(i64 ptrtoint (%MySum* getelementptr (%MySum, %MySum* null, i32 1) to i64))
+  %0 = call i8* @GC_malloc(i64 ptrtoint (%MySum* getelementptr (%MySum, %MySum* null, i32 1) to i64))
   %x = bitcast i8* %0 to %MySum*
   %x1 = alloca %MySum
   %1 = getelementptr %MySum, %MySum* %x1, i32 0, i32 0
   store i8 1, i8* %1
-  %2 = call i8* @malloc(i64 ptrtoint (double* getelementptr (double, double* null, i32 1) to i64))
+  %2 = call i8* @GC_malloc(i64 ptrtoint (double* getelementptr (double, double* null, i32 1) to i64))
   %3 = bitcast i8* %2 to double*
   store double 0x401F333333333333, double* %3
   %4 = bitcast double* %3 to i64*
@@ -22,12 +22,12 @@ entry:
   %6 = alloca i8
   store i8 1, i8* %6
   %y = load i8, i8* %6
-  %7 = call i8* @malloc(i64 ptrtoint (%Nat* getelementptr (%Nat, %Nat* null, i32 1) to i64))
+  %7 = call i8* @GC_malloc(i64 ptrtoint (%Nat* getelementptr (%Nat, %Nat* null, i32 1) to i64))
   %z1 = bitcast i8* %7 to %Nat*
   %z12 = alloca %Nat
   %8 = getelementptr %Nat, %Nat* %z12, i32 0, i32 0
   store i1 false, i1* %8
-  %9 = call i8* @malloc(i64 ptrtoint (%Nat* getelementptr (%Nat, %Nat* null, i32 1) to i64))
+  %9 = call i8* @GC_malloc(i64 ptrtoint (%Nat* getelementptr (%Nat, %Nat* null, i32 1) to i64))
   %z2 = bitcast i8* %9 to %Nat*
   %z23 = alloca %Nat
   %10 = getelementptr %Nat, %Nat* %z23, i32 0, i32 0
@@ -35,7 +35,7 @@ entry:
   %11 = bitcast %Nat* %z12 to i64*
   %12 = getelementptr %Nat, %Nat* %z23, i32 0, i32 1
   store i64* %11, i64** %12
-  %13 = call i8* @malloc(i64 ptrtoint (%Nat* getelementptr (%Nat, %Nat* null, i32 1) to i64))
+  %13 = call i8* @GC_malloc(i64 ptrtoint (%Nat* getelementptr (%Nat, %Nat* null, i32 1) to i64))
   %z = bitcast i8* %13 to %Nat*
   %z4 = alloca %Nat
   %14 = getelementptr %Nat, %Nat* %z4, i32 0, i32 0

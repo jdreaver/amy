@@ -75,7 +75,7 @@ process filePath DumpFlags{..} input = do
 
     -- Compile with clang
     let exeFile = takeDirectory filePath </> "a.out"
-    lift $ callProcess "clang" [llvmFile, "-o", exeFile]
+    lift $ callProcess "clang" [llvmFile, "-lgc", "-o", exeFile]
 
   either (die . intercalate "\n") pure eResult
 
