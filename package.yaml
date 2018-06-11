@@ -39,6 +39,7 @@ executables:
       - amy
       - base
       - bytestring
+      - filepath
       - haskeline
       - llvm-hs-pretty
       - megaparsec

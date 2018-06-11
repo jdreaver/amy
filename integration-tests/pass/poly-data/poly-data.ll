@@ -141,4 +141,3 @@ entry:
   store i64* %4, i64** %5
   ret %Either* %ret
 }
-

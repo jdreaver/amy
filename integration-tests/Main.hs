@@ -45,7 +45,8 @@ runTest' TestDefinition{..} = do
     throwError $ "File doesn't exist! " ++ sourcePath
 
   -- Compile program
-  (compilerExitCode, compilerStdout, compilerStderr) <- liftIO $ readProcessWithExitCode "amy" ["compile", sourcePath] ""
+  (compilerExitCode, compilerStdout, compilerStderr) <-
+    liftIO $ readProcessWithExitCode "amy" ["compile", sourcePath, "--dump-llvm"] ""
   let compilerExpectedExitCode = if isJust testCompilerStderr then ExitFailure 1 else ExitSuccess
   when (compilerExitCode /= compilerExpectedExitCode) $
     throwError $
@@ -60,9 +61,6 @@ runTest' TestDefinition{..} = do
         "Incorrect compiler stderr.\nExpected:\n" ++ expected ++ "\nGot:\n" ++ compilerStderr
 
   when (compilerExitCode == ExitSuccess) $ do
-    -- Print LLVM to file
-    liftIO $ writeFile llvmPath compilerStdout
-
     -- Run llvm program
     lliCommand <- liftIO $ fromMaybe "lli" <$> lookupEnv "LLI_COMMAND"
     (programExitCode, programStdout, programStderr) <- liftIO $ readProcessWithExitCode lliCommand [llvmPath] ""

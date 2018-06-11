@@ -18,4 +18,3 @@ entry:
   %ret = add i64 %x, %y
   ret i64 %ret
 }
-

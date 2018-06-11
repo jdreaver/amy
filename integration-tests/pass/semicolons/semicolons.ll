@@ -23,4 +23,3 @@ entry:
   %ret = load i64, i64* %5
   ret i64 %ret
 }
-

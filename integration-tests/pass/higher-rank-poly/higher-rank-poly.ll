@@ -23,4 +23,3 @@ entry:
   %ret = call i64* %f(i64* %x)
   ret i64* %ret
 }
-

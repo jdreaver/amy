@@ -109,4 +109,3 @@ entry:
   store i64* %z10, i64** %5
   ret { i64*, i64*, i64* }* %ret
 }
-

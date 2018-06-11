@@ -120,4 +120,3 @@ case.end.ret:                                     ; preds = %case.1.ret, %case.0
   %ret = phi i64 [ %5, %case.0.ret ], [ %6, %case.1.ret ]
   ret i64 %ret
 }
-
