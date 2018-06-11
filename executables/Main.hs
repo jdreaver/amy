@@ -18,7 +18,8 @@ import LLVM.Pretty (ppllvm)
 import Options.Applicative
 -- import System.Console.Haskeline
 import System.Exit (die)
-import System.FilePath.Posix (replaceExtension)
+import System.FilePath.Posix ((</>), replaceExtension, takeDirectory)
+import System.Process (callProcess)
 import Text.Megaparsec
 
 import Amy.ANF as ANF
@@ -68,9 +69,13 @@ process filePath DumpFlags{..} input = do
       lift $ TL.writeFile (filePath `replaceExtension` ".ll-pretty") (ppllvm llvmAST)
 
     -- Generate LLVM IR using C++ API
+    let llvmFile = filePath `replaceExtension` ".ll"
     llvm <- lift $ generateLLVMIR llvmAST
-    when dfDumpLLVM $
-      lift $ BS8.writeFile (filePath `replaceExtension` ".ll") llvm
+    lift $ BS8.writeFile llvmFile llvm
+
+    -- Compile with clang
+    let exeFile = takeDirectory filePath </> "a.out"
+    lift $ callProcess "clang" [llvmFile, "-o", exeFile]
 
   either (die . intercalate "\n") pure eResult
 
@@ -120,7 +125,7 @@ data DumpFlags
   , dfDumpCore :: !Bool
   , dfDumpANF :: !Bool
   , dfDumpLLVMPretty :: !Bool
-  , dfDumpLLVM :: !Bool
+  --, dfDumpLLVM :: !Bool
   } deriving (Show, Eq)
 
 -- dumpFlags :: DumpFlags
@@ -151,4 +156,4 @@ parseDumpFlags =
   <*> switch (long "dump-core" <> helpDoc (Just "Dump Core AST"))
   <*> switch (long "dump-anf" <> helpDoc (Just "Dump ANF AST"))
   <*> switch (long "dump-llvm-pretty" <> helpDoc (Just "Dump pure LLVM AST from llvm-hs-pretty"))
-  <*> switch (long "dump-llvm" <> helpDoc (Just "Dump LLVM IR"))
+  -- <*> switch (long "dump-llvm" <> helpDoc (Just "Dump LLVM IR"))
