@@ -24,6 +24,7 @@ import qualified LLVM.AST.Linkage as L
 
 import Amy.ANF as ANF
 import Amy.Codegen.CaseBlocks
+import Amy.Codegen.Malloc
 import Amy.Codegen.Monad
 import Amy.Codegen.TypeConversion
 import Amy.Codegen.Utils
@@ -41,7 +42,7 @@ codegenModule (ANF.Module bindings externs typeDeclarations textPointers) =
         typeDefs = mapMaybe codegenTypeDeclaration typeDeclarations
         textPointers' = codegenTextPointer <$> textPointers
       bindings' <- traverse codegenTopLevelBinding bindings
-      pure $ externs' ++ typeDefs ++ textPointers' ++ bindings'
+      pure $ mallocDefinition : externs' ++ typeDefs ++ textPointers' ++ bindings'
   in
     defaultModule
     { moduleName = "amy-module"
@@ -127,9 +128,7 @@ codegenExpr' name' (ANF.ERecord rows) = do
   let
     rowsTy = Map.toAscList $ typedType <$> rows
     ty = recordType rowsTy
-    ty' = llvmType (RecordType rowsTy)
-    allocOp = LocalReference ty' name'
-  addInstruction $ name' := Alloca ty Nothing 0 []
+  allocOp <- callMalloc name' ty
 
   -- Pack rows
   let numberedRows = zip [0..] $ Map.toAscList rows
@@ -291,7 +290,7 @@ packConstructor name' con mArg (TyConName structName) intBits = do
     structName' = textToName structName
 
   -- Allocate struct
-  let allocOp = LocalReference (LLVM.PointerType (NamedTypeReference structName') (AddrSpace 0)) name'
+  allocOp <- callMalloc name' (NamedTypeReference structName')
   addInstruction $ name' := Alloca (NamedTypeReference structName') Nothing 0 []
 
   -- Set the tag
