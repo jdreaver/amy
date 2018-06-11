@@ -30,6 +30,13 @@ RUN \
   ln -s /usr/bin/clang-6.0 /usr/bin/clang && \
   rm -rf /var/lib/apt/lists/*
 
+# Install Boehm garbage collector
+RUN \
+  apt-get update && \
+  apt-get install -y \
+    libgc-dev && \
+  rm -rf /var/lib/apt/lists/*
+
 # Install stack
 ENV STACK_VERSION 1.7.1
 RUN \

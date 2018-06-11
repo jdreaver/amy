@@ -3,7 +3,7 @@ source_filename = "<string>"
 
 %Either = type { i1, i64* }
 
-declare i8* @malloc(i64)
+declare i8* @GC_malloc(i64)
 
 define i64 @main() {
 entry:
@@ -83,12 +83,12 @@ case.end.ret:                                     ; preds = %case.end.6, %case.0
 
 define private %Either* @f() {
 entry:
-  %0 = call i8* @malloc(i64 ptrtoint (%Either* getelementptr (%Either, %Either* null, i32 1) to i64))
+  %0 = call i8* @GC_malloc(i64 ptrtoint (%Either* getelementptr (%Either, %Either* null, i32 1) to i64))
   %res3 = bitcast i8* %0 to %Either*
   %res31 = alloca %Either
   %1 = getelementptr %Either, %Either* %res31, i32 0, i32 0
   store i1 false, i1* %1
-  %2 = call i8* @malloc(i64 ptrtoint (i64* getelementptr (i64, i64* null, i32 1) to i64))
+  %2 = call i8* @GC_malloc(i64 ptrtoint (i64* getelementptr (i64, i64* null, i32 1) to i64))
   %3 = bitcast i8* %2 to i64*
   store i64 42, i64* %3
   %4 = getelementptr %Either, %Either* %res31, i32 0, i32 1
@@ -104,12 +104,12 @@ entry:
 
 case.0.ret:                                       ; preds = %entry, %entry
   %_u10 = load i64, i64* %8
-  %9 = call i8* @malloc(i64 ptrtoint (%Either* getelementptr (%Either, %Either* null, i32 1) to i64))
+  %9 = call i8* @GC_malloc(i64 ptrtoint (%Either* getelementptr (%Either, %Either* null, i32 1) to i64))
   %10 = bitcast i8* %9 to %Either*
   %11 = alloca %Either
   %12 = getelementptr %Either, %Either* %11, i32 0, i32 0
   store i1 false, i1* %12
-  %13 = call i8* @malloc(i64 ptrtoint (i64* getelementptr (i64, i64* null, i32 1) to i64))
+  %13 = call i8* @GC_malloc(i64 ptrtoint (i64* getelementptr (i64, i64* null, i32 1) to i64))
   %14 = bitcast i8* %13 to i64*
   store i64 %_u10, i64* %14
   %15 = getelementptr %Either, %Either* %11, i32 0, i32 1
@@ -120,7 +120,7 @@ case.1.ret:                                       ; preds = %entry
   %16 = alloca i64*
   store i64* %8, i64** %16
   %_u11 = load i64*, i64** %16
-  %17 = call i8* @malloc(i64 ptrtoint (%Either* getelementptr (%Either, %Either* null, i32 1) to i64))
+  %17 = call i8* @GC_malloc(i64 ptrtoint (%Either* getelementptr (%Either, %Either* null, i32 1) to i64))
   %18 = bitcast i8* %17 to %Either*
   %19 = alloca %Either
   %20 = getelementptr %Either, %Either* %19, i32 0, i32 0
@@ -136,17 +136,17 @@ case.end.ret:                                     ; preds = %case.1.ret, %case.0
 
 define private %Either* @h() {
 entry:
-  %0 = call i8* @malloc(i64 ptrtoint (%Either* getelementptr (%Either, %Either* null, i32 1) to i64))
+  %0 = call i8* @GC_malloc(i64 ptrtoint (%Either* getelementptr (%Either, %Either* null, i32 1) to i64))
   %res4 = bitcast i8* %0 to %Either*
   %res41 = alloca %Either
   %1 = getelementptr %Either, %Either* %res41, i32 0, i32 0
   store i1 true, i1* %1
-  %2 = call i8* @malloc(i64 ptrtoint (i64* getelementptr (i64, i64* null, i32 1) to i64))
+  %2 = call i8* @GC_malloc(i64 ptrtoint (i64* getelementptr (i64, i64* null, i32 1) to i64))
   %3 = bitcast i8* %2 to i64*
   store i64 1, i64* %3
   %4 = getelementptr %Either, %Either* %res41, i32 0, i32 1
   store i64* %3, i64** %4
-  %5 = call i8* @malloc(i64 ptrtoint (%Either* getelementptr (%Either, %Either* null, i32 1) to i64))
+  %5 = call i8* @GC_malloc(i64 ptrtoint (%Either* getelementptr (%Either, %Either* null, i32 1) to i64))
   %ret = bitcast i8* %5 to %Either*
   %ret2 = alloca %Either
   %6 = getelementptr %Either, %Either* %ret2, i32 0, i32 0
