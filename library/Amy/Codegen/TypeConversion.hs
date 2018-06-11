@@ -14,6 +14,7 @@ import LLVM.AST.AddrSpace
 import qualified LLVM.AST.Constant as C
 import LLVM.AST.Float as F
 
+import Amy.Codegen.Malloc
 import Amy.Codegen.Monad
 
 maybeConvertPointer :: Maybe Name -> Operand -> Type -> BlockGen Operand
@@ -34,8 +35,7 @@ allocOp op = do
   storeName <- freshUnName
   let
     opTy = operandType op
-    storeOp = LocalReference (PointerType opTy (AddrSpace 0)) storeName
-  addInstruction $ storeName := Alloca opTy Nothing 0 []
+  storeOp <- callMalloc storeName opTy
   addInstruction $ Do $ Store False storeOp op Nothing 0 []
   pure storeOp
 

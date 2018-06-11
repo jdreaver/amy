@@ -1,6 +1,8 @@
 ; ModuleID = 'amy-module'
 source_filename = "<string>"
 
+declare i8* @malloc(i64)
+
 define i64 @main() {
 entry:
   %ret = call i64 @apply(i64 (i64, i64)* @myAdd)

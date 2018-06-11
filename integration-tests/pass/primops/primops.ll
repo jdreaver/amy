@@ -1,6 +1,8 @@
 ; ModuleID = 'amy-module'
 source_filename = "<string>"
 
+declare i8* @malloc(i64)
+
 define i64 @main() {
 entry:
   %0 = alloca i64
