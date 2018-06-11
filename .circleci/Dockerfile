@@ -25,7 +25,9 @@ RUN \
   echo "deb-src http://apt.llvm.org/xenial/ llvm-toolchain-xenial-6.0 main" >> /etc/apt/sources.list.d/llvm.list && \
   apt-get update && \
   apt-get install -y --allow-unauthenticated \
+    clang-6.0 \
     llvm-6.0-dev && \
+  ln -s /usr/bin/clang-6.0 /usr/bin/clang && \
   rm -rf /var/lib/apt/lists/*
 
 # Install stack
