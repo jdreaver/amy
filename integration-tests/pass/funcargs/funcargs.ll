@@ -3,9 +3,9 @@ source_filename = "<string>"
 
 declare i8* @GC_malloc(i64)
 
-define i64 @main() {
+define private i64 @myAdd(i64 %x, i64 %y) {
 entry:
-  %ret = call i64 @apply(i64 (i64, i64)* @myAdd)
+  %ret = add i64 %x, %y
   ret i64 %ret
 }
 
@@ -15,8 +15,8 @@ entry:
   ret i64 %ret
 }
 
-define private i64 @myAdd(i64 %x, i64 %y) {
+define i64 @main() {
 entry:
-  %ret = add i64 %x, %y
+  %ret = call i64 @apply(i64 (i64, i64)* @myAdd)
   ret i64 %ret
 }

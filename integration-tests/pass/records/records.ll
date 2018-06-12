@@ -5,37 +5,23 @@ source_filename = "<string>"
 
 declare i8* @GC_malloc(i64)
 
-define i64 @main() {
+define private { i64*, i64*, i64* }* @q({ i64*, i64*, i64* }* %r) {
 entry:
-  %0 = call i8* @GC_malloc(i64 mul nuw (i64 ptrtoint (i64* getelementptr (i64, i64* null, i32 1) to i64), i64 2))
-  %res1 = bitcast i8* %0 to { i64, i64 }*
-  %1 = getelementptr { i64, i64 }, { i64, i64 }* %res1, i32 0, i32 0
-  store i64 1, i64* %1
-  %2 = getelementptr { i64, i64 }, { i64, i64 }* %res1, i32 0, i32 1
-  store i64 2, i64* %2
-  %ret = call i64 @addXY({ i64, i64 }* %res1)
-  ret i64 %ret
-}
-
-define private i64 @addXY({ i64, i64 }* %r) {
-entry:
-  %0 = getelementptr { i64, i64 }, { i64, i64 }* %r, i32 0, i32 0
-  %res2 = load i64, i64* %0
-  %1 = getelementptr { i64, i64 }, { i64, i64 }* %r, i32 0, i32 1
-  %res3 = load i64, i64* %1
-  %ret = add i64 %res2, %res3
-  ret i64 %ret
-}
-
-define private { i64*, i64 }* @g(i64* %x) {
-entry:
-  %0 = call i8* @GC_malloc(i64 ptrtoint ({ i64*, i64 }* getelementptr ({ i64*, i64 }, { i64*, i64 }* null, i32 1) to i64))
-  %ret = bitcast i8* %0 to { i64*, i64 }*
-  %1 = getelementptr { i64*, i64 }, { i64*, i64 }* %ret, i32 0, i32 0
-  store i64* %x, i64** %1
-  %2 = getelementptr { i64*, i64 }, { i64*, i64 }* %ret, i32 0, i32 1
-  store i64 1, i64* %2
-  ret { i64*, i64 }* %ret
+  %0 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %r, i32 0, i32 0
+  %x1 = load i64*, i64** %0
+  %1 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %r, i32 0, i32 1
+  %y2 = load i64*, i64** %1
+  %2 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %r, i32 0, i32 2
+  %z3 = load i64*, i64** %2
+  %3 = call i8* @GC_malloc(i64 mul nuw (i64 ptrtoint (i1** getelementptr (i1*, i1** null, i32 1) to i64), i64 3))
+  %ret = bitcast i8* %3 to { i64*, i64*, i64* }*
+  %4 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %ret, i32 0, i32 0
+  store i64* %x1, i64** %4
+  %5 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %ret, i32 0, i32 1
+  store i64* %y2, i64** %5
+  %6 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %ret, i32 0, i32 2
+  store i64* %z3, i64** %6
+  ret { i64*, i64*, i64* }* %ret
 }
 
 define private %List* @h(i64* %x) {
@@ -76,6 +62,39 @@ entry:
   ret %List* %ret3
 }
 
+define private { i64*, i64 }* @g(i64* %x) {
+entry:
+  %0 = call i8* @GC_malloc(i64 ptrtoint ({ i64*, i64 }* getelementptr ({ i64*, i64 }, { i64*, i64 }* null, i32 1) to i64))
+  %ret = bitcast i8* %0 to { i64*, i64 }*
+  %1 = getelementptr { i64*, i64 }, { i64*, i64 }* %ret, i32 0, i32 0
+  store i64* %x, i64** %1
+  %2 = getelementptr { i64*, i64 }, { i64*, i64 }* %ret, i32 0, i32 1
+  store i64 1, i64* %2
+  ret { i64*, i64 }* %ret
+}
+
+define private i64 @addXY({ i64, i64 }* %r) {
+entry:
+  %0 = getelementptr { i64, i64 }, { i64, i64 }* %r, i32 0, i32 0
+  %res8 = load i64, i64* %0
+  %1 = getelementptr { i64, i64 }, { i64, i64 }* %r, i32 0, i32 1
+  %res9 = load i64, i64* %1
+  %ret = add i64 %res8, %res9
+  ret i64 %ret
+}
+
+define i64 @main() {
+entry:
+  %0 = call i8* @GC_malloc(i64 mul nuw (i64 ptrtoint (i64* getelementptr (i64, i64* null, i32 1) to i64), i64 2))
+  %res10 = bitcast i8* %0 to { i64, i64 }*
+  %1 = getelementptr { i64, i64 }, { i64, i64 }* %res10, i32 0, i32 0
+  store i64 1, i64* %1
+  %2 = getelementptr { i64, i64 }, { i64, i64 }* %res10, i32 0, i32 1
+  store i64 2, i64* %2
+  %ret = call i64 @addXY({ i64, i64 }* %res10)
+  ret i64 %ret
+}
+
 define private { i64, i1 }* @a() {
 entry:
   switch i1 true, label %case.0.ret [
@@ -104,23 +123,4 @@ case.1.ret:                                       ; preds = %entry
 case.end.ret:                                     ; preds = %case.1.ret, %case.0.ret
   %ret = phi { i64, i1 }* [ %1, %case.0.ret ], [ %5, %case.1.ret ]
   ret { i64, i1 }* %ret
-}
-
-define private { i64*, i64*, i64* }* @q({ i64*, i64*, i64* }* %r) {
-entry:
-  %0 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %r, i32 0, i32 0
-  %x8 = load i64*, i64** %0
-  %1 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %r, i32 0, i32 1
-  %y9 = load i64*, i64** %1
-  %2 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %r, i32 0, i32 2
-  %z10 = load i64*, i64** %2
-  %3 = call i8* @GC_malloc(i64 mul nuw (i64 ptrtoint (i1** getelementptr (i1*, i1** null, i32 1) to i64), i64 3))
-  %ret = bitcast i8* %3 to { i64*, i64*, i64* }*
-  %4 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %ret, i32 0, i32 0
-  store i64* %x8, i64** %4
-  %5 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %ret, i32 0, i32 1
-  store i64* %y9, i64** %5
-  %6 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %ret, i32 0, i32 2
-  store i64* %z10, i64** %6
-  ret { i64*, i64*, i64* }* %ret
 }

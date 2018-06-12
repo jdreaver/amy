@@ -3,22 +3,12 @@ source_filename = "<string>"
 
 declare i8* @GC_malloc(i64)
 
-define i64 @main() {
-entry:
-  %0 = alloca i64
-  store i64 2, i64* %0
-  %x = load i64, i64* %0
-  %res1 = call i64 @f(i64 %x)
-  %ret = call i64 @f(i64 %res1)
-  ret i64 %ret
-}
-
 define private i64 @f(i64 %x) {
 entry:
   %y = add i64 %x, -1
-  %res3 = sub i64 3, %y
-  %res4 = icmp slt i64 5, %res3
-  switch i1 %res4, label %case.0.ret [
+  %res2 = sub i64 3, %y
+  %res3 = icmp slt i64 5, %res2
+  switch i1 %res3, label %case.0.ret [
     i1 true, label %case.0.ret
     i1 false, label %case.1.ret
   ]
@@ -37,5 +27,15 @@ case.1.ret:                                       ; preds = %entry
 
 case.end.ret:                                     ; preds = %case.1.ret, %case.0.ret
   %ret = phi i64 [ %1, %case.0.ret ], [ %3, %case.1.ret ]
+  ret i64 %ret
+}
+
+define i64 @main() {
+entry:
+  %0 = alloca i64
+  store i64 2, i64* %0
+  %x = load i64, i64* %0
+  %res4 = call i64 @f(i64 %x)
+  %ret = call i64 @f(i64 %res4)
   ret i64 %ret
 }

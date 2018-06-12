@@ -3,12 +3,6 @@ source_filename = "<string>"
 
 declare i8* @GC_malloc(i64)
 
-define i64 @main() {
-entry:
-  %ret = call i64 @fib(i64 10)
-  ret i64 %ret
-}
-
 define private i64 @fib(i64 %x) {
 entry:
   switch i64 %x, label %case.default.ret [
@@ -41,5 +35,11 @@ case.1.ret:                                       ; preds = %entry
 
 case.end.ret:                                     ; preds = %case.1.ret, %case.0.ret, %case.default.ret
   %ret = phi i64 [ %1, %case.default.ret ], [ %3, %case.0.ret ], [ %5, %case.1.ret ]
+  ret i64 %ret
+}
+
+define i64 @main() {
+entry:
+  %ret = call i64 @fib(i64 10)
   ret i64 %ret
 }
