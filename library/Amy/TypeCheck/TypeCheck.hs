@@ -12,16 +12,19 @@ import Control.Monad (replicateM)
 import Control.Monad.Except
 import Data.Foldable (for_, traverse_)
 import Data.List (foldl')
+import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
+import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe, maybeToList)
 import qualified Data.Sequence as Seq
 import Data.Text (Text, pack)
-import Data.Traversable (for)
+import Data.Traversable (for, traverse)
 
 import Amy.Errors
 import Amy.Prim
 import Amy.Syntax.AST as S
+import Amy.Syntax.BindingGroups
 import Amy.TypeCheck.AST as T
 import Amy.TypeCheck.KindInference
 import Amy.TypeCheck.Monad
@@ -54,43 +57,58 @@ inferModule (S.Module filePath declarations) = do
       addTyConKindToScope tyCon kind
 
     -- Infer all bindings
-    bindings' <- inferBindingGroup True bindings bindingTypes
+    bindings' <- inferBindings True bindings bindingTypes
     pure (T.Module bindings' externs' typeDeclarations')
 
-inferBindingGroup :: Bool -> [S.Binding] -> [S.BindingType] -> Checker [T.Binding]
-inferBindingGroup isTopLevel bindings bindingTypes = do
-  let
-    bindingTypeMap = Map.fromList $ (\(BindingType (Located _ name) ty) -> (name, ty)) <$> bindingTypes
+-- | Compute binding groups and infer each group separately.
+inferBindings :: Bool -> [S.Binding] -> [S.BindingType] -> Checker [NonEmpty T.Binding]
+inferBindings isTopLevel bindings bindingTypes =
+  traverse (inferBindingGroup isTopLevel bindingTypeMap) (bindingGroups bindings)
+ where
+  bindingTypeMap = Map.fromList $ (\(BindingType (Located _ name) ty) -> (name, ty)) <$> bindingTypes
 
-  -- Add all binding group types to context
-  bindingsWithTypes <- for bindings $ \binding@(S.Binding lname@(Located _ name) _ _) -> do
-    let mTy = Map.lookup name bindingTypeMap
-    ty <-
-      case mTy of
-        Just ty' -> do
-          let ty'' = convertType ty'
-          checkTypeKind ty''
-          pure ty''
-        Nothing -> T.TyExistVar <$> freshTyExistVar
-    addValueTypeToScope lname ty
-    pure (binding, ty)
+data BindingTypeStatus
+  = TypedBinding !S.Binding !T.Type
+  | UntypedBinding !S.Binding !T.Type
+  deriving (Show, Eq)
 
-  -- Infer each binding individually
-  bindings' <- for bindingsWithTypes $ \(binding, ty) ->
-    case ty of
-      T.TyExistVar _ -> do
+compareBindingTypeStatus :: BindingTypeStatus -> BindingTypeStatus -> Ordering
+compareBindingTypeStatus TypedBinding{} UntypedBinding{} = LT
+compareBindingTypeStatus UntypedBinding{} TypedBinding{} = GT
+compareBindingTypeStatus _ _ = EQ
+
+inferBindingGroup :: Bool -> Map IdentName S.Type -> NonEmpty S.Binding -> Checker (NonEmpty T.Binding)
+inferBindingGroup isTopLevel bindingTypeMap bindings = do
+  -- Add all binding types to context. Also record whether binding is typed or
+  -- untyped
+  bindings' <- for bindings $ \binding@(S.Binding lname@(Located _ name) _ _) ->
+    case Map.lookup name bindingTypeMap of
+      Just ty -> do
+        let ty' = convertType ty
+        checkTypeKind ty'
+        addValueTypeToScope lname ty'
+        pure $ TypedBinding binding ty'
+      Nothing -> do
+        ty <- T.TyExistVar <$> freshTyExistVar
+        addValueTypeToScope lname ty
+        pure $ UntypedBinding binding ty
+
+  -- Check/infer each binding. We sort to make sure typed bindings are checked first
+  bindings'' <- for (NE.sortBy compareBindingTypeStatus bindings') $ \bindingAndTy ->
+    case bindingAndTy of
+      TypedBinding binding ty -> do
+        binding' <- checkBinding binding ty
+        pure $ binding' { T.bindingType = ty }
+      UntypedBinding binding ty -> do
         binding' <- inferBinding binding
         tySub <- currentContextSubst ty
         subtype (T.bindingType binding') tySub
         pure binding'
-      ty' -> do
-        binding' <- checkBinding binding ty'
-        pure $ binding' { T.bindingType = ty' }
 
   -- Generalize and apply substitutions to bindings. N.B. we only generalize
   -- top-level bindings, not let bindings.
   context <- getContext
-  pure $ flip fmap bindings' $ \binding ->
+  pure $ flip fmap bindings'' $ \binding ->
     let
       ty = T.bindingType binding
       (ty', context') =
@@ -175,7 +193,7 @@ inferExpr' (S.ELet (S.Let bindings expression _)) = do
     bindings' = mapMaybe letBinding bindings
     bindingTypes = mapMaybe letBindingType bindings
   withNewLexicalScope $ do
-    bindings'' <- inferBindingGroup False bindings' bindingTypes
+    bindings'' <- inferBindings False bindings' bindingTypes
     expression' <- inferExpr expression
     pure $ T.ELet (T.Let bindings'' expression')
 inferExpr' (S.EApp f e) = do
@@ -416,7 +434,7 @@ contextSubstExpr context (T.EIf (T.If pred' then' else')) =
 contextSubstExpr context (T.ECase (T.Case scrutinee matches)) =
   T.ECase (T.Case (contextSubstExpr context scrutinee) (contextSubstMatch context <$> matches))
 contextSubstExpr context (T.ELet (T.Let bindings expr)) =
-  T.ELet (T.Let (contextSubstBinding context <$> bindings) (contextSubstExpr context expr))
+  T.ELet (T.Let (fmap (contextSubstBinding context) <$> bindings) (contextSubstExpr context expr))
 contextSubstExpr context (T.EApp (T.App f arg returnType)) =
   T.EApp (T.App (contextSubstExpr context f) (contextSubstExpr context arg) (contextSubst context returnType))
 contextSubstExpr context (T.EParens expr) = T.EParens (contextSubstExpr context expr)

@@ -40,7 +40,7 @@ prettyModule (Module bindings externs typeDeclarations) =
   vcatTwoHardLines
   $ (prettyExtern' <$> externs)
   ++ (prettyTypeDeclaration' <$> typeDeclarations)
-  ++ (prettyBinding' <$> bindings)
+  ++ (prettyBinding' <$> concat (toList <$> bindings))
 
 prettyExtern' :: Extern -> Doc ann
 prettyExtern' (Extern name ty) =
@@ -79,7 +79,7 @@ prettyExpr (ECase (Case scrutinee matches)) =
  where
   mkMatch (Match pat body) = (prettyPattern pat, prettyExpr body)
 prettyExpr (ELet (Let bindings body)) =
-  prettyLet (prettyBinding' <$> bindings) (prettyExpr body)
+  prettyLet (prettyBinding' <$> concat (toList <$> bindings)) (prettyExpr body)
 prettyExpr (EApp (App f arg _)) = prettyExpr f <+> prettyExpr arg
 prettyExpr (EParens expr) = parens $ prettyExpr expr
 

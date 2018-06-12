@@ -3,14 +3,10 @@ source_filename = "<string>"
 
 declare i8* @GC_malloc(i64)
 
-define i64 @main() {
+define private i64* @idFancy(i64* (i64*)* %f, i64* %x) {
 entry:
-  %0 = call i8* @GC_malloc(i64 ptrtoint (i64* getelementptr (i64, i64* null, i32 1) to i64))
-  %1 = bitcast i8* %0 to i64*
-  store i64 1, i64* %1
-  %2 = call i64* @idFancy(i64* (i64*)* @id, i64* %1)
-  %ret = load i64, i64* %2
-  ret i64 %ret
+  %ret = call i64* %f(i64* %x)
+  ret i64* %ret
 }
 
 define private i64* @id(i64* %x) {
@@ -21,8 +17,12 @@ entry:
   ret i64* %ret
 }
 
-define private i64* @idFancy(i64* (i64*)* %f, i64* %x) {
+define i64 @main() {
 entry:
-  %ret = call i64* %f(i64* %x)
-  ret i64* %ret
+  %0 = call i8* @GC_malloc(i64 ptrtoint (i64* getelementptr (i64, i64* null, i32 1) to i64))
+  %1 = bitcast i8* %0 to i64*
+  store i64 1, i64* %1
+  %2 = call i64* @idFancy(i64* (i64*)* @id, i64* %1)
+  %ret = load i64, i64* %2
+  ret i64 %ret
 }

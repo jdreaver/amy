@@ -43,7 +43,7 @@ import Amy.Syntax.Located
 
 data Module
   = Module
-  { moduleBindings :: ![Binding]
+  { moduleBindings :: ![NonEmpty Binding]
   , moduleExterns :: ![Extern]
   , moduleTypeDeclarations :: ![TypeDeclaration]
   } deriving (Show, Eq)
@@ -146,7 +146,7 @@ data PatCons
 
 data Let
   = Let
-  { letBindings :: ![Binding]
+  { letBindings :: ![NonEmpty Binding]
   , letExpression :: !Expr
   } deriving (Show, Eq)
 
@@ -199,7 +199,7 @@ substExpr (ECase (Case scrut bind alts default')) var newVar =
     ((\e -> substExpr e var newVar) <$> default')
   )
 substExpr (ELet (Let bindings body)) var newVar =
-  ELet (Let ((\b -> substBinding b var newVar) <$> bindings) (substExpr body var newVar))
+  ELet (Let (fmap (\b -> substBinding b var newVar) <$> bindings) (substExpr body var newVar))
 substExpr (EApp (App f arg ty)) var newVar =
   EApp (App (substExpr f var newVar) (substExpr arg var newVar) ty)
 substExpr (EParens expr) var newVar = EParens (substExpr expr var newVar)

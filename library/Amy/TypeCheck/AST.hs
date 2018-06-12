@@ -41,7 +41,7 @@ import Amy.Prim
 
 data Module
   = Module
-  { moduleBindings :: ![Binding]
+  { moduleBindings :: ![NonEmpty Binding]
   , moduleExterns :: ![Extern]
   , moduleTypeDeclarations :: ![TypeDeclaration]
   } deriving (Show, Eq)
@@ -138,7 +138,7 @@ data PatCons
 
 data Let
   = Let
-  { letBindings :: ![Binding]
+  { letBindings :: ![NonEmpty Binding]
   , letExpression :: !Expr
   } deriving (Show, Eq)
 
