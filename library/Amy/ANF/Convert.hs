@@ -19,8 +19,10 @@ import Amy.Core.AST as C
 import Amy.Prim
 
 normalizeModule :: C.Module -> ANF.Module
-normalizeModule (C.Module bindings externs typeDeclarations) =
+normalizeModule (C.Module bindingGroups externs typeDeclarations) =
   let
+    bindings = concatMap NE.toList bindingGroups
+
     -- Record top-level names
     topLevelNames =
       (C.bindingName <$> bindings)
@@ -124,7 +126,8 @@ normalizeExpr name expr@(C.ECase (C.Case scrutinee bind matches defaultExpr)) =
     defaultExpr' <- traverse (normalizeExpr name) defaultExpr
     ty <- convertType $ expressionType expr
     pure $ ANF.ECase (ANF.Case scrutineeVal bind' matches' defaultExpr' ty)
-normalizeExpr name (C.ELet (C.Let bindings expr)) = do
+normalizeExpr name (C.ELet (C.Let bindingGroups expr)) = do
+  let bindings = concatMap NE.toList bindingGroups
   bindings' <- traverse normalizeLetBinding bindings
   expr' <- normalizeExpr name expr
   pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal bindings' expr'

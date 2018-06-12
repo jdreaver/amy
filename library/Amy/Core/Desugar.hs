@@ -4,6 +4,7 @@ module Amy.Core.Desugar
   ( desugarModule
   ) where
 
+import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (maybeToList)
 import Data.Monoid ((<>))
@@ -19,7 +20,7 @@ desugarModule :: T.Module -> C.Module
 desugarModule (T.Module bindings externs typeDeclarations) = do
   let typeDeclarations' = desugarTypeDeclaration <$> typeDeclarations
   runDesugar typeDeclarations' $ do
-    bindings' <- traverse desugarBinding bindings
+    bindings' <- traverse (traverse desugarBinding) bindings
     let externs' = desugarExtern <$> externs
     pure $ C.Module bindings' externs' typeDeclarations'
 
@@ -77,7 +78,7 @@ desugarExpr (T.ECase (T.Case scrutinee matches)) = do
             , C.bindingReturnType = desugarType $ T.expressionType scrutinee
             , C.bindingBody = scrutinee'
             }
-        in C.ELet $ C.Let [scrutineeBinding] e
+        in C.ELet $ C.Let [scrutineeBinding :| []] e
 
 desugarExpr (T.EIf (T.If pred' then' else')) =
   let
@@ -90,7 +91,7 @@ desugarExpr (T.EIf (T.If pred' then' else')) =
       ]
   in desugarExpr (T.ECase (T.Case pred' matches))
 desugarExpr (T.ELet (T.Let bindings body)) = do
-  bindings' <- traverse desugarBinding bindings
+  bindings' <- traverse (traverse desugarBinding) bindings
   body' <- desugarExpr body
   pure $ C.ELet (C.Let bindings' body')
 desugarExpr (T.EApp (T.App func arg ty)) = do
