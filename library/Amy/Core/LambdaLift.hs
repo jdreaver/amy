@@ -5,7 +5,7 @@
 -- | Lambda lifting core transformation.
 
 module Amy.Core.LambdaLift
-  (
+  ( lambdaLifting
   ) where
 
 import Control.Monad.State.Strict
@@ -19,11 +19,30 @@ import Data.Text (pack)
 import Amy.Core.AST
 
 --
+-- Top Level
+--
+
+lambdaLifting :: Module -> Module
+lambdaLifting mod' =
+  let
+    bindings = moduleBindings mod'
+    liftBinding binding = do
+      body <- undefined
+      pure $ binding { bindingBody = body }
+    bindings' = runLift $ traverse (traverse liftBinding) bindings
+  in undefined
+
+--
 -- Monad
 --
 
 newtype Lift a = Lift (State LiftState a)
   deriving (Functor, Applicative, Monad, MonadState LiftState)
+
+runLift :: Lift a -> (a, [LiftedBinding])
+runLift (Lift action) =
+  let (result, liftState) = runState action (LiftState 0 Set.empty Map.empty)
+  in (result, Map.elems $ liftedBindings liftState)
 
 data LiftState
   = LiftState
@@ -73,20 +92,22 @@ lookupVar var = Map.lookup var <$> gets liftedBindings
 -- Lambda Lifting
 --
 
-liftExpr :: Expr -> Lift Expr
-liftExpr e@ELit{} = pure e
-liftExpr (EVar val@(VVal (Typed _ var))) = do
-  mLifted <- lookupVar var
-  case mLifted of
-    Nothing -> pure $ EVar val
-    Just lifted -> pure $ makeLiftedAppNode lifted
+liftExprBindings :: Expr -> Lift Expr
+liftExprBindings = traverseExprTopDownM f
+ where
+  f (ELet (Let bindings expr)) = do
+    undefined
+  f e = pure e
 
-replaceLiftedFunction :: Typed IdentName -> Lift Expr
-replaceLiftedFunction typed@(Typed _ var) = do
-  mLifted <- lookupVar var
-  case mLifted of
-    Nothing -> pure $ EVar (VVal typed)
-    Just lifted -> pure $ makeLiftedAppNode lifted
+replaceLiftedBindings :: Expr -> Lift Expr
+replaceLiftedBindings = traverseExprTopDownM f
+ where
+  f (EVar (VVal typed@(Typed _ var))) = do
+    mLifted <- lookupVar var
+    case mLifted of
+      Nothing -> pure $ EVar (VVal typed)
+      Just lifted -> pure $ makeLiftedAppNode lifted
+  f e = pure e
 
 -- | Insert an App node for a lifted binding.
 --
