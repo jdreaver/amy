@@ -22,6 +22,8 @@ module Amy.Core.AST
   , substExpr
   , traverseExprTopDown
   , traverseExprTopDownM
+  , freeBindingVars
+  , freeExprVars
 
   , Type(..)
   , unfoldTyApp
@@ -35,7 +37,12 @@ module Amy.Core.AST
 
 import Control.Monad.Identity (Identity(..), runIdentity)
 import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import Data.Maybe (maybeToList)
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 import Amy.ASTCommon
 import Amy.Literal
@@ -215,6 +222,31 @@ traverseExprTopDownM f expr = f' expr
     arg' <- f' arg
     pure $ EApp $ App func' arg' ty
   go (EParens e) = EParens <$> f' e
+
+freeBindingVars :: Binding -> Set IdentName
+freeBindingVars (Binding name _ args _ body) =
+  freeExprVars body `Set.difference` Set.fromList (name : (typedValue <$> args))
+
+freeExprVars :: Expr -> Set IdentName
+freeExprVars ELit{} = Set.empty
+freeExprVars (ERecord rows) = Set.unions $ freeExprVars . typedValue <$> Map.elems rows
+freeExprVars (ERecordSelect expr _ _) = freeExprVars expr
+freeExprVars (EVar (VVal (Typed _ ident))) = Set.singleton ident
+freeExprVars (EVar VCons{}) = Set.empty
+freeExprVars (ECase (Case scrutinee (Typed _ bind) matches default')) =
+  let
+    scrutVars = freeExprVars scrutinee
+    matchVars = freeMatchVars <$> matches
+    defaultVars = maybeToList $ freeExprVars <$> default'
+  in Set.unions (scrutVars : matchVars ++ defaultVars) `Set.difference` Set.singleton bind
+ where
+  freeMatchVars (Match pat expr) = freeExprVars expr `Set.difference` patternVars pat
+  patternVars PLit{} = Set.empty
+  patternVars (PCons (PatCons _ mPat _)) = maybe Set.empty (Set.singleton . typedValue) mPat
+freeExprVars (ELet (Let bindings expr)) =
+  Set.unions (freeExprVars expr : (freeBindingVars <$> concat (NE.toList <$> bindings)))
+freeExprVars (EApp (App f arg _)) = freeExprVars f `Set.union` freeExprVars arg
+freeExprVars (EParens expr) = freeExprVars expr
 
 data Type
   = TyCon !TyConName
