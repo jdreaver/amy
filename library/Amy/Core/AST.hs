@@ -19,8 +19,10 @@ module Amy.Core.AST
   , App(..)
   , unfoldApp
   , expressionType
-
   , substExpr
+  , traverseExprTopDown
+  , traverseExprTopDownM
+
   , Type(..)
   , unfoldTyApp
   , Typed(..)
@@ -31,6 +33,7 @@ module Amy.Core.AST
   , module Amy.Names
   ) where
 
+import Control.Monad.Identity (Identity(..), runIdentity)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map.Strict (Map)
 
@@ -182,36 +185,36 @@ expressionType (EApp app) = appReturnType app
 expressionType (EParens expr) = expressionType expr
 
 substExpr :: Expr -> IdentName -> IdentName -> Expr
-substExpr e@(ELit _) _ _ = e
-substExpr (ERecord rows) var newVar = ERecord $ (\(Typed ty e) -> Typed ty $ substExpr e var newVar) <$> rows
-substExpr (ERecordSelect expr label ty) var newVar =
-  ERecordSelect (substExpr expr var newVar) label ty
-substExpr (EVar v) var newVar =
-  case v of
-    VVal (Typed ty ident) -> EVar (VVal $ Typed ty $ replaceIdent ident var newVar)
-    VCons _ -> EVar v
-substExpr (ECase (Case scrut bind alts default')) var newVar =
-  ECase
-  ( Case
-    (substExpr scrut var newVar)
-    bind
-    ((\m -> substMatch m var newVar) <$> alts)
-    ((\e -> substExpr e var newVar) <$> default')
-  )
-substExpr (ELet (Let bindings body)) var newVar =
-  ELet (Let (fmap (\b -> substBinding b var newVar) <$> bindings) (substExpr body var newVar))
-substExpr (EApp (App f arg ty)) var newVar =
-  EApp (App (substExpr f var newVar) (substExpr arg var newVar) ty)
-substExpr (EParens expr) var newVar = EParens (substExpr expr var newVar)
+substExpr expr oldVar newVar = traverseExprTopDown f expr
+ where
+  f (EVar (VVal (Typed ty var))) = EVar (VVal $ Typed ty $ if var == oldVar then newVar else var)
+  f e = e
 
-substBinding :: Binding -> IdentName -> IdentName -> Binding
-substBinding binding var newVar = binding { bindingBody = substExpr (bindingBody binding) var newVar }
+traverseExprTopDown :: (Expr -> Expr) -> Expr -> Expr
+traverseExprTopDown f = runIdentity . traverseExprTopDownM (Identity . f)
 
-substMatch :: Match -> IdentName -> IdentName -> Match
-substMatch match' var newVar = match' { matchBody = substExpr (matchBody match') var newVar }
-
-replaceIdent :: IdentName -> IdentName -> IdentName -> IdentName
-replaceIdent var oldVar newVar = if var == oldVar then newVar else var
+traverseExprTopDownM :: (Monad m) => (Expr -> m Expr) -> Expr -> m Expr
+traverseExprTopDownM f expr = f' expr
+ where
+  f' e = f e >>= go
+  go e@ELit{} = pure e
+  go e@EVar{} = pure e
+  go (ERecord rows) = ERecord <$> traverse (\(Typed ty e) -> Typed ty <$> f' e) rows
+  go (ERecordSelect e label ty) = (\e' -> ERecordSelect e' label ty) <$> f' e
+  go (ECase (Case scrut bind alts default')) = do
+    scrut' <- f' scrut
+    alts' <- traverse (\(Match pat e) -> Match pat <$> f' e) alts
+    default'' <- traverse f' default'
+    pure $ ECase $ Case scrut' bind alts' default''
+  go (ELet (Let bindings e)) = do
+    bindings' <- traverse (traverse (\(Binding name ty args ret body) -> Binding name ty args ret <$> f' body)) bindings
+    e' <- f' e
+    pure $ ELet $ Let bindings' e'
+  go (EApp (App func arg ty)) = do
+    func' <- f' func
+    arg' <- f' arg
+    pure $ EApp $ App func' arg' ty
+  go (EParens e) = EParens <$> f' e
 
 data Type
   = TyCon !TyConName
