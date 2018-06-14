@@ -383,6 +383,8 @@ mkDataConTypes (S.TypeDeclaration (S.TyConDefinition (Located _ tyConName) tyVar
       tyVars' = T.TyVar . locatedValue <$> tyVars
       tyApp = foldl1 T.TyApp (T.TyCon tyConName : tyVars')
       mTyArg' = convertType <$> mTyArg
+      -- TODO: Should this be foldr? Probably doesn't matter since there is
+      -- only one argument currently, but it would break if we added more.
       ty = foldl1 T.TyFun (maybeToList mTyArg' ++ [tyApp])
       tyForall = maybe ty (\varsNE -> T.TyForall varsNE ty) (NE.nonEmpty $ locatedValue <$> tyVars)
     in (name, tyForall)
