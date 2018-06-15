@@ -203,6 +203,9 @@ traverseExprTopDown f = runIdentity . traverseExprTopDownM (Identity . f)
 traverseExprTopDownM :: (Monad m) => (Expr -> m Expr) -> Expr -> m Expr
 traverseExprTopDownM f expr = f' expr
  where
+  -- TODO: The definition of f' is incorrect if the AST changes. If f returns a
+  -- different node than was passed in (because it changed), it will get sent
+  -- to "go", but we don't run f on that output node.
   f' e = f e >>= go
   go e@ELit{} = pure e
   go e@EVar{} = pure e
