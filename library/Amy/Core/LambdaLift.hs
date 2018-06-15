@@ -182,7 +182,7 @@ replaceLiftedBinding oldName lifted = traverseExprTopDown f
 -- If the old type was @tz -> r@, then the new app types are:
 --
 -- @
---    (f_new :: ty -> tz -> r) y :: tz -> r
+--    ((f_new :: tx -> ty -> tz -> r) x :: ty -> tz -> r) y :: tz -> r
 -- @
 --
 -- Note that we don't have to worry about @z@. Presumably whatever is being
