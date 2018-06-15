@@ -156,7 +156,7 @@ data PatCons
 
 data Let
   = Let
-  { letBindings :: ![NonEmpty Binding]
+  { letBindings :: !(NonEmpty Binding)
   , letExpression :: !Expr
   } deriving (Show, Eq)
 
@@ -214,7 +214,7 @@ traverseExprTopDownM f expr = f' expr
     default'' <- traverse f' default'
     pure $ ECase $ Case scrut' bind alts' default''
   go (ELet (Let bindings e)) = do
-    bindings' <- traverse (traverse (\(Binding name ty args ret body) -> Binding name ty args ret <$> f' body)) bindings
+    bindings' <- traverse (\(Binding name ty args ret body) -> Binding name ty args ret <$> f' body) bindings
     e' <- f' e
     pure $ ELet $ Let bindings' e'
   go (EApp (App func arg ty)) = do
@@ -244,7 +244,7 @@ freeExprVars (ECase (Case scrutinee (Typed _ bind) matches default')) =
   patternVars PLit{} = Set.empty
   patternVars (PCons (PatCons _ mPat _)) = maybe Set.empty (Set.singleton . typedValue) mPat
 freeExprVars (ELet (Let bindings expr)) =
-  Set.unions (freeExprVars expr : (freeBindingVars <$> concat (NE.toList <$> bindings)))
+  Set.unions (freeExprVars expr : (freeBindingVars <$> NE.toList bindings))
 freeExprVars (EApp (App f arg _)) = freeExprVars f `Set.union` freeExprVars arg
 freeExprVars (EParens expr) = freeExprVars expr
 
