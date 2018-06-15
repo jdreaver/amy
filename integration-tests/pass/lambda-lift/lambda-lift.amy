@@ -3,4 +3,6 @@ main =
   let
     id x = x
     const x y = id y
-  in const 2 1
+    z = 2
+    f x = iAdd# z x
+  in f (const 2 1)

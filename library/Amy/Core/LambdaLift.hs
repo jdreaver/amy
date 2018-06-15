@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | Lambda lifting core transformation.
@@ -115,14 +116,32 @@ liftBindingBindings (Binding name ty args retTy body) = withNewScope $ do
   pure $ Binding name ty args retTy body'
 
 liftExprBindings :: Expr -> Lift Expr
-liftExprBindings = traverseExprTopDownM f
+liftExprBindings = go
  where
+  go e@ELit{} = pure e
+  go e@EVar{} = pure e
+  go (ERecord rows) = ERecord <$> traverse (\(Typed ty e) -> Typed ty <$> go e) rows
+  go (ERecordSelect e label ty) = (\e' -> ERecordSelect e' label ty) <$> go e
+  go (EApp (App func arg ty)) = do
+    func' <- go func
+    arg' <- go arg
+    pure $ EApp $ App func' arg' ty
+  go (EParens e) = EParens <$> go e
+  go (ECase (Case scrut bind alts default')) = do
+    scrut' <- go scrut
+    alts' <- traverse (\(Match pat e) -> Match pat <$> go e) alts
+    default'' <- traverse go default'
+    pure $ ECase $ Case scrut' bind alts' default''
   -- Non-recursive binding group
-  f expr@(ELet (Let (binding :| []) body)) = withNewScope $ do
+  go (ELet (Let (binding :| []) body)) = withNewScope $ do
     bindVariable $ Typed (bindingType binding) (bindingName binding)
     case bindingArgs binding of
-      [] -> pure expr
+      [] -> do
+        binding' <- goBinding binding
+        body' <- go body
+        pure $ ELet $ Let (binding' :| []) body'
       _ -> do
+        -- Lift the function and just return the body
         boundVars <- gets boundVariables
         let
           freeVars = freeBindingVars binding
@@ -130,18 +149,22 @@ liftExprBindings = traverseExprTopDownM f
         liftFunction (Set.toList closeVars) binding
         -- TODO: Run lifted binding replacement on the lifted binding itself,
         -- in case it is recursive!
-        replaceLiftedBindings body
+        body' <- replaceLiftedBindings body
+        go body'
   -- Recurive binding group
-  f (ELet (Let bindings _)) = error $ "Can't lambda lift recursive binding groups yet " ++ show (NE.toList $ bindingName <$> bindings)
-  f e = pure e
+  go (ELet (Let bindings _)) = error $ "Can't lambda lift recursive binding groups yet " ++ show (NE.toList $ bindingName <$> bindings)
+
+  goBinding binding = do
+    body' <- go (bindingBody binding)
+    pure $ binding { bindingBody = body' }
 
 replaceLiftedBindings :: Expr -> Lift Expr
 replaceLiftedBindings = traverseExprTopDownM f
  where
-  f (EVar (VVal typed@(Typed _ var))) = do
+  f e@(EVar (VVal (Typed _ var))) = do
     mLifted <- lookupVar var
     case mLifted of
-      Nothing -> pure $ EVar (VVal typed)
+      Nothing -> pure e
       Just lifted -> pure $ makeLiftedAppNode lifted
   f e = pure e
 

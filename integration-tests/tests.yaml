@@ -19,7 +19,7 @@
 
 - name: lambda-lift
   source: pass/lambda-lift
-  program_exit_code: 1
+  program_exit_code: 3
 
 - name: let
   source: pass/let
