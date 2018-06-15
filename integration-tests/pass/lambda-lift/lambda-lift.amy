@@ -1,7 +1,12 @@
+# Demonstrate lambda lifting in let expressions
+
 main :: Int
 main =
   let
-    id x = x
+    id x =
+      let
+        id' y = y
+      in id' x
     const x y = id y
     z = 2
     f x = iAdd# z x

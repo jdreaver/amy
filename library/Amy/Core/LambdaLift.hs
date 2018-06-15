@@ -94,15 +94,18 @@ withNewScope action = do
 bindVariable :: Typed IdentName -> Lift ()
 bindVariable var = modify' $ \s -> s { boundVariables = var `Set.insert` boundVariables s }
 
-liftFunction :: [Typed IdentName] -> Binding -> Lift ()
+liftFunction :: [Typed IdentName] -> Binding -> Lift LiftedBinding
 liftFunction newArgs binding = do
   let oldIdent@(IdentName oldName) = bindingName binding
   newName <- IdentName . ((oldName <> "_$") <>) . pack . show <$> freshId
-  let lifted = LiftedBinding newArgs binding { bindingName = newName }
-  modify' $ \s -> s { liftedBindings = Map.insert oldIdent lifted (liftedBindings s) }
-
-lookupVar :: IdentName -> Lift (Maybe LiftedBinding)
-lookupVar var = Map.lookup var <$> gets liftedBindings
+  let
+    lifted = LiftedBinding newArgs binding { bindingName = newName }
+    body = bindingBody binding
+    body' = replaceLiftedBinding oldIdent lifted body
+  body'' <- liftExprBindings body'
+  let lifted' = lifted { liftedBindingBinding = (liftedBindingBinding lifted) { bindingBody = body'' } }
+  modify' $ \s -> s { liftedBindings = Map.insert oldIdent lifted' (liftedBindings s) }
+  pure lifted'
 
 --
 -- Lambda Lifting
@@ -146,10 +149,10 @@ liftExprBindings = go
         let
           freeVars = freeBindingVars binding
           closeVars = freeVars `Set.intersection` boundVars
-        liftFunction (Set.toList closeVars) binding
+        lifted <- liftFunction (Set.toList closeVars) binding
         -- TODO: Run lifted binding replacement on the lifted binding itself,
         -- in case it is recursive!
-        body' <- replaceLiftedBindings body
+        let body' = replaceLiftedBinding (bindingName binding) lifted body
         go body'
   -- Recurive binding group
   go (ELet (Let bindings _)) = error $ "Can't lambda lift recursive binding groups yet " ++ show (NE.toList $ bindingName <$> bindings)
@@ -158,15 +161,14 @@ liftExprBindings = go
     body' <- go (bindingBody binding)
     pure $ binding { bindingBody = body' }
 
-replaceLiftedBindings :: Expr -> Lift Expr
-replaceLiftedBindings = traverseExprTopDownM f
+replaceLiftedBinding :: IdentName -> LiftedBinding -> Expr -> Expr
+replaceLiftedBinding oldName lifted = traverseExprTopDown f
  where
-  f e@(EVar (VVal (Typed _ var))) = do
-    mLifted <- lookupVar var
-    case mLifted of
-      Nothing -> pure e
-      Just lifted -> pure $ makeLiftedAppNode lifted
-  f e = pure e
+  f e@(EVar (VVal (Typed _ var))) =
+    if oldName == var
+    then makeLiftedAppNode lifted
+    else e
+  f e = e
 
 -- | Insert an App node for a lifted binding.
 --
