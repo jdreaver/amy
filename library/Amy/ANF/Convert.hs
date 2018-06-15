@@ -16,11 +16,14 @@ import Data.Traversable (for)
 import Amy.ANF.AST as ANF
 import Amy.ANF.Monad
 import Amy.Core.AST as C
+import Amy.Core.LambdaLift
 import Amy.Prim
 
 normalizeModule :: C.Module -> ANF.Module
-normalizeModule (C.Module bindingGroups externs typeDeclarations) =
+normalizeModule mod' =
   let
+    -- First do lambda lifting
+    (C.Module bindingGroups externs typeDeclarations) = lambdaLifting mod'
     bindings = concatMap NE.toList bindingGroups
 
     -- Record top-level names

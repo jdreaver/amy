@@ -128,6 +128,8 @@ liftExprBindings = traverseExprTopDownM f
           freeVars = freeBindingVars binding
           closeVars = freeVars `Set.intersection` boundVars
         liftFunction (Set.toList closeVars) binding
+        -- TODO: Run lifted binding replacement on the lifted binding itself,
+        -- in case it is recursive!
         replaceLiftedBindings body
   -- Recurive binding group
   f (ELet (Let bindings _)) = error $ "Can't lambda lift recursive binding groups yet " ++ show (NE.toList $ bindingName <$> bindings)

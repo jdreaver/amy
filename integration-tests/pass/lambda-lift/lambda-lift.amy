@@ -1,0 +1,6 @@
+main :: Int
+main =
+  let
+    id x = x
+    const x y = id y
+  in const 2 1
