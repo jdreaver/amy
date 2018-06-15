@@ -223,17 +223,17 @@ traverseExprTopDownM f expr = f' expr
     pure $ EApp $ App func' arg' ty
   go (EParens e) = EParens <$> f' e
 
-freeBindingVars :: Binding -> Set IdentName
-freeBindingVars (Binding name _ args _ body) =
-  freeExprVars body `Set.difference` Set.fromList (name : (typedValue <$> args))
+freeBindingVars :: Binding -> Set (Typed IdentName)
+freeBindingVars (Binding name ty args _ body) =
+  freeExprVars body `Set.difference` Set.fromList (Typed ty name : args)
 
-freeExprVars :: Expr -> Set IdentName
+freeExprVars :: Expr -> Set (Typed IdentName)
 freeExprVars ELit{} = Set.empty
 freeExprVars (ERecord rows) = Set.unions $ freeExprVars . typedValue <$> Map.elems rows
 freeExprVars (ERecordSelect expr _ _) = freeExprVars expr
-freeExprVars (EVar (VVal (Typed _ ident))) = Set.singleton ident
+freeExprVars (EVar (VVal var)) = Set.singleton var
 freeExprVars (EVar VCons{}) = Set.empty
-freeExprVars (ECase (Case scrutinee (Typed _ bind) matches default')) =
+freeExprVars (ECase (Case scrutinee bind matches default')) =
   let
     scrutVars = freeExprVars scrutinee
     matchVars = freeMatchVars <$> matches
@@ -242,7 +242,7 @@ freeExprVars (ECase (Case scrutinee (Typed _ bind) matches default')) =
  where
   freeMatchVars (Match pat expr) = freeExprVars expr `Set.difference` patternVars pat
   patternVars PLit{} = Set.empty
-  patternVars (PCons (PatCons _ mPat _)) = maybe Set.empty (Set.singleton . typedValue) mPat
+  patternVars (PCons (PatCons _ mPat _)) = maybe Set.empty Set.singleton mPat
 freeExprVars (ELet (Let bindings expr)) =
   Set.unions (freeExprVars expr : (freeBindingVars <$> NE.toList bindings))
 freeExprVars (EApp (App f arg _)) = freeExprVars f `Set.union` freeExprVars arg

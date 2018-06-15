@@ -9,9 +9,13 @@ module Amy.Core.LambdaLift
   ) where
 
 import Control.Monad.State.Strict
+import Data.Foldable (traverse_)
 import Data.List (foldl', tails)
+import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (mapMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (pack)
@@ -26,11 +30,14 @@ lambdaLifting :: Module -> Module
 lambdaLifting mod' =
   let
     bindings = moduleBindings mod'
-    liftBinding binding = do
-      body <- undefined
-      pure $ binding { bindingBody = body }
-    bindings' = runLift $ traverse (traverse liftBinding) bindings
-  in undefined
+    bindingsAndLifted = fmap (runLift . liftBindingBindings) <$> bindings
+    bindings' = fmap fst <$> bindingsAndLifted
+    -- TODO: This violates top-level binding group dependencies. We are just
+    -- shoving all the lifted bindings at the end. Do we even need top-level
+    -- binding group dependencies? Should we nuke them and just use a list?
+    lifted :: [NonEmpty Binding]
+    lifted = mapMaybe NE.nonEmpty $ fmap (fmap liftedBinding) $ concatMap NE.toList $ fmap snd <$> bindingsAndLifted
+  in mod' { moduleBindings = bindings' ++ lifted }
 
 --
 -- Monad
@@ -47,28 +54,25 @@ runLift (Lift action) =
 data LiftState
   = LiftState
   { lastId :: !Int
-  , boundVariables :: !(Set IdentName)
+  , boundVariables :: !(Set (Typed IdentName))
   , liftedBindings :: !(Map IdentName LiftedBinding)
     -- ^ Map from old IdentName to new lifted function
   } deriving (Show, Eq)
 
 data LiftedBinding
   = LiftedBinding
-  { liftedBindingName :: !IdentName
-  , liftedBindingNewArgs :: ![Typed IdentName]
+  { liftedBindingNewArgs :: ![Typed IdentName]
   , liftedBindingBinding :: !Binding
   } deriving (Show, Eq)
 
 -- | Get the 'Binding' for a lifted binding
 liftedBinding :: LiftedBinding -> Binding
-liftedBinding lifted@(LiftedBinding name newArgs (Binding oldName oldTy oldArgs retTy body)) =
-  let
-    ty = liftedBindingType lifted
-    body' = substExpr body oldName name
-  in Binding name ty (newArgs ++ oldArgs) retTy body'
+liftedBinding lifted@(LiftedBinding newArgs (Binding name _ oldArgs retTy body)) =
+  let ty = liftedBindingType lifted
+  in Binding name ty (newArgs ++ oldArgs) retTy body
 
 liftedBindingType :: LiftedBinding -> Type
-liftedBindingType (LiftedBinding _ newArgs (Binding _ oldTy _ _ _)) =
+liftedBindingType (LiftedBinding newArgs (Binding _ oldTy _ _ _)) =
   foldr1 TyFun $ (typedType <$> newArgs) ++ [oldTy]
 
 freshId :: Lift Int
@@ -76,13 +80,24 @@ freshId = do
   modify' (\s -> s { lastId = 1 + lastId s })
   gets lastId
 
-bindVariable :: IdentName -> Lift ()
+withNewScope :: Lift a -> Lift a
+withNewScope action = do
+  orig <- get
+  result <- action
+  modify' $ \s ->
+    s
+    { boundVariables = boundVariables orig
+    }
+  pure result
+
+bindVariable :: Typed IdentName -> Lift ()
 bindVariable var = modify' $ \s -> s { boundVariables = var `Set.insert` boundVariables s }
 
-liftFunction :: IdentName -> [Typed IdentName] -> Binding -> Lift ()
-liftFunction oldIdent@(IdentName oldName) newArgs binding = do
+liftFunction :: [Typed IdentName] -> Binding -> Lift ()
+liftFunction newArgs binding = do
+  let oldIdent@(IdentName oldName) = bindingName binding
   newName <- IdentName . ((oldName <> "_$") <>) . pack . show <$> freshId
-  let lifted = LiftedBinding newName newArgs binding
+  let lifted = LiftedBinding newArgs binding { bindingName = newName }
   modify' $ \s -> s { liftedBindings = Map.insert oldIdent lifted (liftedBindings s) }
 
 lookupVar :: IdentName -> Lift (Maybe LiftedBinding)
@@ -92,11 +107,30 @@ lookupVar var = Map.lookup var <$> gets liftedBindings
 -- Lambda Lifting
 --
 
+liftBindingBindings :: Binding -> Lift Binding
+liftBindingBindings (Binding name ty args retTy body) = withNewScope $ do
+  bindVariable $ Typed ty name
+  traverse_ bindVariable args
+  body' <- liftExprBindings body
+  pure $ Binding name ty args retTy body'
+
 liftExprBindings :: Expr -> Lift Expr
 liftExprBindings = traverseExprTopDownM f
  where
-  f (ELet (Let bindings expr)) = do
-    undefined
+  -- Non-recursive binding group
+  f expr@(ELet (Let (binding :| []) body)) = withNewScope $ do
+    bindVariable $ Typed (bindingType binding) (bindingName binding)
+    case bindingArgs binding of
+      [] -> pure expr
+      _ -> do
+        boundVars <- gets boundVariables
+        let
+          freeVars = freeBindingVars binding
+          closeVars = freeVars `Set.intersection` boundVars
+        liftFunction (Set.toList closeVars) binding
+        replaceLiftedBindings body
+  -- Recurive binding group
+  f (ELet (Let bindings _)) = error $ "Can't lambda lift recursive binding groups yet " ++ show (NE.toList $ bindingName <$> bindings)
   f e = pure e
 
 replaceLiftedBindings :: Expr -> Lift Expr
@@ -127,31 +161,14 @@ replaceLiftedBindings = traverseExprTopDownM f
 -- Note that we don't have to worry about @z@. Presumably whatever is being
 -- bound as the @z@ argument is already present.
 makeLiftedAppNode :: LiftedBinding -> Expr
-makeLiftedAppNode lifted@(LiftedBinding name newArgs oldBinding) =
+makeLiftedAppNode lifted@(LiftedBinding newArgs binding) =
   let
     -- Compute the type for each app node. This is a bit tricky.
-    tys = (typedType <$> newArgs) ++ [bindingType oldBinding]
+    tys = (typedType <$> newArgs) ++ [bindingType binding]
     appTys = drop 1 tys
-    f = Typed (liftedBindingType lifted) name
+    f = Typed (liftedBindingType lifted) (bindingName binding)
     varsAndTys = zip newArgs $ tails appTys
   in foldl' mkApp (EVar $ VVal f) varsAndTys
  where
   mkApp :: Expr -> (Typed IdentName, [Type]) -> Expr
   mkApp e (var', tys') = EApp $ App e (EVar (VVal var')) (foldr1 TyFun tys')
-
-
---
--- Testing
---
-
-testLift :: LiftedBinding
-testLift =
-  LiftedBinding
-  "f_new"
-  [Typed (TyCon "FX") "x", Typed (TyCon "FY") "y"]
-  $ Binding
-    "f"
-    (TyCon "FZ" `TyFun` TyCon "R")
-    [Typed (TyCon "FZ") "z"]
-    (TyCon "R")
-    (ELit (LiteralInt 1))
