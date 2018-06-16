@@ -2,7 +2,13 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- | Lambda lifting core transformation.
+-- | Lambda lifting Core transformation.
+--
+-- This is needed to target backends that don't have nested functions, like
+-- LLVM. It is a pre-requisite to ANF conversion.
+--
+-- The algorithm is a slightly simpler version of the one from "Lambda Lifting:
+-- Transforming Programs into Recursive Equations (Johnsson 1985)".
 
 module Amy.Core.LambdaLift
   ( lambdaLifting
@@ -115,8 +121,11 @@ storeLifted oldIdent lifted = do
 
 liftBindingBindings :: Binding -> Lift Binding
 liftBindingBindings (Binding name ty args retTy body) = withNewScope $ do
+  -- Bind binding name and args to context
   bindVariable $ Typed ty name
   traverse_ bindVariable args
+
+  -- Perform lambda lifting in the body
   body' <- liftExprBindings body
   pure $ Binding name ty args retTy body'
 
@@ -155,6 +164,16 @@ liftExprBindings = go
     lifted <- traverse (\(binding, vars) -> mkLiftedFunction (Set.toList vars) binding) bindingsToLift
 
     -- Replace variables in body and return
+
+    -- TODO: Performing this replacement immediately is less efficient than if
+    -- we saved the variables needing replacing and did it later in the
+    -- traversal. We could store these replacements + extra vars in the State
+    -- and add them as-needed when computing free variables later on. See the
+    -- Johnsson paper for details.
+    --
+    -- This method is much simpler though, and I hesitate to make it more
+    -- efficient unless we can profile and find an example for which this
+    -- function dominates compilation time.
     let
       replaceBody binding =
         let
@@ -182,10 +201,7 @@ liftExprBindings = go
 replaceLiftedBindings :: [(IdentName, LiftedBinding)] -> Expr -> Expr
 replaceLiftedBindings lifted = traverseExprTopDown f
  where
-  f e@(EVar (VVal (Typed _ var))) =
-    case lookup var lifted of
-      Just func -> makeLiftedAppNode func
-      Nothing -> e
+  f e@(EVar (VVal (Typed _ var))) = maybe e makeLiftedAppNode (lookup var lifted)
   f e = e
 
 -- | Insert an App node for a lifted binding.

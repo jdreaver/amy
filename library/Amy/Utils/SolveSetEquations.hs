@@ -32,6 +32,15 @@ import qualified Data.Set as Set
 --     Z = {d} ∪ Y
 -- @
 --
+-- These would be represented as:
+--
+-- @
+--     [ SetEquation X [a, b] [Y, Z]
+--     , SetEquation Y [c] [X]
+--     , SetEquation Z [d] [Y]
+--     ]
+-- @
+--
 data SetEquation eq a
   = SetEquation
   { setEquationName :: !eq
