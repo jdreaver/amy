@@ -15,7 +15,6 @@ import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (mapMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (pack)
@@ -30,14 +29,13 @@ lambdaLifting :: Module -> Module
 lambdaLifting mod' =
   let
     bindings = moduleBindings mod'
-    bindingsAndLifted = fmap (runLift . liftBindingBindings) <$> bindings
-    bindings' = fmap fst <$> bindingsAndLifted
+    (bindings', lifted) = runLift $ traverse (traverse liftBindingBindings) bindings
     -- TODO: This violates top-level binding group dependencies. We are just
     -- shoving all the lifted bindings at the end. Do we even need top-level
     -- binding group dependencies? Should we nuke them and just use a list?
-    lifted :: [NonEmpty Binding]
-    lifted = mapMaybe NE.nonEmpty $ fmap (fmap liftedBinding) $ concatMap NE.toList $ fmap snd <$> bindingsAndLifted
-  in mod' { moduleBindings = bindings' ++ lifted }
+    lifted' :: [NonEmpty Binding]
+    lifted' = (:| []) . liftedBinding <$> lifted
+  in mod' { moduleBindings = bindings' ++ lifted' }
 
 --
 -- Monad
