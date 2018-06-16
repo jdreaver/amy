@@ -9,17 +9,20 @@ module Amy.Core.LambdaLift
   ) where
 
 import Control.Monad.State.Strict
-import Data.Foldable (traverse_)
+import Data.Bifunctor (second)
+import Data.Foldable (for_, traverse_)
 import Data.List (foldl', tails)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (pack)
 
 import Amy.Core.AST
+import Amy.Utils.SolveSetEquations
 
 --
 -- Top Level
@@ -91,18 +94,20 @@ withNewScope action = do
 bindVariable :: Typed IdentName -> Lift ()
 bindVariable var = modify' $ \s -> s { boundVariables = var `Set.insert` boundVariables s }
 
-liftFunction :: [Typed IdentName] -> Binding -> Lift LiftedBinding
-liftFunction newArgs binding = do
+mkLiftedFunction :: [Typed IdentName] -> Binding -> Lift (IdentName, LiftedBinding)
+mkLiftedFunction newArgs binding = do
   let oldIdent@(IdentName oldName) = bindingName binding
   newName <- IdentName . ((oldName <> "_$") <>) . pack . show <$> freshId
+  let lifted = LiftedBinding newArgs binding { bindingName = newName }
+  pure (oldIdent, lifted)
+
+storeLifted :: IdentName -> LiftedBinding -> Lift ()
+storeLifted oldIdent lifted = do
   let
-    lifted = LiftedBinding newArgs binding { bindingName = newName }
-    body = bindingBody binding
-    body' = replaceLiftedBinding oldIdent lifted body
-  body'' <- liftExprBindings body'
-  let lifted' = lifted { liftedBindingBinding = (liftedBindingBinding lifted) { bindingBody = body'' } }
+    body = bindingBody $ liftedBindingBinding lifted
+  body' <- liftExprBindings body
+  let lifted' = lifted { liftedBindingBinding = (liftedBindingBinding lifted) { bindingBody = body' } }
   modify' $ \s -> s { liftedBindings = Map.insert oldIdent lifted' (liftedBindings s) }
-  pure lifted'
 
 --
 -- Lambda Lifting
@@ -118,39 +123,69 @@ liftBindingBindings (Binding name ty args retTy body) = withNewScope $ do
 liftExprBindings :: Expr -> Lift Expr
 liftExprBindings = go
  where
-  -- Non-recursive binding group
-  go (ELet (Let (binding :| []) body)) = withNewScope $ do
-    bindVariable $ Typed (bindingType binding) (bindingName binding)
-    case bindingArgs binding of
-      [] -> do
-        binding' <- goBinding binding
-        body' <- go body
-        pure $ ELet $ Let (binding' :| []) body'
-      _ -> do
-        -- Lift the function and just return the body
-        boundVars <- gets boundVariables
+  go (ELet (Let bindings body)) = withNewScope $ do
+    -- Bind binding names to scope
+    for_ bindings $ \binding -> bindVariable $ Typed (bindingType binding) (bindingName binding)
+    boundVars <- gets boundVariables
+
+    -- Compute variables we need to close for each binding
+    let
+      allBindingNamesAndTys = Set.fromList . NE.toList $ (\b -> Typed (bindingType b) (bindingName b)) <$> bindings
+      computeCloseVars binding = (freeBindingVars binding `Set.intersection` boundVars) `Set.difference` allBindingNamesAndTys
+      bindingsAndCloseVars = fmap (\b -> (b, computeCloseVars b)) bindings
+
+    -- Solve set equations
+    let
+      allBindingNames = Set.fromList $ typedValue <$> Set.toList allBindingNamesAndTys
+      mkEq (binding, vars) = SetEquation (bindingName binding) vars (bindingName binding `Set.delete` allBindingNames)
+      equations = mkEq <$> bindingsAndCloseVars
+      solutions = solveSetEquations (NE.toList equations)
+
+    -- Re-associate bindings with solutions
+    let
+      lookupNewVars binding =
+        fromMaybe (error $ "Panic! Lost solution for binding " ++ show (bindingName binding))
+        $ lookup (bindingName binding) solutions
+      bindingsAndSolutions = (\b -> (b, lookupNewVars b)) <$> bindings
+
+    -- Perform lifting
+    let
+      hasArgs = not . null . bindingArgs
+      (bindingsToLift, unlifted) = NE.partition (hasArgs . fst) bindingsAndSolutions
+    lifted <- traverse (\(binding, vars) -> mkLiftedFunction (Set.toList vars) binding) bindingsToLift
+
+    -- Replace variables in body and return
+    let
+      replaceBody binding =
         let
-          freeVars = freeBindingVars binding
-          closeVars = freeVars `Set.intersection` boundVars
-        lifted <- liftFunction (Set.toList closeVars) binding
-        -- TODO: Run lifted binding replacement on the lifted binding itself,
-        -- in case it is recursive!
-        let body' = replaceLiftedBinding (bindingName binding) lifted body
-        go body'
-  -- Recurive binding group
-  go (ELet (Let bindings _)) = error $ "Can't lambda lift recursive binding groups yet " ++ show (NE.toList $ bindingName <$> bindings)
+          bindBody = bindingBody binding
+          bindBody' = replaceLiftedBindings lifted bindBody
+        in binding { bindingBody = bindBody' }
+      replaceLifted (LiftedBinding args binding) = LiftedBinding args (replaceBody binding)
+      lifted' = second replaceLifted <$> lifted
+      unlifted' = replaceBody . fst <$> unlifted
+      body' = replaceLiftedBindings lifted body
+    traverse_ (uncurry storeLifted) lifted'
+
+    case NE.nonEmpty unlifted' of
+      Nothing -> go body'
+      Just unliftedNE -> do
+        unliftedNE' <- traverse goBinding unliftedNE
+        body'' <- go body'
+        pure $ ELet $ Let unliftedNE' body''
+
   go e = traverseExprM liftExprBindings e
   goBinding binding = do
     body' <- go (bindingBody binding)
     pure $ binding { bindingBody = body' }
 
-replaceLiftedBinding :: IdentName -> LiftedBinding -> Expr -> Expr
-replaceLiftedBinding oldName lifted = traverseExprTopDown f
+replaceLiftedBindings :: [(IdentName, LiftedBinding)] -> Expr -> Expr
+replaceLiftedBindings lifted = traverseExprTopDown f
  where
   f e@(EVar (VVal (Typed _ var))) =
-    if oldName == var
-    then makeLiftedAppNode lifted
-    else e
+    case lookup var lifted of
+      Just func -> makeLiftedAppNode func
+      Nothing -> e
   f e = e
 
 -- | Insert an App node for a lifted binding.

@@ -3,11 +3,21 @@
 main :: Int
 main =
   let
+    # Nested lift
     id x =
       let
         id' y = y
       in id' x
+
+    # Depends on id
     const x y = id y
+
+    # Needs closing
     z = 2
     f x = iAdd# z x
-  in f (const 2 1)
+
+    # Mutually recursive, and needs closing
+    a = 1
+    g x = if iLessThan# x 0 then 100 else g' (iSub# x z)
+    g' x = g (iAdd# x a)
+  in g (f (const 2 1))
