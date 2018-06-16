@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | Lambda lifting core transformation.
@@ -121,20 +120,6 @@ liftBindingBindings (Binding name ty args retTy body) = withNewScope $ do
 liftExprBindings :: Expr -> Lift Expr
 liftExprBindings = go
  where
-  go e@ELit{} = pure e
-  go e@EVar{} = pure e
-  go (ERecord rows) = ERecord <$> traverse (\(Typed ty e) -> Typed ty <$> go e) rows
-  go (ERecordSelect e label ty) = (\e' -> ERecordSelect e' label ty) <$> go e
-  go (EApp (App func arg ty)) = do
-    func' <- go func
-    arg' <- go arg
-    pure $ EApp $ App func' arg' ty
-  go (EParens e) = EParens <$> go e
-  go (ECase (Case scrut bind alts default')) = do
-    scrut' <- go scrut
-    alts' <- traverse (\(Match pat e) -> Match pat <$> go e) alts
-    default'' <- traverse go default'
-    pure $ ECase $ Case scrut' bind alts' default''
   -- Non-recursive binding group
   go (ELet (Let (binding :| []) body)) = withNewScope $ do
     bindVariable $ Typed (bindingType binding) (bindingName binding)
@@ -156,7 +141,7 @@ liftExprBindings = go
         go body'
   -- Recurive binding group
   go (ELet (Let bindings _)) = error $ "Can't lambda lift recursive binding groups yet " ++ show (NE.toList $ bindingName <$> bindings)
-
+  go e = traverseExprM liftExprBindings e
   goBinding binding = do
     body' <- go (bindingBody binding)
     pure $ binding { bindingBody = body' }

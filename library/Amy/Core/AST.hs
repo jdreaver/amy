@@ -22,6 +22,8 @@ module Amy.Core.AST
   , substExpr
   , traverseExprTopDown
   , traverseExprTopDownM
+  , traverseExpr
+  , traverseExprM
   , freeBindingVars
   , freeExprVars
 
@@ -225,6 +227,40 @@ traverseExprTopDownM f expr = f' expr
     arg' <- f' arg
     pure $ EApp $ App func' arg' ty
   go (EParens e) = EParens <$> f' e
+
+-- | Pure version of 'traverseExprM'.
+traverseExpr :: (Expr -> Expr) -> Expr -> Expr
+traverseExpr f = runIdentity . traverseExprM (Identity . f)
+
+-- | Single step of a traversal through an @'Expr'@.
+--
+-- This function doesn't traverse the entire expression. It applies a function
+-- to all the immediate sub expressions of a single node. This is most useful
+-- when paired with another mutually recursive function (@f@) that singles out
+-- the nodes it cares about, and leaves this function to traverse the ones it
+-- doesn't.
+--
+traverseExprM :: (Monad m) => (Expr -> m Expr) -> Expr -> m Expr
+traverseExprM f = go
+ where
+  go e@ELit{} = pure e
+  go e@EVar{} = pure e
+  go (ERecord rows) = ERecord <$> traverse (\(Typed ty e) -> Typed ty <$> f e) rows
+  go (ERecordSelect e label ty) = (\e' -> ERecordSelect e' label ty) <$> f e
+  go (ECase (Case scrut bind alts default')) = do
+    scrut' <- f scrut
+    alts' <- traverse (\(Match pat e) -> Match pat <$> f e) alts
+    default'' <- traverse f default'
+    pure $ ECase $ Case scrut' bind alts' default''
+  go (ELet (Let bindings e)) = do
+    bindings' <- traverse (\(Binding name ty args ret body) -> Binding name ty args ret <$> f body) bindings
+    e' <- f e
+    pure $ ELet $ Let bindings' e'
+  go (EApp (App func arg ty)) = do
+    func' <- f func
+    arg' <- f arg
+    pure $ EApp $ App func' arg' ty
+  go (EParens e) = EParens <$> f e
 
 freeBindingVars :: Binding -> Set (Typed IdentName)
 freeBindingVars (Binding name ty args _ body) =
