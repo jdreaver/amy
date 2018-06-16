@@ -84,7 +84,7 @@ prettyExpr (ECase (Case scrutinee bind matches mDefault)) =
       Nothing -> []
       Just def -> [("__DEFAULT", prettyExpr def)]
 prettyExpr (ELet (Let bindings body)) =
-  prettyLet (prettyBinding' <$> concat (toList <$> bindings)) (prettyExpr body)
+  prettyLet (prettyBinding' <$> toList bindings) (prettyExpr body)
 prettyExpr (EApp (App f arg _)) = prettyExpr f <+> prettyExpr arg
 prettyExpr (EParens expr) = parens $ prettyExpr expr
 

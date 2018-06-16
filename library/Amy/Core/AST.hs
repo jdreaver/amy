@@ -19,8 +19,14 @@ module Amy.Core.AST
   , App(..)
   , unfoldApp
   , expressionType
-
   , substExpr
+  , traverseExprTopDown
+  , traverseExprTopDownM
+  , traverseExpr
+  , traverseExprM
+  , freeBindingVars
+  , freeExprVars
+
   , Type(..)
   , unfoldTyApp
   , Typed(..)
@@ -31,8 +37,14 @@ module Amy.Core.AST
   , module Amy.Names
   ) where
 
+import Control.Monad.Identity (Identity(..), runIdentity)
 import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import Data.Maybe (maybeToList)
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 import Amy.ASTCommon
 import Amy.Literal
@@ -146,7 +158,7 @@ data PatCons
 
 data Let
   = Let
-  { letBindings :: ![NonEmpty Binding]
+  { letBindings :: !(NonEmpty Binding)
   , letExpression :: !Expr
   } deriving (Show, Eq)
 
@@ -182,36 +194,98 @@ expressionType (EApp app) = appReturnType app
 expressionType (EParens expr) = expressionType expr
 
 substExpr :: Expr -> IdentName -> IdentName -> Expr
-substExpr e@(ELit _) _ _ = e
-substExpr (ERecord rows) var newVar = ERecord $ (\(Typed ty e) -> Typed ty $ substExpr e var newVar) <$> rows
-substExpr (ERecordSelect expr label ty) var newVar =
-  ERecordSelect (substExpr expr var newVar) label ty
-substExpr (EVar v) var newVar =
-  case v of
-    VVal (Typed ty ident) -> EVar (VVal $ Typed ty $ replaceIdent ident var newVar)
-    VCons _ -> EVar v
-substExpr (ECase (Case scrut bind alts default')) var newVar =
-  ECase
-  ( Case
-    (substExpr scrut var newVar)
-    bind
-    ((\m -> substMatch m var newVar) <$> alts)
-    ((\e -> substExpr e var newVar) <$> default')
-  )
-substExpr (ELet (Let bindings body)) var newVar =
-  ELet (Let (fmap (\b -> substBinding b var newVar) <$> bindings) (substExpr body var newVar))
-substExpr (EApp (App f arg ty)) var newVar =
-  EApp (App (substExpr f var newVar) (substExpr arg var newVar) ty)
-substExpr (EParens expr) var newVar = EParens (substExpr expr var newVar)
+substExpr expr oldVar newVar = traverseExprTopDown f expr
+ where
+  f (EVar (VVal (Typed ty var))) = EVar (VVal $ Typed ty $ if var == oldVar then newVar else var)
+  f e = e
 
-substBinding :: Binding -> IdentName -> IdentName -> Binding
-substBinding binding var newVar = binding { bindingBody = substExpr (bindingBody binding) var newVar }
+traverseExprTopDown :: (Expr -> Expr) -> Expr -> Expr
+traverseExprTopDown f = runIdentity . traverseExprTopDownM (Identity . f)
 
-substMatch :: Match -> IdentName -> IdentName -> Match
-substMatch match' var newVar = match' { matchBody = substExpr (matchBody match') var newVar }
+traverseExprTopDownM :: (Monad m) => (Expr -> m Expr) -> Expr -> m Expr
+traverseExprTopDownM f expr = f' expr
+ where
+  -- TODO: The definition of f' is incorrect if the AST changes. If f returns a
+  -- different node than was passed in (because it changed), it will get sent
+  -- to "go", but we don't run f on that output node.
+  f' e = f e >>= go
+  go e@ELit{} = pure e
+  go e@EVar{} = pure e
+  go (ERecord rows) = ERecord <$> traverse (\(Typed ty e) -> Typed ty <$> f' e) rows
+  go (ERecordSelect e label ty) = (\e' -> ERecordSelect e' label ty) <$> f' e
+  go (ECase (Case scrut bind alts default')) = do
+    scrut' <- f' scrut
+    alts' <- traverse (\(Match pat e) -> Match pat <$> f' e) alts
+    default'' <- traverse f' default'
+    pure $ ECase $ Case scrut' bind alts' default''
+  go (ELet (Let bindings e)) = do
+    bindings' <- traverse (\(Binding name ty args ret body) -> Binding name ty args ret <$> f' body) bindings
+    e' <- f' e
+    pure $ ELet $ Let bindings' e'
+  go (EApp (App func arg ty)) = do
+    func' <- f' func
+    arg' <- f' arg
+    pure $ EApp $ App func' arg' ty
+  go (EParens e) = EParens <$> f' e
 
-replaceIdent :: IdentName -> IdentName -> IdentName -> IdentName
-replaceIdent var oldVar newVar = if var == oldVar then newVar else var
+-- | Pure version of 'traverseExprM'.
+traverseExpr :: (Expr -> Expr) -> Expr -> Expr
+traverseExpr f = runIdentity . traverseExprM (Identity . f)
+
+-- | Single step of a traversal through an @'Expr'@.
+--
+-- This function doesn't traverse the entire expression. It applies a function
+-- to all the immediate sub expressions of a single node. This is most useful
+-- when paired with another mutually recursive function (@f@) that singles out
+-- the nodes it cares about, and leaves this function to traverse the ones it
+-- doesn't.
+--
+traverseExprM :: (Monad m) => (Expr -> m Expr) -> Expr -> m Expr
+traverseExprM f = go
+ where
+  go e@ELit{} = pure e
+  go e@EVar{} = pure e
+  go (ERecord rows) = ERecord <$> traverse (\(Typed ty e) -> Typed ty <$> f e) rows
+  go (ERecordSelect e label ty) = (\e' -> ERecordSelect e' label ty) <$> f e
+  go (ECase (Case scrut bind alts default')) = do
+    scrut' <- f scrut
+    alts' <- traverse (\(Match pat e) -> Match pat <$> f e) alts
+    default'' <- traverse f default'
+    pure $ ECase $ Case scrut' bind alts' default''
+  go (ELet (Let bindings e)) = do
+    bindings' <- traverse (\(Binding name ty args ret body) -> Binding name ty args ret <$> f body) bindings
+    e' <- f e
+    pure $ ELet $ Let bindings' e'
+  go (EApp (App func arg ty)) = do
+    func' <- f func
+    arg' <- f arg
+    pure $ EApp $ App func' arg' ty
+  go (EParens e) = EParens <$> f e
+
+freeBindingVars :: Binding -> Set (Typed IdentName)
+freeBindingVars (Binding name ty args _ body) =
+  freeExprVars body `Set.difference` Set.fromList (Typed ty name : args)
+
+freeExprVars :: Expr -> Set (Typed IdentName)
+freeExprVars ELit{} = Set.empty
+freeExprVars (ERecord rows) = Set.unions $ freeExprVars . typedValue <$> Map.elems rows
+freeExprVars (ERecordSelect expr _ _) = freeExprVars expr
+freeExprVars (EVar (VVal var)) = Set.singleton var
+freeExprVars (EVar VCons{}) = Set.empty
+freeExprVars (ECase (Case scrutinee bind matches default')) =
+  let
+    scrutVars = freeExprVars scrutinee
+    matchVars = freeMatchVars <$> matches
+    defaultVars = maybeToList $ freeExprVars <$> default'
+  in Set.unions (scrutVars : matchVars ++ defaultVars) `Set.difference` Set.singleton bind
+ where
+  freeMatchVars (Match pat expr) = freeExprVars expr `Set.difference` patternVars pat
+  patternVars PLit{} = Set.empty
+  patternVars (PCons (PatCons _ mPat _)) = maybe Set.empty Set.singleton mPat
+freeExprVars (ELet (Let bindings expr)) =
+  Set.unions (freeExprVars expr : (freeBindingVars <$> NE.toList bindings))
+freeExprVars (EApp (App f arg _)) = freeExprVars f `Set.union` freeExprVars arg
+freeExprVars (EParens expr) = freeExprVars expr
 
 data Type
   = TyCon !TyConName

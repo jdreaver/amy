@@ -16,11 +16,14 @@ import Data.Traversable (for)
 import Amy.ANF.AST as ANF
 import Amy.ANF.Monad
 import Amy.Core.AST as C
+import Amy.Core.LambdaLift
 import Amy.Prim
 
 normalizeModule :: C.Module -> ANF.Module
-normalizeModule (C.Module bindingGroups externs typeDeclarations) =
+normalizeModule mod' =
   let
+    -- First do lambda lifting
+    (C.Module bindingGroups externs typeDeclarations) = lambdaLifting mod'
     bindings = concatMap NE.toList bindingGroups
 
     -- Record top-level names
@@ -126,11 +129,10 @@ normalizeExpr name expr@(C.ECase (C.Case scrutinee bind matches defaultExpr)) =
     defaultExpr' <- traverse (normalizeExpr name) defaultExpr
     ty <- convertType $ expressionType expr
     pure $ ANF.ECase (ANF.Case scrutineeVal bind' matches' defaultExpr' ty)
-normalizeExpr name (C.ELet (C.Let bindingGroups expr)) = do
-  let bindings = concatMap NE.toList bindingGroups
+normalizeExpr name (C.ELet (C.Let bindings expr)) = do
   bindings' <- traverse normalizeLetBinding bindings
   expr' <- normalizeExpr name expr
-  pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal bindings' expr'
+  pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal (NE.toList bindings') expr'
 normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
   -- TODO: More robust arity checking besides just unfolding App nodes.
   let func :| args = C.unfoldApp app

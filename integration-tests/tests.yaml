@@ -17,6 +17,10 @@
   source: pass/higher-rank-poly
   program_exit_code: 1
 
+- name: lambda-lift
+  source: pass/lambda-lift
+  program_exit_code: 100
+
 - name: let
   source: pass/let
   program_exit_code: 200

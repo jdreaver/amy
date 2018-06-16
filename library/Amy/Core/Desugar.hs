@@ -4,6 +4,7 @@ module Amy.Core.Desugar
   ( desugarModule
   ) where
 
+import Data.List (foldl')
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (maybeToList)
@@ -78,7 +79,7 @@ desugarExpr (T.ECase (T.Case scrutinee matches)) = do
             , C.bindingReturnType = desugarType $ T.expressionType scrutinee
             , C.bindingBody = scrutinee'
             }
-        in C.ELet $ C.Let [scrutineeBinding :| []] e
+        in C.ELet $ C.Let (scrutineeBinding :| []) e
 
 desugarExpr (T.EIf (T.If pred' then' else')) =
   let
@@ -93,7 +94,8 @@ desugarExpr (T.EIf (T.If pred' then' else')) =
 desugarExpr (T.ELet (T.Let bindings body)) = do
   bindings' <- traverse (traverse desugarBinding) bindings
   body' <- desugarExpr body
-  pure $ C.ELet (C.Let bindings' body')
+  -- N.B. Core only allows on binding group per let expression.
+  pure $ foldl' (\bod binds -> C.ELet (C.Let binds bod)) body' (reverse bindings')
 desugarExpr (T.EApp (T.App func arg ty)) = do
   func' <- desugarExpr func
   arg' <- desugarExpr arg
