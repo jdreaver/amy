@@ -26,6 +26,7 @@ tests:
     dependencies:
       - amy
       - base
+      - containers
       - hspec
       - hspec-megaparsec
       - megaparsec
