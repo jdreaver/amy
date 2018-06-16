@@ -7,7 +7,7 @@ id x = x
 const :: forall a b. a -> b -> a
 const x y = x
 
-# Use this once we have lambda lifting
+# TODO: Use this once we have lambda lifting and test tyvar scoping rules
 # const :: forall a b. a -> b -> a
 # const x y =
 #   let
