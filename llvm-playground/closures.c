@@ -56,40 +56,52 @@ Closure* make_empty_closure(int arity, void (*f)()) {
   return closure;
 }
 
+Closure* copy_closure(Closure* closure) {
+  struct Closure* new_closure = (struct Closure*)malloc(sizeof *closure);
+  new_closure->arity = closure->arity;
+  new_closure->func_ptr = closure->func_ptr;
+  new_closure->numargs = closure->numargs;
+  new_closure->env = closure->env;
+  return new_closure;
+}
+
 Closure* extend_closure_1(Closure* closure, union EnvVal x1) {
-  closure->env = extend_env_1(closure->numargs, closure->env, x1);
-  closure->numargs += 1;
-  return closure;
+  struct Closure* new_closure = copy_closure(closure);
+  new_closure->env = extend_env_1(new_closure->numargs, new_closure->env, x1);
+  new_closure->numargs += 1;
+  return new_closure;
 }
 
 Closure* extend_closure_2(Closure* closure, union EnvVal x1, union EnvVal x2) {
-  closure->env = extend_env_2(closure->numargs, closure->env, x1, x2);
-  closure->numargs += 2;
-  return closure;
+  struct Closure* new_closure = copy_closure(closure);
+  new_closure->env = extend_env_2(new_closure->numargs, new_closure->env, x1, x2);
+  new_closure->numargs += 2;
+  return new_closure;
 }
 
 Closure* extend_closure_3(Closure* closure, union EnvVal x1, union EnvVal x2, union EnvVal x3) {
-  closure->env = extend_env_3(closure->numargs, closure->env, x1, x2, x3);
-  closure->numargs += 3;
-  return closure;
+  struct Closure* new_closure = copy_closure(closure);
+  new_closure->env = extend_env_3(new_closure->numargs, new_closure->env, x1, x2, x3);
+  new_closure->numargs += 3;
+  return new_closure;
 }
 
-Closure* apply_pap_1(Closure* closure, union EnvVal x1) {
+Closure* apply_closure_1(Closure* closure, union EnvVal x1) {
   Closure* (*f)() = (Closure* (*)(union EnvVal* env))closure->func_ptr;
   union EnvVal* env = extend_env_1(closure->numargs, closure->env, x1);
-  printf("apply_pap_1, x1: %d\n", x1.as_int);
+  printf("apply_closure_1, x1: %d\n", x1.as_int);
   return f(env);
 }
 
-Closure* apply_pap_2(Closure* closure, union EnvVal x1, union EnvVal x2) {
+Closure* apply_closure_2(Closure* closure, union EnvVal x1, union EnvVal x2) {
   Closure* (*f)() = (Closure* (*)(union EnvVal* env, union EnvVal, union EnvVal))closure->func_ptr;
   union EnvVal* env = extend_env_2(closure->numargs, closure->env, x1, x2);
-  printf("apply_pap_2, x1: %d, x2: %d\n", x1.as_int, x2.as_int);
+  printf("apply_closure_2, x1: %d, x2: %d\n", x1.as_int, x2.as_int);
   return f(env);
 }
 
-Closure* apply_pap_3(Closure* closure, union EnvVal x1, union EnvVal x2, union EnvVal x3) {
-  printf("apply_pap_3\n");
+Closure* apply_closure_3(Closure* closure, union EnvVal x1, union EnvVal x2, union EnvVal x3) {
+  printf("apply_closure_3\n");
   Closure* (*f)() = (Closure* (*)(union EnvVal* env, union EnvVal, union EnvVal))closure->func_ptr;
   union EnvVal* env = extend_env_3(closure->numargs, closure->env, x1, x2, x3);
   return f(env);
@@ -105,7 +117,7 @@ Closure* call_closure_1(Closure* closure, union EnvVal x1) {
   switch (arity - numargs) {
     case 1:
       /* Proper number of args, just call */
-      return apply_pap_1(closure, x1);
+      return apply_closure_1(closure, x1);
 
     default:
       /* Not enough arguments, partial application */
@@ -123,12 +135,12 @@ Closure* call_closure_2(Closure* closure, union EnvVal x1, union EnvVal x2) {
   switch (arity - numargs) {
     case 1:
       /* Too many arguments, call then call again */
-      result = apply_pap_1(closure, x1);
+      result = apply_closure_1(closure, x1);
       return call_closure_1(result, x2);
 
     case 2:
       /* Proper number of args, just call */
-      return apply_pap_2(closure, x1, x2);
+      return apply_closure_2(closure, x1, x2);
 
     default:
       /* Not enough arguments, partial application */
@@ -146,17 +158,17 @@ Closure* call_closure_3(Closure* closure, union EnvVal x1, union EnvVal x2, unio
   switch (arity - numargs) {
     case 1:
       /* Too many arguments, call then call again */
-      result = apply_pap_1(closure, x1);
+      result = apply_closure_1(closure, x1);
       return call_closure_2(result, x2, x3);
 
     case 2:
       /* Too many arguments, call then call again */
-      result = apply_pap_2(closure, x1, x2);
+      result = apply_closure_2(closure, x1, x2);
       return call_closure_1(result, x3);
 
     case 3:
       /* Proper number of args, just call */
-      return apply_pap_3(closure, x1, x2, x3);
+      return apply_closure_3(closure, x1, x2, x3);
 
     default:
       /* Not enough arguments, partial application */
