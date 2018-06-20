@@ -1,8 +1,6 @@
 ; ModuleID = 'amy-module'
 source_filename = "<string>"
 
-declare i8* @GC_malloc(i64)
-
 define private i64 @fib(i64 %x) {
 entry:
   switch i64 %x, label %case.default.ret [

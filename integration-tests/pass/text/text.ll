@@ -3,8 +3,6 @@ source_filename = "<string>"
 
 @"$str.1" = private global [21 x i8] c"Hello\0Awith\09\22escapes\22\00"
 
-declare i8* @GC_malloc(i64)
-
 declare i64 @puts(i8*)
 
 define private i8* @hello() {

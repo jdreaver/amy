@@ -5,7 +5,7 @@
 module Amy.Codegen.Monad
   ( runCodeGen
   , CodeGen
-  , CodeGenRead
+  , CodeGenState
   , runBlockGen
   , BlockGen
   , addInstruction
@@ -14,33 +14,38 @@ module Amy.Codegen.Monad
   , freshId
   , freshUnName
   , topLevelType
+  , genExternalFunction
   ) where
 
-import Control.Monad.Reader
 import Control.Monad.State.Strict
+import qualified Control.Monad.Trans.State.Strict as TS
+import Data.Foldable (for_)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import LLVM.AST as LLVM
 
 import Amy.ANF.AST as ANF
 
-newtype CodeGen a = CodeGen (Reader CodeGenRead a)
-  deriving (Functor, Applicative, Monad, MonadReader CodeGenRead)
+newtype CodeGen a = CodeGen (State CodeGenState a)
+  deriving (Functor, Applicative, Monad, MonadState CodeGenState)
 
-runCodeGen :: [(IdentName, ANF.Type)] -> CodeGen a -> a
+runCodeGen :: [(IdentName, ANF.Type)] -> CodeGen [Definition] -> [Definition]
 runCodeGen topLevelTypes (CodeGen action) =
   let
     typeMap = Map.fromList topLevelTypes
-    readState = CodeGenRead typeMap
-  in runReader action readState
+    cgState = CodeGenState typeMap Map.empty
+    (result, state') = runState action cgState
+    externalDefs = fmap snd . Map.toAscList . codeGenStateExternalFunctions $ state'
+  in externalDefs ++ result
 
-data CodeGenRead
-  = CodeGenRead
-  { codeGenReadTopLevelTypes :: !(Map IdentName ANF.Type)
+data CodeGenState
+  = CodeGenState
+  { codeGenStateTopLevelTypes :: !(Map IdentName ANF.Type)
+  , codeGenStateExternalFunctions :: !(Map Name Definition)
   }
 
 newtype BlockGen a = BlockGen (StateT BlockGenState CodeGen a)
-  deriving (Functor, Applicative, Monad, MonadReader CodeGenRead, MonadState BlockGenState)
+  deriving (Functor, Applicative, Monad, MonadState BlockGenState)
 
 runBlockGen :: BlockGen Operand -> CodeGen [BasicBlock]
 runBlockGen (BlockGen action) = do
@@ -59,6 +64,9 @@ data BlockGenState
 
 blockGenState :: LLVM.Name -> BlockGenState
 blockGenState name' = BlockGenState (partialBlock name') [] 0
+
+liftCodeGen :: CodeGen a -> BlockGen a
+liftCodeGen = BlockGen . lift
 
 -- | In-progress 'BasicBlock' without terminator
 data PartialBlock
@@ -101,5 +109,14 @@ freshId = do
 freshUnName :: BlockGen LLVM.Name
 freshUnName = UnName <$> freshId
 
-topLevelType :: (MonadReader CodeGenRead m) => IdentName -> m (Maybe ANF.Type)
-topLevelType ident = asks (Map.lookup ident . codeGenReadTopLevelTypes)
+topLevelType :: IdentName -> BlockGen (Maybe ANF.Type)
+topLevelType ident = liftCodeGen $ CodeGen $ TS.gets (Map.lookup ident . codeGenStateTopLevelTypes)
+
+genExternalFunction :: Name -> Definition -> BlockGen ()
+genExternalFunction name def = liftCodeGen $ CodeGen $ do
+  mExistingDef <- TS.gets (Map.lookup name . codeGenStateExternalFunctions)
+  for_ mExistingDef $ \existingDef ->
+    when (existingDef /= def) $
+      error $ "Definitions don't match! " ++ show (name, existingDef, def)
+  TS.modify' $ \s ->
+    s { codeGenStateExternalFunctions = Map.insert name def (codeGenStateExternalFunctions s) }

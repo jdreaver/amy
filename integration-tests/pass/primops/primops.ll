@@ -1,8 +1,6 @@
 ; ModuleID = 'amy-module'
 source_filename = "<string>"
 
-declare i8* @GC_malloc(i64)
-
 define private i64 @f(i64 %x) {
 entry:
   %y = add i64 %x, -1

@@ -1,8 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Amy.Codegen.Malloc
-  ( mallocDefinition
-  , callMalloc
+  ( callMalloc
   ) where
 
 import LLVM.AST
@@ -17,10 +16,13 @@ mallocDefinition :: Definition
 mallocDefinition =
   GlobalDefinition
   functionDefaults
-  { name = "GC_malloc"
+  { name = mallocFunctionName
   , parameters = ([Parameter mallocArgType (UnName 0) []], False)
   , LLVM.returnType = mallocReturnType
   }
+
+mallocFunctionName :: Name
+mallocFunctionName = "GC_malloc"
 
 -- N.B. This only applies to 64 bit platforms. We probably need to get the
 -- exact malloc type for the target machine.
@@ -40,6 +42,9 @@ mallocFunctionType =
 
 callMalloc :: Name -> Type -> BlockGen Operand
 callMalloc ptrName ty = do
+  -- Make sure malloc definition is generated
+  genExternalFunction mallocFunctionName mallocDefinition
+
   -- Compute size of type
   size <- sizeOfType ty
 

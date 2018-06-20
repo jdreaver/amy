@@ -17,6 +17,7 @@ library:
     - prettyprinter
     - scientific
     - text
+    - transformers
 
 tests:
   spec:

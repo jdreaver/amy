@@ -42,7 +42,7 @@ codegenModule (ANF.Module bindings externs typeDeclarations textPointers) =
         typeDefs = mapMaybe codegenTypeDeclaration typeDeclarations
         textPointers' = codegenTextPointer <$> textPointers
       bindings' <- traverse codegenTopLevelBinding bindings
-      pure $ mallocDefinition : externs' ++ typeDefs ++ textPointers' ++ bindings'
+      pure $ externs' ++ typeDefs ++ textPointers' ++ bindings'
   in
     defaultModule
     { moduleName = "amy-module"
