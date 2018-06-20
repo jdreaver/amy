@@ -20,15 +20,15 @@ void my_print(int z, MyPrintEnv* env) {
   printf("my_print: x: %d, y: %d, z: %d\n", x, y, z);
 }
 
-struct Closure make_my_print_closure(int x, int y)
+struct Closure* make_my_print_closure(int x, int y)
 {
-  struct MyPrintEnv env;
-  env.x = x;
-  env.y = y;
+  struct MyPrintEnv* env = (struct MyPrintEnv*)malloc(sizeof(struct MyPrintEnv*));
+  env->x = x;
+  env->y = y;
 
-  struct Closure closure;
-  closure.env = &env;
-  closure.func_ptr = &my_print;
+  struct Closure* closure = (struct Closure*)malloc(sizeof(struct Closure*));
+  closure->func_ptr = &my_print;
+  closure->env = env;
 
   return closure;
 }
@@ -43,19 +43,20 @@ typedef struct MyOtherEnv {
 void my_other(int z, MyOtherEnv* env) {
   int x = env->x;
   int y = env->y;
-  printf("my_other: x: %d, y: %d, z: %d\n", x, y, z);
+  int a = env->a;
+  printf("my_other: x: %d, y: %d, a: %d, z: %d\n", x, y, a, z);
 }
 
-struct Closure make_my_other_closure(int x, int y, int a)
+struct Closure* make_my_other_closure(int x, int y, int a)
 {
-  struct MyOtherEnv env;
-  env.x = x;
-  env.y = y;
-  env.a = a;
+  struct MyOtherEnv* env = (struct MyOtherEnv*)malloc(sizeof(struct MyOtherEnv*));
+  env->x = x;
+  env->y = y;
+  env->a = a;
 
-  struct Closure closure;
-  closure.env = &env;
-  closure.func_ptr = &my_other;
+  struct Closure* closure = (struct Closure*)malloc(sizeof(struct Closure*));
+  closure->func_ptr = &my_other;
+  closure->env = env;
 
   return closure;
 }
@@ -74,12 +75,12 @@ void call_closure(void (*func)(int, void*), void* env, int z) {
 
 int main() {
 	/* Allocate closures */
-  struct Closure my_print_closure = make_my_print_closure(5, 1);
-  struct Closure my_other_closure = make_my_other_closure(-1, -2, -3);
+  Closure* my_print_closure = make_my_print_closure(5, 1);
+  Closure* my_other_closure = make_my_other_closure(-1, -2, -3);
 
   /* Call a function that accepts closures with the closures. */
-  call_closure(my_print_closure.func_ptr, my_print_closure.env, 500);
-  call_closure(my_other_closure.func_ptr, my_other_closure.env, 1000);
+  call_closure(my_print_closure->func_ptr, my_print_closure->env, 500);
+  call_closure(my_other_closure->func_ptr, my_other_closure->env, 1000);
   /* Note that print_no_closure doesn't accept a closure, so we just pass a
    * void pointer. */
   call_closure((void (*)(int, void *))&print_no_closure, (void*)0, 2000);
