@@ -26,6 +26,12 @@ union EnvVal* realloc_env(size_t numargs, union EnvVal* env, size_t newargs) {
   return new_env;
 }
 
+union EnvVal* extend_env(size_t env1_size, union EnvVal* env1, size_t env2_size, union EnvVal* env2) {
+  union EnvVal* newenv = realloc_env(env1_size, env1, env2_size);
+  memcpy(newenv + env1_size, env2, env2_size * sizeof *env2);
+  return newenv;
+}
+
 union EnvVal* extend_env_1(size_t numargs, union EnvVal* env, union EnvVal x1) {
   union EnvVal* newenv = realloc_env(numargs, env, 1);
   newenv[numargs] = x1;
@@ -107,73 +113,40 @@ Closure* apply_closure_3(Closure* closure, union EnvVal x1, union EnvVal x2, uni
   return f(env);
 }
 
-Closure* call_closure_1(Closure* closure, union EnvVal x1) {
-  // Closure* result;
+Closure* call_closure(Closure* closure) {
   int arity = closure->arity;
   size_t numargs = closure->numargs;
+  Closure* (*f)() = (Closure* (*)(union EnvVal* env, union EnvVal, union EnvVal))closure->func_ptr;
+  union EnvVal* env = closure -> env;
+  Closure* result;
 
-  printf("call_closure_1, arity: %d, numargs: %zu, x1: %d\n", arity, numargs, x1.as_int);
-
-  switch (arity - numargs) {
-    case 1:
-      /* Proper number of args, just call */
-      return apply_closure_1(closure, x1);
-
-    default:
-      /* Not enough arguments, partial application */
-      return extend_closure_1(closure, x1);
+  size_t arity_diff = arity - numargs;
+  if (arity_diff < 0) {
+    /* Too many arguments, call then call again with extra arguments tacked on */
+	result = f(env); // f shouldn't use extra arguments, so we just leave them on
+	result->numargs += (-arity_diff);
+	result->env = extend_env(result->numargs, result->env, -arity_diff, env - arity_diff);
+    return call_closure(result);
+  } else if (arity_diff == 0) {
+	/* Proper number of args, just call */
+	return f(env);
+  } else {
+    /* Not enough arguments, partial application */
+	return closure;
   }
+
+}
+
+Closure* call_closure_1(Closure* closure, union EnvVal x1) {
+  return call_closure(extend_closure_1(closure, x1));
 }
 
 Closure* call_closure_2(Closure* closure, union EnvVal x1, union EnvVal x2) {
-  Closure* result;
-  int arity = closure->arity;
-  size_t numargs = closure->numargs;
-
-  printf("call_closure_2, arity: %d, numargs: %zu, x1: %d, x2: %d\n", arity, numargs, x1.as_int, x2.as_int);
-
-  switch (arity - numargs) {
-    case 1:
-      /* Too many arguments, call then call again */
-      result = apply_closure_1(closure, x1);
-      return call_closure_1(result, x2);
-
-    case 2:
-      /* Proper number of args, just call */
-      return apply_closure_2(closure, x1, x2);
-
-    default:
-      /* Not enough arguments, partial application */
-      return extend_closure_2(closure, x1, x2);
-  }
+  return call_closure(extend_closure_2(closure, x1, x2));
 }
 
 Closure* call_closure_3(Closure* closure, union EnvVal x1, union EnvVal x2, union EnvVal x3) {
-  Closure* result;
-  int arity = closure->arity;
-  size_t numargs = closure->numargs;
-
-  printf("call_closure_3, arity: %d, numargs: %zu, x1: %d, x2: %d, x3: %d\n", arity, numargs, x1.as_int, x2.as_int, x3.as_int);
-
-  switch (arity - numargs) {
-    case 1:
-      /* Too many arguments, call then call again */
-      result = apply_closure_1(closure, x1);
-      return call_closure_2(result, x2, x3);
-
-    case 2:
-      /* Too many arguments, call then call again */
-      result = apply_closure_2(closure, x1, x2);
-      return call_closure_1(result, x3);
-
-    case 3:
-      /* Proper number of args, just call */
-      return apply_closure_3(closure, x1, x2, x3);
-
-    default:
-      /* Not enough arguments, partial application */
-      return extend_closure_3(closure, x1, x2, x3);
-  }
+  return call_closure(extend_closure_3(closure, x1, x2, x3));
 }
 
 void my_print(int x, int y, int z) {
