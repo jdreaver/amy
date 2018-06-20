@@ -136,6 +136,34 @@ Closure* call_closure_2(Closure* closure, union EnvVal x1, union EnvVal x2) {
   }
 }
 
+Closure* call_closure_3(Closure* closure, union EnvVal x1, union EnvVal x2, union EnvVal x3) {
+  Closure* result;
+  int arity = closure->arity;
+  size_t numargs = closure->numargs;
+
+  printf("call_closure_3, arity: %d, numargs: %zu, x1: %d, x2: %d, x3: %d\n", arity, numargs, x1.as_int, x2.as_int, x3.as_int);
+
+  switch (arity - numargs) {
+    case 1:
+      /* Too many arguments, call then call again */
+      result = apply_pap_1(closure, x1);
+      return call_closure_2(result, x2, x3);
+
+    case 2:
+      /* Too many arguments, call then call again */
+      result = apply_pap_2(closure, x1, x2);
+      return call_closure_1(result, x3);
+
+    case 3:
+      /* Proper number of args, just call */
+      return apply_pap_3(closure, x1, x2, x3);
+
+    default:
+      /* Not enough arguments, partial application */
+      return extend_closure_3(closure, x1, x2, x3);
+  }
+}
+
 void my_print(int x, int y, int z) {
   printf("my_print: x: %d, y: %d, z: %d\n", x, y, z);
 }
@@ -210,6 +238,14 @@ int main() {
   call_closure_1(my_other_closure, one_thousand);
 
   printf("\nNow we are going nested\n");
-  Closure* nested = call_closure_1(my_print_closure_1, five_hundred);
-  call_closure_1(nested, one_thousand);
+  Closure* nested_1 = call_closure_1(my_print_closure_1, five_hundred);
+  call_closure_1(nested_1, one_thousand);
+
+  union EnvVal one, two, three, four;
+  one.as_int = 1;
+  two.as_int = 2;
+  three.as_double = 3.3333;
+  four.as_int = 4;
+  Closure* nested_3 = extend_closure_1(make_empty_closure(4, &my_other_wrapper), one);
+  call_closure_3(nested_3, two, three, four);
 }
