@@ -15,6 +15,7 @@ typedef struct Closure {
 union EnvVal {
   int as_int;
   double as_double;
+  char* as_string;
   Closure* as_closure;
 };
 
@@ -154,7 +155,6 @@ void my_print(int x, int y, int z) {
 }
 
 void my_print_wrapper_1(union EnvVal* env) {
-  printf("my_print_wrapper_1\n");
   int x = env[0].as_int;
   int y = env[1].as_int;
   int z = env[2].as_int;
@@ -170,7 +170,6 @@ struct Closure* make_my_print_closure_1(int x)
 }
 
 void my_print_wrapper_2(union EnvVal* env) {
-  printf("my_print_wrapper_2\n");
   int x = env[0].as_int;
   int y = env[1].as_int;
   int z = env[2].as_int;
@@ -186,16 +185,15 @@ struct Closure* make_my_print_closure_2(int x, int y)
   return extend_closure_2(make_empty_closure(3, &my_print_wrapper_2), xe, ye);
 }
 
-void my_other(int x, int y, double a, int z) {
-  printf("my_other: x: %d, y: %d, a: %f, z: %d\n", x, y, a, z);
+void my_other(int x, int y, double a, char* z) {
+  printf("my_other: x: %d, y: %d, a: %f, z: %s\n", x, y, a, z);
 }
 
 void my_other_wrapper(union EnvVal* env) {
-  printf("my_other_wrapper_1\n");
   int x = env[0].as_int;
   int y = env[1].as_int;
   double a = env[2].as_double;
-  int z = env[3].as_int;
+  char* z = env[3].as_string;
   my_other(x, y, a, z);
 }
 
@@ -215,12 +213,13 @@ int main() {
   Closure* my_print_closure_2 = make_my_print_closure_2(5, 1);
   Closure* my_other_closure = make_my_other_closure(-1, -2, -3.45);
 
-  union EnvVal one_thousand, five_hundred;
+  union EnvVal one_thousand, five_hundred, hello;
   five_hundred.as_int = 500;
   one_thousand.as_int = 1000;
+  hello.as_string = "hello";
   call_closure_2(my_print_closure_1, five_hundred, one_thousand);
   call_closure_1(my_print_closure_2, one_thousand);
-  call_closure_1(my_other_closure, one_thousand);
+  call_closure_1(my_other_closure, hello);
 
   printf("\nNow we are going nested\n");
   Closure* nested_1 = call_closure_1(my_print_closure_1, five_hundred);
@@ -232,5 +231,5 @@ int main() {
   three.as_double = 3.3333;
   four.as_int = 4;
   Closure* nested_3 = extend_closure_1(make_empty_closure(4, &my_other_wrapper), one);
-  call_closure_3(nested_3, two, three, four);
+  call_closure_3(nested_3, two, three, hello);
 }
