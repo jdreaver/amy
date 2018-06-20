@@ -1,3 +1,6 @@
+/* This program demonstrates closures in C, partial application, and
+   application of closures. */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,27 +36,6 @@ union EnvVal* extend_env(size_t env1_size, union EnvVal* env1, size_t env2_size,
   return newenv;
 }
 
-union EnvVal* extend_env_1(size_t numargs, union EnvVal* env, union EnvVal x1) {
-  union EnvVal* newenv = realloc_env(numargs, env, 1);
-  newenv[numargs] = x1;
-  return newenv;
-}
-
-union EnvVal* extend_env_2(size_t numargs, union EnvVal* env, union EnvVal x1, union EnvVal x2) {
-  union EnvVal* newenv = realloc_env(numargs, env, 2);
-  newenv[numargs] = x1;
-  newenv[numargs + 1] = x2;
-  return newenv;
-}
-
-union EnvVal* extend_env_3(size_t numargs, union EnvVal* env, union EnvVal x1, union EnvVal x2, union EnvVal x3) {
-  union EnvVal* newenv = realloc_env(numargs, env, 3);
-  newenv[numargs] = x1;
-  newenv[numargs + 1] = x2;
-  newenv[numargs + 2] = x3;
-  return newenv;
-}
-
 Closure* make_empty_closure(int arity, void (*f)()) {
   struct Closure* closure = (struct Closure*)malloc(sizeof *closure);
   closure->arity = arity;
@@ -72,46 +54,11 @@ Closure* copy_closure(Closure* closure) {
   return new_closure;
 }
 
-Closure* extend_closure_1(Closure* closure, union EnvVal x1) {
+Closure* extend_closure(Closure* closure, size_t env_size, union EnvVal* env) {
   struct Closure* new_closure = copy_closure(closure);
-  new_closure->env = extend_env_1(new_closure->numargs, new_closure->env, x1);
-  new_closure->numargs += 1;
+  new_closure->env = extend_env(new_closure->numargs, new_closure->env, env_size, env);
+  new_closure->numargs += env_size;
   return new_closure;
-}
-
-Closure* extend_closure_2(Closure* closure, union EnvVal x1, union EnvVal x2) {
-  struct Closure* new_closure = copy_closure(closure);
-  new_closure->env = extend_env_2(new_closure->numargs, new_closure->env, x1, x2);
-  new_closure->numargs += 2;
-  return new_closure;
-}
-
-Closure* extend_closure_3(Closure* closure, union EnvVal x1, union EnvVal x2, union EnvVal x3) {
-  struct Closure* new_closure = copy_closure(closure);
-  new_closure->env = extend_env_3(new_closure->numargs, new_closure->env, x1, x2, x3);
-  new_closure->numargs += 3;
-  return new_closure;
-}
-
-Closure* apply_closure_1(Closure* closure, union EnvVal x1) {
-  Closure* (*f)() = (Closure* (*)(union EnvVal* env))closure->func_ptr;
-  union EnvVal* env = extend_env_1(closure->numargs, closure->env, x1);
-  printf("apply_closure_1, x1: %d\n", x1.as_int);
-  return f(env);
-}
-
-Closure* apply_closure_2(Closure* closure, union EnvVal x1, union EnvVal x2) {
-  Closure* (*f)() = (Closure* (*)(union EnvVal* env, union EnvVal, union EnvVal))closure->func_ptr;
-  union EnvVal* env = extend_env_2(closure->numargs, closure->env, x1, x2);
-  printf("apply_closure_2, x1: %d, x2: %d\n", x1.as_int, x2.as_int);
-  return f(env);
-}
-
-Closure* apply_closure_3(Closure* closure, union EnvVal x1, union EnvVal x2, union EnvVal x3) {
-  printf("apply_closure_3\n");
-  Closure* (*f)() = (Closure* (*)(union EnvVal* env, union EnvVal, union EnvVal))closure->func_ptr;
-  union EnvVal* env = extend_env_3(closure->numargs, closure->env, x1, x2, x3);
-  return f(env);
 }
 
 Closure* call_closure(Closure* closure) {
@@ -125,9 +72,7 @@ Closure* call_closure(Closure* closure) {
   if (arity_diff < 0) {
     /* Too many arguments, call then call again with extra arguments tacked on */
 	result = f(env); // f shouldn't use extra arguments, so we just leave them on
-	result->numargs += (-arity_diff);
-	result->env = extend_env(result->numargs, result->env, -arity_diff, env - arity_diff);
-    return call_closure(result);
+    return call_closure(extend_closure(result, -arity_diff, env - arity_diff));
   } else if (arity_diff == 0) {
 	/* Proper number of args, just call */
 	return f(env);
@@ -135,19 +80,18 @@ Closure* call_closure(Closure* closure) {
     /* Not enough arguments, partial application */
 	return closure;
   }
-
 }
 
 Closure* call_closure_1(Closure* closure, union EnvVal x1) {
-  return call_closure(extend_closure_1(closure, x1));
+  return call_closure(extend_closure(closure, 1, (union EnvVal[1]){x1}));
 }
 
 Closure* call_closure_2(Closure* closure, union EnvVal x1, union EnvVal x2) {
-  return call_closure(extend_closure_2(closure, x1, x2));
+  return call_closure(extend_closure(closure, 2, (union EnvVal[2]){x1, x2}));
 }
 
 Closure* call_closure_3(Closure* closure, union EnvVal x1, union EnvVal x2, union EnvVal x3) {
-  return call_closure(extend_closure_3(closure, x1, x2, x3));
+  return call_closure(extend_closure(closure, 3, (union EnvVal[3]){x1, x2, x3}));
 }
 
 void my_print(int x, int y, int z) {
@@ -165,8 +109,9 @@ struct Closure* make_my_print_closure_1(int x)
 {
   union EnvVal xe;
   xe.as_int = x;
+  union EnvVal env[] = {xe};
 
-  return extend_closure_1(make_empty_closure(3, &my_print_wrapper_1), xe);
+  return extend_closure(make_empty_closure(3, &my_print_wrapper_1), 1, env);
 }
 
 void my_print_wrapper_2(union EnvVal* env) {
@@ -181,8 +126,9 @@ struct Closure* make_my_print_closure_2(int x, int y)
   union EnvVal xe, ye;
   xe.as_int = x;
   ye.as_int = y;
+  union EnvVal env[] = {xe, ye};
 
-  return extend_closure_2(make_empty_closure(3, &my_print_wrapper_2), xe, ye);
+  return extend_closure(make_empty_closure(3, &my_print_wrapper_2), 2, env);
 }
 
 void my_other(int x, int y, double a, char* z) {
@@ -203,8 +149,9 @@ struct Closure* make_my_other_closure(int x, int y, double a)
   xe.as_int = x;
   ye.as_int = y;
   ae.as_double = a;
+  union EnvVal env[] = {xe, ye, ae};
 
-  return extend_closure_3(make_empty_closure(4, &my_other_wrapper), xe, ye, ae);
+  return extend_closure(make_empty_closure(4, &my_other_wrapper), 3, env);
 }
 
 int main() {
@@ -225,11 +172,10 @@ int main() {
   Closure* nested_1 = call_closure_1(my_print_closure_1, five_hundred);
   call_closure_1(nested_1, one_thousand);
 
-  union EnvVal one, two, three, four;
+  union EnvVal one, two, three;
   one.as_int = 1;
   two.as_int = 2;
   three.as_double = 3.3333;
-  four.as_int = 4;
-  Closure* nested_3 = extend_closure_1(make_empty_closure(4, &my_other_wrapper), one);
+  Closure* nested_3 = call_closure_1(make_empty_closure(4, &my_other_wrapper), one);
   call_closure_3(nested_3, two, three, hello);
 }
