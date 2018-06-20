@@ -4,84 +4,184 @@
 /* Generic closure struct. The function pointer and environment are both void
  * because they are meant to be casted to the correct types. */
 typedef struct Closure {
+  int arity;
   void (*func_ptr)();
-  void* env;
+  union EnvVal* env;
 } Closure;
 
-/* my_print function and its closure environment MyPrintEnv */
-typedef struct MyPrintEnv {
-  int x;
-  int y;
-} MyPrintEnv;
+/* All values are casted to this union so environments are generic. */
+union EnvVal {
+  int as_int;
+  double as_double;
+  Closure* as_closure;
+};
 
-void my_print(int z, MyPrintEnv* env) {
-  int x = env->x;
-  int y = env->y;
+Closure* apply_pap_1(Closure* closure, union EnvVal x1) {
+  Closure* (*f1)() = (Closure* (*)(union EnvVal* env, union EnvVal))closure->func_ptr;
+  union EnvVal* env = closure->env;
+  return f1(env, x1);
+}
+
+/* TODO: When we make a closure from an existing closure, we have to properly
+   handle the environment! Maybe extend EnvVal to allow Closure*, and then
+   make the original closure the first argument. */
+Closure* make_pap_1(int original_arity, void (*f)(), union EnvVal x1) {
+  union EnvVal* env = (union EnvVal*)malloc(sizeof(union EnvVal) * 1);
+  env[0] = x1;
+
+  struct Closure* closure = (struct Closure*)malloc(sizeof(struct Closure*));
+  closure->arity = original_arity - 1;
+  closure->func_ptr = f;
+  closure->env = env;
+
+  return closure;
+}
+
+Closure* apply_pap_2(Closure* closure, union EnvVal x1, union EnvVal x2) {
+  Closure* (*f2)() = (Closure* (*)(union EnvVal* env, union EnvVal, union EnvVal))closure->func_ptr;
+  union EnvVal* env = closure->env;
+  return f2(env, x1, x2);
+}
+
+Closure* make_pap_2(int original_arity, void (*f)(), union EnvVal x1, union EnvVal x2) {
+  union EnvVal* env = (union EnvVal*)malloc(sizeof(union EnvVal) * 2);
+  env[0] = x1;
+  env[1] = x2;
+
+  struct Closure* closure = (struct Closure*)malloc(sizeof(struct Closure*));
+  closure->arity = original_arity - 2;
+  closure->func_ptr = f;
+  closure->env = env;
+
+  return closure;
+}
+
+Closure* apply_pap_3(Closure* closure, union EnvVal x1, union EnvVal x2, union EnvVal x3) {
+  Closure* (*f3)() = (Closure* (*)(union EnvVal* env, union EnvVal, union EnvVal))closure->func_ptr;
+  union EnvVal* env = closure->env;
+  return f3(env, x1, x2, x3);
+}
+
+Closure* make_pap_3(int original_arity, void (*f)(), union EnvVal x1, union EnvVal x2, union EnvVal x3) {
+  union EnvVal* env = (union EnvVal*)malloc(sizeof(union EnvVal) * 3);
+  env[0] = x1;
+  env[1] = x2;
+  env[2] = x3;
+
+  struct Closure* closure = (struct Closure*)malloc(sizeof(struct Closure*));
+  closure->arity = original_arity - 3;
+  closure->func_ptr = f;
+  closure->env = env;
+
+  return closure;
+}
+
+Closure* call_closure_1(Closure* closure, union EnvVal x1) {
+  // Closure* result;
+  int arity = closure->arity;
+  union EnvVal closure_env_val;
+
+  printf("Inside call_closure_1\n");
+
+  switch (arity) {
+    case 1:
+      /* Proper number of args, just call */
+      return apply_pap_1(closure, x1);
+
+    default:
+      /* Not enough arguments, partial application */
+      closure_env_val.as_closure = closure;
+      return make_pap_2(arity, (void (*)())&apply_pap_2, closure_env_val, x1);
+  }
+}
+
+Closure* call_closure_2(Closure* closure, union EnvVal x1, union EnvVal x2) {
+  Closure* result;
+  int arity = closure->arity;
+  union EnvVal closure_env_val;
+
+  printf("Inside call_closure_2\n");
+
+  switch (arity) {
+    case 1:
+      /* Too many arguments, call then call again */
+      result = apply_pap_1(closure, x1);
+      return call_closure_1(result, x2);
+
+    case 2:
+      /* Proper number of args, just call */
+      return apply_pap_2(closure, x1, x2);
+
+    default:
+      /* Not enough arguments, partial application */
+      closure_env_val.as_closure = closure;
+      return make_pap_3(arity, (void (*)())&apply_pap_3, closure_env_val, x1, x2);
+  }
+}
+
+void my_print(int x, int y, int z) {
   printf("my_print: x: %d, y: %d, z: %d\n", x, y, z);
 }
 
-struct Closure* make_my_print_closure(int x, int y)
+void my_print_wrapper_1(union EnvVal* env, int y, int z) {
+  int x = env[0].as_int;
+  my_print(x, y, z);
+}
+
+struct Closure* make_my_print_closure_1(int x)
 {
-  struct MyPrintEnv* env = (struct MyPrintEnv*)malloc(sizeof(struct MyPrintEnv*));
-  env->x = x;
-  env->y = y;
+  union EnvVal xe;
+  xe.as_int = x;
 
-  struct Closure* closure = (struct Closure*)malloc(sizeof(struct Closure*));
-  closure->func_ptr = &my_print;
-  closure->env = env;
-
-  return closure;
+  return make_pap_1(3, &my_print_wrapper_1, xe);
 }
 
-/* my_other function and its closure environment MyOtherEnv */
-typedef struct MyOtherEnv {
-  int x;
-  int y;
-  int a;
-} MyOtherEnv;
-
-void my_other(int z, MyOtherEnv* env) {
-  int x = env->x;
-  int y = env->y;
-  int a = env->a;
-  printf("my_other: x: %d, y: %d, a: %d, z: %d\n", x, y, a, z);
+void my_print_wrapper_2(union EnvVal* env, int z) {
+  int x = env[0].as_int;
+  int y = env[1].as_int;
+  my_print(x, y, z);
 }
 
-struct Closure* make_my_other_closure(int x, int y, int a)
+struct Closure* make_my_print_closure_2(int x, int y)
 {
-  struct MyOtherEnv* env = (struct MyOtherEnv*)malloc(sizeof(struct MyOtherEnv*));
-  env->x = x;
-  env->y = y;
-  env->a = a;
+  union EnvVal xe, ye;
+  xe.as_int = x;
+  ye.as_int = y;
 
-  struct Closure* closure = (struct Closure*)malloc(sizeof(struct Closure*));
-  closure->func_ptr = &my_other;
-  closure->env = env;
-
-  return closure;
+  return make_pap_2(3, &my_print_wrapper_2, xe, ye);
 }
 
-/* Function that doesn't accept a closure, but we will nevertheless pretend it
- * does. */
-void print_no_closure(int z) {
-  printf("print_no_closure: z: %d\n", z);
+void my_other(int x, int y, double a, int z) {
+  printf("my_other: x: %d, y: %d, a: %f, z: %d\n", x, y, a, z);
 }
 
-/* Function to call a generic function. */
-void call_closure(void (*func)(int, void*), void* env, int z) {
-  printf("Inside call_closure\n");
-  func(z, env);
+void my_other_wrapper(union EnvVal* env, int z) {
+  int x = env[0].as_int;
+  int y = env[1].as_int;
+  double a = env[2].as_double;
+  my_other(x, y, a, z);
+}
+
+struct Closure* make_my_other_closure(int x, int y, double a)
+{
+  union EnvVal xe, ye, ae;
+  xe.as_int = x;
+  ye.as_int = y;
+  ae.as_double = a;
+
+  return make_pap_3(4, &my_other_wrapper, xe, ye, ae);
 }
 
 int main() {
-	/* Allocate closures */
-  Closure* my_print_closure = make_my_print_closure(5, 1);
-  Closure* my_other_closure = make_my_other_closure(-1, -2, -3);
+  /* Allocate closures */
+  Closure* my_print_closure_1 = make_my_print_closure_1(100);
+  Closure* my_print_closure_2 = make_my_print_closure_2(5, 1);
+  Closure* my_other_closure = make_my_other_closure(-1, -2, -3.45);
 
-  /* Call a function that accepts closures with the closures. */
-  call_closure(my_print_closure->func_ptr, my_print_closure->env, 500);
-  call_closure(my_other_closure->func_ptr, my_other_closure->env, 1000);
-  /* Note that print_no_closure doesn't accept a closure, so we just pass a
-   * void pointer. */
-  call_closure((void (*)(int, void *))&print_no_closure, (void*)0, 2000);
+  union EnvVal one_thousand, five_hundred;
+  five_hundred.as_int = 500;
+  one_thousand.as_int = 1000;
+  call_closure_2(my_print_closure_1, five_hundred, one_thousand);
+  call_closure_1(my_print_closure_2, one_thousand);
+  call_closure_1(my_other_closure, one_thousand);
 }
