@@ -11,7 +11,7 @@ module Amy.ANF.Monad
   , getTyConDefinitionType
   , getTyConType
   , getDataConInfo
-  , isIdentTopLevel
+  , getIdentArity
   , makeTextPointer
   , getTextPointers
   ) where
@@ -21,10 +21,7 @@ import Control.Monad.State.Strict
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.Text (Text, pack)
-import GHC.Exts (fromList)
 
 import Amy.ANF.AST as ANF
 import Amy.ANF.TypeRep
@@ -41,11 +38,11 @@ data ANFConvertRead
   = ANFConvertRead
   { anfConvertReadTypeReps :: !(Map TyConName ANF.Type)
   , anfConvertReadDataConInfos :: !(Map DataConName (ANF.Type, ConstructorIndex))
-  , anfConvertReadTopLevelNames :: !(Set IdentName)
+  , anfConvertReadIdentArities :: !(Map IdentName Int)
   } deriving (Show, Eq)
 
-anfConvertRead :: [IdentName] -> [C.TypeDeclaration] -> ANFConvertRead
-anfConvertRead topLevelNames typeDeclarations =
+anfConvertRead :: [(IdentName, Int)] -> [C.TypeDeclaration] -> ANFConvertRead
+anfConvertRead arities typeDeclarations =
   let
     allTypeDecls = typeDeclarations ++ (fromPrimTypeDefinition <$> allPrimTypeDefinitions)
     typeRepMap = Map.fromList $ (\t -> (C.tyConDefinitionName $ C.typeDeclarationTypeName t, typeRep t)) <$> allTypeDecls
@@ -54,7 +51,7 @@ anfConvertRead topLevelNames typeDeclarations =
     ANFConvertRead
     { anfConvertReadTypeReps = typeRepMap
     , anfConvertReadDataConInfos = dataConInfos
-    , anfConvertReadTopLevelNames = fromList topLevelNames
+    , anfConvertReadIdentArities = Map.fromList arities
     }
 
 mkDataConInfo :: C.TypeDeclaration -> [(DataConName, (ANF.Type, ConstructorIndex))]
@@ -96,8 +93,8 @@ getDataConInfo con = fromMaybe err . Map.lookup con <$> asks anfConvertReadDataC
   where
    err = error $ "Couldn't find TypeCompilationMethod of TyConDefinition " ++ show con
 
-isIdentTopLevel :: IdentName -> ANFConvert Bool
-isIdentTopLevel ident = Set.member ident <$> asks anfConvertReadTopLevelNames
+getIdentArity :: IdentName -> ANFConvert Arity
+getIdentArity ident = maybe UnknownArity KnownArity . Map.lookup ident <$> asks anfConvertReadIdentArities
 
 makeTextPointer :: Text -> ANFConvert ANF.TextPointer
 makeTextPointer text = do

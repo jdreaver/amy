@@ -19,7 +19,8 @@ prettyType PrimDoubleType = "PrimDouble"
 prettyType PrimTextType = "PrimText"
 prettyType (PointerType ty) = "Pointer" <+> parens (prettyType ty)
 prettyType OpaquePointerType = "OpaquePointer"
-prettyType (FuncType args retTy) = "Func" <> groupOrHang (tupled (prettyType <$> args) <+> "=>" <+> prettyType retTy)
+prettyType (UnknownFuncType args retTy) = "UnknownFunc" <> groupOrHang (tupled (prettyType <$> args) <+> "=>" <+> prettyType retTy)
+prettyType (KnownFuncType args retTy) = "KnownFunc" <> groupOrHang (tupled (prettyType <$> args) <+> "=>" <+> prettyType retTy)
 prettyType (EnumType bits) = "Enum" <+> pretty bits
 prettyType (TaggedUnionType (TyConName name) bits) = "TaggedUnion" <+> pretty name <+> pretty bits
 prettyType (RecordType rows) =
@@ -45,7 +46,7 @@ prettyTypeDeclaration' (TypeDeclaration tyName _ cons) =
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding ident args retTy body) =
-  prettyBindingType (prettyIdent ident) (prettyType $ FuncType (typedType <$> args) retTy) <>
+  prettyBindingType (prettyIdent ident) (prettyType $ KnownFuncType (typedType <$> args) retTy) <>
   hardline <>
   prettyBinding (prettyIdent ident) (prettyIdent . typedValue <$> args) (prettyExpr body)
 

@@ -27,12 +27,12 @@ normalizeModule mod' =
     bindings = concatMap NE.toList bindingGroups
 
     -- Record top-level names
-    topLevelNames =
-      (C.bindingName <$> bindings)
-      ++ (C.externName <$> externs)
+    bindingArities = (\b -> (C.bindingName b, length $ C.bindingArgs b)) <$> bindings
+    externArities = (\e -> (C.externName e, length (typeToNonEmpty $ C.externType e) - 1)) <$> externs
+    arities = bindingArities ++ externArities
 
     -- Actual conversion
-    convertRead = anfConvertRead topLevelNames typeDeclarations
+    convertRead = anfConvertRead arities typeDeclarations
   in runANFConvert convertRead $ do
     typeDeclarations' <- traverse convertTypeDeclaration typeDeclarations
     externs' <- traverse convertExtern externs
@@ -41,7 +41,9 @@ normalizeModule mod' =
     pure $ ANF.Module bindings' externs' typeDeclarations' textPointers
 
 convertExtern :: C.Extern -> ANFConvert ANF.Extern
-convertExtern (C.Extern name ty) = ANF.Extern name <$> convertType ty
+convertExtern (C.Extern name ty) = do
+  arity <- getIdentArity name
+  ANF.Extern name <$> convertType arity ty
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANFConvert ANF.TypeDeclaration
 convertTypeDeclaration (C.TypeDeclaration tyConDef con) = do
@@ -51,7 +53,7 @@ convertTypeDeclaration (C.TypeDeclaration tyConDef con) = do
 
 convertDataConDefinition :: C.DataConDefinition -> ANFConvert ANF.DataConDefinition
 convertDataConDefinition (C.DataConDefinition conName mTyArg) = do
-  mTyArg' <- traverse convertType mTyArg
+  mTyArg' <- traverse (convertType UnknownArity) mTyArg
   pure
     ANF.DataConDefinition
     { ANF.dataConDefinitionName = conName
@@ -68,8 +70,8 @@ convertDataCon con = do
     , ANF.dataConIndex = index
     }
 
-convertType :: C.Type -> ANFConvert ANF.Type
-convertType ty = go (typeToNonEmpty ty)
+convertType :: Arity -> C.Type -> ANFConvert ANF.Type
+convertType arity ty = go (typeToNonEmpty ty)
  where
   go :: NonEmpty C.Type -> ANFConvert ANF.Type
   go (ty' :| []) =
@@ -82,33 +84,44 @@ convertType ty = go (typeToNonEmpty ty)
           _ -> error $ "Can't convert non-TyCon TyApp yet " ++ show ty'
       -- N.B. ANF/LLVM doesn't care about polymorphic records
       C.TyRecord rows _ -> mkRecordType rows
-      C.TyFun{} -> mkFunctionType ty
-      C.TyForall _ ty'' -> convertType ty''
-  go _ = mkFunctionType ty
+      C.TyFun{} -> mkFunctionType arity ty
+      C.TyForall _ ty'' -> convertType arity ty''
+  go _ = mkFunctionType arity ty
 
 mkRecordType :: Map RowLabel C.Type -> ANFConvert ANF.Type
 mkRecordType rows = do
   rows' <- for (Map.toAscList rows) $ \(label, ty) -> do
-    ty' <- convertType ty
+    ty' <- convertType UnknownArity ty
     pure (label, ty')
   pure $ RecordType rows'
 
-mkFunctionType :: C.Type -> ANFConvert ANF.Type
-mkFunctionType ty = do
-  args <- traverse convertType (NE.init ts)
-  returnType <- convertType $ NE.last ts
-  pure $ FuncType args returnType
+mkFunctionType :: Arity -> C.Type -> ANFConvert ANF.Type
+mkFunctionType arity ty =
+  case arity of
+    KnownArity numArgs -> do
+      let (args, retTys) = NE.splitAt numArgs tyNE
+      args' <- traverse (convertType UnknownArity) args
+      returnType <- convertType UnknownArity $ foldr1 TyFun retTys
+      pure $ KnownFuncType args' returnType
+    UnknownArity -> do
+      let
+        args = NE.init tyNE
+        retTy = NE.last tyNE
+      args' <- traverse (convertType UnknownArity) args
+      retTy' <- convertType UnknownArity retTy
+      pure $ UnknownFuncType args' retTy'
  where
-  ts = typeToNonEmpty ty
+  tyNE = typeToNonEmpty ty
 
 typeToNonEmpty :: C.Type -> NonEmpty C.Type
 typeToNonEmpty (t1 `C.TyFun` t2) = NE.cons t1 (typeToNonEmpty t2)
 typeToNonEmpty ty = ty :| []
 
 convertTypedIdent :: C.Typed IdentName -> ANFConvert (ANF.Typed IdentName)
-convertTypedIdent (C.Typed ty arg) = do
-  ty' <- convertType ty
-  pure $ ANF.Typed ty' arg
+convertTypedIdent (C.Typed ty ident) = do
+  arity <- getIdentArity ident
+  ty' <- convertType arity ty
+  pure $ ANF.Typed ty' ident
 
 normalizeExpr
   :: Text -- ^ Base name for generated variables
@@ -120,24 +133,25 @@ normalizeExpr _ (C.ERecord rows) =
     pure $ ANF.ERecord $ Map.fromList rows'
 normalizeExpr name (C.ERecordSelect expr label ty) =
   normalizeName name expr $ \val ->
-    ANF.ERecordSelect val label <$> convertType ty
+    ANF.ERecordSelect val label <$> convertType UnknownArity ty
 normalizeExpr name var@C.EVar{} = normalizeName name var (pure . ANF.EVal)
 normalizeExpr name expr@(C.ECase (C.Case scrutinee bind matches defaultExpr)) =
   normalizeName name scrutinee $ \scrutineeVal -> do
     bind' <- convertTypedIdent bind
     matches' <- traverse (normalizeMatch name) matches
     defaultExpr' <- traverse (normalizeExpr name) defaultExpr
-    ty <- convertType $ expressionType expr
+    ty <- convertType UnknownArity $ expressionType expr
     pure $ ANF.ECase (ANF.Case scrutineeVal bind' matches' defaultExpr' ty)
 normalizeExpr name (C.ELet (C.Let bindings expr)) = do
   bindings' <- traverse normalizeLetBinding bindings
   expr' <- normalizeExpr name expr
   pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal (NE.toList bindings') expr'
 normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
-  -- TODO: More robust arity checking besides just unfolding App nodes.
+  -- TODO: Refactor this, it is getting huge and hard to understand. Maybe do
+  -- case analysis before normalizeName so there are fewer options.
   let func :| args = C.unfoldApp app
   normalizeList (normalizeName name) (toList args) $ \argVals -> do
-    retTy' <- convertType retTy
+    retTy' <- convertType UnknownArity retTy
     case func of
       C.EVar (C.VCons (C.Typed _ con)) -> do
         con' <- convertDataCon con
@@ -155,7 +169,7 @@ normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
           case funcVal of
             ANF.Lit lit -> error $ "Encountered lit function application " ++ show lit
             ANF.ConEnum _ con -> error $ "Encountered con enum function application " ++ show con
-            ANF.Var (tyIdent@(ANF.Typed _ ident)) _ ->
+            ANF.Var (tyIdent@(ANF.Typed _ ident)) arity ->
               -- TODO: We need something more robust besides looking up by name.
               -- The Renamer should maybe handle resolving this name, or when we
               -- have modules we should make sure we are looking at the Prim
@@ -164,7 +178,17 @@ normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
                 -- Primitive operation
                 Just prim -> pure $ ANF.EPrimOp $ ANF.App prim argVals retTy'
                 -- Default, just a function call
-                Nothing -> pure $ ANF.EApp $ ANF.App tyIdent argVals retTy'
+                Nothing ->
+                  let app' = ANF.EApp $ ANF.App tyIdent argVals retTy'
+                  in
+                    case arity of
+                      -- TODO: Call closure
+                      UnknownArity -> pure app'
+                      KnownArity numArgs ->
+                        -- TODO: Don't error here, make closure and call
+                        if numArgs /= length argVals
+                        then error $ "Wrong arity in ANF conversion " ++ show app
+                        else pure app'
 normalizeExpr name (C.EParens expr) = normalizeExpr name expr
 
 normalizeLiteral :: C.Literal -> ANFConvert ANF.Literal
@@ -177,20 +201,16 @@ normalizeName _ (C.ELit lit) c = c =<< ANF.Lit <$> normalizeLiteral lit
 normalizeName name (C.EVar var) c =
   case var of
     C.VVal (C.Typed ty ident) -> do
-      ty' <- convertType ty
-      isTopLevel <- isIdentTopLevel ident
+      arity <- getIdentArity ident
+      ty' <- convertType arity ty
       let ident' = ANF.Typed ty' ident
-      if isTopLevel
+      case arity of
         -- Top-level values need to be first called as functions
-        then
-          case ty' of
-            FuncType{} -> c $ ANF.Var ident' isTopLevel
-            _ -> mkNormalizeLet name (ANF.EApp $ ANF.App ident' [] ty') ty' c
-        -- Not a top-level value, just return
-        else c $ ANF.Var ident' isTopLevel
+        KnownArity 0 -> mkNormalizeLet name (ANF.EApp $ ANF.App ident' [] ty') ty' c
+        _ -> c $ ANF.Var ident' arity
     C.VCons (C.Typed ty con) -> do
       con' <- convertDataCon con
-      ty' <- convertType ty
+      ty' <- convertType UnknownArity ty
       case ty' of
         EnumType intBits -> c $ ConEnum intBits con'
         TaggedUnionType structName intBits ->
@@ -198,13 +218,13 @@ normalizeName name (C.EVar var) c =
         _ -> error $ "Invalid type for constructor in normalizeName " ++ show ty'
 normalizeName name expr c = do
   expr' <- normalizeExpr name expr
-  exprType <- convertType $ expressionType expr
+  exprType <- convertType UnknownArity $ expressionType expr
   mkNormalizeLet name expr' exprType c
 
 mkNormalizeLet :: Text -> ANF.Expr -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 mkNormalizeLet name expr exprType c = do
   newIdent <- freshIdent name
-  body <- c $ ANF.Var (ANF.Typed exprType newIdent) False
+  body <- c $ ANF.Var (ANF.Typed exprType newIdent) UnknownArity
   pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal [ANF.LetValBinding newIdent exprType expr] body
 
 normalizeBinding :: Maybe Text -> C.Binding -> ANFConvert ANF.Binding
@@ -214,13 +234,14 @@ normalizeBinding mName (C.Binding ident _ args retTy body) = do
   let subName = fromMaybe (unIdentName ident) mName
   body' <- normalizeExpr subName body
   args' <- traverse convertTypedIdent args
-  retTy' <- convertType retTy
+  arity <- getIdentArity ident
+  retTy' <- convertType arity retTy
   pure $ ANF.Binding ident args' retTy' body'
 
 normalizeLetBinding :: C.Binding -> ANFConvert ANF.LetValBinding
 normalizeLetBinding (C.Binding ident ty [] _ body) = do
   body' <- normalizeExpr (unIdentName ident) body
-  ty' <- convertType ty
+  ty' <- convertType UnknownArity ty
   pure $ ANF.LetValBinding ident ty' body'
 normalizeLetBinding bind@C.Binding{} =
   error $ "Encountered let binding with arguments. Functions not allowed in ANF. " ++ show bind
@@ -236,7 +257,7 @@ convertPattern (C.PLit lit) = ANF.PLit <$> normalizeLiteral lit
 convertPattern (C.PCons (C.PatCons cons mArg retTy)) = do
   cons' <- convertDataCon cons
   mArg' <- traverse convertTypedIdent mArg
-  retTy' <- convertType retTy
+  retTy' <- convertType UnknownArity retTy
   pure $ ANF.PCons $ ANF.PatCons cons' mArg' retTy'
 
 -- | Helper for normalizing lists of things
@@ -248,7 +269,7 @@ normalizeList norm (x:xs) c =
 normalizeRows :: [(RowLabel, C.Typed C.Expr)] -> ([(RowLabel, ANF.Typed ANF.Val)] -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 normalizeRows [] c = c []
 normalizeRows ((RowLabel label, C.Typed ty x):xs) c = do
-  ty' <- convertType ty
+  ty' <- convertType UnknownArity ty
   normalizeName label x $ \v -> normalizeRows xs $ \vs -> c ((RowLabel label, ANF.Typed ty' v):vs)
 
 -- | ANF conversion produces a lot of nested and adjacent letval expressions.

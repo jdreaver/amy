@@ -7,6 +7,7 @@ module Amy.ANF.AST
   , TypeDeclaration(..)
   , DataConDefinition(..)
   , Val(..)
+  , Arity(..)
   , Literal(..)
   , TextPointer(..)
   , DataCon(..)
@@ -71,9 +72,16 @@ data DataConDefinition
   } deriving (Show, Eq, Ord)
 
 data Val
-  = Var !(Typed IdentName) !Bool -- Bool means isTopLevel
+  = Var !(Typed IdentName) !Arity
   | Lit !Literal
   | ConEnum !Word32 !DataCon
+  deriving (Show, Eq)
+
+data Arity
+  = UnknownArity
+    -- ^ Unknown function, like when a function is used as an argument
+  | KnownArity !Int
+    -- ^ Known function, of course with known arity
   deriving (Show, Eq)
 
 data Literal
@@ -168,7 +176,8 @@ data Type
   | PointerType !Type
   | OpaquePointerType
     -- ^ Used for polymorphic types
-  | FuncType ![Type] !Type
+  | UnknownFuncType ![Type] !Type -- TODO: Leave off all types. This should be a closure.
+  | KnownFuncType ![Type] !Type
   | EnumType !Word32
   | TaggedUnionType !TyConName !Word32
   | RecordType ![(RowLabel, Type)]
