@@ -28,6 +28,7 @@ RUN \
     clang-6.0 \
     llvm-6.0-dev && \
   ln -s /usr/bin/clang-6.0 /usr/bin/clang && \
+  ln -s /usr/bin/llvm-link-6.0 /usr/bin/llvm-link && \
   rm -rf /var/lib/apt/lists/*
 
 # Install Boehm garbage collector
