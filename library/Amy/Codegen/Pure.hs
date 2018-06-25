@@ -24,6 +24,7 @@ import qualified LLVM.AST.Linkage as L
 
 import Amy.ANF as ANF
 import Amy.Codegen.CaseBlocks
+import Amy.Codegen.Closures
 import Amy.Codegen.Malloc
 import Amy.Codegen.Monad
 import Amy.Codegen.TypeConversion
@@ -197,7 +198,6 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
       -- integers and sum types.
       _ -> error $ "Cannot generate switch expression for doubles" ++ show bindingTy
 
-
   let
     switchNames = (\(CaseLiteralBlock _ switchName _ constant _) -> (constant, switchName)) <$> literalBlocks
   terminateBlock (Do $ Switch switchOp switchDefaultBlockName switchNames []) switchDefaultBlockName
@@ -233,8 +233,11 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
     allOpsAndBlocks = maybe id (:) mDefaultOpAndBlock matchOpsAndBlocks
   addInstruction $ name' := Phi endTy allOpsAndBlocks []
   pure $ LocalReference endTy name'
-codegenExpr' _ (ANF.ECreateClosure cc) = error $ "Can't create closure yet " ++ show cc
-codegenExpr' _ (ANF.EEvalClosure ec) = error $ "Can't eval closure yet " ++ show ec
+codegenExpr' name' (ANF.ECreateClosure (CreateClosure func arity args')) = do
+  funcTy <- maybe (error $ "Couldn't find topLevelType for " ++ show func) llvmType <$> topLevelType func
+  createClosure name' (identToName func) funcTy arity (valOperand <$> args')
+codegenExpr' name' (ANF.EEvalClosure (EvalClosure val args' retTy)) =
+  callClosure name' (valOperand val) (valOperand <$> args') (llvmType retTy)
 codegenExpr' name' (ANF.EKnownFuncApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = do
   topLevelTy <- topLevelType ident
   let
@@ -374,7 +377,7 @@ llvmType PrimDoubleType = FloatingPointType DoubleFP
 llvmType PrimTextType = LLVM.PointerType (IntegerType 8) (AddrSpace 0)
 llvmType (ANF.PointerType ty) = LLVM.PointerType (llvmType ty) (AddrSpace 0)
 llvmType OpaquePointerType = LLVM.PointerType (IntegerType 64) (AddrSpace 0)
-llvmType ClosureType = LLVM.PointerType (NamedTypeReference "Closure") (AddrSpace 0)
+llvmType ClosureType = LLVM.PointerType (NamedTypeReference closureStructName) (AddrSpace 0)
 llvmType (KnownFuncType argTys retTy) = llvmFuncType argTys retTy
 llvmType (EnumType intBits) = IntegerType intBits
 llvmType (TaggedUnionType structName _) = LLVM.PointerType (NamedTypeReference (textToName $ unTyConName structName)) (AddrSpace 0)

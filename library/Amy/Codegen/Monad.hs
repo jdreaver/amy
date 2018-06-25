@@ -14,7 +14,8 @@ module Amy.Codegen.Monad
   , freshId
   , freshUnName
   , topLevelType
-  , genExternalFunction
+  , genExternalGlobal
+  , genExternalType
   ) where
 
 import Control.Monad.State.Strict
@@ -23,6 +24,7 @@ import Data.Foldable (for_)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import LLVM.AST as LLVM
+import qualified LLVM.AST.Global as G
 
 import Amy.ANF.AST as ANF
 
@@ -112,8 +114,14 @@ freshUnName = UnName <$> freshId
 topLevelType :: IdentName -> BlockGen (Maybe ANF.Type)
 topLevelType ident = liftCodeGen $ CodeGen $ TS.gets (Map.lookup ident . codeGenStateTopLevelTypes)
 
-genExternalFunction :: Name -> Definition -> BlockGen ()
-genExternalFunction name def = liftCodeGen $ CodeGen $ do
+genExternalGlobal :: Global -> BlockGen ()
+genExternalGlobal global = genExternalDefinition (G.name global) (GlobalDefinition global)
+
+genExternalType :: Name -> LLVM.Type -> BlockGen ()
+genExternalType name ty = genExternalDefinition name (TypeDefinition name (Just ty))
+
+genExternalDefinition :: Name -> Definition -> BlockGen ()
+genExternalDefinition name def = liftCodeGen $ CodeGen $ do
   mExistingDef <- TS.gets (Map.lookup name . codeGenStateExternalFunctions)
   for_ mExistingDef $ \existingDef ->
     when (existingDef /= def) $

@@ -13,7 +13,7 @@ typedef struct Closure {
 
 /* Create a closure. NOTE: env needs to be heap allocated, not stack
    allocated. */
-Closure* make_closure(int8_t arity, void (*f)(), int8_t numargs, int64_t* env) {
+Closure* create_closure(int8_t arity, void (*f)(), int8_t numargs, int64_t* env) {
   struct Closure* closure = (struct Closure*)GC_malloc(sizeof *closure);
   closure->arity = arity;
   closure->func_ptr = f;
@@ -60,7 +60,7 @@ Closure* extend_closure(Closure* closure, int8_t env_size, int64_t* env) {
    here, but in reality the final result of a closure application could be any
    arbitrary result if called with the correct number of arguments.
    */
-Closure* evaluate_closure(Closure* closure) {
+Closure* eval_closure(Closure* closure) {
   int8_t arity = closure->arity;
   int8_t numargs = closure->numargs;
   Closure* (*f)() = (Closure* (*)(int64_t* env, int64_t, int64_t))closure->func_ptr;
@@ -75,7 +75,7 @@ Closure* evaluate_closure(Closure* closure) {
 	   returned from another function, it must be a closure, even if it isn't
 	   partially applied. */
 	result = f(env); // f shouldn't use extra arguments, so we just leave them on
-    return evaluate_closure(extend_closure(result, -arity_diff, env - arity_diff));
+    return eval_closure(extend_closure(result, -arity_diff, env - arity_diff));
   } else if (arity_diff == 0) {
 	/* Proper number of args, just call the function and return the result. */
 	return f(env);
@@ -92,5 +92,5 @@ Closure* evaluate_closure(Closure* closure) {
    call_closure_2 etc. functions with the exact number of arguments to make
    the caller's life easier. */
 Closure* call_closure(Closure* closure, int8_t numargs, int64_t* args) {
-  return evaluate_closure(extend_closure(closure, numargs, args));
+  return eval_closure(extend_closure(closure, numargs, args));
 }

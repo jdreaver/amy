@@ -151,6 +151,7 @@ data EvalClosure
   = EvalClosure
   { evalClosureClosure :: !Val
   , evalClosureArgs :: ![Val]
+  , evalClosureReturnType :: !Type
   } deriving (Show, Eq)
 
 data Match
