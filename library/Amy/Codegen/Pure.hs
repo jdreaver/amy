@@ -32,7 +32,7 @@ import Amy.Codegen.Utils
 import Amy.Prim
 
 codegenModule :: ANF.Module -> LLVM.Module
-codegenModule (ANF.Module bindings externs typeDeclarations textPointers) =
+codegenModule (ANF.Module bindings externs typeDeclarations textPointers closureWrappers) =
   let
     topLevelTypes =
       ((\(ANF.Binding name' argTys retTy _) -> (name', KnownFuncType (typedType <$> argTys) retTy)) <$> bindings)
@@ -43,7 +43,8 @@ codegenModule (ANF.Module bindings externs typeDeclarations textPointers) =
         typeDefs = mapMaybe codegenTypeDeclaration typeDeclarations
         textPointers' = codegenTextPointer <$> textPointers
       bindings' <- traverse codegenTopLevelBinding bindings
-      pure $ externs' ++ typeDefs ++ textPointers' ++ bindings'
+      closureWrappers' <- traverse codegenClosureWrapper closureWrappers
+      pure $ externs' ++ typeDefs ++ closureWrappers' ++ textPointers' ++ bindings'
   in
     defaultModule
     { moduleName = "amy-module"
@@ -93,6 +94,10 @@ codegenTextPointer ptr =
   , initializer = Just $ textPointerConstant ptr
   , linkage = L.Private
   }
+
+codegenClosureWrapper :: ANF.ClosureWrapper -> CodeGen Definition
+codegenClosureWrapper (ANF.ClosureWrapper name' original argTys retTy) =
+  closureWrapperDefinition (identToName name') (identToName original) (llvmType <$> argTys) (llvmType retTy)
 
 codegenTopLevelBinding :: ANF.Binding -> CodeGen Definition
 codegenTopLevelBinding binding = do
@@ -233,9 +238,8 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
     allOpsAndBlocks = maybe id (:) mDefaultOpAndBlock matchOpsAndBlocks
   addInstruction $ name' := Phi endTy allOpsAndBlocks []
   pure $ LocalReference endTy name'
-codegenExpr' name' (ANF.ECreateClosure (CreateClosure func arity args')) = do
-  funcTy <- maybe (error $ "Couldn't find topLevelType for " ++ show func) llvmType <$> topLevelType func
-  createClosure name' (identToName func) funcTy arity (valOperand <$> args')
+codegenExpr' name' (ANF.ECreateClosure (CreateClosure func retTy arity args')) =
+  createClosure name' (identToName func) (llvmType retTy) arity (valOperand <$> args')
 codegenExpr' name' (ANF.ECallClosure (CallClosure val args' retTy)) =
   callClosure name' (valOperand val) (valOperand <$> args') (llvmType retTy)
 codegenExpr' name' (ANF.EKnownFuncApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = do

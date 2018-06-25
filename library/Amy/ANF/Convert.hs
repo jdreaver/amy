@@ -38,7 +38,8 @@ normalizeModule mod' =
     externs' <- traverse convertExtern externs
     bindings' <- traverse (normalizeBinding (Just "res")) bindings
     textPointers <- getTextPointers
-    pure $ ANF.Module bindings' externs' typeDeclarations' textPointers
+    closureWrappers <- getClosureWrappers
+    pure $ ANF.Module bindings' externs' typeDeclarations' textPointers closureWrappers
 
 convertExtern :: C.Extern -> ANFConvert ANF.Extern
 convertExtern (C.Extern name ty) = do
@@ -179,7 +180,9 @@ normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
                     KnownArity numArgs ->
                       if numArgs == length argVals
                       then pure $ ANF.EKnownFuncApp $ ANF.App tyIdent argVals retTy'
-                      else createClosure ident numArgs [] $ \closureVal -> pure $ ECallClosure $ CallClosure closureVal argVals retTy'
+                      else
+                        createClosure tyIdent numArgs [] $ \closureVal ->
+                          pure $ ECallClosure $ CallClosure closureVal argVals retTy'
 
 normalizeExpr name (C.EParens expr) = normalizeExpr name expr
 
@@ -220,12 +223,16 @@ mkNormalizeLet name expr exprType c = do
   pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal [ANF.LetValBinding newIdent exprType expr] body
 
 maybeCreateClosure :: ANF.Val -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
-maybeCreateClosure (ANF.Var (ANF.Typed _ ident) (KnownArity arity)) c = createClosure ident arity [] c
+maybeCreateClosure (ANF.Var ident (KnownArity arity)) c = createClosure ident arity [] c
 maybeCreateClosure v c = c v
 
-createClosure :: IdentName -> Int -> [ANF.Val] -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
-createClosure ident arity args c =
-  mkNormalizeLet (unIdentName ident <> "_closure") (ECreateClosure $ CreateClosure ident arity args) ClosureType c
+createClosure :: ANF.Typed IdentName -> Int -> [ANF.Val] -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
+createClosure tyIdent@(ANF.Typed ty ident) arity args c =
+  case ty of
+    KnownFuncType argTys retTy -> do
+      wrapperName <- putTextClosureWrapper ident argTys retTy
+      mkNormalizeLet (unIdentName ident <> "_closure") (ECreateClosure $ CreateClosure wrapperName retTy arity args) ClosureType c
+    _ -> error $ "Tried to create a closure for something taht isn't a KnownFuncType " ++ show tyIdent
 
 normalizeBinding :: Maybe Text -> C.Binding -> ANFConvert ANF.Binding
 normalizeBinding mName (C.Binding ident _ args retTy body) = do

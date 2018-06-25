@@ -27,7 +27,7 @@ prettyType (RecordType rows) =
   "RecordType" <> groupOrHang (bracketed ((\(RowLabel label, ty) -> pretty label <+> "::" <> groupOrHang (prettyType ty)) <$> rows))
 
 prettyModule :: Module -> Doc ann
-prettyModule (Module bindings externs typeDeclarations _) =
+prettyModule (Module bindings externs typeDeclarations _ _) =
   vcatTwoHardLines
   $ (prettyExtern' <$> externs)
   ++ (prettyTypeDeclaration' <$> typeDeclarations)
@@ -70,8 +70,8 @@ prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault _)) =
     case mDefault of
       Nothing -> []
       Just def -> [("__DEFAULT", prettyExpr def)]
-prettyExpr (ECreateClosure (CreateClosure f arity args)) =
-  "$createClosure" <+> prettyIdent f <+> pretty arity <+> list (prettyVal <$> args)
+prettyExpr (ECreateClosure (CreateClosure f retTy arity args)) =
+  "$createClosure" <+> prettyIdent f <+> pretty arity <+> list (prettyVal <$> args) <+> "::" <+> prettyType retTy
 prettyExpr (ECallClosure (CallClosure f args retTy)) =
   "$callClosure" <+> prettyVal f <+> list (prettyVal <$> args) <+> "::" <+> prettyType retTy
 prettyExpr (ELetVal (LetVal bindings body)) =

@@ -3,27 +3,39 @@
 module Amy.Codegen.Closures
   ( createClosure
   , callClosure
+  , closureWrapperDefinition
   , closureStructName
   ) where
 
 import Data.Foldable (for_)
+import Data.Traversable (for)
 import LLVM.AST as LLVM
 import LLVM.AST.AddrSpace
 import qualified LLVM.AST.CallingConvention as CC
 import qualified LLVM.AST.Constant as C
 import LLVM.AST.Global as LLVM
+import qualified LLVM.AST.Linkage as L
 
 import Amy.Codegen.Malloc
 import Amy.Codegen.Monad
 import Amy.Codegen.TypeConversion
 
 createClosure :: LLVM.Name -> LLVM.Name -> Type -> Int -> [Operand] -> BlockGen Operand
-createClosure name' func funcTy arity argOps = do
+createClosure name' func retTy arity argOps = do
   -- Make sure create_closure definition is generated
   genExternalType closureStructName closureStructType
   genExternalGlobal createClosureDefinition
 
   -- Bitcast function pointer
+  let
+    funcTy =
+      PointerType
+      FunctionType
+      { resultType = retTy
+      , argumentTypes = [int64ArrayType]
+      , isVarArg = False
+      }
+      (AddrSpace 0)
   funcOp <-
     namedInstruction
       Nothing
@@ -120,6 +132,45 @@ convertClosurePointerOperand name' operand targetTy =
       _ -> do
         intOp <- namedInstruction Nothing (PtrToInt operand (IntegerType 64) []) (IntegerType 64)
         namedInstruction (Just name') (BitCast intOp targetTy []) targetTy
+
+--
+-- Wrapper Functions
+--
+
+closureWrapperDefinition :: LLVM.Name -> LLVM.Name -> [Type] -> Type -> CodeGen Definition
+closureWrapperDefinition wrapperName originalName argTys retTy = do
+  blocks <- runBlockGen $ closureWrapperBlock originalName argTys retTy
+  pure $
+    GlobalDefinition
+    functionDefaults
+    { name = wrapperName
+    , parameters = ([Parameter int64ArrayType "env" []], False)
+    , LLVM.returnType = retTy
+    , basicBlocks = blocks
+    , linkage = L.Private
+    }
+
+closureWrapperBlock :: LLVM.Name -> [Type] -> Type -> BlockGen Operand
+closureWrapperBlock funcName argTys retTy = do
+  let envOp = LocalReference int64ArrayType "env"
+
+  -- Unpack arguments
+  argOps <- for (zip argTys [0..]) $ \(argTy, i) -> do
+    let ptrTy = PointerType argTy (AddrSpace 0)
+    ptrOp <- namedInstruction Nothing (GetElementPtr False envOp [ConstantOperand (C.Int 32 i)] []) ptrTy
+    namedInstruction Nothing (Load False ptrOp Nothing 0 []) argTy
+
+  -- Call function
+  let
+    funcTy =
+      FunctionType
+      { resultType = retTy
+      , argumentTypes = argTys
+      , isVarArg = False
+      }
+    funcOp = ConstantOperand $ C.GlobalReference (PointerType funcTy (AddrSpace 0)) funcName
+    funcArgs = (\arg -> (arg, [])) <$> argOps
+  namedInstruction Nothing (Call Nothing CC.C [] (Right funcOp) funcArgs [] []) retTy
 
 --
 -- Function signatures from RTS

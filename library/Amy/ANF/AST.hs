@@ -6,6 +6,7 @@ module Amy.ANF.AST
   , Extern(..)
   , TypeDeclaration(..)
   , DataConDefinition(..)
+  , ClosureWrapper(..)
   , Val(..)
   , Arity(..)
   , Literal(..)
@@ -44,6 +45,7 @@ data Module
   , moduleExterns :: ![Extern]
   , moduleTypeDeclarations :: ![TypeDeclaration]
   , moduleTextPointers :: ![TextPointer]
+  , moduleClosureWrappers :: ![ClosureWrapper]
   } deriving (Show, Eq)
 
 data Binding
@@ -72,6 +74,14 @@ data DataConDefinition
   { dataConDefinitionName :: !DataConName
   , dataConDefinitionArgument :: !(Maybe Type)
   } deriving (Show, Eq, Ord)
+
+data ClosureWrapper
+  = ClosureWrapper
+  { closureWrapperName :: !IdentName
+  , closureWrapperOriginalName :: !IdentName
+  , closureWrapperArgTypes :: ![Type]
+  , closureWrapperReturnType :: !Type
+  } deriving (Show, Eq)
 
 data Val
   = Var !(Typed IdentName) !Arity
@@ -143,6 +153,7 @@ data Case
 data CreateClosure
   = CreateClosure
   { createClosureFunctionName :: !IdentName
+  , createClosureFunctionReturnType :: !Type
   , createClosureArity :: !Int
   , createClosureArgs :: ![Val]
   } deriving (Show, Eq)

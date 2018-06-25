@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Amy.ANF.Monad
   ( ANFConvert
@@ -14,6 +15,8 @@ module Amy.ANF.Monad
   , getIdentArity
   , makeTextPointer
   , getTextPointers
+  , putTextClosureWrapper
+  , getClosureWrappers
   ) where
 
 import Control.Monad.Reader
@@ -32,7 +35,7 @@ newtype ANFConvert a = ANFConvert (ReaderT ANFConvertRead (State ANFConvertState
   deriving (Functor, Applicative, Monad, MonadReader ANFConvertRead, MonadState ANFConvertState)
 
 runANFConvert :: ANFConvertRead -> ANFConvert a -> a
-runANFConvert read' (ANFConvert action) = evalState (runReaderT action read') (ANFConvertState 0 [])
+runANFConvert read' (ANFConvert action) = evalState (runReaderT action read') (ANFConvertState 0 [] Map.empty)
 
 data ANFConvertRead
   = ANFConvertRead
@@ -64,6 +67,7 @@ data ANFConvertState
   = ANFConvertState
   { lastId :: !Int
   , textPointers :: ![TextPointer]
+  , closureWrappers :: !(Map IdentName ClosureWrapper)
   } deriving (Show, Eq)
 
 freshId :: ANFConvert Int
@@ -105,3 +109,15 @@ makeTextPointer text = do
 
 getTextPointers :: ANFConvert [TextPointer]
 getTextPointers = reverse <$> gets textPointers
+
+putTextClosureWrapper :: IdentName -> [ANF.Type] -> ANF.Type -> ANFConvert IdentName
+putTextClosureWrapper original@(IdentName t) argTys retTy = do
+  let
+    name = IdentName $ t <> "_closure_wrapper"
+    wrapper = ANF.ClosureWrapper name original argTys retTy
+  -- TODO: Maybe check for duplicates and ensure they are equal
+  modify' $ \s -> s { closureWrappers = Map.insert name wrapper (closureWrappers s) }
+  pure name
+
+getClosureWrappers :: ANFConvert [ClosureWrapper]
+getClosureWrappers = fmap snd . Map.toAscList <$> gets closureWrappers
