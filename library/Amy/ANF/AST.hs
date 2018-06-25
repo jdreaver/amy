@@ -16,7 +16,7 @@ module Amy.ANF.AST
   , LetValBinding(..)
   , Case(..)
   , CreateClosure(..)
-  , EvalClosure(..)
+  , CallClosure(..)
   , Match(..)
   , Pattern(..)
   , PatCons(..)
@@ -112,7 +112,7 @@ data Expr
   | ELetVal !LetVal
   | ECase !Case
   | ECreateClosure !CreateClosure
-  | EEvalClosure !EvalClosure
+  | ECallClosure !CallClosure
   | EKnownFuncApp !(App (Typed IdentName))
   | EConApp !ConApp
   | EPrimOp !(App PrimitiveFunction)
@@ -147,11 +147,11 @@ data CreateClosure
   , createClosureArgs :: ![Val]
   } deriving (Show, Eq)
 
-data EvalClosure
-  = EvalClosure
-  { evalClosureClosure :: !Val
-  , evalClosureArgs :: ![Val]
-  , evalClosureReturnType :: !Type
+data CallClosure
+  = CallClosure
+  { callClosureClosure :: !Val
+  , callClosureArgs :: ![Val]
+  , callClosureReturnType :: !Type
   } deriving (Show, Eq)
 
 data Match

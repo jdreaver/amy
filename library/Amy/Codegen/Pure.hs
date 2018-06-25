@@ -236,7 +236,7 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
 codegenExpr' name' (ANF.ECreateClosure (CreateClosure func arity args')) = do
   funcTy <- maybe (error $ "Couldn't find topLevelType for " ++ show func) llvmType <$> topLevelType func
   createClosure name' (identToName func) funcTy arity (valOperand <$> args')
-codegenExpr' name' (ANF.EEvalClosure (EvalClosure val args' retTy)) =
+codegenExpr' name' (ANF.ECallClosure (CallClosure val args' retTy)) =
   callClosure name' (valOperand val) (valOperand <$> args') (llvmType retTy)
 codegenExpr' name' (ANF.EKnownFuncApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = do
   topLevelTy <- topLevelType ident

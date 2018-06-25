@@ -72,8 +72,8 @@ prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault _)) =
       Just def -> [("__DEFAULT", prettyExpr def)]
 prettyExpr (ECreateClosure (CreateClosure f arity args)) =
   "$createClosure" <+> prettyIdent f <+> pretty arity <+> list (prettyVal <$> args)
-prettyExpr (EEvalClosure (EvalClosure f args retTy)) =
-  "$evalClosure" <+> prettyVal f <+> list (prettyVal <$> args) <+> "::" <+> prettyType retTy
+prettyExpr (ECallClosure (CallClosure f args retTy)) =
+  "$callClosure" <+> prettyVal f <+> list (prettyVal <$> args) <+> "::" <+> prettyType retTy
 prettyExpr (ELetVal (LetVal bindings body)) =
   prettyLetVal (prettyLetValBinding <$> bindings) (prettyExpr body)
 prettyExpr (EKnownFuncApp (App (Typed _ ident) args _)) =

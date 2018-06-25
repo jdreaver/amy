@@ -175,11 +175,11 @@ normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
                 -- Default, just a function call
                 Nothing ->
                   case arity of
-                    UnknownArity -> pure $ EEvalClosure $ EvalClosure (ANF.Var (ANF.Typed ClosureType ident) UnknownArity) argVals retTy'
+                    UnknownArity -> pure $ ECallClosure $ CallClosure (ANF.Var (ANF.Typed ClosureType ident) UnknownArity) argVals retTy'
                     KnownArity numArgs ->
                       if numArgs == length argVals
                       then pure $ ANF.EKnownFuncApp $ ANF.App tyIdent argVals retTy'
-                      else createClosure ident numArgs [] $ \closureVal -> pure $ EEvalClosure $ EvalClosure closureVal argVals retTy'
+                      else createClosure ident numArgs [] $ \closureVal -> pure $ ECallClosure $ CallClosure closureVal argVals retTy'
 
 normalizeExpr name (C.EParens expr) = normalizeExpr name expr
 
