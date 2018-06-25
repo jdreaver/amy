@@ -72,7 +72,7 @@ prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault _)) =
       Just def -> [("__DEFAULT", prettyExpr def)]
 prettyExpr (ELetVal (LetVal bindings body)) =
   prettyLetVal (prettyLetValBinding <$> bindings) (prettyExpr body)
-prettyExpr (EApp (App (Typed _ ident) args _)) =
+prettyExpr (EKnownFuncApp (App (Typed _ ident) args _)) =
   "$call" <+> prettyIdent ident <+> list (prettyVal <$> args)
 prettyExpr (EConApp (ConApp info mArg _ _)) =
   "$mkCon" <+> prettyDataConName (dataConName info) <+> list (prettyVal <$> maybeToList mArg)

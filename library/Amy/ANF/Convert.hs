@@ -179,7 +179,7 @@ normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
                 Just prim -> pure $ ANF.EPrimOp $ ANF.App prim argVals retTy'
                 -- Default, just a function call
                 Nothing ->
-                  let app' = ANF.EApp $ ANF.App tyIdent argVals retTy'
+                  let app' = ANF.EKnownFuncApp $ ANF.App tyIdent argVals retTy'
                   in
                     case arity of
                       -- TODO: Call closure
@@ -206,7 +206,7 @@ normalizeName name (C.EVar var) c =
       let ident' = ANF.Typed ty' ident
       case arity of
         -- Top-level values need to be first called as functions
-        KnownArity 0 -> mkNormalizeLet name (ANF.EApp $ ANF.App ident' [] ty') ty' c
+        KnownArity 0 -> mkNormalizeLet name (ANF.EKnownFuncApp $ ANF.App ident' [] ty') ty' c
         _ -> c $ ANF.Var ident' arity
     C.VCons (C.Typed ty con) -> do
       con' <- convertDataCon con

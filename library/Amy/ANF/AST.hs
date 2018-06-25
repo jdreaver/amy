@@ -109,7 +109,7 @@ data Expr
   | ERecordSelect !Val !RowLabel !Type
   | ELetVal !LetVal
   | ECase !Case
-  | EApp !(App (Typed IdentName))
+  | EKnownFuncApp !(App (Typed IdentName))
   | EConApp !ConApp
   | EPrimOp !(App PrimitiveFunction)
   deriving (Show, Eq)
