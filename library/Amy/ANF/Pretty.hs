@@ -19,7 +19,7 @@ prettyType PrimDoubleType = "PrimDouble"
 prettyType PrimTextType = "PrimText"
 prettyType (PointerType ty) = "Pointer" <+> parens (prettyType ty)
 prettyType OpaquePointerType = "OpaquePointer"
-prettyType (UnknownFuncType args retTy) = "UnknownFunc" <> groupOrHang (tupled (prettyType <$> args) <+> "=>" <+> prettyType retTy)
+prettyType ClosureType = "ClosureType"
 prettyType (KnownFuncType args retTy) = "KnownFunc" <> groupOrHang (tupled (prettyType <$> args) <+> "=>" <+> prettyType retTy)
 prettyType (EnumType bits) = "Enum" <+> pretty bits
 prettyType (TaggedUnionType (TyConName name) bits) = "TaggedUnion" <+> pretty name <+> pretty bits
@@ -70,6 +70,10 @@ prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault _)) =
     case mDefault of
       Nothing -> []
       Just def -> [("__DEFAULT", prettyExpr def)]
+prettyExpr (ECreateClosure (CreateClosure f arity args)) =
+  "$createClosure" <+> prettyIdent f <+> pretty arity <+> list (prettyVal <$> args)
+prettyExpr (EEvalClosure (EvalClosure f args)) =
+  "$evalClosure" <+> prettyVal f <+> list (prettyVal <$> args)
 prettyExpr (ELetVal (LetVal bindings body)) =
   prettyLetVal (prettyLetValBinding <$> bindings) (prettyExpr body)
 prettyExpr (EKnownFuncApp (App (Typed _ ident) args _)) =

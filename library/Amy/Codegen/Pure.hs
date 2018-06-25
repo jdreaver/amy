@@ -233,6 +233,8 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
     allOpsAndBlocks = maybe id (:) mDefaultOpAndBlock matchOpsAndBlocks
   addInstruction $ name' := Phi endTy allOpsAndBlocks []
   pure $ LocalReference endTy name'
+codegenExpr' _ (ANF.ECreateClosure cc) = error $ "Can't create closure yet " ++ show cc
+codegenExpr' _ (ANF.EEvalClosure ec) = error $ "Can't eval closure yet " ++ show ec
 codegenExpr' name' (ANF.EKnownFuncApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = do
   topLevelTy <- topLevelType ident
   let
@@ -244,7 +246,7 @@ codegenExpr' name' (ANF.EKnownFuncApp (ANF.App (ANF.Typed originalTy ident) args
     (argTys', returnTy') =
       case ty of
         -- TODO: This should call a closure evaluation
-        UnknownFuncType argTys ret -> (argTys, ret)
+        ClosureType -> error "Can't codegen closure calls yet"
         KnownFuncType argTys ret -> (argTys, ret)
         _ -> error $ "Tried to EApp a non-function type " ++ show ty
   -- Convert arguments to pointers if we have to
@@ -372,7 +374,7 @@ llvmType PrimDoubleType = FloatingPointType DoubleFP
 llvmType PrimTextType = LLVM.PointerType (IntegerType 8) (AddrSpace 0)
 llvmType (ANF.PointerType ty) = LLVM.PointerType (llvmType ty) (AddrSpace 0)
 llvmType OpaquePointerType = LLVM.PointerType (IntegerType 64) (AddrSpace 0)
-llvmType (UnknownFuncType argTys retTy) = llvmFuncType argTys retTy
+llvmType ClosureType = LLVM.PointerType (NamedTypeReference "Closure") (AddrSpace 0)
 llvmType (KnownFuncType argTys retTy) = llvmFuncType argTys retTy
 llvmType (EnumType intBits) = IntegerType intBits
 llvmType (TaggedUnionType structName _) = LLVM.PointerType (NamedTypeReference (textToName $ unTyConName structName)) (AddrSpace 0)

@@ -15,6 +15,8 @@ module Amy.ANF.AST
   , LetVal(..)
   , LetValBinding(..)
   , Case(..)
+  , CreateClosure(..)
+  , EvalClosure(..)
   , Match(..)
   , Pattern(..)
   , PatCons(..)
@@ -109,6 +111,8 @@ data Expr
   | ERecordSelect !Val !RowLabel !Type
   | ELetVal !LetVal
   | ECase !Case
+  | ECreateClosure !CreateClosure
+  | EEvalClosure !EvalClosure
   | EKnownFuncApp !(App (Typed IdentName))
   | EConApp !ConApp
   | EPrimOp !(App PrimitiveFunction)
@@ -134,6 +138,19 @@ data Case
   , caseAlternatives :: ![Match]
   , caseDefault :: !(Maybe Expr)
   , caseType :: !Type
+  } deriving (Show, Eq)
+
+data CreateClosure
+  = CreateClosure
+  { createClosureFunctionName :: !IdentName
+  , createClosureArity :: !Int
+  , createClosureArgs :: ![Val]
+  } deriving (Show, Eq)
+
+data EvalClosure
+  = EvalClosure
+  { evalClosureClosure :: !Val
+  , evalClosureArgs :: ![Val]
   } deriving (Show, Eq)
 
 data Match
@@ -176,7 +193,7 @@ data Type
   | PointerType !Type
   | OpaquePointerType
     -- ^ Used for polymorphic types
-  | UnknownFuncType ![Type] !Type -- TODO: Leave off all types. This should be a closure.
+  | ClosureType
   | KnownFuncType ![Type] !Type
   | EnumType !Word32
   | TaggedUnionType !TyConName !Word32

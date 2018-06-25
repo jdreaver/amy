@@ -103,13 +103,7 @@ mkFunctionType arity ty =
       args' <- traverse (convertType UnknownArity) args
       returnType <- convertType UnknownArity $ foldr1 TyFun retTys
       pure $ KnownFuncType args' returnType
-    UnknownArity -> do
-      let
-        args = NE.init tyNE
-        retTy = NE.last tyNE
-      args' <- traverse (convertType UnknownArity) args
-      retTy' <- convertType UnknownArity retTy
-      pure $ UnknownFuncType args' retTy'
+    UnknownArity -> pure ClosureType
  where
   tyNE = typeToNonEmpty ty
 
@@ -150,7 +144,8 @@ normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
   -- TODO: Refactor this, it is getting huge and hard to understand. Maybe do
   -- case analysis before normalizeName so there are fewer options.
   let func :| args = C.unfoldApp app
-  normalizeList (normalizeName name) (toList args) $ \argVals -> do
+  normalizeList (normalizeName name) (toList args) $ \rawArgVals ->
+   normalizeList maybeCreateClosure rawArgVals $ \argVals -> do
     retTy' <- convertType UnknownArity retTy
     case func of
       C.EVar (C.VCons (C.Typed _ con)) -> do
@@ -179,16 +174,13 @@ normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
                 Just prim -> pure $ ANF.EPrimOp $ ANF.App prim argVals retTy'
                 -- Default, just a function call
                 Nothing ->
-                  let app' = ANF.EKnownFuncApp $ ANF.App tyIdent argVals retTy'
-                  in
-                    case arity of
-                      -- TODO: Call closure
-                      UnknownArity -> pure app'
-                      KnownArity numArgs ->
-                        -- TODO: Don't error here, make closure and call
-                        if numArgs /= length argVals
-                        then error $ "Wrong arity in ANF conversion " ++ show app
-                        else pure app'
+                  case arity of
+                    UnknownArity -> pure $ EEvalClosure $ EvalClosure (ANF.Var (ANF.Typed ClosureType ident) UnknownArity) argVals
+                    KnownArity numArgs ->
+                      if numArgs == length argVals
+                      then pure $ ANF.EKnownFuncApp $ ANF.App tyIdent argVals retTy'
+                      else createClosure ident numArgs [] $ \closureVal -> pure $ EEvalClosure $ EvalClosure closureVal argVals
+
 normalizeExpr name (C.EParens expr) = normalizeExpr name expr
 
 normalizeLiteral :: C.Literal -> ANFConvert ANF.Literal
@@ -226,6 +218,14 @@ mkNormalizeLet name expr exprType c = do
   newIdent <- freshIdent name
   body <- c $ ANF.Var (ANF.Typed exprType newIdent) UnknownArity
   pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal [ANF.LetValBinding newIdent exprType expr] body
+
+maybeCreateClosure :: ANF.Val -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
+maybeCreateClosure (ANF.Var (ANF.Typed _ ident) (KnownArity arity)) c = createClosure ident arity [] c
+maybeCreateClosure v c = c v
+
+createClosure :: IdentName -> Int -> [ANF.Val] -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
+createClosure ident arity args c =
+  mkNormalizeLet (unIdentName ident <> "_closure") (ECreateClosure $ CreateClosure ident arity args) ClosureType c
 
 normalizeBinding :: Maybe Text -> C.Binding -> ANFConvert ANF.Binding
 normalizeBinding mName (C.Binding ident _ args retTy body) = do
