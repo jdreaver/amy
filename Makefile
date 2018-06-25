@@ -19,7 +19,7 @@ watch:
 	stack test --fast --pedantic --file-watch amy
 
 $(RTS_LL): $(RTS_C)
-	(cd rts && clang -S -emit-llvm rts.c)
+	(cd rts && clang -Wall -Wconversion -Werror -S -emit-llvm rts.c)
 
 .PHONY: clean
 clean:
