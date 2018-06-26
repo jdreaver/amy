@@ -12,10 +12,11 @@ declare %struct.Closure* @create_closure(i8, void (...)*, i8, i64*)
 define private %struct.Closure* @id_closure_wrapper(i64* %env) {
 entry:
   %0 = getelementptr i64, i64* %env, i32 0
-  %1 = load i64, i64* %0
-  %2 = call i64* @id(i64 %1)
-  %3 = bitcast i64* %2 to %struct.Closure*
-  ret %struct.Closure* %3
+  %1 = bitcast i64* %0 to i64**
+  %2 = load i64*, i64** %1
+  %3 = call i64* @id(i64* %2)
+  %4 = bitcast i64* %3 to %struct.Closure*
+  ret %struct.Closure* %4
 }
 
 define private i64* @idFancy(%struct.Closure* %f, i64* %x) {

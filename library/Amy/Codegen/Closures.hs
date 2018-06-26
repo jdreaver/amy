@@ -171,9 +171,10 @@ closureWrapperBlock funcName argTys retTy = do
 
   -- Unpack arguments
   argOps <- for (zip argTys [0..]) $ \(argTy, i) -> do
-    let ptrTy = PointerType argTy (AddrSpace 0)
+    let ptrTy = PointerType (IntegerType 64) (AddrSpace 0)
     ptrOp <- namedInstruction Nothing (GetElementPtr False envOp [ConstantOperand (C.Int 32 i)] []) ptrTy
-    namedInstruction Nothing (Load False ptrOp Nothing 0 []) argTy
+    ptrOp' <- bitcastFromInt64Ptr ptrOp argTy
+    namedInstruction Nothing (Load False ptrOp' Nothing 0 []) argTy
 
   -- Call function
   let
@@ -189,6 +190,13 @@ closureWrapperBlock funcName argTys retTy = do
 
   -- Cast and return
   convertToClosurePointerOperand callOp
+ where
+  bitcastFromInt64Ptr ptrOp argTy =
+    case argTy of
+      IntegerType 64 -> pure ptrOp
+      ty ->
+        let ptrTy = PointerType ty (AddrSpace 0)
+        in namedInstruction Nothing (BitCast ptrOp ptrTy []) ptrTy
 
 --
 -- Known function application
