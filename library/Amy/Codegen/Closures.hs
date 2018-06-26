@@ -20,8 +20,8 @@ import Amy.Codegen.Malloc
 import Amy.Codegen.Monad
 import Amy.Codegen.TypeConversion
 
-createClosure :: LLVM.Name -> LLVM.Name -> Type -> Int -> [Operand] -> BlockGen Operand
-createClosure name' func retTy arity argOps = do
+createClosure :: LLVM.Name -> LLVM.Name -> Int -> [Operand] -> BlockGen Operand
+createClosure name' func arity argOps = do
   -- Make sure create_closure definition is generated
   genExternalType closureStructName closureStructType
   genExternalGlobal createClosureDefinition
@@ -31,7 +31,7 @@ createClosure name' func retTy arity argOps = do
     funcTy =
       PointerType
       FunctionType
-      { resultType = retTy
+      { resultType = closurePointerType
       , argumentTypes = [int64ArrayType]
       , isVarArg = False
       }
@@ -91,19 +91,17 @@ packInt64Array operands = do
   -- Malloc array
   arrayOpName <- freshUnName
   let
-    arrayOpType = ArrayType (fromIntegral $ length operands) (IntegerType 64)
-  arrayOp <- callMalloc arrayOpName arrayOpType
+    arraySize = fromIntegral $ 64 * length operands
+  arrayOp <- callMalloc arrayOpName (Just arraySize) (IntegerType 64)
 
   -- Pack array
   for_ (zip operands [0..]) $ \(argOp, i) -> do
     let ptrTy = PointerType (IntegerType 64) (AddrSpace 0)
-    ptrOp <- namedInstruction Nothing (GetElementPtr False arrayOp [ConstantOperand (C.Int 32 1), ConstantOperand (C.Int 32 i)] []) ptrTy
+    ptrOp <- namedInstruction Nothing (GetElementPtr False arrayOp [ConstantOperand (C.Int 32 i)] []) ptrTy
     ptrOp' <- bitcastFromInt64Ptr ptrOp argOp
     addInstruction $ Do $ Store False ptrOp' argOp Nothing 0 []
 
-  -- Bitcast to just a pointer
-  let arrayPtrTy = PointerType (IntegerType 64) (AddrSpace 0)
-  namedInstruction Nothing (BitCast arrayOp arrayPtrTy []) arrayPtrTy
+  pure arrayOp
 
  where
   bitcastFromInt64Ptr ptrOp argOp =
@@ -120,6 +118,10 @@ namedInstruction mName instruction ty = do
   addInstruction $ name' := instruction
   pure op
 
+--
+-- Conversion to/from Closure pointer
+--
+
 convertClosurePointerOperand :: LLVM.Name -> Operand -> Type -> BlockGen Operand
 convertClosurePointerOperand name' operand targetTy =
   if targetTy == closurePointerType
@@ -133,6 +135,18 @@ convertClosurePointerOperand name' operand targetTy =
         intOp <- namedInstruction Nothing (PtrToInt operand (IntegerType 64) []) (IntegerType 64)
         namedInstruction (Just name') (BitCast intOp targetTy []) targetTy
 
+convertToClosurePointerOperand :: Operand -> BlockGen Operand
+convertToClosurePointerOperand operand =
+  if operandType operand == closurePointerType
+  then pure operand
+  else
+    case operandType operand of
+      PointerType _ _ -> namedInstruction Nothing (BitCast operand closurePointerType []) closurePointerType
+      IntegerType _ -> namedInstruction Nothing (IntToPtr operand closurePointerType []) closurePointerType
+      _ -> do
+        intOp <- namedInstruction Nothing (IntToPtr operand (IntegerType 64) []) (IntegerType 64)
+        namedInstruction Nothing (BitCast intOp closurePointerType []) closurePointerType
+
 --
 -- Wrapper Functions
 --
@@ -145,7 +159,7 @@ closureWrapperDefinition wrapperName originalName argTys retTy = do
     functionDefaults
     { name = wrapperName
     , parameters = ([Parameter int64ArrayType "env" []], False)
-    , LLVM.returnType = retTy
+    , LLVM.returnType = closurePointerType
     , basicBlocks = blocks
     , linkage = L.Private
     }
@@ -170,7 +184,10 @@ closureWrapperBlock funcName argTys retTy = do
       }
     funcOp = ConstantOperand $ C.GlobalReference (PointerType funcTy (AddrSpace 0)) funcName
     funcArgs = (\arg -> (arg, [])) <$> argOps
-  namedInstruction Nothing (Call Nothing CC.C [] (Right funcOp) funcArgs [] []) retTy
+  callOp <- namedInstruction Nothing (Call Nothing CC.C [] (Right funcOp) funcArgs [] []) retTy
+
+  -- Cast and return
+  convertToClosurePointerOperand callOp
 
 --
 -- Function signatures from RTS

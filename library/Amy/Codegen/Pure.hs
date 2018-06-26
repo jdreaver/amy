@@ -134,7 +134,7 @@ codegenExpr' name' (ANF.ERecord rows) = do
   let
     rowsTy = Map.toAscList $ typedType <$> rows
     ty = recordType rowsTy
-  allocOp <- callMalloc name' ty
+  allocOp <- callMalloc name' Nothing ty
 
   -- Pack rows
   let numberedRows = zip [0..] $ Map.toAscList rows
@@ -238,8 +238,8 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
     allOpsAndBlocks = maybe id (:) mDefaultOpAndBlock matchOpsAndBlocks
   addInstruction $ name' := Phi endTy allOpsAndBlocks []
   pure $ LocalReference endTy name'
-codegenExpr' name' (ANF.ECreateClosure (CreateClosure func retTy arity args')) =
-  createClosure name' (identToName func) (llvmType retTy) arity (valOperand <$> args')
+codegenExpr' name' (ANF.ECreateClosure (CreateClosure func arity args')) =
+  createClosure name' (identToName func) arity (valOperand <$> args')
 codegenExpr' name' (ANF.ECallClosure (CallClosure val args' retTy)) =
   callClosure name' (valOperand val) (valOperand <$> args') (llvmType retTy)
 codegenExpr' name' (ANF.EKnownFuncApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = do
@@ -301,7 +301,7 @@ packConstructor name' con mArg (TyConName structName) intBits = do
     structName' = textToName structName
 
   -- Allocate struct
-  allocOp <- callMalloc name' (NamedTypeReference structName')
+  allocOp <- callMalloc name' Nothing (NamedTypeReference structName')
   addInstruction $ name' := Alloca (NamedTypeReference structName') Nothing 0 []
 
   -- Set the tag

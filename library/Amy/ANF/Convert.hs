@@ -231,7 +231,7 @@ createClosure tyIdent@(ANF.Typed ty ident) arity args c =
   case ty of
     KnownFuncType argTys retTy -> do
       wrapperName <- putTextClosureWrapper ident argTys retTy
-      mkNormalizeLet (unIdentName ident <> "_closure") (ECreateClosure $ CreateClosure wrapperName retTy arity args) ClosureType c
+      mkNormalizeLet (unIdentName ident <> "_closure") (ECreateClosure $ CreateClosure wrapperName arity args) ClosureType c
     _ -> error $ "Tried to create a closure for something taht isn't a KnownFuncType " ++ show tyIdent
 
 normalizeBinding :: Maybe Text -> C.Binding -> ANFConvert ANF.Binding

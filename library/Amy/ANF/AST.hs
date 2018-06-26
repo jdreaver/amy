@@ -153,7 +153,6 @@ data Case
 data CreateClosure
   = CreateClosure
   { createClosureFunctionName :: !IdentName
-  , createClosureFunctionReturnType :: !Type
   , createClosureArity :: !Int
   , createClosureArgs :: ![Val]
   } deriving (Show, Eq)

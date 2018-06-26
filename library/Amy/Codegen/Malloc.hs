@@ -39,13 +39,13 @@ mallocFunctionType =
   , isVarArg = False
   }
 
-callMalloc :: Name -> Type -> BlockGen Operand
-callMalloc ptrName ty = do
+callMalloc :: Name -> Maybe Integer -> Type -> BlockGen Operand
+callMalloc ptrName mSize ty = do
   -- Make sure malloc definition is generated
   genExternalGlobal mallocDefinition
 
   -- Compute size of type
-  size <- sizeOfType ty
+  size <- maybe (sizeOfType ty) (pure . ConstantOperand . C.Int 64) mSize
 
   -- Call malloc
   mallocName <- freshUnName

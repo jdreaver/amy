@@ -35,7 +35,7 @@ allocOp op = do
   storeName <- freshUnName
   let
     opTy = operandType op
-  storeOp <- callMalloc storeName opTy
+  storeOp <- callMalloc storeName Nothing opTy
   addInstruction $ Do $ Store False storeOp op Nothing 0 []
   pure storeOp
 
