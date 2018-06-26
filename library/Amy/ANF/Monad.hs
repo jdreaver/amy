@@ -12,7 +12,7 @@ module Amy.ANF.Monad
   , getTyConDefinitionType
   , getTyConType
   , getDataConInfo
-  , getIdentArity
+  , getKnownFuncType
   , makeTextPointer
   , getTextPointers
   , putClosureWrapper
@@ -41,11 +41,11 @@ data ANFConvertRead
   = ANFConvertRead
   { anfConvertReadTypeReps :: !(Map TyConName ANF.Type)
   , anfConvertReadDataConInfos :: !(Map DataConName (ANF.Type, ConstructorIndex))
-  , anfConvertReadIdentArities :: !(Map IdentName Int)
+  , anfConvertReadFuncTypes :: !(Map IdentName ([C.Type], C.Type))
   } deriving (Show, Eq)
 
-anfConvertRead :: [(IdentName, Int)] -> [C.TypeDeclaration] -> ANFConvertRead
-anfConvertRead arities typeDeclarations =
+anfConvertRead :: [(IdentName, ([C.Type], C.Type))] -> [C.TypeDeclaration] -> ANFConvertRead
+anfConvertRead funcs typeDeclarations =
   let
     allTypeDecls = typeDeclarations ++ (fromPrimTypeDefinition <$> allPrimTypeDefinitions)
     typeRepMap = Map.fromList $ (\t -> (C.tyConDefinitionName $ C.typeDeclarationTypeName t, typeRep t)) <$> allTypeDecls
@@ -54,7 +54,7 @@ anfConvertRead arities typeDeclarations =
     ANFConvertRead
     { anfConvertReadTypeReps = typeRepMap
     , anfConvertReadDataConInfos = dataConInfos
-    , anfConvertReadIdentArities = Map.fromList arities
+    , anfConvertReadFuncTypes = Map.fromList funcs
     }
 
 mkDataConInfo :: C.TypeDeclaration -> [(DataConName, (ANF.Type, ConstructorIndex))]
@@ -97,8 +97,8 @@ getDataConInfo con = fromMaybe err . Map.lookup con <$> asks anfConvertReadDataC
   where
    err = error $ "Couldn't find TypeCompilationMethod of TyConDefinition " ++ show con
 
-getIdentArity :: IdentName -> ANFConvert Arity
-getIdentArity ident = maybe UnknownArity KnownArity . Map.lookup ident <$> asks anfConvertReadIdentArities
+getKnownFuncType :: IdentName -> ANFConvert (Maybe ([C.Type], C.Type))
+getKnownFuncType ident = Map.lookup ident <$> asks anfConvertReadFuncTypes
 
 makeTextPointer :: Text -> ANFConvert ANF.TextPointer
 makeTextPointer text = do

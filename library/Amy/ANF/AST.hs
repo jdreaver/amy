@@ -8,7 +8,6 @@ module Amy.ANF.AST
   , DataConDefinition(..)
   , ClosureWrapper(..)
   , Val(..)
-  , Arity(..)
   , Literal(..)
   , TextPointer(..)
   , DataCon(..)
@@ -21,6 +20,7 @@ module Amy.ANF.AST
   , Match(..)
   , Pattern(..)
   , PatCons(..)
+  , KnownFuncApp(..)
   , App(..)
   , ConApp(..)
 
@@ -59,7 +59,8 @@ data Binding
 data Extern
   = Extern
   { externName :: !IdentName
-  , externType :: !Type
+  , externArgTypes :: ![Type]
+  , externReturnType :: !Type
   } deriving (Show, Eq)
 
 data TypeDeclaration
@@ -84,16 +85,9 @@ data ClosureWrapper
   } deriving (Show, Eq)
 
 data Val
-  = Var !(Typed IdentName) !Arity
+  = Var !(Typed IdentName)
   | Lit !Literal
   | ConEnum !Word32 !DataCon
-  deriving (Show, Eq)
-
-data Arity
-  = UnknownArity
-    -- ^ Unknown function, like when a function is used as an argument
-  | KnownArity !Int
-    -- ^ Known function, of course with known arity
   deriving (Show, Eq)
 
 data Literal
@@ -123,7 +117,7 @@ data Expr
   | ECase !Case
   | ECreateClosure !CreateClosure
   | ECallClosure !CallClosure
-  | EKnownFuncApp !(App (Typed IdentName))
+  | EKnownFuncApp !KnownFuncApp
   | EConApp !ConApp
   | EPrimOp !(App PrimitiveFunction)
   deriving (Show, Eq)
@@ -182,6 +176,15 @@ data PatCons
   , patConsType :: !Type
   } deriving (Show, Eq)
 
+data KnownFuncApp
+  = KnownFuncApp
+  { knownFuncAppFunction :: !IdentName
+  , knownFuncAppArgs :: ![Val]
+  , knownFuncAppArgTypes :: ![Type]
+  , knownFuncAppOriginalReturnType :: !Type
+  , knownFuncAppReturnType :: !Type
+  } deriving (Show, Eq)
+
 data App f
   = App
   { appFunction :: !f
@@ -205,7 +208,6 @@ data Type
   | OpaquePointerType
     -- ^ Used for polymorphic types
   | ClosureType
-  | KnownFuncType ![Type] !Type
   | EnumType !Word32
   | TaggedUnionType !TyConName !Word32
   | RecordType ![(RowLabel, Type)]
