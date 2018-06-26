@@ -196,6 +196,7 @@ inferExpr' (S.ELet (S.Let bindings expression _)) = do
     bindings'' <- inferBindings False bindings' bindingTypes
     expression' <- inferExpr expression
     pure $ T.ELet (T.Let bindings'' expression')
+inferExpr' (ELam lam) = error $ "Can't infer lambda yet " ++ show lam
 inferExpr' (S.EApp f e) = do
   f' <- inferExpr f
   tfSub <- currentContextSubst (expressionType f')

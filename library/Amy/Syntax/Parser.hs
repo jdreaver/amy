@@ -170,6 +170,7 @@ expressionTerm =
   , EIf <$> ifExpression <?> "if expression"
   , ECase <$> caseExpression <?> "case expression"
   , ELet <$> letExpression' <?> "let expression"
+  , ELam <$> lambda <?> "lambda"
   , EVar <$> variable <?> "variable"
   ]
 
@@ -285,4 +286,17 @@ letExpression' = do
     { letBindings = bindings
     , letExpression = expr
     , letSpan = mergeSpans startSpan (expressionSpan expr)
+    }
+
+lambda :: AmyParser Lambda
+lambda = do
+  startSpan <- backslash
+  args <- CNE.some $ assertIndented *> ident
+  _ <- rArrow
+  body <- expression <?> "lambda body"
+  pure
+    Lambda
+    { lambdaArgs = args
+    , lambdaBody = body
+    , lambdaSpan = mergeSpans startSpan (expressionSpan body)
     }

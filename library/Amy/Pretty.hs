@@ -30,6 +30,7 @@ module Amy.Pretty
   , prettyLet
   , prettyLetVal
   , prettyBinding
+  , prettyLambda
   , prettyBindingType
   , prettyExtern
   , prettyTypeDeclaration
@@ -162,6 +163,10 @@ prettyLet' mSuffix bindings body =
 prettyBinding :: Doc ann -> [Doc ann] -> Doc ann -> Doc ann
 prettyBinding name args body =
   sep (name : args) <+> "=" <> groupOrHang body
+
+prettyLambda :: [Doc ann] -> Doc ann -> Doc ann
+prettyLambda args body =
+  "\\" <> sep args <+> "->" <> groupOrHang body
 
 prettyBindingType :: Doc ann -> Doc ann -> Doc ann
 prettyBindingType name ty = name <+> "::" <> groupOrHang ty
