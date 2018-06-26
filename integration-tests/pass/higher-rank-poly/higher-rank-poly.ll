@@ -1,13 +1,13 @@
 ; ModuleID = 'amy-module'
 source_filename = "<string>"
 
-%struct.Closure = type { i8, void (...)*, i8, i64* }
+%struct.Closure = type { i8, %struct.Closure* (i64*)*, i8, i64* }
 
 declare i8* @GC_malloc(i64)
 
 declare %struct.Closure* @call_closure(%struct.Closure*, i8, i64*)
 
-declare %struct.Closure* @create_closure(i8, void (...)*)
+declare %struct.Closure* @create_closure(i8, %struct.Closure* (i64*)*)
 
 define private %struct.Closure* @id_closure_wrapper(i64* %env) {
 entry:
@@ -41,7 +41,7 @@ entry:
 
 define i64 @main() {
 entry:
-  %id_closure1 = call %struct.Closure* @create_closure(i8 1, void (...)* bitcast (%struct.Closure* (i64*)* @id_closure_wrapper to void (...)*))
+  %id_closure1 = call %struct.Closure* @create_closure(i8 1, %struct.Closure* (i64*)* @id_closure_wrapper)
   %0 = call i8* @GC_malloc(i64 ptrtoint (i64* getelementptr (i64, i64* null, i32 1) to i64))
   %1 = bitcast i8* %0 to i64*
   store i64 1, i64* %1

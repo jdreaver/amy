@@ -1,13 +1,13 @@
 ; ModuleID = 'amy-module'
 source_filename = "<string>"
 
-%struct.Closure = type { i8, void (...)*, i8, i64* }
+%struct.Closure = type { i8, %struct.Closure* (i64*)*, i8, i64* }
 
 declare i8* @GC_malloc(i64)
 
 declare %struct.Closure* @call_closure(%struct.Closure*, i8, i64*)
 
-declare %struct.Closure* @create_closure(i8, void (...)*)
+declare %struct.Closure* @create_closure(i8, %struct.Closure* (i64*)*)
 
 define private %struct.Closure* @incDouble_closure_wrapper(i64* %env) {
 entry:
@@ -62,7 +62,7 @@ entry:
 
 define private %struct.Closure* @incDouble() {
 entry:
-  %myAddDouble_closure2 = call %struct.Closure* @create_closure(i8 2, void (...)* bitcast (%struct.Closure* (i64*)* @myAddDouble_closure_wrapper to void (...)*))
+  %myAddDouble_closure2 = call %struct.Closure* @create_closure(i8 2, %struct.Closure* (i64*)* @myAddDouble_closure_wrapper)
   %0 = call i8* @GC_malloc(i64 64)
   %1 = bitcast i8* %0 to i64*
   %2 = getelementptr i64, i64* %1, i32 0
@@ -77,7 +77,7 @@ entry:
 
 define private %struct.Closure* @inc() {
 entry:
-  %myAdd_closure3 = call %struct.Closure* @create_closure(i8 2, void (...)* bitcast (%struct.Closure* (i64*)* @myAdd_closure_wrapper to void (...)*))
+  %myAdd_closure3 = call %struct.Closure* @create_closure(i8 2, %struct.Closure* (i64*)* @myAdd_closure_wrapper)
   %0 = call i8* @GC_malloc(i64 64)
   %1 = bitcast i8* %0 to i64*
   %2 = getelementptr i64, i64* %1, i32 0
@@ -91,7 +91,7 @@ entry:
 
 define i64 @main() {
 entry:
-  %incDouble_closure4 = call %struct.Closure* @create_closure(i8 0, void (...)* bitcast (%struct.Closure* (i64*)* @incDouble_closure_wrapper to void (...)*))
+  %incDouble_closure4 = call %struct.Closure* @create_closure(i8 0, %struct.Closure* (i64*)* @incDouble_closure_wrapper)
   %0 = call i8* @GC_malloc(i64 64)
   %1 = bitcast i8* %0 to i64*
   %2 = getelementptr i64, i64* %1, i32 0
@@ -100,7 +100,7 @@ entry:
   %4 = call %struct.Closure* @call_closure(%struct.Closure* %incDouble_closure4, i8 1, i64* %1)
   %5 = ptrtoint %struct.Closure* %4 to i64
   %res5 = bitcast i64 %5 to double
-  %inc_closure6 = call %struct.Closure* @create_closure(i8 0, void (...)* bitcast (%struct.Closure* (i64*)* @inc_closure_wrapper to void (...)*))
+  %inc_closure6 = call %struct.Closure* @create_closure(i8 0, %struct.Closure* (i64*)* @inc_closure_wrapper)
   %6 = call i8* @GC_malloc(i64 64)
   %7 = bitcast i8* %6 to i64*
   %8 = getelementptr i64, i64* %7, i32 0

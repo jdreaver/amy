@@ -38,11 +38,7 @@ createClosure name' func arity = do
       , isVarArg = False
       }
       (AddrSpace 0)
-  funcOp <-
-    namedInstruction
-      Nothing
-      (BitCast (ConstantOperand $ C.GlobalReference funcTy func) closureFuncPointerType [])
-      closureFuncPointerType
+    funcOp = ConstantOperand $ C.GlobalReference funcTy func
 
   -- Call create_closure RTS function
   let
@@ -241,9 +237,9 @@ closureFuncPointerType :: Type
 closureFuncPointerType =
   PointerType
   FunctionType
-  { resultType = VoidType
-  , argumentTypes = []
-  , isVarArg = True
+  { resultType = closurePointerType
+  , argumentTypes = [int64ArrayType]
+  , isVarArg = False
   }
   (AddrSpace 0)
 

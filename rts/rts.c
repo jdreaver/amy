@@ -2,17 +2,17 @@
 #include <string.h>
 #include "gc.h"
 
-/* Generic closure struct. The function pointer and environment are both void
- * because they are meant to be casted to the correct types. */
+/* Closure struct. Packs in a function with known arity and an array of
+   arguments to apply. */
 typedef struct Closure {
   int8_t arity;
-  void (*func_ptr)();
+  struct Closure* (*func_ptr)(int64_t* env);
   int8_t numargs;
   int64_t* env; // N.B. Using int64_t everywhere probably only works well on 64 bit archs
 } Closure;
 
 /* Create a closure. */
-Closure* create_closure(int8_t arity, void (*f)()) {
+Closure* create_closure(int8_t arity, Closure* (*f)(int64_t* env)) {
   struct Closure* closure = (struct Closure*)GC_malloc(sizeof *closure);
   closure->arity = arity;
   closure->func_ptr = f;
@@ -62,7 +62,7 @@ Closure* extend_closure(Closure* closure, int8_t env_size, int64_t* env) {
 Closure* eval_closure(Closure* closure) {
   int8_t arity = closure->arity;
   int8_t numargs = closure->numargs;
-  Closure* (*f)() = (Closure* (*)(int64_t* env, int64_t, int64_t))closure->func_ptr;
+  Closure* (*f)(int64_t* env) = closure->func_ptr;
   int64_t* env = closure -> env;
   Closure* result;
 
