@@ -12,11 +12,9 @@ import Data.Foldable (for_)
 import Data.List (elemIndex, sort)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe, mapMaybe)
-import Data.Traversable (for)
 import GHC.Word (Word32)
 import LLVM.AST as LLVM hiding (type')
 import LLVM.AST.AddrSpace
-import qualified LLVM.AST.CallingConvention as CC
 import qualified LLVM.AST.Constant as C
 import LLVM.AST.Global as LLVM
 import qualified LLVM.AST.IntegerPredicate as IP
@@ -236,31 +234,13 @@ codegenExpr' name' (ANF.ECreateClosure (CreateClosure func arity args')) =
 codegenExpr' name' (ANF.ECallClosure (CallClosure val args' retTy)) =
   callClosure name' (valOperand val) (valOperand <$> args') (llvmType retTy)
 codegenExpr' name' (ANF.EKnownFuncApp (ANF.KnownFuncApp ident args' argTys originalReturnTy returnTy)) = do
-  -- Convert arguments to pointers if we have to
-  argOps <- for (zip args' argTys) $ \(arg, argTy) -> do
-    let originalOp = valOperand arg
-    maybeConvertPointer Nothing originalOp $ llvmType argTy
-
-  -- Add call instruction
   let
-    returnTyLLVM = llvmType returnTy
-    funcTy =
-      FunctionType
-      { resultType = returnTyLLVM
-      , argumentTypes = llvmType <$> argTys
-      , isVarArg = False
-      }
-    funcOperand = ConstantOperand $ C.GlobalReference (LLVM.PointerType funcTy (AddrSpace 0)) (identToName ident)
-    callInstruction = Call Nothing CC.C [] (Right funcOperand) ((\arg -> (arg, [])) <$> argOps) [] []
-    originalReturnTyLLVM = llvmType originalReturnTy
-  if returnTyLLVM == originalReturnTyLLVM
-    then do
-      addInstruction $ name' := callInstruction
-      pure $ LocalReference returnTyLLVM name'
-    else do
-      callName <- freshUnName
-      addInstruction $ callName := callInstruction
-      maybeConvertPointer (Just name') (LocalReference returnTyLLVM callName) originalReturnTyLLVM
+    ident' = identToName ident
+    argVals = valOperand <$> args'
+    argTys' = llvmType <$> argTys
+    originalReturnTy' = llvmType originalReturnTy
+    returnTy' = llvmType returnTy
+  knownFunctionApplication name' ident' argVals argTys' originalReturnTy' returnTy'
 codegenExpr' name' (ANF.EConApp (ANF.ConApp con mArg structName intBits)) =
   packConstructor name' con mArg structName intBits
 codegenExpr' name' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do

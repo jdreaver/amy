@@ -4,6 +4,7 @@ module Amy.Codegen.Closures
   ( createClosure
   , callClosure
   , closureWrapperDefinition
+  , knownFunctionApplication
   , closureStructName
   ) where
 
@@ -188,6 +189,34 @@ closureWrapperBlock funcName argTys retTy = do
 
   -- Cast and return
   convertToClosurePointerOperand callOp
+
+--
+-- Known function application
+--
+
+knownFunctionApplication :: Name -> Name -> [Operand] -> [Type] -> Type -> Type -> BlockGen Operand
+knownFunctionApplication name' funcName argOps argTys originalReturnTy returnTy = do
+  -- Convert arguments to pointers if we have to
+  argOps' <- traverse (uncurry (maybeConvertPointer Nothing)) (zip argOps argTys)
+
+  -- Add call instruction
+  let
+    funcTy =
+      FunctionType
+      { resultType = returnTy
+      , argumentTypes = argTys
+      , isVarArg = False
+      }
+    funcOperand = ConstantOperand $ C.GlobalReference (LLVM.PointerType funcTy (AddrSpace 0)) funcName
+    callInstruction = Call Nothing CC.C [] (Right funcOperand) ((\arg -> (arg, [])) <$> argOps') [] []
+  if returnTy == originalReturnTy
+    then do
+      addInstruction $ name' := callInstruction
+      pure $ LocalReference returnTy name'
+    else do
+      callName <- freshUnName
+      addInstruction $ callName := callInstruction
+      maybeConvertPointer (Just name') (LocalReference returnTy callName) originalReturnTy
 
 --
 -- Function signatures from RTS
