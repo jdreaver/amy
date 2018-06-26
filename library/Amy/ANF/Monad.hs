@@ -15,7 +15,7 @@ module Amy.ANF.Monad
   , getIdentArity
   , makeTextPointer
   , getTextPointers
-  , putTextClosureWrapper
+  , putClosureWrapper
   , getClosureWrappers
   ) where
 
@@ -110,8 +110,8 @@ makeTextPointer text = do
 getTextPointers :: ANFConvert [TextPointer]
 getTextPointers = reverse <$> gets textPointers
 
-putTextClosureWrapper :: IdentName -> [ANF.Type] -> ANF.Type -> ANFConvert IdentName
-putTextClosureWrapper original@(IdentName t) argTys retTy = do
+putClosureWrapper :: IdentName -> [ANF.Type] -> ANF.Type -> ANFConvert IdentName
+putClosureWrapper original@(IdentName t) argTys retTy = do
   let
     name = IdentName $ t <> "_closure_wrapper"
     wrapper = ANF.ClosureWrapper name original argTys retTy
