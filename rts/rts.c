@@ -3,7 +3,7 @@
 #include "gc.h"
 
 /* Closure struct. Packs in a function with known arity and an array of
-   arguments to apply. */
+   arguments to apply (called the environment, or env). */
 typedef struct Closure {
   int8_t arity;
   struct Closure* (*func_ptr)(int64_t* env);
@@ -11,7 +11,7 @@ typedef struct Closure {
   int64_t* env; // N.B. Using int64_t everywhere probably only works well on 64 bit archs
 } Closure;
 
-/* Create a closure. */
+/* Create an empty closure with the given function pointer. */
 Closure* create_closure(int8_t arity, Closure* (*f)(int64_t* env)) {
   struct Closure* closure = (struct Closure*)GC_malloc(sizeof *closure);
   closure->arity = arity;
@@ -26,7 +26,7 @@ Closure* create_closure(int8_t arity, Closure* (*f)(int64_t* env)) {
 int64_t* extend_env(int8_t env1_size, int64_t* env1, int8_t env2_size, int64_t* env2) {
   int64_t* newenv = GC_malloc((size_t)(env1_size + env2_size) * sizeof *newenv);
   if (env1_size > 0) {
-	memcpy(newenv, env1, (size_t)env1_size * sizeof *newenv);
+    memcpy(newenv, env1, (size_t)env1_size * sizeof *newenv);
   }
   memcpy(newenv + env1_size, env2, (size_t)env2_size * sizeof *env2);
   return newenv;
@@ -41,6 +41,7 @@ Closure* copy_closure(Closure* closure) {
   return new_closure;
 }
 
+/* Extends a closure's environment with the given environment. */
 Closure* extend_closure(Closure* closure, int8_t env_size, int64_t* env) {
   struct Closure* new_closure = copy_closure(closure);
   new_closure->env = extend_env(new_closure->numargs, new_closure->env, env_size, env);
@@ -70,18 +71,18 @@ Closure* eval_closure(Closure* closure) {
   if (arity_diff < 0) {
     /* Too many arguments, call then call again with extra arguments tacked on.
 
-	   N.B.: This relies on f returning a closure. Any time a function is
-	   returned from another function, it must be a closure, even if it isn't
-	   partially applied. */
-	result = f(env); // f shouldn't use extra arguments, so we just leave them on
+       N.B.: This relies on f returning a closure. Any time a function is
+       returned from another function, it must be a closure, even if it isn't
+       partially applied. */
+    result = f(env); // f shouldn't use extra arguments, so we just leave them on
     return eval_closure(extend_closure(result, -arity_diff, env + (int64_t)arity)); // TODO: Is "env + arity" the correct offset?
   } else if (arity_diff == 0) {
-	/* Proper number of args, just call the function and return the result. */
-	return f(env);
+    /* Proper number of args, just call the function and return the result. */
+    return f(env);
   } else {
     /* Not enough arguments. This is a partial application, and we just return
-	   the result. */
-	return closure;
+       the result. */
+    return closure;
   }
 }
 
