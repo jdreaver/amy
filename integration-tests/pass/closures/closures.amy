@@ -1,0 +1,8 @@
+main :: Int
+main = inc 2.1
+
+myAdd :: Int -> Double -> Int
+myAdd x y = iAdd# x (doubleToInt# y)
+
+inc :: Double -> Int
+inc = myAdd 1

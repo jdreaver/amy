@@ -75,7 +75,7 @@ Closure* eval_closure(Closure* closure) {
 	   returned from another function, it must be a closure, even if it isn't
 	   partially applied. */
 	result = f(env); // f shouldn't use extra arguments, so we just leave them on
-    return eval_closure(extend_closure(result, -arity_diff, env - arity_diff));
+    return eval_closure(extend_closure(result, -arity_diff, env + (int64_t)arity)); // TODO: Is "env + arity" the correct offset?
   } else if (arity_diff == 0) {
 	/* Proper number of args, just call the function and return the result. */
 	return f(env);
