@@ -29,10 +29,11 @@ prettyFunctionType :: [Type] -> Type -> Doc ann
 prettyFunctionType args retTy = "Func" <> groupOrHang (tupled (prettyType <$> args) <+> "=>" <+> prettyType retTy)
 
 prettyModule :: Module -> Doc ann
-prettyModule (Module bindings externs typeDeclarations _ _) =
+prettyModule (Module bindings externs typeDeclarations _ closureWrappers) =
   vcatTwoHardLines
   $ (prettyExtern' <$> externs)
   ++ (prettyTypeDeclaration' <$> typeDeclarations)
+  ++ (prettyClosureWrapper <$> closureWrappers)
   ++ (prettyBinding' <$> bindings)
 
 prettyExtern' :: Extern -> Doc ann
@@ -45,6 +46,10 @@ prettyTypeDeclaration' (TypeDeclaration tyName _ cons) =
  where
   prettyConstructor (DataConDefinition conName mArg) =
     prettyDataConstructor (prettyDataConName conName) (prettyType <$> mArg)
+
+prettyClosureWrapper :: ClosureWrapper -> Doc ann
+prettyClosureWrapper (ClosureWrapper wrapperName originalName argTys returnTy) =
+  prettyIdent wrapperName <+> parens (prettyIdent originalName) <+> list (prettyType <$> argTys) <+> "=>" <+> prettyType returnTy
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding ident args retTy body) =
