@@ -137,8 +137,7 @@ normalizeExpr name (C.ELet (C.Let bindings expr)) = do
   pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal (NE.toList bindings') expr'
 normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
   let func :| args = C.unfoldApp app
-  normalizeList (normalizeName name) (toList args) $ \rawArgVals ->
-   normalizeList maybeCreateClosure rawArgVals $ \argVals -> do
+  normalizeList (normalizeName name) (toList args) $ \argVals -> do
     retTy' <- convertType retTy
     case func of
       C.EVar (C.VVal (C.Typed _ ident)) -> do
@@ -147,15 +146,16 @@ normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
           -- Primitive operation
           (Just prim, _) -> pure $ ANF.EPrimOp $ ANF.App prim argVals retTy'
           -- Known function
-          (_, Just (funcArgTys, funcRetTy)) -> do
-            funcArgTys' <- traverse convertType funcArgTys
-            funcRetTy' <- convertType funcRetTy
+          (_, Just (funcArgTys, funcRetTy)) ->
             if length argVals == length funcArgTys
             -- Known function call
-            then pure $ ANF.EKnownFuncApp $ KnownFuncApp ident argVals funcArgTys' retTy' funcRetTy'
+            then do
+              funcArgTys' <- traverse convertType funcArgTys
+              funcRetTy' <- convertType funcRetTy
+              pure $ ANF.EKnownFuncApp $ KnownFuncApp ident argVals funcArgTys' retTy' funcRetTy'
             -- Too few or too many args, fall back to using a closure and call it
             else
-              createClosure ident funcArgTys' funcRetTy' $ \closureVal ->
+              createClosure ident funcArgTys funcRetTy $ \closureVal ->
                 pure $ ECallClosure $ CallClosure closureVal argVals retTy'
           -- Unknown function, must be a closure
           (_, Nothing) -> pure $ ECallClosure $ CallClosure (ANF.Var (ANF.Typed ClosureType ident)) argVals retTy'
@@ -192,7 +192,10 @@ normalizeName name (C.EVar var) c =
       case mFuncType of
         -- Top-level values need to be first called as functions
         Just ([], _) -> mkNormalizeLet name (ANF.EKnownFuncApp $ ANF.KnownFuncApp ident [] [] ty' ty') ty' c
-        _ -> c $ ANF.Var $ ANF.Typed ty' ident
+        -- If we have a known function, then make a closure
+        Just (argTys, retTy) -> createClosure ident argTys retTy c
+        -- Not a known function, just return
+        Nothing -> c $ ANF.Var $ ANF.Typed ty' ident
     C.VCons (C.Typed ty con) -> do
       con' <- convertDataCon con
       ty' <- convertType ty
@@ -212,20 +215,11 @@ mkNormalizeLet name expr exprType c = do
   body <- c $ ANF.Var (ANF.Typed exprType newIdent)
   pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal [ANF.LetValBinding newIdent exprType expr] body
 
-maybeCreateClosure :: ANF.Val -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
-maybeCreateClosure v@(ANF.Var (ANF.Typed _ ident)) c = do
-  mFuncType <- getKnownFuncType ident
-  case mFuncType of
-    Just (argTys, retTy) -> do
-      argTys' <- traverse convertType argTys
-      retTy' <- convertType retTy
-      createClosure ident argTys' retTy' c
-    _ -> c v
-maybeCreateClosure v c = c v
-
-createClosure :: ANF.IdentName -> [ANF.Type] -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
+createClosure :: ANF.IdentName -> [C.Type] -> C.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 createClosure ident argTys retTy c = do
-  wrapperName <- putClosureWrapper ident argTys retTy
+  argTys' <- traverse convertType argTys
+  retTy' <- convertType retTy
+  wrapperName <- putClosureWrapper ident argTys' retTy'
   let arity = length argTys
   mkNormalizeLet (unIdentName ident <> "_closure") (ECreateClosure $ CreateClosure wrapperName arity) ClosureType c
 
