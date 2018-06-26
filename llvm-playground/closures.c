@@ -36,12 +36,12 @@ union EnvVal* extend_env(size_t env1_size, union EnvVal* env1, size_t env2_size,
   return newenv;
 }
 
-Closure* make_empty_closure(int arity, void (*f)()) {
+Closure* make_closure(int arity, void (*f)(), size_t numargs, union EnvVal* env) {
   struct Closure* closure = (struct Closure*)malloc(sizeof *closure);
   closure->arity = arity;
   closure->func_ptr = f;
-  closure->numargs = 0;
-  closure->env = NULL;
+  closure->numargs = numargs;
+  closure->env = realloc_env(numargs, env, 0);
   return closure;
 }
 
@@ -68,7 +68,7 @@ Closure* call_closure(Closure* closure) {
   union EnvVal* env = closure -> env;
   Closure* result;
 
-  size_t arity_diff = arity - numargs;
+  size_t arity_diff = (size_t)arity - numargs;
   if (arity_diff < 0) {
     /* Too many arguments, call then call again with extra arguments tacked on */
 	result = f(env); // f shouldn't use extra arguments, so we just leave them on
@@ -111,7 +111,7 @@ struct Closure* make_my_print_closure_1(int x)
   xe.as_int = x;
   union EnvVal env[] = {xe};
 
-  return extend_closure(make_empty_closure(3, &my_print_wrapper_1), 1, env);
+  return make_closure(3, &my_print_wrapper_1, 1, env);
 }
 
 void my_print_wrapper_2(union EnvVal* env) {
@@ -128,7 +128,7 @@ struct Closure* make_my_print_closure_2(int x, int y)
   ye.as_int = y;
   union EnvVal env[] = {xe, ye};
 
-  return extend_closure(make_empty_closure(3, &my_print_wrapper_2), 2, env);
+  return make_closure(3, &my_print_wrapper_2, 2, env);
 }
 
 void my_other(int x, int y, double a, char* z) {
@@ -151,7 +151,7 @@ struct Closure* make_my_other_closure(int x, int y, double a)
   ae.as_double = a;
   union EnvVal env[] = {xe, ye, ae};
 
-  return extend_closure(make_empty_closure(4, &my_other_wrapper), 3, env);
+  return make_closure(4, &my_other_wrapper, 3, env);
 }
 
 int main() {
@@ -176,6 +176,6 @@ int main() {
   one.as_int = 1;
   two.as_int = 2;
   three.as_double = 3.3333;
-  Closure* nested_3 = call_closure_1(make_empty_closure(4, &my_other_wrapper), one);
+  Closure* nested_3 = call_closure_1(make_closure(4, &my_other_wrapper, 0, NULL), one);
   call_closure_3(nested_3, two, three, hello);
 }

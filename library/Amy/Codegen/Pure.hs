@@ -12,11 +12,9 @@ import Data.Foldable (for_)
 import Data.List (elemIndex, sort)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe, mapMaybe)
-import Data.Traversable (for)
 import GHC.Word (Word32)
 import LLVM.AST as LLVM hiding (type')
 import LLVM.AST.AddrSpace
-import qualified LLVM.AST.CallingConvention as CC
 import qualified LLVM.AST.Constant as C
 import LLVM.AST.Global as LLVM
 import qualified LLVM.AST.IntegerPredicate as IP
@@ -24,6 +22,7 @@ import qualified LLVM.AST.Linkage as L
 
 import Amy.ANF as ANF
 import Amy.Codegen.CaseBlocks
+import Amy.Codegen.Closures
 import Amy.Codegen.Malloc
 import Amy.Codegen.Monad
 import Amy.Codegen.TypeConversion
@@ -31,18 +30,16 @@ import Amy.Codegen.Utils
 import Amy.Prim
 
 codegenModule :: ANF.Module -> LLVM.Module
-codegenModule (ANF.Module bindings externs typeDeclarations textPointers) =
+codegenModule (ANF.Module bindings externs typeDeclarations textPointers closureWrappers) =
   let
-    topLevelTypes =
-      ((\(ANF.Binding name' argTys retTy _) -> (name', FuncType (typedType <$> argTys) retTy)) <$> bindings)
-      ++ ((\(ANF.Extern name' ty) -> (name', ty)) <$> externs)
-    definitions = runCodeGen topLevelTypes $ do
+    definitions = runCodeGen $ do
       let
         externs' = codegenExtern <$> externs
         typeDefs = mapMaybe codegenTypeDeclaration typeDeclarations
         textPointers' = codegenTextPointer <$> textPointers
       bindings' <- traverse codegenTopLevelBinding bindings
-      pure $ externs' ++ typeDefs ++ textPointers' ++ bindings'
+      closureWrappers' <- traverse codegenClosureWrapper closureWrappers
+      pure $ externs' ++ typeDefs ++ closureWrappers' ++ textPointers' ++ bindings'
   in
     defaultModule
     { moduleName = "amy-module"
@@ -50,19 +47,15 @@ codegenModule (ANF.Module bindings externs typeDeclarations textPointers) =
     }
 
 codegenExtern :: ANF.Extern -> Definition
-codegenExtern extern =
+codegenExtern (ANF.Extern name' argTys retTy) =
   let
-    (paramTypes, retTy) =
-      case ANF.externType extern of
-        FuncType argTys ret -> (argTys, ret)
-        _ -> error $ "Found extern with non function type " ++ show extern
     mkParam ty = Parameter (llvmType ty) (UnName 0) []
-    params = mkParam <$> paramTypes
+    params = mkParam <$> argTys
     retTy' = llvmType retTy
   in
     GlobalDefinition
     functionDefaults
-    { name = identToName $ ANF.externName extern
+    { name = identToName name'
     , parameters = (params, False)
     , LLVM.returnType = retTy'
     }
@@ -92,6 +85,10 @@ codegenTextPointer ptr =
   , initializer = Just $ textPointerConstant ptr
   , linkage = L.Private
   }
+
+codegenClosureWrapper :: ANF.ClosureWrapper -> CodeGen Definition
+codegenClosureWrapper (ANF.ClosureWrapper name' original argTys retTy) =
+  closureWrapperDefinition (identToName name') (identToName original) (llvmType <$> argTys) (llvmType retTy)
 
 codegenTopLevelBinding :: ANF.Binding -> CodeGen Definition
 codegenTopLevelBinding binding = do
@@ -128,7 +125,7 @@ codegenExpr' name' (ANF.ERecord rows) = do
   let
     rowsTy = Map.toAscList $ typedType <$> rows
     ty = recordType rowsTy
-  allocOp <- callMalloc name' ty
+  allocOp <- callMalloc name' Nothing ty
 
   -- Pack rows
   let numberedRows = zip [0..] $ Map.toAscList rows
@@ -147,7 +144,7 @@ codegenExpr' name' (ANF.ERecordSelect val label retTy) = do
   let
     tyRows =
       case val of
-        Var (Typed (RecordType rows) _) _ -> rows
+        Var (Typed (RecordType rows) _) -> rows
         _ -> error $ "Expected record var, got " ++ show val
     index' =
       fromMaybe (error $ "Couldn't find index for label in type " ++ show (label, tyRows))
@@ -197,7 +194,6 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
       -- integers and sum types.
       _ -> error $ "Cannot generate switch expression for doubles" ++ show bindingTy
 
-
   let
     switchNames = (\(CaseLiteralBlock _ switchName _ constant _) -> (constant, switchName)) <$> literalBlocks
   terminateBlock (Do $ Switch switchOp switchDefaultBlockName switchNames []) switchDefaultBlockName
@@ -233,36 +229,18 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
     allOpsAndBlocks = maybe id (:) mDefaultOpAndBlock matchOpsAndBlocks
   addInstruction $ name' := Phi endTy allOpsAndBlocks []
   pure $ LocalReference endTy name'
-codegenExpr' name' (ANF.EApp (ANF.App (ANF.Typed originalTy ident) args' returnTy)) = do
-  topLevelTy <- topLevelType ident
+codegenExpr' name' (ANF.ECreateClosure (CreateClosure func arity)) =
+  createClosure name' (identToName func) arity
+codegenExpr' name' (ANF.ECallClosure (CallClosure val args' retTy)) =
+  callClosure name' (valOperand val) (valOperand <$> args') (llvmType retTy)
+codegenExpr' name' (ANF.EKnownFuncApp (ANF.KnownFuncApp ident args' argTys originalReturnTy returnTy)) = do
   let
-    (ty, funcOperand) =
-      case topLevelTy of
-        Nothing -> (originalTy, valOperand (ANF.Var (ANF.Typed originalTy ident) False))
-        Just ty' -> (ty', valOperand (ANF.Var (ANF.Typed ty' ident) True))
-  let
-    (argTys', returnTy') =
-      case ty of
-        FuncType argTys ret -> (argTys, ret)
-        _ -> error $ "Tried to EApp a non-function type " ++ show ty
-  -- Convert arguments to pointers if we have to
-  argOps <- for (zip args' argTys') $ \(arg, argTy) -> do
-    let originalOp = valOperand arg
-    maybeConvertPointer Nothing originalOp $ llvmType argTy
-
-  -- Add call instruction
-  let
-    callInstruction = Call Nothing CC.C [] (Right funcOperand) ((\arg -> (arg, [])) <$> argOps) [] []
-    returnTyLLVM = llvmType returnTy
-    returnTyLLVM' = llvmType returnTy'
-  if returnTyLLVM == returnTyLLVM'
-    then do
-      addInstruction $ name' := callInstruction
-      pure $ LocalReference returnTyLLVM' name'
-    else do
-      callName <- freshUnName
-      addInstruction $ callName := callInstruction
-      maybeConvertPointer (Just name') (LocalReference returnTyLLVM' callName) returnTyLLVM
+    ident' = identToName ident
+    argVals = valOperand <$> args'
+    argTys' = llvmType <$> argTys
+    originalReturnTy' = llvmType originalReturnTy
+    returnTy' = llvmType returnTy
+  knownFunctionApplication name' ident' argVals argTys' originalReturnTy' returnTy'
 codegenExpr' name' (ANF.EConApp (ANF.ConApp con mArg structName intBits)) =
   packConstructor name' con mArg structName intBits
 codegenExpr' name' (ANF.EPrimOp (ANF.App prim args' returnTy)) = do
@@ -275,8 +253,7 @@ gepIndex :: Integer -> Operand
 gepIndex i = ConstantOperand $ C.Int 32 i
 
 valOperand :: ANF.Val -> Operand
-valOperand (ANF.Var (ANF.Typed ty ident) True) = ConstantOperand $ C.GlobalReference (llvmType ty) (identToName ident)
-valOperand (ANF.Var (ANF.Typed ty ident) False) = LocalReference (llvmType ty) (identToName ident)
+valOperand (ANF.Var (ANF.Typed ty ident)) = LocalReference (llvmType ty) (identToName ident)
 valOperand (ANF.Lit lit) = ConstantOperand $ literalConstant lit
 valOperand (ANF.ConEnum intBits con) =
   let
@@ -290,7 +267,7 @@ packConstructor name' con mArg (TyConName structName) intBits = do
     structName' = textToName structName
 
   -- Allocate struct
-  allocOp <- callMalloc name' (NamedTypeReference structName')
+  allocOp <- callMalloc name' Nothing (NamedTypeReference structName')
   addInstruction $ name' := Alloca (NamedTypeReference structName') Nothing 0 []
 
   -- Set the tag
@@ -370,14 +347,7 @@ llvmType PrimDoubleType = FloatingPointType DoubleFP
 llvmType PrimTextType = LLVM.PointerType (IntegerType 8) (AddrSpace 0)
 llvmType (ANF.PointerType ty) = LLVM.PointerType (llvmType ty) (AddrSpace 0)
 llvmType OpaquePointerType = LLVM.PointerType (IntegerType 64) (AddrSpace 0)
-llvmType (FuncType argTys retTy) =
-  LLVM.PointerType
-  FunctionType
-  { resultType = llvmType retTy
-  , argumentTypes = llvmType <$> argTys
-  , isVarArg = False
-  }
-  (AddrSpace 0)
+llvmType ClosureType = LLVM.PointerType (NamedTypeReference closureStructName) (AddrSpace 0)
 llvmType (EnumType intBits) = IntegerType intBits
 llvmType (TaggedUnionType structName _) = LLVM.PointerType (NamedTypeReference (textToName $ unTyConName structName)) (AddrSpace 0)
 llvmType (RecordType rows) = LLVM.PointerType (recordType rows) (AddrSpace 0)

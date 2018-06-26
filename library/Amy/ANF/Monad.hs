@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Amy.ANF.Monad
   ( ANFConvert
@@ -11,9 +12,11 @@ module Amy.ANF.Monad
   , getTyConDefinitionType
   , getTyConType
   , getDataConInfo
-  , isIdentTopLevel
+  , getKnownFuncType
   , makeTextPointer
   , getTextPointers
+  , putClosureWrapper
+  , getClosureWrappers
   ) where
 
 import Control.Monad.Reader
@@ -21,10 +24,7 @@ import Control.Monad.State.Strict
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.Text (Text, pack)
-import GHC.Exts (fromList)
 
 import Amy.ANF.AST as ANF
 import Amy.ANF.TypeRep
@@ -35,17 +35,17 @@ newtype ANFConvert a = ANFConvert (ReaderT ANFConvertRead (State ANFConvertState
   deriving (Functor, Applicative, Monad, MonadReader ANFConvertRead, MonadState ANFConvertState)
 
 runANFConvert :: ANFConvertRead -> ANFConvert a -> a
-runANFConvert read' (ANFConvert action) = evalState (runReaderT action read') (ANFConvertState 0 [])
+runANFConvert read' (ANFConvert action) = evalState (runReaderT action read') (ANFConvertState 0 [] Map.empty)
 
 data ANFConvertRead
   = ANFConvertRead
   { anfConvertReadTypeReps :: !(Map TyConName ANF.Type)
   , anfConvertReadDataConInfos :: !(Map DataConName (ANF.Type, ConstructorIndex))
-  , anfConvertReadTopLevelNames :: !(Set IdentName)
+  , anfConvertReadFuncTypes :: !(Map IdentName ([C.Type], C.Type))
   } deriving (Show, Eq)
 
-anfConvertRead :: [IdentName] -> [C.TypeDeclaration] -> ANFConvertRead
-anfConvertRead topLevelNames typeDeclarations =
+anfConvertRead :: [(IdentName, ([C.Type], C.Type))] -> [C.TypeDeclaration] -> ANFConvertRead
+anfConvertRead funcs typeDeclarations =
   let
     allTypeDecls = typeDeclarations ++ (fromPrimTypeDefinition <$> allPrimTypeDefinitions)
     typeRepMap = Map.fromList $ (\t -> (C.tyConDefinitionName $ C.typeDeclarationTypeName t, typeRep t)) <$> allTypeDecls
@@ -54,7 +54,7 @@ anfConvertRead topLevelNames typeDeclarations =
     ANFConvertRead
     { anfConvertReadTypeReps = typeRepMap
     , anfConvertReadDataConInfos = dataConInfos
-    , anfConvertReadTopLevelNames = fromList topLevelNames
+    , anfConvertReadFuncTypes = Map.fromList funcs
     }
 
 mkDataConInfo :: C.TypeDeclaration -> [(DataConName, (ANF.Type, ConstructorIndex))]
@@ -67,6 +67,7 @@ data ANFConvertState
   = ANFConvertState
   { lastId :: !Int
   , textPointers :: ![TextPointer]
+  , closureWrappers :: !(Map IdentName ClosureWrapper)
   } deriving (Show, Eq)
 
 freshId :: ANFConvert Int
@@ -96,8 +97,8 @@ getDataConInfo con = fromMaybe err . Map.lookup con <$> asks anfConvertReadDataC
   where
    err = error $ "Couldn't find TypeCompilationMethod of TyConDefinition " ++ show con
 
-isIdentTopLevel :: IdentName -> ANFConvert Bool
-isIdentTopLevel ident = Set.member ident <$> asks anfConvertReadTopLevelNames
+getKnownFuncType :: IdentName -> ANFConvert (Maybe ([C.Type], C.Type))
+getKnownFuncType ident = Map.lookup ident <$> asks anfConvertReadFuncTypes
 
 makeTextPointer :: Text -> ANFConvert ANF.TextPointer
 makeTextPointer text = do
@@ -108,3 +109,15 @@ makeTextPointer text = do
 
 getTextPointers :: ANFConvert [TextPointer]
 getTextPointers = reverse <$> gets textPointers
+
+putClosureWrapper :: IdentName -> [ANF.Type] -> ANF.Type -> ANFConvert IdentName
+putClosureWrapper original@(IdentName t) argTys retTy = do
+  let
+    name = IdentName $ t <> "_closure_wrapper"
+    wrapper = ANF.ClosureWrapper name original argTys retTy
+  -- TODO: Maybe check for duplicates and ensure they are equal
+  modify' $ \s -> s { closureWrappers = Map.insert name wrapper (closureWrappers s) }
+  pure name
+
+getClosureWrappers :: ANFConvert [ClosureWrapper]
+getClosureWrappers = fmap snd . Map.toAscList <$> gets closureWrappers

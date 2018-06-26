@@ -6,6 +6,7 @@ module Amy.ANF.AST
   , Extern(..)
   , TypeDeclaration(..)
   , DataConDefinition(..)
+  , ClosureWrapper(..)
   , Val(..)
   , Literal(..)
   , TextPointer(..)
@@ -14,9 +15,12 @@ module Amy.ANF.AST
   , LetVal(..)
   , LetValBinding(..)
   , Case(..)
+  , CreateClosure(..)
+  , CallClosure(..)
   , Match(..)
   , Pattern(..)
   , PatCons(..)
+  , KnownFuncApp(..)
   , App(..)
   , ConApp(..)
 
@@ -41,6 +45,7 @@ data Module
   , moduleExterns :: ![Extern]
   , moduleTypeDeclarations :: ![TypeDeclaration]
   , moduleTextPointers :: ![TextPointer]
+  , moduleClosureWrappers :: ![ClosureWrapper]
   } deriving (Show, Eq)
 
 data Binding
@@ -54,7 +59,8 @@ data Binding
 data Extern
   = Extern
   { externName :: !IdentName
-  , externType :: !Type
+  , externArgTypes :: ![Type]
+  , externReturnType :: !Type
   } deriving (Show, Eq)
 
 data TypeDeclaration
@@ -70,8 +76,16 @@ data DataConDefinition
   , dataConDefinitionArgument :: !(Maybe Type)
   } deriving (Show, Eq, Ord)
 
+data ClosureWrapper
+  = ClosureWrapper
+  { closureWrapperName :: !IdentName
+  , closureWrapperOriginalName :: !IdentName
+  , closureWrapperArgTypes :: ![Type]
+  , closureWrapperReturnType :: !Type
+  } deriving (Show, Eq)
+
 data Val
-  = Var !(Typed IdentName) !Bool -- Bool means isTopLevel
+  = Var !(Typed IdentName)
   | Lit !Literal
   | ConEnum !Word32 !DataCon
   deriving (Show, Eq)
@@ -101,7 +115,9 @@ data Expr
   | ERecordSelect !Val !RowLabel !Type
   | ELetVal !LetVal
   | ECase !Case
-  | EApp !(App (Typed IdentName))
+  | ECreateClosure !CreateClosure
+  | ECallClosure !CallClosure
+  | EKnownFuncApp !KnownFuncApp
   | EConApp !ConApp
   | EPrimOp !(App PrimitiveFunction)
   deriving (Show, Eq)
@@ -128,6 +144,19 @@ data Case
   , caseType :: !Type
   } deriving (Show, Eq)
 
+data CreateClosure
+  = CreateClosure
+  { createClosureFunctionName :: !IdentName
+  , createClosureArity :: !Int
+  } deriving (Show, Eq)
+
+data CallClosure
+  = CallClosure
+  { callClosureClosure :: !Val
+  , callClosureArgs :: ![Val]
+  , callClosureReturnType :: !Type
+  } deriving (Show, Eq)
+
 data Match
   = Match
   { matchPattern :: !Pattern
@@ -144,6 +173,15 @@ data PatCons
   { patConsConstructor :: !DataCon
   , patConsArg :: !(Maybe (Typed IdentName))
   , patConsType :: !Type
+  } deriving (Show, Eq)
+
+data KnownFuncApp
+  = KnownFuncApp
+  { knownFuncAppFunction :: !IdentName
+  , knownFuncAppArgs :: ![Val]
+  , knownFuncAppArgTypes :: ![Type]
+  , knownFuncAppOriginalReturnType :: !Type
+  , knownFuncAppReturnType :: !Type
   } deriving (Show, Eq)
 
 data App f
@@ -168,7 +206,7 @@ data Type
   | PointerType !Type
   | OpaquePointerType
     -- ^ Used for polymorphic types
-  | FuncType ![Type] !Type
+  | ClosureType
   | EnumType !Word32
   | TaggedUnionType !TyConName !Word32
   | RecordType ![(RowLabel, Type)]

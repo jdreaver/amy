@@ -16,6 +16,7 @@ import LLVM.AST.Float as F
 
 import Amy.Codegen.Malloc
 import Amy.Codegen.Monad
+import Amy.Codegen.Utils
 
 maybeConvertPointer :: Maybe Name -> Operand -> Type -> BlockGen Operand
 maybeConvertPointer mName op targetTy =
@@ -35,16 +36,12 @@ allocOp op = do
   storeName <- freshUnName
   let
     opTy = operandType op
-  storeOp <- callMalloc storeName opTy
+  storeOp <- callMalloc storeName Nothing opTy
   addInstruction $ Do $ Store False storeOp op Nothing 0 []
   pure storeOp
 
 loadPointerToType :: Maybe Name -> Type -> Operand -> BlockGen Operand
-loadPointerToType mName targetTy op = do
-  resultName <- maybe freshUnName pure mName
-  let resultOp = LocalReference targetTy resultName
-  addInstruction $ resultName := Load False op Nothing 0 []
-  pure resultOp
+loadPointerToType mName targetTy op = namedInstruction mName (Load False op Nothing 0 []) targetTy
 
 maybeBitcast :: Maybe Name -> Type -> Operand -> BlockGen Operand
 maybeBitcast mName ty op =
@@ -52,11 +49,7 @@ maybeBitcast mName ty op =
   if operandType op == ty
   then
     fromMaybe op <$> for mName (\name' -> bindOpToName name' op)
-  else do
-   ptrName <- maybe freshUnName pure mName
-   let ptrOp = LocalReference ty ptrName
-   addInstruction $ ptrName := BitCast op ty []
-   pure ptrOp
+  else namedInstruction mName (BitCast op ty []) ty
 
 operandType :: Operand -> Type
 operandType (LocalReference ty _) = ty
@@ -95,10 +88,6 @@ someFloatType =
 
 bindOpToName :: Name -> Operand -> BlockGen Operand
 bindOpToName name' op = do
-  storeName <- freshUnName
-  let
-    storeOp = LocalReference (PointerType (operandType op) (AddrSpace 0)) storeName
-  addInstruction $ storeName := Alloca (operandType op) Nothing 0 []
+  storeOp <- namedInstruction Nothing (Alloca (operandType op) Nothing 0 []) (PointerType (operandType op) (AddrSpace 0))
   addInstruction $ Do $ Store False storeOp op Nothing 0 []
-  addInstruction $ name' := Load False storeOp Nothing 0 []
-  pure $ LocalReference (operandType op) name'
+  namedInstruction (Just name') (Load False storeOp Nothing 0 []) (operandType op)

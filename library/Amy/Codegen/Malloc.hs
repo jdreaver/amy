@@ -12,9 +12,8 @@ import LLVM.AST.Global as LLVM
 
 import Amy.Codegen.Monad
 
-mallocDefinition :: Definition
+mallocDefinition :: Global
 mallocDefinition =
-  GlobalDefinition
   functionDefaults
   { name = mallocFunctionName
   , parameters = ([Parameter mallocArgType (UnName 0) []], False)
@@ -40,18 +39,18 @@ mallocFunctionType =
   , isVarArg = False
   }
 
-callMalloc :: Name -> Type -> BlockGen Operand
-callMalloc ptrName ty = do
+callMalloc :: Name -> Maybe Integer -> Type -> BlockGen Operand
+callMalloc ptrName mSize ty = do
   -- Make sure malloc definition is generated
-  genExternalFunction mallocFunctionName mallocDefinition
+  genExternalGlobal mallocDefinition
 
   -- Compute size of type
-  size <- sizeOfType ty
+  size <- maybe (sizeOfType ty) (pure . ConstantOperand . C.Int 64) mSize
 
   -- Call malloc
   mallocName <- freshUnName
   let
-    funcOp = ConstantOperand $ C.GlobalReference (PointerType mallocFunctionType (AddrSpace 0)) "GC_malloc"
+    funcOp = ConstantOperand $ C.GlobalReference (PointerType mallocFunctionType (AddrSpace 0)) mallocFunctionName
     mallocOp = LocalReference mallocReturnType mallocName
   addInstruction $ mallocName := Call Nothing CC.C [] (Right funcOp) [(size, [])] [] []
 

@@ -1,0 +1,17 @@
+# Tests closures via partial application and applications with too many
+# arguments.
+
+main :: Int
+main = inc (incDouble 2.01)
+
+myAdd :: Int -> Double -> Int
+myAdd x y = iAdd# x (doubleToInt# y)
+
+inc :: Double -> Int
+inc = myAdd 1
+
+myAddDouble :: Double -> Double -> Double
+myAddDouble x y = dAdd# x y
+
+incDouble :: Double -> Double
+incDouble = myAddDouble 1.01

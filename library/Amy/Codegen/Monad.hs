@@ -13,8 +13,8 @@ module Amy.Codegen.Monad
   , currentBlockName
   , freshId
   , freshUnName
-  , topLevelType
-  , genExternalFunction
+  , genExternalGlobal
+  , genExternalType
   ) where
 
 import Control.Monad.State.Strict
@@ -23,25 +23,22 @@ import Data.Foldable (for_)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import LLVM.AST as LLVM
-
-import Amy.ANF.AST as ANF
+import qualified LLVM.AST.Global as G
 
 newtype CodeGen a = CodeGen (State CodeGenState a)
   deriving (Functor, Applicative, Monad, MonadState CodeGenState)
 
-runCodeGen :: [(IdentName, ANF.Type)] -> CodeGen [Definition] -> [Definition]
-runCodeGen topLevelTypes (CodeGen action) =
+runCodeGen :: CodeGen [Definition] -> [Definition]
+runCodeGen (CodeGen action) =
   let
-    typeMap = Map.fromList topLevelTypes
-    cgState = CodeGenState typeMap Map.empty
+    cgState = CodeGenState Map.empty
     (result, state') = runState action cgState
     externalDefs = fmap snd . Map.toAscList . codeGenStateExternalFunctions $ state'
   in externalDefs ++ result
 
 data CodeGenState
   = CodeGenState
-  { codeGenStateTopLevelTypes :: !(Map IdentName ANF.Type)
-  , codeGenStateExternalFunctions :: !(Map Name Definition)
+  { codeGenStateExternalFunctions :: !(Map Name Definition)
   }
 
 newtype BlockGen a = BlockGen (StateT BlockGenState CodeGen a)
@@ -109,11 +106,14 @@ freshId = do
 freshUnName :: BlockGen LLVM.Name
 freshUnName = UnName <$> freshId
 
-topLevelType :: IdentName -> BlockGen (Maybe ANF.Type)
-topLevelType ident = liftCodeGen $ CodeGen $ TS.gets (Map.lookup ident . codeGenStateTopLevelTypes)
+genExternalGlobal :: Global -> BlockGen ()
+genExternalGlobal global = genExternalDefinition (G.name global) (GlobalDefinition global)
 
-genExternalFunction :: Name -> Definition -> BlockGen ()
-genExternalFunction name def = liftCodeGen $ CodeGen $ do
+genExternalType :: Name -> LLVM.Type -> BlockGen ()
+genExternalType name ty = genExternalDefinition name (TypeDefinition name (Just ty))
+
+genExternalDefinition :: Name -> Definition -> BlockGen ()
+genExternalDefinition name def = liftCodeGen $ CodeGen $ do
   mExistingDef <- TS.gets (Map.lookup name . codeGenStateExternalFunctions)
   for_ mExistingDef $ \existingDef ->
     when (existingDef /= def) $

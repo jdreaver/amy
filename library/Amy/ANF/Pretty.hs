@@ -19,22 +19,26 @@ prettyType PrimDoubleType = "PrimDouble"
 prettyType PrimTextType = "PrimText"
 prettyType (PointerType ty) = "Pointer" <+> parens (prettyType ty)
 prettyType OpaquePointerType = "OpaquePointer"
-prettyType (FuncType args retTy) = "Func" <> groupOrHang (tupled (prettyType <$> args) <+> "=>" <+> prettyType retTy)
+prettyType ClosureType = "ClosureType"
 prettyType (EnumType bits) = "Enum" <+> pretty bits
 prettyType (TaggedUnionType (TyConName name) bits) = "TaggedUnion" <+> pretty name <+> pretty bits
 prettyType (RecordType rows) =
   "RecordType" <> groupOrHang (bracketed ((\(RowLabel label, ty) -> pretty label <+> "::" <> groupOrHang (prettyType ty)) <$> rows))
 
+prettyFunctionType :: [Type] -> Type -> Doc ann
+prettyFunctionType args retTy = "Func" <> groupOrHang (tupled (prettyType <$> args) <+> "=>" <+> prettyType retTy)
+
 prettyModule :: Module -> Doc ann
-prettyModule (Module bindings externs typeDeclarations _) =
+prettyModule (Module bindings externs typeDeclarations _ closureWrappers) =
   vcatTwoHardLines
   $ (prettyExtern' <$> externs)
   ++ (prettyTypeDeclaration' <$> typeDeclarations)
+  ++ (prettyClosureWrapper <$> closureWrappers)
   ++ (prettyBinding' <$> bindings)
 
 prettyExtern' :: Extern -> Doc ann
-prettyExtern' (Extern name ty) =
-  prettyExtern (prettyIdent name) (prettyType ty)
+prettyExtern' (Extern name argTys retTy) =
+  prettyExtern (prettyIdent name) (prettyFunctionType argTys retTy)
 
 prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
 prettyTypeDeclaration' (TypeDeclaration tyName _ cons) =
@@ -43,14 +47,18 @@ prettyTypeDeclaration' (TypeDeclaration tyName _ cons) =
   prettyConstructor (DataConDefinition conName mArg) =
     prettyDataConstructor (prettyDataConName conName) (prettyType <$> mArg)
 
+prettyClosureWrapper :: ClosureWrapper -> Doc ann
+prettyClosureWrapper (ClosureWrapper wrapperName originalName argTys returnTy) =
+  prettyIdent wrapperName <+> parens (prettyIdent originalName) <+> list (prettyType <$> argTys) <+> "=>" <+> prettyType returnTy
+
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding ident args retTy body) =
-  prettyBindingType (prettyIdent ident) (prettyType $ FuncType (typedType <$> args) retTy) <>
+  prettyBindingType (prettyIdent ident) (prettyFunctionType (typedType <$> args) retTy) <>
   hardline <>
   prettyBinding (prettyIdent ident) (prettyIdent . typedValue <$> args) (prettyExpr body)
 
 prettyVal :: Val -> Doc ann
-prettyVal (Var (Typed _ ident) _) = prettyIdent ident
+prettyVal (Var (Typed _ ident)) = prettyIdent ident
 prettyVal (Lit lit) = pretty $ show lit
 prettyVal (ConEnum _ con) = prettyDataConName (dataConName con)
 
@@ -69,9 +77,13 @@ prettyExpr (ECase (Case scrutinee (Typed _ bind) matches mDefault _)) =
     case mDefault of
       Nothing -> []
       Just def -> [("__DEFAULT", prettyExpr def)]
+prettyExpr (ECreateClosure (CreateClosure f arity)) =
+  "$createClosure" <+> prettyIdent f <+> pretty arity
+prettyExpr (ECallClosure (CallClosure f args retTy)) =
+  "$callClosure" <+> prettyVal f <+> list (prettyVal <$> args) <+> "::" <+> prettyType retTy
 prettyExpr (ELetVal (LetVal bindings body)) =
   prettyLetVal (prettyLetValBinding <$> bindings) (prettyExpr body)
-prettyExpr (EApp (App (Typed _ ident) args _)) =
+prettyExpr (EKnownFuncApp (KnownFuncApp ident args _ _ _)) =
   "$call" <+> prettyIdent ident <+> list (prettyVal <$> args)
 prettyExpr (EConApp (ConApp info mArg _ _)) =
   "$mkCon" <+> prettyDataConName (dataConName info) <+> list (prettyVal <$> maybeToList mArg)

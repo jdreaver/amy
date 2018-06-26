@@ -1,3 +1,5 @@
 .stack-work/
 *.cabal
 a.out
+*-rts-linked.ll
+*-rts-opt.ll

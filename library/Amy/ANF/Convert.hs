@@ -27,21 +27,31 @@ normalizeModule mod' =
     bindings = concatMap NE.toList bindingGroups
 
     -- Record top-level names
-    topLevelNames =
-      (C.bindingName <$> bindings)
-      ++ (C.externName <$> externs)
+    bindingTys = (\b -> (C.bindingName b, (C.typedType <$> C.bindingArgs b, C.bindingReturnType b))) <$> bindings
+    externTys = (\e -> (C.externName e, mkExternType (C.externType e))) <$> externs
+    topLevelTys = bindingTys ++ externTys
 
     -- Actual conversion
-    convertRead = anfConvertRead topLevelNames typeDeclarations
+    convertRead = anfConvertRead topLevelTys typeDeclarations
   in runANFConvert convertRead $ do
     typeDeclarations' <- traverse convertTypeDeclaration typeDeclarations
     externs' <- traverse convertExtern externs
     bindings' <- traverse (normalizeBinding (Just "res")) bindings
     textPointers <- getTextPointers
-    pure $ ANF.Module bindings' externs' typeDeclarations' textPointers
+    closureWrappers <- getClosureWrappers
+    pure $ ANF.Module bindings' externs' typeDeclarations' textPointers closureWrappers
 
 convertExtern :: C.Extern -> ANFConvert ANF.Extern
-convertExtern (C.Extern name ty) = ANF.Extern name <$> convertType ty
+convertExtern (C.Extern name ty) = do
+  let (argTys, retTy) = mkExternType ty
+  argTys' <- traverse convertType argTys
+  retTy' <- convertType retTy
+  pure $ ANF.Extern name argTys' retTy'
+
+mkExternType :: C.Type -> ([C.Type], C.Type)
+mkExternType ty =
+  let tyNE = typeToNonEmpty ty
+  in (NE.init tyNE, NE.last tyNE)
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANFConvert ANF.TypeDeclaration
 convertTypeDeclaration (C.TypeDeclaration tyConDef con) = do
@@ -82,9 +92,9 @@ convertType ty = go (typeToNonEmpty ty)
           _ -> error $ "Can't convert non-TyCon TyApp yet " ++ show ty'
       -- N.B. ANF/LLVM doesn't care about polymorphic records
       C.TyRecord rows _ -> mkRecordType rows
-      C.TyFun{} -> mkFunctionType ty
+      C.TyFun{} -> pure ClosureType
       C.TyForall _ ty'' -> convertType ty''
-  go _ = mkFunctionType ty
+  go _ = pure ClosureType
 
 mkRecordType :: Map RowLabel C.Type -> ANFConvert ANF.Type
 mkRecordType rows = do
@@ -93,22 +103,14 @@ mkRecordType rows = do
     pure (label, ty')
   pure $ RecordType rows'
 
-mkFunctionType :: C.Type -> ANFConvert ANF.Type
-mkFunctionType ty = do
-  args <- traverse convertType (NE.init ts)
-  returnType <- convertType $ NE.last ts
-  pure $ FuncType args returnType
- where
-  ts = typeToNonEmpty ty
-
 typeToNonEmpty :: C.Type -> NonEmpty C.Type
 typeToNonEmpty (t1 `C.TyFun` t2) = NE.cons t1 (typeToNonEmpty t2)
 typeToNonEmpty ty = ty :| []
 
 convertTypedIdent :: C.Typed IdentName -> ANFConvert (ANF.Typed IdentName)
-convertTypedIdent (C.Typed ty arg) = do
+convertTypedIdent (C.Typed ty ident) = do
   ty' <- convertType ty
-  pure $ ANF.Typed ty' arg
+  pure $ ANF.Typed ty' ident
 
 normalizeExpr
   :: Text -- ^ Base name for generated variables
@@ -134,11 +136,30 @@ normalizeExpr name (C.ELet (C.Let bindings expr)) = do
   expr' <- normalizeExpr name expr
   pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal (NE.toList bindings') expr'
 normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
-  -- TODO: More robust arity checking besides just unfolding App nodes.
   let func :| args = C.unfoldApp app
-  normalizeList (normalizeName name) (toList args) $ \argVals -> do
+  normalizeList (normalizeName name) (toList args) $ \rawArgVals ->
+   normalizeList maybeCreateClosure rawArgVals $ \argVals -> do
     retTy' <- convertType retTy
     case func of
+      C.EVar (C.VVal (C.Typed _ ident)) -> do
+        mFuncType <- getKnownFuncType ident
+        case (Map.lookup ident primitiveFunctionsByName, mFuncType) of
+          -- Primitive operation
+          (Just prim, _) -> pure $ ANF.EPrimOp $ ANF.App prim argVals retTy'
+          -- Known function
+          (_, Just (funcArgTys, funcRetTy)) -> do
+            funcArgTys' <- traverse convertType funcArgTys
+            funcRetTy' <- convertType funcRetTy
+            if length argVals == length funcArgTys
+            -- Known function call
+            then pure $ ANF.EKnownFuncApp $ KnownFuncApp ident argVals funcArgTys' retTy' funcRetTy'
+            -- Too few or too many args, fall back to using a closure and call it
+            else
+              createClosure ident funcArgTys' funcRetTy' $ \closureVal ->
+                pure $ ECallClosure $ CallClosure closureVal argVals retTy'
+          -- Unknown function, must be a closure
+          (_, Nothing) -> pure $ ECallClosure $ CallClosure (ANF.Var (ANF.Typed ClosureType ident)) argVals retTy'
+      -- Data constructor
       C.EVar (C.VCons (C.Typed _ con)) -> do
         con' <- convertDataCon con
         let
@@ -152,19 +173,8 @@ normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
           _ -> error $ "Invalid type for ConApp " ++ show retTy'
       _ ->
         normalizeName name func $ \funcVal ->
-          case funcVal of
-            ANF.Lit lit -> error $ "Encountered lit function application " ++ show lit
-            ANF.ConEnum _ con -> error $ "Encountered con enum function application " ++ show con
-            ANF.Var (tyIdent@(ANF.Typed _ ident)) _ ->
-              -- TODO: We need something more robust besides looking up by name.
-              -- The Renamer should maybe handle resolving this name, or when we
-              -- have modules we should make sure we are looking at the Prim
-              -- module.
-              case Map.lookup ident primitiveFunctionsByName of
-                -- Primitive operation
-                Just prim -> pure $ ANF.EPrimOp $ ANF.App prim argVals retTy'
-                -- Default, just a function call
-                Nothing -> pure $ ANF.EApp $ ANF.App tyIdent argVals retTy'
+          pure $ ECallClosure $ CallClosure funcVal argVals retTy'
+
 normalizeExpr name (C.EParens expr) = normalizeExpr name expr
 
 normalizeLiteral :: C.Literal -> ANFConvert ANF.Literal
@@ -177,17 +187,12 @@ normalizeName _ (C.ELit lit) c = c =<< ANF.Lit <$> normalizeLiteral lit
 normalizeName name (C.EVar var) c =
   case var of
     C.VVal (C.Typed ty ident) -> do
+      mFuncType <- getKnownFuncType ident
       ty' <- convertType ty
-      isTopLevel <- isIdentTopLevel ident
-      let ident' = ANF.Typed ty' ident
-      if isTopLevel
+      case mFuncType of
         -- Top-level values need to be first called as functions
-        then
-          case ty' of
-            FuncType{} -> c $ ANF.Var ident' isTopLevel
-            _ -> mkNormalizeLet name (ANF.EApp $ ANF.App ident' [] ty') ty' c
-        -- Not a top-level value, just return
-        else c $ ANF.Var ident' isTopLevel
+        Just ([], _) -> mkNormalizeLet name (ANF.EKnownFuncApp $ ANF.KnownFuncApp ident [] [] ty' ty') ty' c
+        _ -> c $ ANF.Var $ ANF.Typed ty' ident
     C.VCons (C.Typed ty con) -> do
       con' <- convertDataCon con
       ty' <- convertType ty
@@ -204,14 +209,34 @@ normalizeName name expr c = do
 mkNormalizeLet :: Text -> ANF.Expr -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 mkNormalizeLet name expr exprType c = do
   newIdent <- freshIdent name
-  body <- c $ ANF.Var (ANF.Typed exprType newIdent) False
+  body <- c $ ANF.Var (ANF.Typed exprType newIdent)
   pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal [ANF.LetValBinding newIdent exprType expr] body
+
+maybeCreateClosure :: ANF.Val -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
+maybeCreateClosure v@(ANF.Var (ANF.Typed _ ident)) c = do
+  mFuncType <- getKnownFuncType ident
+  case mFuncType of
+    Just (argTys, retTy) -> do
+      argTys' <- traverse convertType argTys
+      retTy' <- convertType retTy
+      createClosure ident argTys' retTy' c
+    _ -> c v
+maybeCreateClosure v c = c v
+
+createClosure :: ANF.IdentName -> [ANF.Type] -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
+createClosure ident argTys retTy c = do
+  wrapperName <- putClosureWrapper ident argTys retTy
+  let arity = length argTys
+  mkNormalizeLet (unIdentName ident <> "_closure") (ECreateClosure $ CreateClosure wrapperName arity) ClosureType c
 
 normalizeBinding :: Maybe Text -> C.Binding -> ANFConvert ANF.Binding
 normalizeBinding mName (C.Binding ident _ args retTy body) = do
   -- If we are given a base name, then use it. Otherwise use the binding name
   -- as the base name for all sub expressions.
   let subName = fromMaybe (unIdentName ident) mName
+  -- TODO: Check if body' is actually just a reference to a top-level function.
+  -- If so, we must make a closure. This is probably rare and only happens if
+  -- you alias a function, like "g = f", but it is important.
   body' <- normalizeExpr subName body
   args' <- traverse convertTypedIdent args
   retTy' <- convertType retTy

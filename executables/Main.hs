@@ -11,14 +11,15 @@ import Control.Monad.Except
 import Data.Bifunctor (first)
 import qualified Data.ByteString.Char8 as BS8
 import Data.List (intercalate)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy.IO as TL
 import LLVM.Pretty (ppllvm)
 import Options.Applicative
--- import System.Console.Haskeline
+import System.Environment (lookupEnv)
 import System.Exit (die)
-import System.FilePath.Posix ((</>), replaceExtension, takeDirectory)
+import System.FilePath.Posix ((</>), dropExtension, replaceExtension, takeDirectory)
 import System.Process (callProcess)
 import Text.Megaparsec
 
@@ -73,9 +74,21 @@ process filePath DumpFlags{..} input = do
     llvm <- lift $ generateLLVMIR llvmAST
     lift $ BS8.writeFile llvmFile llvm
 
+    -- Link RTS
+    let linkedLL = dropExtension filePath ++ "-rts-linked.ll"
+    rtsLL <- fromMaybe "rts/rts.ll" <$> lift (lookupEnv "RTS_LL_LOCATION")
+    linked <- lift $ linkRTS rtsLL llvmFile
+    lift $ BS8.writeFile linkedLL linked
+
+    -- Optimize LLVM
+    -- TODO: This breaks some examples
+    -- let optLL = dropExtension filePath ++ "-rts-opt.ll"
+    -- opt <- lift $ optimizeLLVM linkedLL
+    -- lift $ BS8.writeFile optLL opt
+
     -- Compile with clang
     let exeFile = takeDirectory filePath </> "a.out"
-    lift $ callProcess "clang" [llvmFile, "-lgc", "-o", exeFile]
+    lift $ callProcess "clang" ["-lgc", "-o", exeFile, linkedLL]
 
   either (die . intercalate "\n") pure eResult
 
