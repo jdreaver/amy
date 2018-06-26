@@ -229,8 +229,8 @@ codegenExpr' name' (ANF.ECase case'@(ANF.Case scrutinee (Typed bindingTy binding
     allOpsAndBlocks = maybe id (:) mDefaultOpAndBlock matchOpsAndBlocks
   addInstruction $ name' := Phi endTy allOpsAndBlocks []
   pure $ LocalReference endTy name'
-codegenExpr' name' (ANF.ECreateClosure (CreateClosure func arity args')) =
-  createClosure name' (identToName func) arity (valOperand <$> args')
+codegenExpr' name' (ANF.ECreateClosure (CreateClosure func arity)) =
+  createClosure name' (identToName func) arity
 codegenExpr' name' (ANF.ECallClosure (CallClosure val args' retTy)) =
   callClosure name' (valOperand val) (valOperand <$> args') (llvmType retTy)
 codegenExpr' name' (ANF.EKnownFuncApp (ANF.KnownFuncApp ident args' argTys originalReturnTy returnTy)) = do

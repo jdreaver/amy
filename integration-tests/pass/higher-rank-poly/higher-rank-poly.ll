@@ -7,7 +7,7 @@ declare i8* @GC_malloc(i64)
 
 declare %struct.Closure* @call_closure(%struct.Closure*, i8, i64*)
 
-declare %struct.Closure* @create_closure(i8, void (...)*, i8, i64*)
+declare %struct.Closure* @create_closure(i8, void (...)*)
 
 define private %struct.Closure* @id_closure_wrapper(i64* %env) {
 entry:
@@ -41,13 +41,11 @@ entry:
 
 define i64 @main() {
 entry:
-  %0 = call i8* @GC_malloc(i64 0)
+  %id_closure1 = call %struct.Closure* @create_closure(i8 1, void (...)* bitcast (%struct.Closure* (i64*)* @id_closure_wrapper to void (...)*))
+  %0 = call i8* @GC_malloc(i64 ptrtoint (i64* getelementptr (i64, i64* null, i32 1) to i64))
   %1 = bitcast i8* %0 to i64*
-  %id_closure1 = call %struct.Closure* @create_closure(i8 1, void (...)* bitcast (%struct.Closure* (i64*)* @id_closure_wrapper to void (...)*), i8 0, i64* %1)
-  %2 = call i8* @GC_malloc(i64 ptrtoint (i64* getelementptr (i64, i64* null, i32 1) to i64))
-  %3 = bitcast i8* %2 to i64*
-  store i64 1, i64* %3
-  %4 = call i64* @idFancy(%struct.Closure* %id_closure1, i64* %3)
-  %ret = load i64, i64* %4
+  store i64 1, i64* %1
+  %2 = call i64* @idFancy(%struct.Closure* %id_closure1, i64* %1)
+  %ret = load i64, i64* %2
   ret i64 %ret
 }

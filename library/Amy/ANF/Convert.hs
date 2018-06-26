@@ -155,7 +155,7 @@ normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
             then pure $ ANF.EKnownFuncApp $ KnownFuncApp ident argVals funcArgTys' retTy' funcRetTy'
             -- Too few or too many args, fall back to using a closure and call it
             else
-              createClosure ident funcArgTys' funcRetTy' [] $ \closureVal ->
+              createClosure ident funcArgTys' funcRetTy' $ \closureVal ->
                 pure $ ECallClosure $ CallClosure closureVal argVals retTy'
           -- Unknown function, must be a closure
           (_, Nothing) -> pure $ ECallClosure $ CallClosure (ANF.Var (ANF.Typed ClosureType ident)) argVals retTy'
@@ -219,15 +219,15 @@ maybeCreateClosure v@(ANF.Var (ANF.Typed _ ident)) c = do
     Just (argTys, retTy) -> do
       argTys' <- traverse convertType argTys
       retTy' <- convertType retTy
-      createClosure ident argTys' retTy' [] c
+      createClosure ident argTys' retTy' c
     _ -> c v
 maybeCreateClosure v c = c v
 
-createClosure :: ANF.IdentName -> [ANF.Type] -> ANF.Type -> [ANF.Val] -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
-createClosure ident argTys retTy args c = do
+createClosure :: ANF.IdentName -> [ANF.Type] -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
+createClosure ident argTys retTy c = do
   wrapperName <- putClosureWrapper ident argTys retTy
   let arity = length argTys
-  mkNormalizeLet (unIdentName ident <> "_closure") (ECreateClosure $ CreateClosure wrapperName arity args) ClosureType c
+  mkNormalizeLet (unIdentName ident <> "_closure") (ECreateClosure $ CreateClosure wrapperName arity) ClosureType c
 
 normalizeBinding :: Maybe Text -> C.Binding -> ANFConvert ANF.Binding
 normalizeBinding mName (C.Binding ident _ args retTy body) = do

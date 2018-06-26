@@ -21,8 +21,8 @@ import Amy.Codegen.Malloc
 import Amy.Codegen.Monad
 import Amy.Codegen.TypeConversion
 
-createClosure :: LLVM.Name -> LLVM.Name -> Int -> [Operand] -> BlockGen Operand
-createClosure name' func arity argOps = do
+createClosure :: LLVM.Name -> LLVM.Name -> Int -> BlockGen Operand
+createClosure name' func arity = do
   -- Make sure create_closure definition is generated
   genExternalType closureStructName closureStructType
   genExternalGlobal createClosureDefinition
@@ -43,9 +43,6 @@ createClosure name' func arity argOps = do
       (BitCast (ConstantOperand $ C.GlobalReference funcTy func) closureFuncPointerType [])
       closureFuncPointerType
 
-  -- Pack args into an array
-  argsArrayOp <- packInt64Array argOps
-
   -- Call create_closure RTS function
   let
     createClosureOp = ConstantOperand $ C.GlobalReference (PointerType createClosureFunctionType (AddrSpace 0)) createClosureFunctionName
@@ -53,8 +50,6 @@ createClosure name' func arity argOps = do
       (\arg -> (arg, [])) <$>
       [ ConstantOperand $ C.Int 8 (fromIntegral arity)
       , funcOp
-      , ConstantOperand $ C.Int 8 (fromIntegral $ length argOps)
-      , argsArrayOp
       ]
   namedInstruction
     (Just name')
@@ -268,8 +263,6 @@ createClosureDefinition =
     (
       [ Parameter (IntegerType 8) (UnName 0) [] -- arity
       , Parameter closureFuncPointerType (UnName 1) [] -- *f
-      , Parameter (IntegerType 8) (UnName 2) [] -- numargs
-      , Parameter int64ArrayType (UnName 3) [] -- env
       ]
     , False
     )
@@ -283,8 +276,6 @@ createClosureFunctionType =
   , argumentTypes =
     [ IntegerType 8 -- arity
     , closureFuncPointerType -- *f
-    , IntegerType 8 -- numargs
-    , int64ArrayType -- env
     ]
   , isVarArg = False
   }

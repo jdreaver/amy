@@ -11,14 +11,13 @@ typedef struct Closure {
   int64_t* env; // N.B. Using int64_t everywhere probably only works well on 64 bit archs
 } Closure;
 
-/* Create a closure. NOTE: env needs to be heap allocated, not stack
-   allocated. */
-Closure* create_closure(int8_t arity, void (*f)(), int8_t numargs, int64_t* env) {
+/* Create a closure. */
+Closure* create_closure(int8_t arity, void (*f)()) {
   struct Closure* closure = (struct Closure*)GC_malloc(sizeof *closure);
   closure->arity = arity;
   closure->func_ptr = f;
-  closure->numargs = numargs;
-  closure->env = env;
+  closure->numargs = 0;
+  closure->env = NULL;
   return closure;
 }
 

@@ -148,7 +148,6 @@ data CreateClosure
   = CreateClosure
   { createClosureFunctionName :: !IdentName
   , createClosureArity :: !Int
-  , createClosureArgs :: ![Val]
   } deriving (Show, Eq)
 
 data CallClosure

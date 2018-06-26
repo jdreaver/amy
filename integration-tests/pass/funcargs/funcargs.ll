@@ -7,7 +7,7 @@ declare i8* @GC_malloc(i64)
 
 declare %struct.Closure* @call_closure(%struct.Closure*, i8, i64*)
 
-declare %struct.Closure* @create_closure(i8, void (...)*, i8, i64*)
+declare %struct.Closure* @create_closure(i8, void (...)*)
 
 define private %struct.Closure* @myAdd_closure_wrapper(i64* %env) {
 entry:
@@ -41,9 +41,7 @@ entry:
 
 define i64 @main() {
 entry:
-  %0 = call i8* @GC_malloc(i64 0)
-  %1 = bitcast i8* %0 to i64*
-  %myAdd_closure1 = call %struct.Closure* @create_closure(i8 2, void (...)* bitcast (%struct.Closure* (i64*)* @myAdd_closure_wrapper to void (...)*), i8 0, i64* %1)
+  %myAdd_closure1 = call %struct.Closure* @create_closure(i8 2, void (...)* bitcast (%struct.Closure* (i64*)* @myAdd_closure_wrapper to void (...)*))
   %ret = call i64 @apply(%struct.Closure* %myAdd_closure1)
   ret i64 %ret
 }
