@@ -3,7 +3,7 @@
 # Passing tests
 - name: closures
   source: pass/closures
-  program_exit_code: 3
+  program_exit_code: 4
 
 - name: data
   source: pass/data

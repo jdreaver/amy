@@ -145,8 +145,8 @@ convertToClosurePointerOperand operand =
       PointerType _ _ -> namedInstruction Nothing (BitCast operand closurePointerType []) closurePointerType
       IntegerType _ -> namedInstruction Nothing (IntToPtr operand closurePointerType []) closurePointerType
       _ -> do
-        intOp <- namedInstruction Nothing (IntToPtr operand (IntegerType 64) []) (IntegerType 64)
-        namedInstruction Nothing (BitCast intOp closurePointerType []) closurePointerType
+        intOp <- namedInstruction Nothing (BitCast operand (IntegerType 64) []) (IntegerType 64)
+        namedInstruction Nothing (IntToPtr intOp closurePointerType []) (IntegerType 64)
 
 --
 -- Wrapper Functions
