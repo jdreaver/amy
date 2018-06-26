@@ -234,6 +234,9 @@ normalizeBinding mName (C.Binding ident _ args retTy body) = do
   -- If we are given a base name, then use it. Otherwise use the binding name
   -- as the base name for all sub expressions.
   let subName = fromMaybe (unIdentName ident) mName
+  -- TODO: Check if body' is actually just a reference to a top-level function.
+  -- If so, we must make a closure. This is probably rare and only happens if
+  -- you alias a function, like "g = f", but it is important.
   body' <- normalizeExpr subName body
   args' <- traverse convertTypedIdent args
   retTy' <- convertType retTy
