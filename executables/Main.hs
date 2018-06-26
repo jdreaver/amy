@@ -77,7 +77,14 @@ process filePath DumpFlags{..} input = do
     -- Link RTS
     let linkedLL = dropExtension filePath ++ "-rts-linked.ll"
     rtsLL <- fromMaybe "rts/rts.ll" <$> lift (lookupEnv "RTS_LL_LOCATION")
-    lift $ callProcess "llvm-link" ["-S", "-o", linkedLL, rtsLL, llvmFile]
+    linked <- lift $ linkRTS rtsLL llvmFile
+    lift $ BS8.writeFile linkedLL linked
+
+    -- Optimize LLVM
+    -- TODO: This breaks some examples
+    -- let optLL = dropExtension filePath ++ "-rts-opt.ll"
+    -- opt <- lift $ optimizeLLVM linkedLL
+    -- lift $ BS8.writeFile optLL opt
 
     -- Compile with clang
     let exeFile = takeDirectory filePath </> "a.out"
