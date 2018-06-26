@@ -216,7 +216,8 @@ lexToken = lexeme lexToken'
 lexToken' :: Lexer AmyToken
 lexToken' =
   choice
-  [ try (string "extern" $> ExternToken)
+  [ try (IdentToken <$> lexIdentifier)
+  , try (string "extern" $> ExternToken)
   , try (string "if" $> IfToken)
   , try (string "then" $> ThenToken)
   , try (string "else" $> ElseToken)
@@ -240,7 +241,6 @@ lexToken' =
   , try (string "->" $> RArrowToken)
   , try (either DoubleToken IntToken <$> lexNumber)
   , try (TextToken <$> lexText)
-  , try (IdentToken <$> lexIdentifier)
   , try (TypeIdentToken <$> lexTypeIdentifier)
   ]
 
@@ -252,7 +252,7 @@ lexText :: Lexer Text
 lexText = fmap pack $ char '"' >> manyTill L.charLiteral (char '"')
 
 lexIdentifier :: Lexer Text
-lexIdentifier = try (p >>= check)
+lexIdentifier = p >>= check
  where
   p = do
     firstChar <- lowerChar
@@ -274,6 +274,7 @@ reservedWords =
   , "of"
   , "let"
   , "in"
+  , "forall"
   ]
 
 lexTypeIdentifier :: Lexer Text
