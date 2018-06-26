@@ -252,8 +252,6 @@ codegenExpr' name' (ANF.EKnownFuncApp (ANF.App (ANF.Typed originalTy ident) args
   let
     (argTys', returnTy') =
       case ty of
-        -- TODO: This should call a closure evaluation
-        ClosureType -> error "Can't codegen closure calls yet"
         KnownFuncType argTys ret -> (argTys, ret)
         _ -> error $ "Tried to EApp a non-function type " ++ show ty
   -- Convert arguments to pointers if we have to
