@@ -7,6 +7,7 @@ module Amy.Codegen.Utils
   , textPointerType
   , textPointerName
   , textPointerConstant
+  , namedInstruction
   ) where
 
 import qualified Data.ByteString.Char8 as BS8
@@ -19,6 +20,7 @@ import LLVM.AST as LLVM
 import qualified LLVM.AST.Constant as C
 
 import Amy.ANF.AST as ANF
+import Amy.Codegen.Monad
 
 identToName :: IdentName -> LLVM.Name
 identToName (IdentName name') = textToName name'
@@ -42,3 +44,10 @@ textPointerConstant (TextPointer _ text) = C.Array (LLVM.IntegerType 8) array
  where
   chars = (fromIntegral . ord <$> unpack text) ++ [0]
   array = C.Int 8 <$> chars
+
+namedInstruction :: Maybe LLVM.Name -> Instruction -> LLVM.Type -> BlockGen Operand
+namedInstruction mName instruction ty = do
+  name' <- maybe freshUnName pure mName
+  let op = LocalReference ty name'
+  addInstruction $ name' := instruction
+  pure op

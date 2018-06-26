@@ -20,6 +20,7 @@ import qualified LLVM.AST.Linkage as L
 import Amy.Codegen.Malloc
 import Amy.Codegen.Monad
 import Amy.Codegen.TypeConversion
+import Amy.Codegen.Utils
 
 createClosure :: LLVM.Name -> LLVM.Name -> Int -> BlockGen Operand
 createClosure name' func arity = do
@@ -106,13 +107,6 @@ packInt64Array operands = do
       ty ->
         let ptrTy = PointerType ty (AddrSpace 0)
         in namedInstruction Nothing (BitCast ptrOp ptrTy []) ptrTy
-
-namedInstruction :: Maybe LLVM.Name -> Instruction -> Type -> BlockGen Operand
-namedInstruction mName instruction ty = do
-  name' <- maybe freshUnName pure mName
-  let op = LocalReference ty name'
-  addInstruction $ name' := instruction
-  pure op
 
 --
 -- Conversion to/from Closure pointer
