@@ -10,7 +10,7 @@ module Amy.TypeCheck.TypeCheck
 
 import Control.Monad (replicateM)
 import Control.Monad.Except
-import Data.Foldable (for_, traverse_)
+import Data.Foldable (for_, traverse_, toList)
 import Data.List (foldl')
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
@@ -119,7 +119,18 @@ inferBindingGroup isTopLevel bindingTypeMap bindings = do
       contextSubstBinding context' $ binding { T.bindingType = ty' }
 
 inferBinding :: S.Binding -> Checker T.Binding
-inferBinding (S.Binding (Located nameSpan name) args body) = withSourceSpan nameSpan $ withNewLexicalScope $ do
+inferBinding (S.Binding (Located nameSpan name) args body) = do
+  (args', body', ty, retTy, context) <- inferAbs args body nameSpan
+  pure $ contextSubstBinding context $ T.Binding name ty args' retTy body'
+
+-- | Helper to infer both bindings and lambdas
+inferAbs
+  :: (Traversable t)
+  => t (Located IdentName)
+  -> S.Expr
+  -> SourceSpan
+  -> Checker (t (Typed IdentName), T.Expr, T.Type, T.Type, Context)
+inferAbs args body span' = withSourceSpan span' $ withNewLexicalScope $ do
   argsAndVars <- for args $ \larg@(Located _ arg) -> do
     ty <- freshTyExistVar
     addValueTypeToScope larg (TyExistVar ty)
@@ -131,7 +142,7 @@ inferBinding (S.Binding (Located nameSpan name) args body) = withSourceSpan name
   body' <- checkExpr body (TyExistVar bodyVar)
 
   -- Construct the type from arg/body variables
-  let ty = foldr1 T.TyFun $ T.TyExistVar <$> ((snd <$> argsAndVars) ++ [bodyVar])
+  let ty = foldr1 T.TyFun $ T.TyExistVar <$> (toList (snd <$> argsAndVars) ++ [bodyVar])
 
   -- Convert binding
   args' <- for argsAndVars $ \(arg, var) -> do
@@ -141,7 +152,7 @@ inferBinding (S.Binding (Located nameSpan name) args body) = withSourceSpan name
 
   (contextL, contextR) <- findMarkerHole marker
   putContext contextL
-  pure $ contextSubstBinding (contextL <> contextR) $ T.Binding name ty args' retTy body'
+  pure (args', body', ty, retTy, contextL <> contextR)
 
 generalize :: Context -> T.Type -> (T.Type, Context)
 generalize context ty =
@@ -196,7 +207,9 @@ inferExpr' (S.ELet (S.Let bindings expression _)) = do
     bindings'' <- inferBindings False bindings' bindingTypes
     expression' <- inferExpr expression
     pure $ T.ELet (T.Let bindings'' expression')
-inferExpr' (S.ELam lam) = error $ "Can't infer lambda yet " ++ show lam
+inferExpr' (S.ELam (S.Lambda args body span')) = do
+  (args', body', ty, _, context) <- inferAbs args body span'
+  pure $ contextSubstExpr context $ T.ELam $ T.Lambda args' body' ty
 inferExpr' (S.EApp f e) = do
   f' <- inferExpr f
   tfSub <- currentContextSubst (expressionType f')
@@ -295,7 +308,18 @@ checkBinding :: S.Binding -> T.Type -> Checker T.Binding
 checkBinding binding (T.TyForall as t) =
   withContextUntilNE (ContextVar <$> as) $
     checkBinding binding t
-checkBinding (S.Binding (Located span' name) args body) t =
+checkBinding (S.Binding (Located span' name) args body) t = do
+  (args', body', bodyTy, context) <- checkAbs args body t span'
+  pure $ contextSubstBinding context $ T.Binding name t args' bodyTy body'
+
+-- | Helper to check bindings and lambdas
+checkAbs
+  :: [Located IdentName]
+  -> S.Expr
+  -> T.Type
+  -> SourceSpan
+  -> Checker ([Typed IdentName], T.Expr, T.Type, Context)
+checkAbs args body t span' =
   withSourceSpan span' $ do
     -- Split out argument and body types
     let
@@ -316,9 +340,8 @@ checkBinding (S.Binding (Located span' name) args body) t =
       -- Check body
       body' <- checkExpr body bodyTy
 
-      -- Substitute and return new binding
       context <- getContext
-      pure $ contextSubstBinding context $ T.Binding name t args' bodyTy body'
+      pure (args', body', bodyTy, context)
 
 checkExpr :: S.Expr -> T.Type -> Checker T.Expr
 checkExpr e t = withSourceSpan (expressionSpan e) $ checkExpr' e t
@@ -327,6 +350,9 @@ checkExpr' :: S.Expr -> T.Type -> Checker T.Expr
 checkExpr' e (T.TyForall as t) =
   withContextUntilNE (ContextVar <$> as) $
     checkExpr e t
+checkExpr' (S.ELam (S.Lambda args body span')) t@T.TyFun{} = do
+  (args', body', _, context) <- checkAbs (toList args) body t span'
+  pure $ contextSubstExpr context $ T.ELam $ T.Lambda (NE.fromList args') body' t
 checkExpr' e t = do
   e' <- inferExpr e
   tSub <- currentContextSubst t
