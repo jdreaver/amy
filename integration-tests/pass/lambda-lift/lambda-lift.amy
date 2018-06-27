@@ -1,4 +1,4 @@
-# Demonstrate lambda lifting in let expressions
+# Demonstrate lambda lifting
 
 main :: Int
 main =
