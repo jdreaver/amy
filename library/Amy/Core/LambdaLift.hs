@@ -15,13 +15,10 @@ module Amy.Core.LambdaLift
   ) where
 
 import Control.Monad.State.Strict
-import Data.Bifunctor (second)
 import Data.Foldable (for_, traverse_)
 import Data.List (foldl', tails)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -55,14 +52,14 @@ newtype Lift a = Lift (State LiftState a)
 
 runLift :: Lift a -> (a, [LiftedBinding])
 runLift (Lift action) =
-  let (result, liftState) = runState action (LiftState 0 Set.empty Map.empty)
-  in (result, Map.elems $ liftedBindings liftState)
+  let (result, liftState) = runState action (LiftState 0 Set.empty [])
+  in (result, reverse $ liftedBindings liftState)
 
 data LiftState
   = LiftState
   { lastId :: !Int
   , boundVariables :: !(Set (Typed IdentName))
-  , liftedBindings :: !(Map IdentName LiftedBinding)
+  , liftedBindings :: ![LiftedBinding]
     -- ^ Map from old IdentName to new lifted function
   } deriving (Show, Eq)
 
@@ -107,11 +104,11 @@ mkLiftedFunction newArgs binding = do
   let lifted = LiftedBinding newArgs binding { bindingName = newName }
   pure (oldIdent, lifted)
 
-storeLifted :: IdentName -> LiftedBinding -> Lift ()
-storeLifted oldIdent lifted = do
+storeLifted :: LiftedBinding -> Lift ()
+storeLifted lifted = do
   binding' <- liftBindingBindings $ liftedBindingBinding lifted
   let lifted' = lifted { liftedBindingBinding = binding' }
-  modify' $ \s -> s { liftedBindings = Map.insert oldIdent lifted' (liftedBindings s) }
+  modify' $ \s -> s { liftedBindings = lifted' : liftedBindings s }
 
 --
 -- Lambda Lifting
@@ -188,10 +185,10 @@ liftExprBindings = go
           bindBody' = replaceLiftedBindings lifted bindBody
         in binding { bindingBody = bindBody' }
       replaceLifted (LiftedBinding args binding) = LiftedBinding args (replaceBody binding)
-      lifted' = second replaceLifted <$> lifted
+      lifted' = replaceLifted . snd <$> lifted
       unlifted' = replaceBody . fst <$> unlifted
       body' = replaceLiftedBindings lifted body
-    traverse_ (uncurry storeLifted) lifted'
+    traverse_ storeLifted lifted'
 
     case NE.nonEmpty unlifted' of
       Nothing -> go body'
