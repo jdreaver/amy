@@ -15,6 +15,7 @@ module Amy.TypeCheck.AST
   , Pattern(..)
   , PatCons(..)
   , Let(..)
+  , Lambda(..)
   , App(..)
   , expressionType
   , matchType
@@ -94,6 +95,7 @@ data Expr
   | EIf !If
   | ECase !Case
   | ELet !Let
+  | ELam !Lambda
   | EApp !App
   | EParens !Expr
   deriving (Show, Eq)
@@ -142,6 +144,13 @@ data Let
   , letExpression :: !Expr
   } deriving (Show, Eq)
 
+data Lambda
+  = Lambda
+  { lambdaArgs :: !(NonEmpty (Typed IdentName))
+  , lambdaBody :: !Expr
+  , lambdaType :: !Type
+  } deriving (Show, Eq)
+
 data App
   = App
   { appFunction :: !Expr
@@ -163,6 +172,7 @@ expressionType (EVar var) =
 expressionType (EIf if') = expressionType (ifThen if') -- Checker ensure "then" and "else" types match
 expressionType (ECase (Case _ (match :| _))) = matchType match
 expressionType (ELet let') = expressionType (letExpression let')
+expressionType (ELam (Lambda _ _ ty)) = ty
 expressionType (EApp app) = appReturnType app
 expressionType (EParens expr) = expressionType expr
 

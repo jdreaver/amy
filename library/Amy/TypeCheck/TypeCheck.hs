@@ -196,7 +196,7 @@ inferExpr' (S.ELet (S.Let bindings expression _)) = do
     bindings'' <- inferBindings False bindings' bindingTypes
     expression' <- inferExpr expression
     pure $ T.ELet (T.Let bindings'' expression')
-inferExpr' (ELam lam) = error $ "Can't infer lambda yet " ++ show lam
+inferExpr' (S.ELam lam) = error $ "Can't infer lambda yet " ++ show lam
 inferExpr' (S.EApp f e) = do
   f' <- inferExpr f
   tfSub <- currentContextSubst (expressionType f')
@@ -438,6 +438,8 @@ contextSubstExpr context (T.ECase (T.Case scrutinee matches)) =
   T.ECase (T.Case (contextSubstExpr context scrutinee) (contextSubstMatch context <$> matches))
 contextSubstExpr context (T.ELet (T.Let bindings expr)) =
   T.ELet (T.Let (fmap (contextSubstBinding context) <$> bindings) (contextSubstExpr context expr))
+contextSubstExpr context (T.ELam (T.Lambda args body ty)) =
+  T.ELam (T.Lambda (contextSubstTyped context <$> args) (contextSubstExpr context body) (contextSubst context ty))
 contextSubstExpr context (T.EApp (T.App f arg returnType)) =
   T.EApp (T.App (contextSubstExpr context f) (contextSubstExpr context arg) (contextSubst context returnType))
 contextSubstExpr context (T.EParens expr) = T.EParens (contextSubstExpr context expr)

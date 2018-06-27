@@ -80,7 +80,7 @@ desugarExpr (T.ECase (T.Case scrutinee matches)) = do
             , C.bindingBody = scrutinee'
             }
         in C.ELet $ C.Let (scrutineeBinding :| []) e
-
+desugarExpr (T.ELam lam) = error $ "Can't desugar lambda yet " ++ show lam
 desugarExpr (T.EIf (T.If pred' then' else')) =
   let
     boolTyCon' = T.TyCon boolTyCon
