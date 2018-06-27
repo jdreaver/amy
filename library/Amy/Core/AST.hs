@@ -16,6 +16,7 @@ module Amy.Core.AST
   , Pattern(..)
   , PatCons(..)
   , Let(..)
+  , Lambda(..)
   , App(..)
   , unfoldApp
   , expressionType
@@ -114,6 +115,7 @@ data Expr
   | EVar !Var
   | ECase !Case
   | ELet !Let
+  | ELam !Lambda
   | EApp !App
   | EParens !Expr
   deriving (Show, Eq)
@@ -162,6 +164,13 @@ data Let
   , letExpression :: !Expr
   } deriving (Show, Eq)
 
+data Lambda
+  = Lambda
+  { lambdaArgs :: !(NonEmpty (Typed IdentName))
+  , lambdaBody :: !Expr
+  , lambdaType :: !Type
+  } deriving (Show, Eq)
+
 data App
   = App
   { appFunction :: !Expr
@@ -190,6 +199,7 @@ expressionType e@(ECase (Case _ _ matches defaultMatch)) =
     ([], Just expr) -> expressionType expr
     _ -> error $ "Found empty case expression with no branches " ++ show e
 expressionType (ELet let') = expressionType (letExpression let')
+expressionType (ELam (Lambda _ _ ty)) = ty
 expressionType (EApp app) = appReturnType app
 expressionType (EParens expr) = expressionType expr
 
@@ -222,6 +232,9 @@ traverseExprTopDownM f expr = f' expr
     bindings' <- traverse (\(Binding name ty args ret body) -> Binding name ty args ret <$> f' body) bindings
     e' <- f' e
     pure $ ELet $ Let bindings' e'
+  go (ELam (Lambda args body ty)) = do
+    body' <- f' body
+    pure $ ELam $ Lambda args body' ty
   go (EApp (App func arg ty)) = do
     func' <- f' func
     arg' <- f' arg
@@ -256,6 +269,9 @@ traverseExprM f = go
     bindings' <- traverse (\(Binding name ty args ret body) -> Binding name ty args ret <$> f body) bindings
     e' <- f e
     pure $ ELet $ Let bindings' e'
+  go (ELam (Lambda args body ty)) = do
+    body' <- f body
+    pure $ ELam $ Lambda args body' ty
   go (EApp (App func arg ty)) = do
     func' <- f func
     arg' <- f arg
@@ -284,6 +300,8 @@ freeExprVars (ECase (Case scrutinee bind matches default')) =
   patternVars (PCons (PatCons _ mPat _)) = maybe Set.empty Set.singleton mPat
 freeExprVars (ELet (Let bindings expr)) =
   Set.unions (freeExprVars expr : (freeBindingVars <$> NE.toList bindings))
+freeExprVars (ELam (Lambda args body _)) =
+  freeExprVars body `Set.difference` Set.fromList (NE.toList args)
 freeExprVars (EApp (App f arg _)) = freeExprVars f `Set.union` freeExprVars arg
 freeExprVars (EParens expr) = freeExprVars expr
 

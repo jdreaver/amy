@@ -135,6 +135,7 @@ normalizeExpr name (C.ELet (C.Let bindings expr)) = do
   bindings' <- traverse normalizeLetBinding bindings
   expr' <- normalizeExpr name expr
   pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal (NE.toList bindings') expr'
+normalizeExpr _ (C.ELam lam) = error $ "All lambdas should have been lifted! " ++ show lam
 normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
   let func :| args = C.unfoldApp app
   normalizeList (normalizeName name) (toList args) $ \argVals -> do
