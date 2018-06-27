@@ -132,6 +132,15 @@ liftBindingBindings (Binding name ty args retTy body) = withNewScope $ do
 liftExprBindings :: Expr -> Lift Expr
 liftExprBindings = go
  where
+  -- Turn lambdas into let expression so we can use the same code
+  go (ELam (Lambda args body ty)) = do
+    name <- IdentName . ("lambda" <>) . pack . show <$> freshId
+    let
+      binding = Binding name ty (NE.toList args) (expressionType body) body
+      var = EVar $ VVal $ Typed ty name
+    go $ ELet $ Let (binding :| []) var
+
+  -- Lift let expressions
   go (ELet (Let bindings body)) = withNewScope $ do
     -- Bind binding names to scope
     for_ bindings $ \binding -> bindVariable $ Typed (bindingType binding) (bindingName binding)

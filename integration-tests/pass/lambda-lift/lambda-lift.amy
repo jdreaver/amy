@@ -14,7 +14,7 @@ main =
 
     # Needs closing
     z = 2
-    f x = iAdd# z x
+    f = \x -> iAdd# z x
 
     # Mutually recursive, and needs closing
     a = 1
