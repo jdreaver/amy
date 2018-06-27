@@ -109,10 +109,8 @@ mkLiftedFunction newArgs binding = do
 
 storeLifted :: IdentName -> LiftedBinding -> Lift ()
 storeLifted oldIdent lifted = do
-  let
-    body = bindingBody $ liftedBindingBinding lifted
-  body' <- liftExprBindings body
-  let lifted' = lifted { liftedBindingBinding = (liftedBindingBinding lifted) { bindingBody = body' } }
+  binding' <- liftBindingBindings $ liftedBindingBinding lifted
+  let lifted' = lifted { liftedBindingBinding = binding' }
   modify' $ \s -> s { liftedBindings = Map.insert oldIdent lifted' (liftedBindings s) }
 
 --

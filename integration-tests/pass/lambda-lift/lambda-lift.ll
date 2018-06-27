@@ -20,6 +20,17 @@ entry:
   ret %struct.Closure* %5
 }
 
+define private %struct.Closure* @"lambda8_$9_closure_wrapper"(i64* %env) {
+entry:
+  %0 = getelementptr i64, i64* %env, i32 0
+  %1 = load i64, i64* %0
+  %2 = getelementptr i64, i64* %env, i32 1
+  %3 = load i64, i64* %2
+  %4 = call i64 @"lambda8_$9"(i64 %1, i64 %3)
+  %5 = inttoptr i64 %4 to %struct.Closure*
+  ret %struct.Closure* %5
+}
+
 define i64 @main() {
 entry:
   %0 = alloca i64
@@ -80,21 +91,35 @@ case.end.ret:                                     ; preds = %case.1.ret, %case.0
 
 define private i64 @"g'_$6"(i64 %a, i64 %z, i64 %x) {
 entry:
-  %res6 = add i64 %x, %a
-  %ret = call i64 @"g_$7"(i64 %a, i64 %z, i64 %res6)
+  %"lambda8_$9_closure6" = call %struct.Closure* @create_closure(i8 2, %struct.Closure* (i64*)* @"lambda8_$9_closure_wrapper")
+  %0 = call i8* @GC_malloc(i64 64)
+  %1 = bitcast i8* %0 to i64*
+  %2 = getelementptr i64, i64* %1, i32 0
+  store i64 %x, i64* %2
+  %3 = call %struct.Closure* @call_closure(%struct.Closure* %"lambda8_$9_closure6", i8 1, i64* %1)
+  %4 = alloca %struct.Closure*
+  store %struct.Closure* %3, %struct.Closure** %4
+  %res7 = load %struct.Closure*, %struct.Closure** %4
+  %5 = call i8* @GC_malloc(i64 64)
+  %6 = bitcast i8* %5 to i64*
+  %7 = getelementptr i64, i64* %6, i32 0
+  store i64 %a, i64* %7
+  %8 = call %struct.Closure* @call_closure(%struct.Closure* %res7, i8 1, i64* %6)
+  %res8 = ptrtoint %struct.Closure* %8 to i64
+  %ret = call i64 @"g_$7"(i64 %a, i64 %z, i64 %res8)
   ret i64 %ret
 }
 
 define private i64 @"id_$1"(i64 %x) {
 entry:
-  %ret = call i64 @"id'_$2"(i64 %x)
+  %ret = call i64 @"id'_$2"(i64 %x, i64 %x)
   ret i64 %ret
 }
 
-define private i64 @"id'_$2"(i64 %y) {
+define private i64 @"id'_$2"(i64 %x, i64 %y) {
 entry:
   %0 = alloca i64
-  store i64 %y, i64* %0
+  store i64 %x, i64* %0
   %ret = load i64, i64* %0
   ret i64 %ret
 }
@@ -102,5 +127,11 @@ entry:
 define private i64 @"lambda3_$4"(i64 %z, i64 %x) {
 entry:
   %ret = add i64 %z, %x
+  ret i64 %ret
+}
+
+define private i64 @"lambda8_$9"(i64 %x, i64 %y) {
+entry:
+  %ret = add i64 %x, %y
   ret i64 %ret
 }
