@@ -44,6 +44,7 @@ module Amy.Syntax.Lexer
   , semiColon
   , equals
   , rArrow
+  , backslash
 
     -- * Indentation
   , noIndent
@@ -97,6 +98,7 @@ data AmyToken
   | SemiColonToken
   | EqualsToken
   | RArrowToken
+  | BackslashToken
   deriving (Show, Eq, Ord)
 
 prettyToken :: AmyToken -> Text
@@ -127,6 +129,7 @@ prettyToken ColonToken = ":"
 prettyToken SemiColonToken = ";"
 prettyToken EqualsToken = "="
 prettyToken RArrowToken = "->"
+prettyToken BackslashToken = "\\"
 
 prettyTokens :: AmyTokens -> Text
 prettyTokens (AmyTokens ts) = T.unwords $ prettyToken . locatedValue <$> ts
@@ -239,6 +242,7 @@ lexToken' =
   , try (string ";" $> SemiColonToken)
   , try (string "=" $> EqualsToken)
   , try (string "->" $> RArrowToken)
+  , try (string "\\" $> BackslashToken)
   , try (either DoubleToken IntToken <$> lexNumber)
   , try (TextToken <$> lexText)
   , try (TypeIdentToken <$> lexTypeIdentifier)
@@ -388,6 +392,9 @@ equals = matchToken EqualsToken
 
 rArrow :: (MonadParsec e AmyTokens m) => m SourceSpan
 rArrow = matchToken RArrowToken
+
+backslash :: (MonadParsec e AmyTokens m) => m SourceSpan
+backslash = matchToken BackslashToken
 
 --
 -- Indentation helpers

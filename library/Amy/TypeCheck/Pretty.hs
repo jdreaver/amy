@@ -80,6 +80,7 @@ prettyExpr (ECase (Case scrutinee matches)) =
   mkMatch (Match pat body) = (prettyPattern pat, prettyExpr body)
 prettyExpr (ELet (Let bindings body)) =
   prettyLet (prettyBinding' <$> concat (toList <$> bindings)) (prettyExpr body)
+prettyExpr (ELam (Lambda args body _)) = prettyLambda (prettyIdent . typedValue <$> toList args) (prettyExpr body)
 prettyExpr (EApp (App f arg _)) = prettyExpr f <+> prettyExpr arg
 prettyExpr (EParens expr) = parens $ prettyExpr expr
 

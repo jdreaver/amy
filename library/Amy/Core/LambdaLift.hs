@@ -15,13 +15,10 @@ module Amy.Core.LambdaLift
   ) where
 
 import Control.Monad.State.Strict
-import Data.Bifunctor (second)
 import Data.Foldable (for_, traverse_)
 import Data.List (foldl', tails)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -55,14 +52,14 @@ newtype Lift a = Lift (State LiftState a)
 
 runLift :: Lift a -> (a, [LiftedBinding])
 runLift (Lift action) =
-  let (result, liftState) = runState action (LiftState 0 Set.empty Map.empty)
-  in (result, Map.elems $ liftedBindings liftState)
+  let (result, liftState) = runState action (LiftState 0 Set.empty [])
+  in (result, reverse $ liftedBindings liftState)
 
 data LiftState
   = LiftState
   { lastId :: !Int
   , boundVariables :: !(Set (Typed IdentName))
-  , liftedBindings :: !(Map IdentName LiftedBinding)
+  , liftedBindings :: ![LiftedBinding]
     -- ^ Map from old IdentName to new lifted function
   } deriving (Show, Eq)
 
@@ -107,13 +104,11 @@ mkLiftedFunction newArgs binding = do
   let lifted = LiftedBinding newArgs binding { bindingName = newName }
   pure (oldIdent, lifted)
 
-storeLifted :: IdentName -> LiftedBinding -> Lift ()
-storeLifted oldIdent lifted = do
-  let
-    body = bindingBody $ liftedBindingBinding lifted
-  body' <- liftExprBindings body
-  let lifted' = lifted { liftedBindingBinding = (liftedBindingBinding lifted) { bindingBody = body' } }
-  modify' $ \s -> s { liftedBindings = Map.insert oldIdent lifted' (liftedBindings s) }
+storeLifted :: LiftedBinding -> Lift ()
+storeLifted lifted = do
+  binding' <- liftBindingBindings $ liftedBindingBinding lifted
+  let lifted' = lifted { liftedBindingBinding = binding' }
+  modify' $ \s -> s { liftedBindings = lifted' : liftedBindings s }
 
 --
 -- Lambda Lifting
@@ -132,6 +127,15 @@ liftBindingBindings (Binding name ty args retTy body) = withNewScope $ do
 liftExprBindings :: Expr -> Lift Expr
 liftExprBindings = go
  where
+  -- Turn lambdas into let expression so we can use the same code
+  go (ELam (Lambda args body ty)) = do
+    name <- IdentName . ("lambda" <>) . pack . show <$> freshId
+    let
+      binding = Binding name ty (NE.toList args) (expressionType body) body
+      var = EVar $ VVal $ Typed ty name
+    go $ ELet $ Let (binding :| []) var
+
+  -- Lift let expressions
   go (ELet (Let bindings body)) = withNewScope $ do
     -- Bind binding names to scope
     for_ bindings $ \binding -> bindVariable $ Typed (bindingType binding) (bindingName binding)
@@ -181,10 +185,10 @@ liftExprBindings = go
           bindBody' = replaceLiftedBindings lifted bindBody
         in binding { bindingBody = bindBody' }
       replaceLifted (LiftedBinding args binding) = LiftedBinding args (replaceBody binding)
-      lifted' = second replaceLifted <$> lifted
+      lifted' = replaceLifted . snd <$> lifted
       unlifted' = replaceBody . fst <$> unlifted
       body' = replaceLiftedBindings lifted body
-    traverse_ (uncurry storeLifted) lifted'
+    traverse_ storeLifted lifted'
 
     case NE.nonEmpty unlifted' of
       Nothing -> go body'

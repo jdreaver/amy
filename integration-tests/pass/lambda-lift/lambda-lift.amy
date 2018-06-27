@@ -1,4 +1,4 @@
-# Demonstrate lambda lifting in let expressions
+# Demonstrate lambda lifting
 
 main :: Int
 main =
@@ -6,7 +6,7 @@ main =
     # Nested lift
     id x =
       let
-        id' y = y
+        id' y = x
       in id' x
 
     # Depends on id
@@ -14,10 +14,10 @@ main =
 
     # Needs closing
     z = 2
-    f x = iAdd# z x
+    f = \x -> iAdd# z x
 
     # Mutually recursive, and needs closing
     a = 1
     g x = if iLessThan# x 0 then 100 else g' (iSub# x z)
-    g' x = g (iAdd# x a)
+    g' x = g ((\y -> iAdd# x y) a)
   in g (f (const 2 1))

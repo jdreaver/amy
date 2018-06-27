@@ -54,6 +54,8 @@ freeExprVars (EIf (If pred' then' else' _)) = freeExprVars pred' `Set.union` fre
 freeExprVars (ECase (Case scrutinee matches _)) = Set.unions (freeExprVars scrutinee : toList (freeMatchVars <$> matches))
  where
   freeMatchVars (Match pat expr) = freeExprVars expr `Set.difference` patternVars pat
+freeExprVars (ELam (Lambda args body _)) =
+  freeExprVars body `Set.difference` Set.fromList (toList $ locatedValue <$> args)
 freeExprVars (ELet (Let bindings expr _)) =
   let bindings' = mapMaybe letBinding bindings
   in Set.unions (freeExprVars expr : (freeBindingVars <$> bindings'))

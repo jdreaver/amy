@@ -21,7 +21,7 @@ entry:
   ret %struct.Closure* %0
 }
 
-define private %struct.Closure* @myAddDouble_closure_wrapper(i64* %env) {
+define private %struct.Closure* @"lambda1_$2_closure_wrapper"(i64* %env) {
 entry:
   %0 = getelementptr i64, i64* %env, i32 0
   %1 = bitcast i64* %0 to double*
@@ -29,7 +29,7 @@ entry:
   %3 = getelementptr i64, i64* %env, i32 1
   %4 = bitcast i64* %3 to double*
   %5 = load double, double* %4
-  %6 = call double @myAddDouble(double %2, double %5)
+  %6 = call double @"lambda1_$2"(double %2, double %5)
   %7 = bitcast double %6 to i64
   %8 = inttoptr i64 %7 to %struct.Closure*
   ret %struct.Closure* %8
@@ -47,31 +47,31 @@ entry:
   ret %struct.Closure* %6
 }
 
-define private double @myAddDouble(double %x, double %y) {
+define private %struct.Closure* @myAddDouble(double %x) {
 entry:
-  %ret = fadd double %x, %y
-  ret double %ret
+  %"lambda1_$2_closure1" = call %struct.Closure* @create_closure(i8 2, %struct.Closure* (i64*)* @"lambda1_$2_closure_wrapper")
+  %0 = call i8* @GC_malloc(i64 64)
+  %1 = bitcast i8* %0 to i64*
+  %2 = getelementptr i64, i64* %1, i32 0
+  %3 = bitcast i64* %2 to double*
+  store double %x, double* %3
+  %4 = call %struct.Closure* @call_closure(%struct.Closure* %"lambda1_$2_closure1", i8 1, i64* %1)
+  %5 = alloca %struct.Closure*
+  store %struct.Closure* %4, %struct.Closure** %5
+  %ret = load %struct.Closure*, %struct.Closure** %5
+  ret %struct.Closure* %ret
 }
 
 define private i64 @myAdd(i64 %x, double %y) {
 entry:
-  %res1 = fptoui double %y to i64
-  %ret = add i64 %x, %res1
+  %res2 = fptoui double %y to i64
+  %ret = add i64 %x, %res2
   ret i64 %ret
 }
 
 define private %struct.Closure* @incDouble() {
 entry:
-  %myAddDouble_closure2 = call %struct.Closure* @create_closure(i8 2, %struct.Closure* (i64*)* @myAddDouble_closure_wrapper)
-  %0 = call i8* @GC_malloc(i64 64)
-  %1 = bitcast i8* %0 to i64*
-  %2 = getelementptr i64, i64* %1, i32 0
-  %3 = bitcast i64* %2 to double*
-  store double 1.010000e+00, double* %3
-  %4 = call %struct.Closure* @call_closure(%struct.Closure* %myAddDouble_closure2, i8 1, i64* %1)
-  %5 = alloca %struct.Closure*
-  store %struct.Closure* %4, %struct.Closure** %5
-  %ret = load %struct.Closure*, %struct.Closure** %5
+  %ret = call %struct.Closure* @myAddDouble(double 1.010000e+00)
   ret %struct.Closure* %ret
 }
 
@@ -109,4 +109,10 @@ entry:
   %10 = call %struct.Closure* @call_closure(%struct.Closure* %inc_closure6, i8 1, i64* %7)
   %ret = ptrtoint %struct.Closure* %10 to i64
   ret i64 %ret
+}
+
+define private double @"lambda1_$2"(double %x, double %y) {
+entry:
+  %ret = fadd double %x, %y
+  ret double %ret
 }

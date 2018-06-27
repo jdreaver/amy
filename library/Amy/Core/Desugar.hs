@@ -80,7 +80,11 @@ desugarExpr (T.ECase (T.Case scrutinee matches)) = do
             , C.bindingBody = scrutinee'
             }
         in C.ELet $ C.Let (scrutineeBinding :| []) e
-
+desugarExpr (T.ELam (T.Lambda args body ty)) = do
+  let args' = desugarTypedIdent <$> args
+  body' <- desugarExpr body
+  let ty' = desugarType ty
+  pure $ C.ELam $ C.Lambda args' body' ty'
 desugarExpr (T.EIf (T.If pred' then' else')) =
   let
     boolTyCon' = T.TyCon boolTyCon

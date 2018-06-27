@@ -78,6 +78,7 @@ prettyExpr (ELet (Let bindings body _)) =
  where
   prettyLetBinding (LetBinding binding) = prettyBinding' binding
   prettyLetBinding (LetBindingType bindingTy) = prettyBindingType' bindingTy
+prettyExpr (ELam (Lambda args body _)) = prettyLambda (prettyIdent . locatedValue <$> toList args) (prettyExpr body)
 prettyExpr (EApp f arg) = prettyExpr f <+> prettyExpr arg
 prettyExpr (EParens expr) = parens $ prettyExpr expr
 

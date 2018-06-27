@@ -21,6 +21,7 @@ module Amy.Syntax.AST
   , Pattern(..)
   , PatCons(..)
   , Let(..)
+  , Lambda(..)
   , letBinding
   , letBindingType
   , expressionSpan
@@ -124,6 +125,7 @@ data Expr
   | EIf !If
   | ECase !Case
   | ELet !Let
+  | ELam !Lambda
   | EApp !Expr !Expr
   | EParens !Expr
   deriving (Show, Eq)
@@ -174,6 +176,13 @@ data Let
   , letSpan :: !SourceSpan
   } deriving (Show, Eq)
 
+data Lambda
+  = Lambda
+  { lambdaArgs :: !(NonEmpty (Located IdentName))
+  , lambdaBody :: !Expr
+  , lambdaSpan :: !SourceSpan
+  } deriving (Show, Eq)
+
 data LetBinding
   = LetBinding !Binding
   | LetBindingType !BindingType
@@ -196,6 +205,7 @@ expressionSpan (EVar (VCons (Located s _))) = s
 expressionSpan (EIf (If _ _ _ s)) = s
 expressionSpan (ECase (Case _ _ s)) = s
 expressionSpan (ELet (Let _ _ s)) = s
+expressionSpan (ELam (Lambda _ _ s)) = s
 expressionSpan (EApp e1 e2) = mergeSpans (expressionSpan e1) (expressionSpan e2)
 expressionSpan (EParens e) = expressionSpan e
 
