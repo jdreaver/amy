@@ -59,8 +59,13 @@ process filePath DumpFlags{..} input = do
     when dfDumpCore $
       lift $ writeFile (filePath `replaceExtension` ".amy-core") (show $ C.prettyModule core)
 
+    -- Prepare for ANF
+    let lifted = lambdaLifting core
+    when dfDumpCoreLifted $
+      lift $ writeFile (filePath `replaceExtension` ".amy-core-lifted") (show $ C.prettyModule lifted)
+
     -- Normalize to ANF
-    let anf = normalizeModule core
+    let anf = normalizeModule lifted
     when dfDumpANF $
       lift $ writeFile (filePath `replaceExtension` ".amy-anf") (show $ ANF.prettyModule anf)
 
@@ -136,6 +141,7 @@ data DumpFlags
   { dfDumpParsed :: !Bool
   , dfDumpTypeChecked :: !Bool
   , dfDumpCore :: !Bool
+  , dfDumpCoreLifted :: !Bool
   , dfDumpANF :: !Bool
   , dfDumpLLVMPretty :: !Bool
   --, dfDumpLLVM :: !Bool
@@ -167,6 +173,7 @@ parseDumpFlags =
   <$> switch (long "dump-parsed" <> helpDoc (Just "Dump parsed AST"))
   <*> switch (long "dump-typechecked" <> helpDoc (Just "Dump type checked AST"))
   <*> switch (long "dump-core" <> helpDoc (Just "Dump Core AST"))
+  <*> switch (long "dump-core-lifted" <> helpDoc (Just "Dump lifted Core AST"))
   <*> switch (long "dump-anf" <> helpDoc (Just "Dump ANF AST"))
   <*> switch (long "dump-llvm-pretty" <> helpDoc (Just "Dump pure LLVM AST from llvm-hs-pretty"))
   -- <*> switch (long "dump-llvm" <> helpDoc (Just "Dump LLVM IR"))
