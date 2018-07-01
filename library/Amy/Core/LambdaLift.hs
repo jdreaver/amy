@@ -9,6 +9,9 @@
 --
 -- The algorithm is a slightly simpler version of the one from "Lambda Lifting:
 -- Transforming Programs into Recursive Equations (Johnsson 1985)".
+--
+-- This pass also eta expands partially-applied data constructors and primitive
+-- operations before lifting them.
 
 module Amy.Core.LambdaLift
   ( lambdaLifting
@@ -16,15 +19,17 @@ module Amy.Core.LambdaLift
 
 import Control.Monad.State.Strict
 import Data.Foldable (for_, traverse_)
-import Data.List (foldl', tails)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
+import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (pack)
+import Data.Traversable (for)
 
 import Amy.Core.AST
+import Amy.Prim
 import Amy.Utils.SolveSetEquations
 
 --
@@ -197,7 +202,31 @@ liftExprBindings = go
         body'' <- go body'
         pure $ ELet $ Let unliftedNE' body''
 
+  -- Try to eta expand primops and data constructors
+  go (EVar var) = do
+    expr <- maybeEtaExpandVar var 0
+    case expr of
+      EVar{} -> pure expr
+      _ -> go expr
+  go (EApp app) = do
+    let func :| args = unfoldApp app
+    func' <-
+      case func of
+        EVar var -> maybeEtaExpandVar var (length args)
+        _ -> go func
+    func'' <-
+      case func' of
+        EVar{} -> pure func'
+        _ -> go func'
+    args' <- traverse go args
+    case foldApp func'' args' of
+      -- TODO: Fix this kludge where foldApp has a polymorphic return type when
+      -- it should be monomorphized.
+      EApp app' -> pure $ EApp app' { appReturnType = appReturnType app }
+      e -> pure e
+
   go e = traverseExprM liftExprBindings e
+
   goBinding binding = do
     body' <- go (bindingBody binding)
     pure $ binding { bindingBody = body' }
@@ -227,13 +256,37 @@ replaceLiftedBindings lifted = traverseExprTopDown f
 -- bound as the @z@ argument is already present.
 makeLiftedAppNode :: LiftedBinding -> Expr
 makeLiftedAppNode lifted@(LiftedBinding newArgs binding) =
+  let f = Typed (liftedBindingType lifted) (bindingName binding)
+  in foldApp (EVar $ VVal f) (EVar . VVal <$> newArgs)
+
+-- | Eta expands primops and data constructors.
+--
+-- The @Int@ argument is the number of arguments already applied.
+--
+maybeEtaExpandVar :: Var -> Int -> Lift Expr
+maybeEtaExpandVar var@(VVal (Typed _ func)) numArgsApplied =
+  etaExpand var
+  . maybe [] (fmap TyCon . drop numArgsApplied . NE.init . primitiveFunctionType)
+  $ Map.lookup func primitiveFunctionsByName
+maybeEtaExpandVar var@(VCons (Typed ty _)) numArgsApplied = do
   let
-    -- Compute the type for each app node. This is a bit tricky.
-    tys = (typedType <$> newArgs) ++ [bindingType binding]
-    appTys = drop 1 tys
-    f = Typed (liftedBindingType lifted) (bindingName binding)
-    varsAndTys = zip newArgs $ tails appTys
-  in foldl' mkApp (EVar $ VVal f) varsAndTys
- where
-  mkApp :: Expr -> (Typed IdentName, [Type]) -> Expr
-  mkApp e (var', tys') = EApp $ App e (EVar (VVal var')) (foldr1 TyFun tys')
+    allArgTys = NE.init $ unfoldTyApp ty
+    argTys = drop numArgsApplied allArgTys
+  etaExpand var argTys
+
+-- | Eta expands the given expression to be applied to N extra args.
+--
+-- Example in pseudo-code: @etaExpand f [Int, Double]@ would give @(\(x :: Int)
+-- (y :: Double) -> f x y)@
+--
+etaExpand :: Var -> [Type] -> Lift Expr
+etaExpand func argTypes =
+  case NE.nonEmpty argTypes of
+    Nothing -> pure $ EVar func
+    Just argTypesNE -> do
+      args <- for argTypesNE $ \argType ->
+        Typed argType . IdentName . ("_x" <>) . pack . show <$> freshId
+      let
+        app = foldApp (EVar func) (EVar . VVal <$> NE.toList args)
+        lambdaTy = foldr1 TyFun $ argTypes ++ [expressionType app]
+      pure $ ELam $ Lambda args app lambdaTy
