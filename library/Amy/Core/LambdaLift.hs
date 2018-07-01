@@ -203,16 +203,11 @@ liftExprBindings = go
         pure $ ELet $ Let unliftedNE' body''
 
   -- Try to eta expand primops and data constructors
-  go expr@EVar{} = maybeEtaExpandExpr expr 0
+  go expr@EVar{} = maybeEtaExpandExpr expr [] Nothing
   go (EApp app) = do
     let func :| args = unfoldApp app
     args' <- traverse go args
-    func' <- maybeEtaExpandExpr func (length args)
-    case foldApp func' args' of
-      -- TODO: Fix this kludge where foldApp has a polymorphic return type when
-      -- it should be monomorphized.
-      EApp app' -> pure $ EApp app' { appReturnType = appReturnType app }
-      e -> pure e
+    maybeEtaExpandExpr func args' (Just $ appReturnType app)
 
   go e = traverseExprM liftExprBindings e
 
@@ -249,34 +244,39 @@ makeLiftedAppNode lifted@(LiftedBinding newArgs binding) =
   in foldApp (EVar $ VVal f) (EVar . VVal <$> newArgs)
 
 -- | Eta expands primops and data constructors.
---
--- The @Int@ argument is the number of arguments already applied.
---
-maybeEtaExpandExpr :: Expr -> Int -> Lift Expr
-maybeEtaExpandExpr expr@(EVar (VVal (Typed _ func))) numArgsApplied =
-  etaExpand expr
-  . maybe [] (fmap TyCon . drop numArgsApplied . NE.init . primitiveFunctionType)
+maybeEtaExpandExpr :: Expr -> [Expr] -> Maybe Type -> Lift Expr
+maybeEtaExpandExpr expr@(EVar (VVal (Typed _ func))) args mRetTy =
+  etaExpand expr args mRetTy
+  . maybe [] (fmap TyCon . drop (length args) . NE.init . primitiveFunctionType)
   $ Map.lookup func primitiveFunctionsByName
-maybeEtaExpandExpr expr@(EVar (VCons (Typed ty _))) numArgsApplied = do
+maybeEtaExpandExpr expr@(EVar (VCons (Typed ty _))) args mRetTy = do
   let
     allArgTys = NE.init $ unfoldTyApp ty
-    argTys = drop numArgsApplied allArgTys
-  etaExpand expr argTys
-maybeEtaExpandExpr expr _ = liftExprBindings expr
+    argTys = drop (length args) allArgTys
+  etaExpand expr args mRetTy argTys
+maybeEtaExpandExpr expr args mRetTy = do
+  expr' <- liftExprBindings expr
+  pure $ foldAppSetReturnType expr' args [] mRetTy
 
--- | Eta expands the given expression to be applied to N extra args.
---
--- Example in pseudo-code: @etaExpand f [Int, Double]@ would give @(\(x :: Int)
--- (y :: Double) -> f x y)@
---
-etaExpand :: Expr -> [Type] -> Lift Expr
-etaExpand func argTypes =
-  case NE.nonEmpty argTypes of
-    Nothing -> pure func
-    Just argTypesNE -> do
-      args <- for argTypesNE $ \argType ->
+-- | Eta expands the given expression to be applied to extra args.
+etaExpand :: Expr -> [Expr] -> Maybe Type -> [Type] -> Lift Expr
+etaExpand func args mRetTy newArgTypes =
+  case NE.nonEmpty newArgTypes of
+    Nothing -> pure $ foldAppSetReturnType func args [] mRetTy
+    Just newArgTypesNE -> do
+      newArgs <- for newArgTypesNE $ \argType ->
         Typed argType . IdentName . ("_x" <>) . pack . show <$> freshId
       let
-        app = foldApp func (EVar . VVal <$> NE.toList args)
-        lambdaTy = foldr1 TyFun $ argTypes ++ [expressionType app]
-      liftExprBindings $ ELam $ Lambda args app lambdaTy
+        app = foldAppSetReturnType func args (EVar . VVal <$> NE.toList newArgs) mRetTy
+        lambdaTy = foldr1 TyFun $ newArgTypes ++ [expressionType app]
+      liftExprBindings $ ELam $ Lambda newArgs app lambdaTy
+
+-- TODO: This feels like a huge kludge.
+foldAppSetReturnType :: Expr -> [Expr] -> [Expr] -> Maybe Type -> Expr
+foldAppSetReturnType func args newArgs mRetTy =
+  case (foldApp func (args ++ newArgs), mRetTy) of
+    (EApp app', Just retTy) ->
+      -- Drop new args from old return type
+      let retTy' = foldr1 TyFun $ NE.drop (length newArgs) $ unfoldTyFun retTy
+      in EApp app' { appReturnType = retTy' }
+    (e, _) -> e

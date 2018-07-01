@@ -31,6 +31,7 @@ module Amy.Core.AST
 
   , Type(..)
   , unfoldTyApp
+  , unfoldTyFun
   , Typed(..)
 
     -- Re-export
