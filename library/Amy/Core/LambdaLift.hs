@@ -251,7 +251,7 @@ maybeEtaExpandExpr expr@(EVar (VVal (Typed _ func))) args mRetTy =
   $ Map.lookup func primitiveFunctionsByName
 maybeEtaExpandExpr expr@(EVar (VCons (Typed ty _))) args mRetTy = do
   let
-    allArgTys = NE.init $ unfoldTyApp ty
+    allArgTys = NE.init $ unfoldTyFun ty
     argTys = drop (length args) allArgTys
   etaExpand expr args mRetTy argTys
 maybeEtaExpandExpr expr args mRetTy = do

@@ -1,5 +1,7 @@
 # Demonstrate lambda lifting
 
+Maybe a = Nothing | Just a
+
 main :: Int
 main =
   let
@@ -21,3 +23,6 @@ main =
     g x = if iLessThan# x 0 then 100 else g' (iSub# x z)
     g' x = g ((\y -> iAdd# x y) a)
   in g (f (const 2 1))
+
+mkJust :: forall a. a -> Maybe a
+mkJust = Just
