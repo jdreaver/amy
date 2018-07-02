@@ -4,4 +4,5 @@ module Amy.Core
 
 import Amy.Core.AST as X
 import Amy.Core.Desugar as X
+import Amy.Core.LambdaLift as X
 import Amy.Core.Pretty as X

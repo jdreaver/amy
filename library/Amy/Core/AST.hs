@@ -19,6 +19,7 @@ module Amy.Core.AST
   , Lambda(..)
   , App(..)
   , unfoldApp
+  , foldApp
   , expressionType
   , substExpr
   , traverseExprTopDown
@@ -30,6 +31,7 @@ module Amy.Core.AST
 
   , Type(..)
   , unfoldTyApp
+  , unfoldTyFun
   , Typed(..)
 
     -- Re-export
@@ -39,6 +41,7 @@ module Amy.Core.AST
   ) where
 
 import Control.Monad.Identity (Identity(..), runIdentity)
+import Data.List (foldl', tails)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
@@ -178,9 +181,22 @@ data App
   , appReturnType :: !Type
   } deriving (Show, Eq)
 
+-- | Unfold an 'App' node into function and args.
 unfoldApp :: App -> NonEmpty Expr
 unfoldApp (App (EApp app@App{}) arg _) = unfoldApp app <> (arg :| [])
 unfoldApp (App f arg _) = f :| [arg]
+
+-- | Combine function and arg expressions into an 'App' node.
+foldApp :: Expr -> [Expr] -> Expr
+foldApp func args =
+  let
+    tys = unfoldTyFun $ expressionType func
+    appTys = NE.drop 1 tys
+    varsAndTys = zip args $ tails appTys
+  in foldl' mkApp func varsAndTys
+ where
+  mkApp :: Expr -> (Expr, [Type]) -> Expr
+  mkApp e (arg, tys') = EApp $ App e arg (foldr1 TyFun tys')
 
 literalType' :: Literal -> Type
 literalType' lit = TyCon $ literalType lit
@@ -320,6 +336,11 @@ unfoldTyApp :: Type -> NonEmpty Type
 unfoldTyApp (TyApp app@(TyApp _ _) arg) = unfoldTyApp app <> (arg :| [])
 unfoldTyApp (TyApp f arg) = f :| [arg]
 unfoldTyApp t = t :| []
+
+unfoldTyFun :: Type -> NonEmpty Type
+unfoldTyFun (TyForall _ t) = unfoldTyFun t
+unfoldTyFun (t1 `TyFun` t2) = NE.cons t1 (unfoldTyFun t2)
+unfoldTyFun ty = ty :| []
 
 data Typed a
   = Typed

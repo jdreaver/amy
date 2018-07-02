@@ -1,10 +1,7 @@
 # Demonstrate use of a function as an argument
 
 main :: Int
-main = apply myAdd
+main = apply iAdd#
 
 apply :: (Int -> Int -> Int) -> Int
 apply f = f 1 2
-
-myAdd :: Int -> Int -> Int
-myAdd x y = iAdd# x y

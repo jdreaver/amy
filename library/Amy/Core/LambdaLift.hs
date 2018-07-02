@@ -9,6 +9,9 @@
 --
 -- The algorithm is a slightly simpler version of the one from "Lambda Lifting:
 -- Transforming Programs into Recursive Equations (Johnsson 1985)".
+--
+-- This pass also eta expands partially-applied data constructors and primitive
+-- operations before lifting them.
 
 module Amy.Core.LambdaLift
   ( lambdaLifting
@@ -16,15 +19,17 @@ module Amy.Core.LambdaLift
 
 import Control.Monad.State.Strict
 import Data.Foldable (for_, traverse_)
-import Data.List (foldl', tails)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
+import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (pack)
+import Data.Traversable (for)
 
 import Amy.Core.AST
+import Amy.Prim
 import Amy.Utils.SolveSetEquations
 
 --
@@ -197,7 +202,15 @@ liftExprBindings = go
         body'' <- go body'
         pure $ ELet $ Let unliftedNE' body''
 
+  -- Try to eta expand primops and data constructors
+  go expr@EVar{} = maybeEtaExpandExpr expr [] Nothing
+  go (EApp app) = do
+    let func :| args = unfoldApp app
+    args' <- traverse go args
+    maybeEtaExpandExpr func args' (Just $ appReturnType app)
+
   go e = traverseExprM liftExprBindings e
+
   goBinding binding = do
     body' <- go (bindingBody binding)
     pure $ binding { bindingBody = body' }
@@ -227,13 +240,62 @@ replaceLiftedBindings lifted = traverseExprTopDown f
 -- bound as the @z@ argument is already present.
 makeLiftedAppNode :: LiftedBinding -> Expr
 makeLiftedAppNode lifted@(LiftedBinding newArgs binding) =
+  let f = Typed (liftedBindingType lifted) (bindingName binding)
+  in foldApp (EVar $ VVal f) (EVar . VVal <$> newArgs)
+
+-- | Eta expands primops and data constructors.
+--
+-- This function inspects a function expression and determines if it is a
+-- primop or a data constructor. Then, it compares the number of arguments
+-- already applied to the total arity of the primop/constructor. If it is
+-- partially applied, arguments are added via eta expansion and the resulting
+-- lambda is lifted.
+--
+maybeEtaExpandExpr :: Expr -> [Expr] -> Maybe Type -> Lift Expr
+maybeEtaExpandExpr expr@(EVar (VVal (Typed _ func))) args mRetTy =
+  etaExpand expr args mRetTy
+  . maybe [] (fmap TyCon . drop (length args) . NE.init . primitiveFunctionType)
+  $ Map.lookup func primitiveFunctionsByName
+maybeEtaExpandExpr expr@(EVar (VCons (Typed ty _))) args mRetTy = do
   let
-    -- Compute the type for each app node. This is a bit tricky.
-    tys = (typedType <$> newArgs) ++ [bindingType binding]
-    appTys = drop 1 tys
-    f = Typed (liftedBindingType lifted) (bindingName binding)
-    varsAndTys = zip newArgs $ tails appTys
-  in foldl' mkApp (EVar $ VVal f) varsAndTys
- where
-  mkApp :: Expr -> (Typed IdentName, [Type]) -> Expr
-  mkApp e (var', tys') = EApp $ App e (EVar (VVal var')) (foldr1 TyFun tys')
+    allArgTys = NE.init $ unfoldTyFun ty
+    argTys = drop (length args) allArgTys
+  etaExpand expr args mRetTy argTys
+maybeEtaExpandExpr expr args mRetTy = do
+  expr' <- liftExprBindings expr
+  pure $ foldAppSetReturnType expr' args [] mRetTy
+
+-- | Eta expands the given expression to be applied to extra args.
+etaExpand :: Expr -> [Expr] -> Maybe Type -> [Type] -> Lift Expr
+etaExpand func args mRetTy newArgTypes =
+  case NE.nonEmpty newArgTypes of
+    Nothing -> pure $ foldAppSetReturnType func args [] mRetTy
+    Just newArgTypesNE -> do
+      newArgs <- for newArgTypesNE $ \argType ->
+        Typed argType . IdentName . ("_x" <>) . pack . show <$> freshId
+      let
+        app = foldAppSetReturnType func args (EVar . VVal <$> NE.toList newArgs) mRetTy
+        lambdaTy = foldr1 TyFun $ newArgTypes ++ [expressionType app]
+      liftExprBindings $ ELam $ Lambda newArgs app lambdaTy
+
+-- | Calls 'foldApp' and sets return type.
+--
+-- This function is necessary because we must restore any monomorphic App
+-- return type after combining the function and args into an App node. Our type
+-- inference algorithm doesn't monomorphize polymorphic functions at use sites
+-- like Hindley-Milner would. When we deconstruct the App node to determine if
+-- it is partially applied, we carry around the old App return type and restore
+-- it here.
+--
+-- TODO: This feels like a huge kludge.
+--
+foldAppSetReturnType :: Expr -> [Expr] -> [Expr] -> Maybe Type -> Expr
+foldAppSetReturnType func args newArgs mRetTy =
+  case (foldApp func (args ++ newArgs), mRetTy) of
+    (EApp app', Just retTy) ->
+      -- Drop new args from old return type since arguments have been added,
+      -- and the old return type assumes they haven't (i.e. we aren't partially
+      -- applying anymore).
+      let retTy' = foldr1 TyFun $ NE.drop (length newArgs) $ unfoldTyFun retTy
+      in EApp app' { appReturnType = retTy' }
+    (e, _) -> e
