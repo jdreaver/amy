@@ -244,6 +244,13 @@ makeLiftedAppNode lifted@(LiftedBinding newArgs binding) =
   in foldApp (EVar $ VVal f) (EVar . VVal <$> newArgs)
 
 -- | Eta expands primops and data constructors.
+--
+-- This function inspects a function expression and determines if it is a
+-- primop or a data constructor. Then, it compares the number of arguments
+-- already applied to the total arity of the primop/constructor. If it is
+-- partially applied, arguments are added via eta expansion and the resulting
+-- lambda is lifted.
+--
 maybeEtaExpandExpr :: Expr -> [Expr] -> Maybe Type -> Lift Expr
 maybeEtaExpandExpr expr@(EVar (VVal (Typed _ func))) args mRetTy =
   etaExpand expr args mRetTy
@@ -271,12 +278,24 @@ etaExpand func args mRetTy newArgTypes =
         lambdaTy = foldr1 TyFun $ newArgTypes ++ [expressionType app]
       liftExprBindings $ ELam $ Lambda newArgs app lambdaTy
 
+-- | Calls 'foldApp' and sets return type.
+--
+-- This function is necessary because we must restore any monomorphic App
+-- return type after combining the function and args into an App node. Our type
+-- inference algorithm doesn't monomorphize polymorphic functions at use sites
+-- like Hindley-Milner would. When we deconstruct the App node to determine if
+-- it is partially applied, we carry around the old App return type and restore
+-- it here.
+--
 -- TODO: This feels like a huge kludge.
+--
 foldAppSetReturnType :: Expr -> [Expr] -> [Expr] -> Maybe Type -> Expr
 foldAppSetReturnType func args newArgs mRetTy =
   case (foldApp func (args ++ newArgs), mRetTy) of
     (EApp app', Just retTy) ->
-      -- Drop new args from old return type
+      -- Drop new args from old return type since arguments have been added,
+      -- and the old return type assumes they haven't (i.e. we aren't partially
+      -- applying anymore).
       let retTy' = foldr1 TyFun $ NE.drop (length newArgs) $ unfoldTyFun retTy
       in EApp app' { appReturnType = retTy' }
     (e, _) -> e

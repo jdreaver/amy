@@ -181,10 +181,12 @@ data App
   , appReturnType :: !Type
   } deriving (Show, Eq)
 
+-- | Unfold an 'App' node into function and args.
 unfoldApp :: App -> NonEmpty Expr
 unfoldApp (App (EApp app@App{}) arg _) = unfoldApp app <> (arg :| [])
 unfoldApp (App f arg _) = f :| [arg]
 
+-- | Combine function and arg expressions into an 'App' node.
 foldApp :: Expr -> [Expr] -> Expr
 foldApp func args =
   let
