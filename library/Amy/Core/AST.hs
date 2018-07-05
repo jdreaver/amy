@@ -9,7 +9,6 @@ module Amy.Core.AST
   , fromPrimTypeDefinition
   , DataConDefinition(..)
   , Expr(..)
-  , Var(..)
   , If(..)
   , Case(..)
   , Match(..)
@@ -115,17 +114,13 @@ data Expr
   = ELit !Literal
   | ERecord !(Map RowLabel (Typed Expr))
   | ERecordSelect !Expr !RowLabel !Type
-  | EVar !Var
+  | EVar !(Typed IdentName)
+  | ECon !(Typed DataConName)
   | ECase !Case
   | ELet !Let
   | ELam !Lambda
   | EApp !App
   | EParens !Expr
-  deriving (Show, Eq)
-
-data Var
-  = VVal !(Typed IdentName)
-  | VCons !(Typed DataConName)
   deriving (Show, Eq)
 
 data If
@@ -205,10 +200,8 @@ expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType' lit
 expressionType (ERecord rows) = TyRecord (typedType <$> rows) Nothing
 expressionType (ERecordSelect _ _ ty) = ty
-expressionType (EVar var) =
-  case var of
-    VVal (Typed ty _) -> ty
-    VCons (Typed ty _) -> ty
+expressionType (EVar (Typed ty _)) = ty
+expressionType (ECon (Typed ty _)) = ty
 expressionType e@(ECase (Case _ _ matches defaultMatch)) =
   case (matches, defaultMatch) of
     (Match _ expr : _, _) -> expressionType expr
@@ -222,7 +215,7 @@ expressionType (EParens expr) = expressionType expr
 substExpr :: Expr -> IdentName -> IdentName -> Expr
 substExpr expr oldVar newVar = traverseExprTopDown f expr
  where
-  f (EVar (VVal (Typed ty var))) = EVar (VVal $ Typed ty $ if var == oldVar then newVar else var)
+  f (EVar (Typed ty var)) = EVar (Typed ty $ if var == oldVar then newVar else var)
   f e = e
 
 traverseExprTopDown :: (Expr -> Expr) -> Expr -> Expr
@@ -237,6 +230,7 @@ traverseExprTopDownM f expr = f' expr
   f' e = f e >>= go
   go e@ELit{} = pure e
   go e@EVar{} = pure e
+  go e@ECon{} = pure e
   go (ERecord rows) = ERecord <$> traverse (\(Typed ty e) -> Typed ty <$> f' e) rows
   go (ERecordSelect e label ty) = (\e' -> ERecordSelect e' label ty) <$> f' e
   go (ECase (Case scrut bind alts default')) = do
@@ -274,6 +268,7 @@ traverseExprM f = go
  where
   go e@ELit{} = pure e
   go e@EVar{} = pure e
+  go e@ECon{} = pure e
   go (ERecord rows) = ERecord <$> traverse (\(Typed ty e) -> Typed ty <$> f e) rows
   go (ERecordSelect e label ty) = (\e' -> ERecordSelect e' label ty) <$> f e
   go (ECase (Case scrut bind alts default')) = do
@@ -302,8 +297,8 @@ freeExprVars :: Expr -> Set (Typed IdentName)
 freeExprVars ELit{} = Set.empty
 freeExprVars (ERecord rows) = Set.unions $ freeExprVars . typedValue <$> Map.elems rows
 freeExprVars (ERecordSelect expr _ _) = freeExprVars expr
-freeExprVars (EVar (VVal var)) = Set.singleton var
-freeExprVars (EVar VCons{}) = Set.empty
+freeExprVars (EVar var) = Set.singleton var
+freeExprVars ECon{} = Set.empty
 freeExprVars (ECase (Case scrutinee bind matches default')) =
   let
     scrutVars = freeExprVars scrutinee

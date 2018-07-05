@@ -121,6 +121,7 @@ normalizeExpr name (C.ERecordSelect expr label ty) =
   normalizeName name expr $ \val ->
     ANF.ERecordSelect val label <$> convertType ty
 normalizeExpr name var@C.EVar{} = normalizeName name var (pure . ANF.EVal)
+normalizeExpr name con@C.ECon{} = normalizeName name con (pure . ANF.EVal)
 normalizeExpr name expr@(C.ECase (C.Case scrutinee bind matches defaultExpr)) =
   normalizeName name scrutinee $ \scrutineeVal -> do
     bind' <- convertTypedIdent bind
@@ -138,7 +139,7 @@ normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
   normalizeList (normalizeName name) (toList args) $ \argVals -> do
     retTy' <- convertType retTy
     case func of
-      C.EVar (C.VVal (C.Typed _ ident)) -> do
+      C.EVar (C.Typed _ ident) -> do
         mFuncType <- getKnownFuncType ident
         case (Map.lookup ident primitiveFunctionsByName, mFuncType) of
           -- Primitive operation
@@ -158,7 +159,7 @@ normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
           -- Unknown function, must be a closure
           (_, Nothing) -> pure $ ECallClosure $ CallClosure (ANF.Var (ANF.Typed ClosureType ident)) argVals retTy'
       -- Data constructor
-      C.EVar (C.VCons (C.Typed _ con)) -> do
+      C.ECon (C.Typed _ con) -> do
         con' <- convertDataCon con
         let
           mArg =
@@ -182,26 +183,24 @@ normalizeLiteral (C.LiteralText t) = ANF.LiteralTextPointer <$> makeTextPointer 
 
 normalizeName :: Text -> C.Expr -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 normalizeName _ (C.ELit lit) c = c =<< ANF.Lit <$> normalizeLiteral lit
-normalizeName name (C.EVar var) c =
-  case var of
-    C.VVal (C.Typed ty ident) -> do
-      mFuncType <- getKnownFuncType ident
-      ty' <- convertType ty
-      case mFuncType of
-        -- Top-level values need to be first called as functions
-        Just ([], _) -> mkNormalizeLet name (ANF.EKnownFuncApp $ ANF.KnownFuncApp ident [] [] ty' ty') ty' c
-        -- If we have a known function, then make a closure
-        Just (argTys, retTy) -> createClosure ident argTys retTy c
-        -- Not a known function, just return
-        Nothing -> c $ ANF.Var $ ANF.Typed ty' ident
-    C.VCons (C.Typed ty con) -> do
-      con' <- convertDataCon con
-      ty' <- convertType ty
-      case ty' of
-        EnumType intBits -> c $ ConEnum intBits con'
-        TaggedUnionType structName intBits ->
-          mkNormalizeLet name (ANF.EConApp $ ANF.ConApp con' Nothing structName intBits) ty' c
-        _ -> error $ "Invalid type for constructor in normalizeName " ++ show ty'
+normalizeName name (C.EVar (C.Typed ty ident)) c = do
+  mFuncType <- getKnownFuncType ident
+  ty' <- convertType ty
+  case mFuncType of
+    -- Top-level values need to be first called as functions
+    Just ([], _) -> mkNormalizeLet name (ANF.EKnownFuncApp $ ANF.KnownFuncApp ident [] [] ty' ty') ty' c
+    -- If we have a known function, then make a closure
+    Just (argTys, retTy) -> createClosure ident argTys retTy c
+    -- Not a known function, just return
+    Nothing -> c $ ANF.Var $ ANF.Typed ty' ident
+normalizeName name (C.ECon (C.Typed ty con)) c = do
+  con' <- convertDataCon con
+  ty' <- convertType ty
+  case ty' of
+    EnumType intBits -> c $ ConEnum intBits con'
+    TaggedUnionType structName intBits ->
+      mkNormalizeLet name (ANF.EConApp $ ANF.ConApp con' Nothing structName intBits) ty' c
+    _ -> error $ "Invalid type for constructor in normalizeName " ++ show ty'
 normalizeName name expr c = do
   expr' <- normalizeExpr name expr
   exprType <- convertType $ expressionType expr

@@ -48,8 +48,8 @@ freeExprVars :: Expr -> Set IdentName
 freeExprVars ELit{} = Set.empty
 freeExprVars (ERecord _ rows) = Set.unions $ freeExprVars <$> Map.elems rows
 freeExprVars (ERecordSelect expr _) = freeExprVars expr
-freeExprVars (EVar (VVal (Located _ ident))) = Set.singleton ident
-freeExprVars (EVar VCons{}) = Set.empty
+freeExprVars (EVar (Located _ ident)) = Set.singleton ident
+freeExprVars ECon{} = Set.empty
 freeExprVars (EIf (If pred' then' else' _)) = freeExprVars pred' `Set.union` freeExprVars then' `Set.union` freeExprVars else'
 freeExprVars (ECase (Case scrutinee matches _)) = Set.unions (freeExprVars scrutinee : toList (freeMatchVars <$> matches))
  where

@@ -171,7 +171,8 @@ expressionTerm =
   , ECase <$> caseExpression <?> "case expression"
   , ELet <$> letExpression' <?> "let expression"
   , ELam <$> lambda <?> "lambda"
-  , EVar <$> variable <?> "variable"
+  , EVar <$> ident <?> "identifier"
+  , ECon <$> dataCon <?> "data constructor"
   ]
 
 expressionParens :: AmyParser Expr
@@ -200,13 +201,6 @@ record = do
     pure (label', expr)
   endSpan <- assertIndented *> rBrace
   pure $ ERecord (mergeSpans startSpan endSpan) rows
-
-variable :: AmyParser Var
-variable =
-  choice
-  [ VVal <$> ident
-  , VCons <$> dataCon
-  ]
 
 ifExpression :: AmyParser If
 ifExpression = do

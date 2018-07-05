@@ -66,7 +66,8 @@ prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
 prettyExpr (ERecord _ rows) = bracketed $ uncurry prettyRow <$> Map.toList rows
 prettyExpr (ERecordSelect expr field) = prettyExpr expr <> "." <> prettyRowLabel (locatedValue field)
-prettyExpr (EVar var) = prettyVar var
+prettyExpr (EVar (Located _ ident)) = prettyIdent ident
+prettyExpr (ECon (Located _ dataCon)) = prettyDataConName dataCon
 prettyExpr (EIf (If pred' then' else' _)) =
   prettyIf (prettyExpr pred') (prettyExpr then') (prettyExpr else')
 prettyExpr (ECase (Case scrutinee matches _)) =
@@ -84,10 +85,6 @@ prettyExpr (EParens expr) = parens $ prettyExpr expr
 
 prettyRow :: Located RowLabel -> Expr -> Doc ann
 prettyRow (Located _ label) expr = prettyRowLabel label <> ":" <+> prettyExpr expr
-
-prettyVar :: Var -> Doc ann
-prettyVar (VVal (Located _ var)) = prettyIdent var
-prettyVar (VCons (Located _ var)) = prettyDataConName var
 
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PLit (Located _ lit)) = pretty $ showLiteral lit

@@ -8,7 +8,6 @@ module Amy.TypeCheck.AST
   , TyConDefinition(..)
   , DataConDefinition(..)
   , Expr(..)
-  , Var(..)
   , If(..)
   , Case(..)
   , Match(..)
@@ -91,18 +90,14 @@ data Expr
   = ELit !Literal
   | ERecord !(Map RowLabel (Typed Expr))
   | ERecordSelect !Expr !RowLabel !Type
-  | EVar !Var
+  | EVar !(Typed IdentName)
+  | ECon !(Typed DataConName)
   | EIf !If
   | ECase !Case
   | ELet !Let
   | ELam !Lambda
   | EApp !App
   | EParens !Expr
-  deriving (Show, Eq)
-
-data Var
-  = VVal !(Typed IdentName)
-  | VCons !(Typed DataConName)
   deriving (Show, Eq)
 
 data If
@@ -165,10 +160,8 @@ expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType' lit
 expressionType (ERecord rows) = TyRecord (typedType <$> rows) Nothing
 expressionType (ERecordSelect _ _ ty) = ty
-expressionType (EVar var) =
-  case var of
-    VVal (Typed ty _) -> ty
-    VCons (Typed ty _) -> ty
+expressionType (EVar (Typed ty _)) = ty
+expressionType (ECon (Typed ty _)) = ty
 expressionType (EIf if') = expressionType (ifThen if') -- Checker ensure "then" and "else" types match
 expressionType (ECase (Case _ (match :| _))) = matchType match
 expressionType (ELet let') = expressionType (letExpression let')

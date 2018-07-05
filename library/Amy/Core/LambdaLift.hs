@@ -137,7 +137,7 @@ liftExprBindings = go
     name <- IdentName . ("lambda" <>) . pack . show <$> freshId
     let
       binding = Binding name ty (NE.toList args) (expressionType body) body
-      var = EVar $ VVal $ Typed ty name
+      var = EVar $ Typed ty name
     go $ ELet $ Let (binding :| []) var
 
   -- Lift let expressions
@@ -204,6 +204,7 @@ liftExprBindings = go
 
   -- Try to eta expand primops and data constructors
   go expr@EVar{} = maybeEtaExpandExpr expr [] Nothing
+  go expr@ECon{} = maybeEtaExpandExpr expr [] Nothing
   go (EApp app) = do
     let func :| args = unfoldApp app
     args' <- traverse go args
@@ -218,7 +219,7 @@ liftExprBindings = go
 replaceLiftedBindings :: [(IdentName, LiftedBinding)] -> Expr -> Expr
 replaceLiftedBindings lifted = traverseExprTopDown f
  where
-  f e@(EVar (VVal (Typed _ var))) = maybe e makeLiftedAppNode (lookup var lifted)
+  f e@(EVar (Typed _ var)) = maybe e makeLiftedAppNode (lookup var lifted)
   f e = e
 
 -- | Insert an App node for a lifted binding.
@@ -241,7 +242,7 @@ replaceLiftedBindings lifted = traverseExprTopDown f
 makeLiftedAppNode :: LiftedBinding -> Expr
 makeLiftedAppNode lifted@(LiftedBinding newArgs binding) =
   let f = Typed (liftedBindingType lifted) (bindingName binding)
-  in foldApp (EVar $ VVal f) (EVar . VVal <$> newArgs)
+  in foldApp (EVar f) (EVar <$> newArgs)
 
 -- | Eta expands primops and data constructors.
 --
@@ -252,11 +253,11 @@ makeLiftedAppNode lifted@(LiftedBinding newArgs binding) =
 -- lambda is lifted.
 --
 maybeEtaExpandExpr :: Expr -> [Expr] -> Maybe Type -> Lift Expr
-maybeEtaExpandExpr expr@(EVar (VVal (Typed _ func))) args mRetTy =
+maybeEtaExpandExpr expr@(EVar (Typed _ func)) args mRetTy =
   etaExpand expr args mRetTy
   . maybe [] (fmap TyCon . drop (length args) . NE.init . primitiveFunctionType)
   $ Map.lookup func primitiveFunctionsByName
-maybeEtaExpandExpr expr@(EVar (VCons (Typed ty _))) args mRetTy = do
+maybeEtaExpandExpr expr@(ECon (Typed ty _)) args mRetTy = do
   let
     allArgTys = NE.init $ unfoldTyFun ty
     argTys = drop (length args) allArgTys
@@ -274,7 +275,7 @@ etaExpand func args mRetTy newArgTypes =
       newArgs <- for newArgTypesNE $ \argType ->
         Typed argType . IdentName . ("_x" <>) . pack . show <$> freshId
       let
-        app = foldAppSetReturnType func args (EVar . VVal <$> NE.toList newArgs) mRetTy
+        app = foldAppSetReturnType func args (EVar <$> NE.toList newArgs) mRetTy
         lambdaTy = foldr1 TyFun $ newArgTypes ++ [expressionType app]
       liftExprBindings $ ELam $ Lambda newArgs app lambdaTy
 

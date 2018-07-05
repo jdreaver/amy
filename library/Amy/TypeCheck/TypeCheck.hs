@@ -182,14 +182,12 @@ inferExpr expr = withSourceSpan (expressionSpan expr) $ inferExpr' expr
 
 inferExpr' :: S.Expr -> Checker T.Expr
 inferExpr' (S.ELit (Located _ lit)) = pure $ T.ELit lit
-inferExpr' (S.EVar var) =
-  case var of
-    S.VVal lvar@(Located _ valVar) -> do
-      t <- currentContextSubst =<< lookupValueType lvar
-      pure $ T.EVar $ T.VVal (T.Typed t valVar)
-    S.VCons lcon@(Located _ con) -> do
-      t <- currentContextSubst =<< lookupDataConType lcon
-      pure (T.EVar $ T.VCons (T.Typed t con))
+inferExpr' (S.EVar lvar@(Located _ valVar)) = do
+    t <- currentContextSubst =<< lookupValueType lvar
+    pure $ T.EVar $ T.Typed t valVar
+inferExpr' (S.ECon lcon@(Located _ con)) = do
+    t <- currentContextSubst =<< lookupDataConType lcon
+    pure $ T.ECon $ T.Typed t con
 inferExpr' (S.EIf (S.If pred' then' else' _)) = do
   -- TODO: Is this the right way to do this? Should we actually infer the types
   -- and then unify with expected types? I'm thinking instead we should
@@ -453,11 +451,8 @@ contextSubstExpr context (T.ERecord rows) =
   T.ERecord $ (\(Typed ty expr) -> Typed (contextSubst context ty) (contextSubstExpr context expr)) <$> rows
 contextSubstExpr context (T.ERecordSelect expr label ty) =
   T.ERecordSelect (contextSubstExpr context expr) label (contextSubst context ty)
-contextSubstExpr context (T.EVar var) =
-  T.EVar $
-    case var of
-      T.VVal var' -> T.VVal $ contextSubstTyped context var'
-      T.VCons (T.Typed ty con) -> T.VCons (T.Typed (contextSubst context ty) con)
+contextSubstExpr context (T.EVar var) = T.EVar $ contextSubstTyped context var
+contextSubstExpr context (T.ECon con) = T.ECon $ contextSubstTyped context con
 contextSubstExpr context (T.EIf (T.If pred' then' else')) =
   T.EIf (T.If (contextSubstExpr context pred') (contextSubstExpr context then') (contextSubstExpr context else'))
 contextSubstExpr context (T.ECase (T.Case scrutinee matches)) =

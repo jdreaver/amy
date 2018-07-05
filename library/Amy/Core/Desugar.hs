@@ -56,7 +56,8 @@ desugarExpr (T.ERecordSelect expr label ty) = do
   expr' <- desugarExpr expr
   let ty' = desugarType ty
   pure $ C.ERecordSelect expr' label ty'
-desugarExpr (T.EVar var) = pure $ C.EVar (desugarVar var)
+desugarExpr (T.EVar ident) = pure $ C.EVar $ desugarTypedIdent ident
+desugarExpr (T.ECon (T.Typed ty con)) = pure $ C.ECon $ C.Typed (desugarType ty) con
 desugarExpr (T.ECase (T.Case scrutinee matches)) = do
   -- Desugar the case expression
   scrutinee' <- desugarExpr scrutinee
@@ -106,10 +107,6 @@ desugarExpr (T.EApp (T.App func arg ty)) = do
   pure $ C.EApp (C.App func' arg' (desugarType ty))
 desugarExpr (T.EParens expr) = C.EParens <$> desugarExpr expr
 
-desugarVar :: T.Var -> C.Var
-desugarVar (T.VVal ident) = C.VVal $ desugarTypedIdent ident
-desugarVar (T.VCons (T.Typed ty con)) = C.VCons $ C.Typed (desugarType ty) con
-
 desugarTypedIdent :: T.Typed IdentName -> C.Typed IdentName
 desugarTypedIdent (T.Typed ty ident) = C.Typed (desugarType ty) ident
 
@@ -156,7 +153,7 @@ convertPattern (T.PParens pat) = convertPattern pat
 restoreCaseExpr :: PC.CaseExpr -> Desugar C.Expr
 restoreCaseExpr (PC.CaseExpr scrutinee clauses mDefault) = do
   let
-    scrutinee' = C.EVar $ C.VVal scrutinee
+    scrutinee' = C.EVar scrutinee
   clauses' <- traverse restoreClause clauses
   defaultClause <- traverse restoreCaseExpr mDefault
   pure $ C.ECase $ C.Case scrutinee' scrutinee clauses' defaultClause

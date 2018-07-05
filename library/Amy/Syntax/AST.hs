@@ -14,7 +14,6 @@ module Amy.Syntax.AST
   , TyConDefinition(..)
   , DataConDefinition(..)
   , Expr(..)
-  , Var(..)
   , If(..)
   , Case(..)
   , Match(..)
@@ -121,18 +120,14 @@ data Expr
   = ELit !(Located Literal)
   | ERecord !SourceSpan !(Map (Located RowLabel) Expr)
   | ERecordSelect !Expr !(Located RowLabel)
-  | EVar !Var
+  | EVar !(Located IdentName)
+  | ECon !(Located DataConName)
   | EIf !If
   | ECase !Case
   | ELet !Let
   | ELam !Lambda
   | EApp !Expr !Expr
   | EParens !Expr
-  deriving (Show, Eq)
-
-data Var
-  = VVal !(Located IdentName)
-  | VCons !(Located DataConName)
   deriving (Show, Eq)
 
 data If
@@ -200,8 +195,8 @@ expressionSpan :: Expr -> SourceSpan
 expressionSpan (ELit (Located s _)) = s
 expressionSpan (ERecord s _) = s
 expressionSpan (ERecordSelect expr (Located end _)) = mergeSpans (expressionSpan expr) end
-expressionSpan (EVar (VVal (Located s _))) = s
-expressionSpan (EVar (VCons (Located s _))) = s
+expressionSpan (EVar (Located s _)) = s
+expressionSpan (ECon (Located s _)) = s
 expressionSpan (EIf (If _ _ _ s)) = s
 expressionSpan (ECase (Case _ _ s)) = s
 expressionSpan (ELet (Let _ _ s)) = s

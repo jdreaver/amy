@@ -39,13 +39,10 @@ match' vars eqs = runDesugar [] $ match vars eqs
 boolTy :: Type
 boolTy = TyCon "Bool"
 
-mkVal :: Typed IdentName -> Expr
-mkVal x' = EVar $ VVal x'
-
 mkExpr :: [Typed IdentName] -> Expr
 mkExpr [] = error "empty list"
-mkExpr [x'] = mkVal x'
-mkExpr xs' = foldl1' mkApp (mkVal <$> xs')
+mkExpr [x'] = EVar x'
+mkExpr xs' = foldl1' mkApp (EVar <$> xs')
  where
   mkApp e1 e2 = EApp (App e1 e2 boolTy)
 
@@ -88,19 +85,19 @@ intP i = PCon (intC i) []
 -- mappairs example from book
 mappairsEquations :: [Equation]
 mappairsEquations =
-  [ ([PVar f, nilP, PVar ys], mkVal x)
-  , ([PVar f, consP (PVar x) (PVar xs), nilP], mkVal y)
-  , ([PVar f, consP (PVar x) (PVar xs), consP (PVar y) (PVar ys)], mkVal z)
+  [ ([PVar f, nilP, PVar ys], EVar x)
+  , ([PVar f, consP (PVar x) (PVar xs), nilP], EVar y)
+  , ([PVar f, consP (PVar x) (PVar xs), consP (PVar y) (PVar ys)], EVar z)
   ]
 
 mappairsExpect :: CaseExpr
 mappairsExpect =
   CaseExpr y
-  [ Clause nilC [] (Expr $ mkVal x)
+  [ Clause nilC [] (Expr $ EVar x)
   , Clause consC [mkId 1, mkId 2]
      (CaseExpr (mkId 1)
-        [ Clause nilC [] (Expr $ mkVal y)
-        , Clause consC [mkId 3, mkId 4] (Expr $ mkVal z)
+        [ Clause nilC [] (Expr $ EVar y)
+        , Clause consC [mkId 3, mkId 4] (Expr $ EVar z)
         ]
         Nothing
      )
@@ -198,24 +195,24 @@ spec = do
   describe "compileMatch" $ do
 
     it "handles a simple variable case" $ do
-      match' [x] [([PVar x], mkVal x)] `shouldBe` Expr (mkVal x)
+      match' [x] [([PVar x], EVar x)] `shouldBe` Expr (EVar x)
 
     it "handles a single constructor case with a variable" $ do
-      match' [x] [([newtypeP (PVar y)], mkVal x)]
+      match' [x] [([newtypeP (PVar y)], EVar x)]
         `shouldBe`
-        CaseExpr x [Clause newtypeC [mkId 1] (Expr (mkVal x))] Nothing
+        CaseExpr x [Clause newtypeC [mkId 1] (Expr (EVar x))] Nothing
 
     it "handles a single constructor case with a literal and variable" $ do
       let
         equations =
-          [ ([newtypeP (intP 1)], mkVal x)
+          [ ([newtypeP (intP 1)], EVar x)
           , ([newtypeP (PVar y)], mkExpr [x, y])
           ]
         expected =
           CaseExpr x
           [ Clause newtypeC [mkId 1]
             ( CaseExpr (mkId 1)
-              [ Clause (intC 1) [] (Expr $ mkVal x)
+              [ Clause (intC 1) [] (Expr $ EVar x)
               ]
               (Just (Expr $ mkExpr [x, mkId 1]))
             )
@@ -226,13 +223,13 @@ spec = do
     it "handles a simple true/false case" $ do
       let
         equations =
-          [ ([trueP], mkVal x)
-          , ([falseP], mkVal y)
+          [ ([trueP], EVar x)
+          , ([falseP], EVar y)
           ]
         expected =
           CaseExpr x
-          [ Clause trueC [] (Expr $ mkVal x)
-          , Clause falseC [] (Expr $ mkVal y)
+          [ Clause trueC [] (Expr $ EVar x)
+          , Clause falseC [] (Expr $ EVar y)
           ]
           Nothing
       match' [x] equations `shouldBe` expected
@@ -240,18 +237,18 @@ spec = do
     it "handles redundant branches" $ do
       let
         equations =
-          [ ([intP 1], mkVal x)
-          , ([intP 2], mkVal y)
-          , ([intP 2], mkVal z)
-          , ([intP 1], mkVal v)
-          , ([intP 2], mkVal w)
-          , ([intP 3], mkVal c)
+          [ ([intP 1], EVar x)
+          , ([intP 2], EVar y)
+          , ([intP 2], EVar z)
+          , ([intP 1], EVar v)
+          , ([intP 2], EVar w)
+          , ([intP 3], EVar c)
           ]
         expected =
           CaseExpr x
-          [ Clause (intC 1) [] (Expr $ mkVal x)
-          , Clause (intC 2) [] (Expr $ mkVal y)
-          , Clause (intC 3) [] (Expr $ mkVal c)
+          [ Clause (intC 1) [] (Expr $ EVar x)
+          , Clause (intC 2) [] (Expr $ EVar y)
+          , Clause (intC 3) [] (Expr $ EVar c)
           ]
           (Just Error)
       match' [x] equations `shouldBe` expected
@@ -259,24 +256,24 @@ spec = do
     it "handles a pair of bools case" $ do
       let
         equations =
-          [ ([trueP, trueP], mkVal x)
-          , ([falseP, falseP], mkVal y)
-          , ([trueP, falseP] , mkVal z)
-          , ([falseP, trueP], mkVal w)
+          [ ([trueP, trueP], EVar x)
+          , ([falseP, falseP], EVar y)
+          , ([trueP, falseP] , EVar z)
+          , ([falseP, trueP], EVar w)
           ]
         expected =
           CaseExpr x
           [ Clause trueC []
             ( CaseExpr y
-              [ Clause trueC [] (Expr $ mkVal x)
-              , Clause falseC [] (Expr $ mkVal z)
+              [ Clause trueC [] (Expr $ EVar x)
+              , Clause falseC [] (Expr $ EVar z)
               ]
               Nothing
             )
           , Clause falseC []
             ( CaseExpr y
-              [ Clause falseC [] (Expr $ mkVal y)
-              , Clause trueC [] (Expr $ mkVal w)
+              [ Clause falseC [] (Expr $ EVar y)
+              , Clause trueC [] (Expr $ EVar w)
               ]
               Nothing
             )
