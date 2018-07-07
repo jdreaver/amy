@@ -217,12 +217,13 @@ patternSpan (PCons (PatCons (Located s _) mPat)) =
 patternSpan (PParens pat) = patternSpan pat
 
 data Type
-  = TyCon !(Located TyConName)
-  | TyVar !(Located TyVarName)
+  = TyCon !TyConName
+  | TyVar !TyVarName
   | TyApp !Type !Type
-  | TyRecord !(Map (Located RowLabel) Type) !(Maybe (Located TyVarName))
+  | TyRecord !(Map RowLabel Type) !(Maybe TyVarName)
   | TyFun !Type !Type
-  | TyForall !(NonEmpty (Located TyVarName)) !Type
+  | TyForall !(NonEmpty TyVarName) !Type
+  | LocatedType !SourceSpan !Type
   deriving (Show, Eq)
 
 infixr 0 `TyFun`

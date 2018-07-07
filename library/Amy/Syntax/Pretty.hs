@@ -17,14 +17,15 @@ import Amy.Syntax.AST
 
 prettyType :: Type -> Doc ann
 prettyType (TyFun ty1 ty2) = parensIf (isTyFun ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
-prettyType (TyCon con) = prettyTyConName (locatedValue con)
-prettyType (TyVar var) = prettyTyVarName (locatedValue var)
-prettyType (TyRecord rows mVar) = prettyTyRecord (uncurry prettyTyRow <$> Map.toList rows) (prettyTyVarName . locatedValue <$> mVar)
+prettyType (TyCon con) = prettyTyConName con
+prettyType (TyVar var) = prettyTyVarName var
+prettyType (TyRecord rows mVar) = prettyTyRecord (uncurry prettyTyRow <$> Map.toList rows) (prettyTyVarName <$> mVar)
 prettyType (TyApp f arg) = prettyType f <+> parensIf (isTyApp arg) (prettyType arg)
-prettyType (TyForall vars ty) = "forall" <+> hcat (punctuate space $ prettyTyVarName . locatedValue <$> toList vars) <> "." <+> prettyType ty
+prettyType (TyForall vars ty) = "forall" <+> hcat (punctuate space $ prettyTyVarName <$> toList vars) <> "." <+> prettyType ty
+prettyType (LocatedType _ ty) = prettyType ty
 
-prettyTyRow :: Located RowLabel -> Type -> Doc ann
-prettyTyRow (Located _ label) ty = prettyRowLabel label <+> "::" <+> prettyType ty
+prettyTyRow :: RowLabel -> Type -> Doc ann
+prettyTyRow label ty = prettyRowLabel label <+> "::" <+> prettyType ty
 
 isTyApp :: Type -> Bool
 isTyApp TyApp{} = True

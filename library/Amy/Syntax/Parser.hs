@@ -81,28 +81,38 @@ typeTerm =
   choice
   [ parens parseType <?> "type parens"
   , tyForall <?> "forall type"
-  , TyVar <$> tyVar <?> "type variable"
-  , TyCon <$> tyCon <?> "type constructor"
+  , tyVar' <?> "type variable"
+  , tyCon' <?> "type constructor"
   , uncurry TyRecord <$> tyRecord <?> "record"
   ]
 
 tyForall :: AmyParser Type
 tyForall = do
   _ <- forall
-  vars <- CNE.some (assertIndented *> tyVar)
+  vars <- fmap locatedValue <$> CNE.some (assertIndented *> tyVar)
   _ <- assertIndented *> dot
   ty <- parseType <?> "type"
   pure $ TyForall vars ty
 
-tyRecord :: AmyParser (Map (Located RowLabel) Type, Maybe (Located TyVarName))
+tyVar' :: AmyParser Type
+tyVar' = do
+  (Located span' var) <- tyVar
+  pure $ LocatedType span' (TyVar var)
+
+tyCon' :: AmyParser Type
+tyCon' = do
+  (Located span' con) <- tyCon
+  pure $ LocatedType span' (TyCon con)
+
+tyRecord :: AmyParser (Map RowLabel Type, Maybe TyVarName)
 tyRecord =
   between lBrace rBrace $ do
     fields <- (`sepBy` comma) $ do
-      label' <- assertIndented *> L.rowLabel
+      label' <- locatedValue <$> (assertIndented *> L.rowLabel)
       _ <- assertIndented *> doubleColon
       ty <- parseType
       pure (label', ty)
-    mTyVar <- optional $ assertIndented *> pipe *> assertIndented *> tyVar
+    mTyVar <- optional . fmap locatedValue $ assertIndented *> pipe *> assertIndented *> tyVar
     pure (Map.fromList fields, mTyVar)
 
 binding :: AmyParser Binding

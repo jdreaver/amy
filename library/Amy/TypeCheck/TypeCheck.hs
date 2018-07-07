@@ -415,21 +415,19 @@ mkDataConTypes (S.TypeDeclaration (S.TyConDefinition (Located _ tyConName) tyVar
     in (name, tyForall)
 
 convertType :: S.Type -> T.Type
-convertType (S.TyCon (Located _ con)) = T.TyCon con
-convertType (S.TyVar var) = T.TyVar (convertTyVarInfo var)
+convertType (S.TyCon con) = T.TyCon con
+convertType (S.TyVar var) = T.TyVar var
 convertType (S.TyApp f arg) = T.TyApp (convertType f) (convertType arg)
 convertType (S.TyRecord rows mTail) =
   T.TyRecord
-    (Map.mapKeys locatedValue $ convertType <$> rows)
-    (T.TyVar . locatedValue <$> mTail)
+    (convertType <$> rows)
+    (T.TyVar <$> mTail)
 convertType (S.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
-convertType (S.TyForall vars ty) = T.TyForall (convertTyVarInfo <$> vars) (convertType ty)
+convertType (S.TyForall vars ty) = T.TyForall vars (convertType ty)
+convertType (LocatedType _ ty) = convertType ty
 
 convertTyConDefinition :: S.TyConDefinition -> T.TyConDefinition
 convertTyConDefinition (S.TyConDefinition (Located _ name') args) = T.TyConDefinition name' (locatedValue <$> args)
-
-convertTyVarInfo :: Located TyVarName -> T.TyVarName
-convertTyVarInfo (Located _ name') = name'
 
 --
 -- Substitution
