@@ -82,24 +82,21 @@ contextElem :: ContextMember -> Context -> Bool
 contextElem member (Context context) = member `elem` context
 
 contextSubst :: Context -> Type -> Type
-contextSubst _ t@(TyCon _) = t
-contextSubst _ t@(TyVar _) = t
-contextSubst ctx t@(TyExistVar v) = maybe t (contextSubst ctx) (contextSolution ctx v)
-contextSubst ctx (TyApp a b) = TyApp (contextSubst ctx a) (contextSubst ctx b)
-contextSubst ctx record@(TyRecord rows mTail) =
-  let rows' = contextSubst ctx <$> rows
-  in case contextSubst ctx <$> mTail of
-    Nothing -> TyRecord rows' mTail
-    Just record'@(TyRecord newRows mTail') ->
-      -- Ensure no overlap in rows. If there was overlap then unification
-      -- shouldn't have allowed i
-      if null $ Set.intersection (Map.keysSet rows') (Map.keysSet newRows)
-      then TyRecord (Map.union rows' newRows) mTail'
-      else error $ "Found duplicate keys in record substitution: " ++ show (record, record')
-    Just t -> TyRecord rows' (Just t)
-contextSubst ctx (TyFun a b) = TyFun (contextSubst ctx a) (contextSubst ctx b)
-contextSubst ctx (TyForall vs t) = TyForall vs (contextSubst ctx t)
-contextSubst ctx (LocatedType ss t) = LocatedType ss $ contextSubst ctx t
+contextSubst ctx = go
+ where
+  go t@(TyExistVar v) = maybe t go (contextSolution ctx v)
+  go record@(TyRecord rows mTail) =
+    let rows' = go <$> rows
+    in case go <$> mTail of
+      Nothing -> TyRecord rows' mTail
+      Just record'@(TyRecord newRows mTail') ->
+        -- Ensure no overlap in rows. If there was overlap then unification
+        -- shouldn't have allowed i
+        if null $ Set.intersection (Map.keysSet rows') (Map.keysSet newRows)
+        then TyRecord (Map.union rows' newRows) mTail'
+        else error $ "Found duplicate keys in record substitution: " ++ show (record, record')
+      Just t -> TyRecord rows' (Just t)
+  go t = traverseType go t
 
 -- | Γ = Γ0[Θ] means Γ has the form (ΓL, Θ,ΓR)
 contextHole :: ContextMember -> Context -> Maybe (Context, Context)

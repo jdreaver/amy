@@ -24,24 +24,27 @@ import Amy.TypeCheck.Monad
 --
 
 subtype :: Type -> Type -> Checker ()
-subtype (LocatedType _ a) b = subtype a b
-subtype a (LocatedType _ b) = subtype a b
-subtype (TyCon a) (TyCon b) | a == b = pure ()
-subtype (TyVar a) (TyVar b) | a == b = pure ()
-subtype (TyExistVar a) (TyExistVar b) | a == b = pure ()
-subtype (TyApp t1 t2) (TyApp t1' t2') = subtypeMany [t1, t2] [t1', t2']
-subtype (TyFun t1 t2) (TyFun t1' t2') = subtypeMany [t1, t2] [t1', t2']
-subtype (TyForall as t1) t2 =
+subtype t1 t2 =
+  -- N.B. Removing all LocatedType nodes makes this logic simpler.
+  subtype' (removeLocatedType t1) (removeLocatedType t2)
+
+subtype' :: Type -> Type -> Checker ()
+subtype' (TyCon a) (TyCon b) | a == b = pure ()
+subtype' (TyVar a) (TyVar b) | a == b = pure ()
+subtype' (TyExistVar a) (TyExistVar b) | a == b = pure ()
+subtype' (TyApp t1 t2) (TyApp t1' t2') = subtypeMany [t1, t2] [t1', t2']
+subtype' (TyFun t1 t2) (TyFun t1' t2') = subtypeMany [t1, t2] [t1', t2']
+subtype' (TyForall as t1) t2 =
   withNewContextScope $ do
     as' <- traverse (const freshTyExistVar) as
     let t1' = foldl' (\t (a, a') -> instantiate a (TyExistVar a') t) t1 $ NE.zip as as'
-    subtype t1' t2
-subtype t1 (TyForall as t2) =
+    subtype' t1' t2
+subtype' t1 (TyForall as t2) =
   withContextUntilNE (ContextVar <$> as) $
-    subtype t1 t2
-subtype (TyExistVar a) t = occursCheck a t >> instantiateLeft a t
-subtype t (TyExistVar a) = occursCheck a t >> instantiateRight t a
-subtype t1@(TyRecord rows1 mTail1) t2@(TyRecord rows2 mTail2) = do
+    subtype' t1 t2
+subtype' (TyExistVar a) t = occursCheck a t >> instantiateLeft a t
+subtype' t (TyExistVar a) = occursCheck a t >> instantiateRight t a
+subtype' t1@(TyRecord rows1 mTail1) t2@(TyRecord rows2 mTail2) = do
   -- TODO: This logic was copy/pasted and modified from old unification code.
   -- This probably needs to be audited to make sure it is actually checking for
   -- subtyping in the correct order (that is, t1 is a subtype of t2) and we
@@ -65,11 +68,11 @@ subtype t1@(TyRecord rows1 mTail1) t2@(TyRecord rows2 mTail2) = do
         -- unifying an empty row with an empty row.
         (True, Nothing, Nothing) -> pure ()
         -- Distinct rows are empty but there are type variables so unify them
-        (True, Just tail', Just unifyVar) -> subtype tail' unifyVar
+        (True, Just tail', Just unifyVar) -> subtype' tail' unifyVar
         -- Rows are empty and we are unifying with the empty row.
         (True, Just tail', Nothing) -> subtype tail' (TyRecord Map.empty Nothing)
         -- Base case, unify the record with the unify var
-        (_, _, Just unifyVar) -> subtype recordTy unifyVar
+        (_, _, Just unifyVar) -> subtype' recordTy unifyVar
         (_, _, _) -> throwAmyError $ UnificationFail t1 t2
 
   -- Unify common fields
@@ -80,7 +83,7 @@ subtype t1@(TyRecord rows1 mTail1) t2@(TyRecord rows2 mTail2) = do
   -- Vice versa, unifying rows from second record with first variable.
   mTail2' <- traverse (maybeFreshTail justFields1) mTail2
   subtypeRecordWithVar justFields2 mTail2' mTail1
-subtype t1 t2 = throwAmyError $ UnificationFail t1 t2
+subtype' t1 t2 = throwAmyError $ UnificationFail t1 t2
 
 subtypeMany :: [Type] -> [Type] -> Checker ()
 subtypeMany [] [] = pure ()
@@ -117,21 +120,14 @@ freeTEVars' (LocatedType _ t) = freeTEVars t
 --
 
 instantiate :: TyVarName -> Type -> Type -> Type
-instantiate _ _ t@(TyCon _) = t
-instantiate v s t@(TyVar v')
-  | v == v' = s
-  | otherwise = t
-instantiate _ _ t@(TyExistVar _) = t
-instantiate v s (TyApp a b) = TyApp (instantiate v s a) (instantiate v s b)
-instantiate v s (TyRecord rows mTail) = TyRecord (instantiate v s <$> rows) (instantiate v s <$> mTail)
-instantiate v s (TyFun a b) = TyFun (instantiate v s a) (instantiate v s b)
-instantiate v s (TyForall a t) = TyForall a (instantiate v s t)
-instantiate v s (LocatedType ss t) = LocatedType ss (instantiate v s t)
+instantiate v s = go
+ where
+  go t@(TyVar v')
+   | v == v' = s
+   | otherwise = t
+  go t = traverseType go t
 
 instantiateLeft :: TyExistVarName -> Type -> Checker ()
--- TODO: Why do we need to unwrap LocatedType here? Shouldn't that have been
--- handled above?
-instantiateLeft a (LocatedType _ t) = instantiateLeft a t
 instantiateLeft a (TyFun t1 t2) = do
   (a1, a2) <- articulateTyFunExist a
   instantiateRight t1 a1
@@ -154,7 +150,6 @@ instantiateLeft a (TyRecord rows mTail) = do
 instantiateLeft a t = instantiateMonoType a t
 
 instantiateRight :: Type -> TyExistVarName -> Checker ()
-instantiateRight (LocatedType _ t) a = instantiateRight t a
 instantiateRight (TyFun t1 t2) a = do
   (a1, a2) <- articulateTyFunExist a
   instantiateLeft a1 t1

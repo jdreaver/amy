@@ -8,8 +8,6 @@ import Data.List (foldl')
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (maybeToList)
-import Data.Monoid ((<>))
-import Data.Text (pack)
 
 import Amy.Core.AST as C
 import Amy.Core.Monad
@@ -110,15 +108,8 @@ desugarExpr (T.EParens expr) = C.EParens <$> desugarExpr expr
 desugarTypedIdent :: T.Typed IdentName -> C.Typed IdentName
 desugarTypedIdent (T.Typed ty ident) = C.Typed (desugarType ty) ident
 
-desugarType :: T.Type -> C.Type
-desugarType (T.TyCon con) = C.TyCon con
-desugarType (T.TyRecord rows mTail) = C.TyRecord (desugarType <$> rows) (desugarType <$> mTail)
-desugarType (T.TyVar var) = C.TyVar var
-desugarType (T.TyExistVar (TyExistVarName i)) = C.TyVar $ TyVarName $ "$t" <> pack (show i)
-desugarType (T.TyApp f arg) = C.TyApp (desugarType f) (desugarType arg)
-desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)
-desugarType (T.TyForall vars ty) = C.TyForall vars (desugarType ty)
-desugarType (LocatedType _ ty) = desugarType ty
+desugarType :: Type -> Type
+desugarType = removeLocatedType . removeTyExistVar
 
 desugarTyConDefinition :: T.TyConDefinition -> C.TyConDefinition
 desugarTyConDefinition (T.TyConDefinition name args) = C.TyConDefinition name args
