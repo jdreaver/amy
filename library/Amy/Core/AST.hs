@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveFunctor #-}
-
 module Amy.Core.AST
   ( Module(..)
   , Binding(..)
@@ -28,15 +26,11 @@ module Amy.Core.AST
   , freeBindingVars
   , freeExprVars
 
-  , Type(..)
-  , unfoldTyApp
-  , unfoldTyFun
-  , Typed(..)
-
     -- Re-export
   , Literal(..)
   , module Amy.ASTCommon
   , module Amy.Names
+  , module Amy.Type
   ) where
 
 import Control.Monad.Identity (Identity(..), runIdentity)
@@ -55,6 +49,7 @@ import Amy.Names
 import Amy.Prim
 import qualified Amy.Syntax.AST as S
 import Amy.Syntax.Located
+import Amy.Type
 
 data Module
   = Module
@@ -315,30 +310,3 @@ freeExprVars (ELam (Lambda args body _)) =
   freeExprVars body `Set.difference` Set.fromList (NE.toList args)
 freeExprVars (EApp (App f arg _)) = freeExprVars f `Set.union` freeExprVars arg
 freeExprVars (EParens expr) = freeExprVars expr
-
-data Type
-  = TyCon !TyConName
-  | TyVar !TyVarName
-  | TyApp !Type !Type
-  | TyRecord !(Map RowLabel Type) !(Maybe Type)
-  | TyFun !Type !Type
-  | TyForall !(NonEmpty TyVarName) !Type
-  deriving (Show, Eq, Ord)
-
-infixr 0 `TyFun`
-
-unfoldTyApp :: Type -> NonEmpty Type
-unfoldTyApp (TyApp app@(TyApp _ _) arg) = unfoldTyApp app <> (arg :| [])
-unfoldTyApp (TyApp f arg) = f :| [arg]
-unfoldTyApp t = t :| []
-
-unfoldTyFun :: Type -> NonEmpty Type
-unfoldTyFun (TyForall _ t) = unfoldTyFun t
-unfoldTyFun (t1 `TyFun` t2) = NE.cons t1 (unfoldTyFun t2)
-unfoldTyFun ty = ty :| []
-
-data Typed a
-  = Typed
-  { typedType :: !Type
-  , typedValue :: !a
-  } deriving (Show, Eq, Ord, Functor)

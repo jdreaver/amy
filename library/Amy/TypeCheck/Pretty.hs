@@ -22,6 +22,7 @@ prettyType (TyExistVar var) = prettyTyExistVarName var
 prettyType (TyRecord rows mVar) = prettyTyRecord (uncurry prettyTyRow <$> Map.toList rows) (prettyType <$> mVar)
 prettyType (TyApp f arg) = prettyType f <+> parensIf (isTyApp arg) (prettyType arg)
 prettyType (TyForall vars ty) = "forall" <+> hcat (punctuate space $ prettyTyVarName <$> toList vars) <> "." <+> prettyType ty
+prettyType (LocatedType _ ty) = prettyType ty
 
 prettyTyRow :: RowLabel -> Type -> Doc ann
 prettyTyRow label ty = prettyRowLabel label <+> "::" <+> prettyType ty

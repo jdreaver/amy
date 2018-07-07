@@ -18,8 +18,9 @@ import Amy.Syntax.AST
 prettyType :: Type -> Doc ann
 prettyType (TyFun ty1 ty2) = parensIf (isTyFun ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
 prettyType (TyCon con) = prettyTyConName con
+prettyType (TyExistVar _) = error "Found TyExistVar in Syntax AST"
 prettyType (TyVar var) = prettyTyVarName var
-prettyType (TyRecord rows mVar) = prettyTyRecord (uncurry prettyTyRow <$> Map.toList rows) (prettyTyVarName <$> mVar)
+prettyType (TyRecord rows mVar) = prettyTyRecord (uncurry prettyTyRow <$> Map.toList rows) (prettyType <$> mVar)
 prettyType (TyApp f arg) = prettyType f <+> parensIf (isTyApp arg) (prettyType arg)
 prettyType (TyForall vars ty) = "forall" <+> hcat (punctuate space $ prettyTyVarName <$> toList vars) <> "." <+> prettyType ty
 prettyType (LocatedType _ ty) = prettyType ty

@@ -104,7 +104,7 @@ tyCon' = do
   (Located span' con) <- tyCon
   pure $ LocatedType span' (TyCon con)
 
-tyRecord :: AmyParser (Map RowLabel Type, Maybe TyVarName)
+tyRecord :: AmyParser (Map RowLabel Type, Maybe Type)
 tyRecord =
   between lBrace rBrace $ do
     fields <- (`sepBy` comma) $ do
@@ -112,7 +112,7 @@ tyRecord =
       _ <- assertIndented *> doubleColon
       ty <- parseType
       pure (label', ty)
-    mTyVar <- optional . fmap locatedValue $ assertIndented *> pipe *> assertIndented *> tyVar
+    mTyVar <- optional $ assertIndented *> pipe *> assertIndented *> parseType
     pure (Map.fromList fields, mTyVar)
 
 binding :: AmyParser Binding

@@ -83,6 +83,7 @@ convertType ty = go (typeToNonEmpty ty)
     case ty' of
       C.TyCon con -> getTyConType con
       C.TyVar _ -> pure OpaquePointerType
+      C.TyExistVar _ -> error "Found TyExistVar in Core"
       app@C.TyApp{} ->
         case unfoldTyApp app of
           TyCon con :| _ -> getTyConType con
@@ -91,6 +92,7 @@ convertType ty = go (typeToNonEmpty ty)
       C.TyRecord rows _ -> mkRecordType rows
       C.TyFun{} -> pure ClosureType
       C.TyForall _ ty'' -> convertType ty''
+      C.LocatedType _ _ -> error "Found LocatedType in Core"
   go _ = pure ClosureType
 
 mkRecordType :: Map RowLabel C.Type -> ANFConvert ANF.Type

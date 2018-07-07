@@ -99,6 +99,7 @@ contextSubst ctx record@(TyRecord rows mTail) =
     Just t -> TyRecord rows' (Just t)
 contextSubst ctx (TyFun a b) = TyFun (contextSubst ctx a) (contextSubst ctx b)
 contextSubst ctx (TyForall vs t) = TyForall vs (contextSubst ctx t)
+contextSubst ctx (LocatedType ss t) = LocatedType ss $ contextSubst ctx t
 
 -- | Γ = Γ0[Θ] means Γ has the form (ΓL, Θ,ΓR)
 contextHole :: ContextMember -> Context -> Maybe (Context, Context)
@@ -137,6 +138,7 @@ typeWellFormed context (TyApp x y) = typeWellFormed context x >> typeWellFormed 
 typeWellFormed context (TyFun x y) = typeWellFormed context x >> typeWellFormed context y
 typeWellFormed context (TyRecord rows mTy) = asum (typeWellFormed context <$> rows) >> (mTy >>= typeWellFormed context)
 typeWellFormed context (TyForall vs t) = typeWellFormed (context <> Context (Seq.fromList $ NE.toList $ ContextVar <$> vs)) t
+typeWellFormed context (LocatedType _ t) = typeWellFormed context t
 
 --
 -- Monad

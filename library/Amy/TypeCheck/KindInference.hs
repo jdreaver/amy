@@ -95,6 +95,7 @@ inferTypeKind' (TyRecord fields mTail) = do
 inferTypeKind' (TyForall vars ty) = withNewLexicalScope $ do
   traverse_ addUnknownTyVarKindToScope vars
   inferTypeKind' ty
+inferTypeKind' (LocatedType _ ty) = inferTypeKind' ty
 inferTypeKind' v@(TyExistVar _) = error $ "Found existential variable in kind inference " ++ show v
 
 -- | If we have any unknown kinds left, just call them KStar.

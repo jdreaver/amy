@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveFunctor #-}
-
 module Amy.TypeCheck.AST
   ( Module(..)
   , Binding(..)
@@ -20,24 +18,21 @@ module Amy.TypeCheck.AST
   , matchType
   , patternType
 
-  , Type(..)
-  , unfoldTyFun
-  , Typed(..)
-
     -- Re-export
   , Literal(..)
   , module Amy.ASTCommon
   , module Amy.Names
+  , module Amy.Type
   ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 
 import Amy.ASTCommon
 import Amy.Literal
 import Amy.Names
 import Amy.Prim
+import Amy.Type
 
 data Module
   = Module
@@ -177,25 +172,3 @@ patternType (PLit lit) = literalType' lit
 patternType (PVar (Typed ty _)) = ty
 patternType (PCons (PatCons _ _ ty)) = ty
 patternType (PParens pat) = patternType pat
-
-data Type
-  = TyCon !TyConName
-  | TyVar !TyVarName
-  | TyExistVar !TyExistVarName
-  | TyApp !Type !Type
-  | TyRecord !(Map RowLabel Type) !(Maybe Type)
-  | TyFun !Type !Type
-  | TyForall !(NonEmpty TyVarName) !Type
-  deriving (Show, Eq, Ord)
-
-infixr 0 `TyFun`
-
-unfoldTyFun :: Type -> NonEmpty Type
-unfoldTyFun (t1 `TyFun` t2) = NE.cons t1 (unfoldTyFun t2)
-unfoldTyFun ty = ty :| []
-
-data Typed a
-  = Typed
-  { typedType :: !Type
-  , typedValue :: !a
-  } deriving (Show, Eq, Ord, Functor)

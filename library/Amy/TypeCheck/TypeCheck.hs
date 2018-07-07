@@ -84,10 +84,9 @@ inferBindingGroup isTopLevel bindingTypeMap bindings = do
   bindings' <- for bindings $ \binding@(S.Binding lname@(Located _ name) _ _) ->
     case Map.lookup name bindingTypeMap of
       Just ty -> do
-        let ty' = convertType ty
-        checkTypeKind ty'
-        addValueTypeToScope lname ty'
-        pure $ TypedBinding binding ty'
+        checkTypeKind ty
+        addValueTypeToScope lname ty
+        pure $ TypedBinding binding ty
       Nothing -> do
         ty <- T.TyExistVar <$> freshTyExistVar
         addValueTypeToScope lname ty
@@ -387,7 +386,7 @@ primitiveFunctionType' (PrimitiveFunction _ name ty) =
   )
 
 convertExtern :: S.Extern -> T.Extern
-convertExtern (S.Extern (Located _ name) ty) = T.Extern name (convertType ty)
+convertExtern (S.Extern (Located _ name) ty) = T.Extern name ty
 
 convertTypeDeclaration :: S.TypeDeclaration -> T.TypeDeclaration
 convertTypeDeclaration (S.TypeDeclaration tyName cons) =
@@ -397,7 +396,7 @@ convertDataConDefinition :: S.DataConDefinition -> T.DataConDefinition
 convertDataConDefinition (S.DataConDefinition (Located _ conName) mTyArg) =
   T.DataConDefinition
   { T.dataConDefinitionName = conName
-  , T.dataConDefinitionArgument = convertType <$> mTyArg
+  , T.dataConDefinitionArgument = mTyArg
   }
 
 mkDataConTypes :: S.TypeDeclaration -> [(Located DataConName, T.Type)]
@@ -407,24 +406,11 @@ mkDataConTypes (S.TypeDeclaration (S.TyConDefinition (Located _ tyConName) tyVar
     let
       tyVars' = T.TyVar . locatedValue <$> tyVars
       tyApp = foldl1 T.TyApp (T.TyCon tyConName : tyVars')
-      mTyArg' = convertType <$> mTyArg
       -- TODO: Should this be foldr? Probably doesn't matter since there is
       -- only one argument currently, but it would break if we added more.
-      ty = foldl1 T.TyFun (maybeToList mTyArg' ++ [tyApp])
+      ty = foldl1 T.TyFun (maybeToList mTyArg ++ [tyApp])
       tyForall = maybe ty (\varsNE -> T.TyForall varsNE ty) (NE.nonEmpty $ locatedValue <$> tyVars)
     in (name, tyForall)
-
-convertType :: S.Type -> T.Type
-convertType (S.TyCon con) = T.TyCon con
-convertType (S.TyVar var) = T.TyVar var
-convertType (S.TyApp f arg) = T.TyApp (convertType f) (convertType arg)
-convertType (S.TyRecord rows mTail) =
-  T.TyRecord
-    (convertType <$> rows)
-    (T.TyVar <$> mTail)
-convertType (S.TyFun ty1 ty2) = T.TyFun (convertType ty1) (convertType ty2)
-convertType (S.TyForall vars ty) = T.TyForall vars (convertType ty)
-convertType (LocatedType _ ty) = convertType ty
 
 convertTyConDefinition :: S.TyConDefinition -> T.TyConDefinition
 convertTyConDefinition (S.TyConDefinition (Located _ name') args) = T.TyConDefinition name' (locatedValue <$> args)

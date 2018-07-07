@@ -27,13 +27,13 @@ module Amy.Syntax.AST
   , matchSpan
   , patternSpan
   , LetBinding(..)
-  , Type(..)
 
     -- Re-export
   , Literal(..)
   , Located(..)
   , SourceSpan(..)
   , module Amy.Names
+  , module Amy.Type
   ) where
 
 import Data.List.NonEmpty (NonEmpty)
@@ -42,6 +42,7 @@ import Data.Map.Strict (Map)
 import Amy.Literal (Literal(..))
 import Amy.Names
 import Amy.Syntax.Located
+import Amy.Type
 
 -- | A 'Module' is simply a list of 'Declaration' values.
 data Module
@@ -215,15 +216,3 @@ patternSpan (PCons (PatCons (Located s _) mPat)) =
     Nothing -> s
     Just pat -> mergeSpans s (patternSpan pat)
 patternSpan (PParens pat) = patternSpan pat
-
-data Type
-  = TyCon !TyConName
-  | TyVar !TyVarName
-  | TyApp !Type !Type
-  | TyRecord !(Map RowLabel Type) !(Maybe TyVarName)
-  | TyFun !Type !Type
-  | TyForall !(NonEmpty TyVarName) !Type
-  | LocatedType !SourceSpan !Type
-  deriving (Show, Eq)
-
-infixr 0 `TyFun`

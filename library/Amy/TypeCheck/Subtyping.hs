@@ -24,6 +24,8 @@ import Amy.TypeCheck.Monad
 --
 
 subtype :: Type -> Type -> Checker ()
+subtype (LocatedType _ a) b = subtype a b
+subtype a (LocatedType _ b) = subtype a b
 subtype (TyCon a) (TyCon b) | a == b = pure ()
 subtype (TyVar a) (TyVar b) | a == b = pure ()
 subtype (TyExistVar a) (TyExistVar b) | a == b = pure ()
@@ -108,6 +110,7 @@ freeTEVars' (TyApp a b) = freeTEVars a ++ freeTEVars b
 freeTEVars' (TyRecord rows mTail) = concat $ (freeTEVars <$> Map.elems rows) ++ maybeToList (freeTEVars <$> mTail)
 freeTEVars' (TyFun a b) = freeTEVars a ++ freeTEVars b
 freeTEVars' (TyForall _ t) = freeTEVars t
+freeTEVars' (LocatedType _ t) = freeTEVars t
 
 --
 -- Instantiate
@@ -123,8 +126,12 @@ instantiate v s (TyApp a b) = TyApp (instantiate v s a) (instantiate v s b)
 instantiate v s (TyRecord rows mTail) = TyRecord (instantiate v s <$> rows) (instantiate v s <$> mTail)
 instantiate v s (TyFun a b) = TyFun (instantiate v s a) (instantiate v s b)
 instantiate v s (TyForall a t) = TyForall a (instantiate v s t)
+instantiate v s (LocatedType ss t) = LocatedType ss (instantiate v s t)
 
 instantiateLeft :: TyExistVarName -> Type -> Checker ()
+-- TODO: Why do we need to unwrap LocatedType here? Shouldn't that have been
+-- handled above?
+instantiateLeft a (LocatedType _ t) = instantiateLeft a t
 instantiateLeft a (TyFun t1 t2) = do
   (a1, a2) <- articulateTyFunExist a
   instantiateRight t1 a1
@@ -147,6 +154,7 @@ instantiateLeft a (TyRecord rows mTail) = do
 instantiateLeft a t = instantiateMonoType a t
 
 instantiateRight :: Type -> TyExistVarName -> Checker ()
+instantiateRight (LocatedType _ t) a = instantiateRight t a
 instantiateRight (TyFun t1 t2) a = do
   (a1, a2) <- articulateTyFunExist a
   instantiateLeft a1 t1

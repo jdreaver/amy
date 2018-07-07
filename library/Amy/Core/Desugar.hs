@@ -118,6 +118,7 @@ desugarType (T.TyExistVar (TyExistVarName i)) = C.TyVar $ TyVarName $ "$t" <> pa
 desugarType (T.TyApp f arg) = C.TyApp (desugarType f) (desugarType arg)
 desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)
 desugarType (T.TyForall vars ty) = C.TyForall vars (desugarType ty)
+desugarType (LocatedType _ ty) = desugarType ty
 
 desugarTyConDefinition :: T.TyConDefinition -> C.TyConDefinition
 desugarTyConDefinition (T.TyConDefinition name args) = C.TyConDefinition name args
