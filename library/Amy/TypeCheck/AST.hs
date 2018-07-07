@@ -2,9 +2,6 @@ module Amy.TypeCheck.AST
   ( Module(..)
   , Binding(..)
   , Extern(..)
-  , TypeDeclaration(..)
-  , TyConDefinition(..)
-  , DataConDefinition(..)
   , Expr(..)
   , If(..)
   , Case(..)
@@ -20,6 +17,7 @@ module Amy.TypeCheck.AST
 
     -- Re-export
   , Literal(..)
+  , Located(..)
   , module Amy.ASTCommon
   , module Amy.Names
   , module Amy.Type
@@ -32,6 +30,7 @@ import Amy.ASTCommon
 import Amy.Literal
 import Amy.Names
 import Amy.Prim
+import Amy.Syntax.Located
 import Amy.Type
 
 data Module
@@ -61,24 +60,6 @@ data Extern
   { externName :: !IdentName
   , externType :: !Type
   } deriving (Show, Eq)
-
-data TypeDeclaration
-  = TypeDeclaration
-  { typeDeclarationTypeName :: !TyConDefinition
-  , typeDeclarationConstructors :: ![DataConDefinition]
-  } deriving (Show, Eq, Ord)
-
-data TyConDefinition
-  = TyConDefinition
-  { tyConDefinitionName :: !TyConName
-  , tyConDefinitionArgs :: ![TyVarName]
-  } deriving (Show, Eq, Ord)
-
-data DataConDefinition
-  = DataConDefinition
-  { dataConDefinitionName :: !DataConName
-  , dataConDefinitionArgument :: !(Maybe Type)
-  } deriving (Show, Eq, Ord)
 
 -- | A renamed 'Expr'
 data Expr

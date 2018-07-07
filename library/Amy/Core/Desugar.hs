@@ -28,7 +28,7 @@ desugarExtern (T.Extern ident ty) = C.Extern ident (desugarType ty)
 
 desugarTypeDeclaration :: T.TypeDeclaration -> C.TypeDeclaration
 desugarTypeDeclaration (T.TypeDeclaration tyName cons) =
-  C.TypeDeclaration (desugarTyConDefinition tyName) (desugarDataConDefinition <$> cons)
+  C.TypeDeclaration tyName (desugarDataConDefinition <$> cons)
 
 desugarDataConDefinition :: T.DataConDefinition -> C.DataConDefinition
 desugarDataConDefinition (T.DataConDefinition conName mTyArg) =
@@ -111,9 +111,6 @@ desugarTypedIdent (T.Typed ty ident) = C.Typed (desugarType ty) ident
 desugarType :: Type -> Type
 desugarType = removeLocatedType . removeTyExistVar
 
-desugarTyConDefinition :: T.TyConDefinition -> C.TyConDefinition
-desugarTyConDefinition (T.TyConDefinition name args) = C.TyConDefinition name args
-
 --
 -- Case Expressions
 --
@@ -160,7 +157,7 @@ restoreClause clause@(PC.Clause (PC.ConLit _) _ _) =
 restoreClause (PC.Clause (PC.Con con _ _) args caseExpr) = do
   (tyDecl, _) <- lookupDataConType con
   let
-    patTy = C.TyCon $ C.tyConDefinitionName $ C.typeDeclarationTypeName tyDecl
+    patTy = C.TyCon $ locatedValue $ C.tyConDefinitionName $ C.typeDeclarationTypeName tyDecl
     arg =
       case args of
         [] -> Nothing

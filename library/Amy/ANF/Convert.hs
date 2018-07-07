@@ -54,10 +54,10 @@ convertTypeDeclaration :: C.TypeDeclaration -> ANFConvert ANF.TypeDeclaration
 convertTypeDeclaration (C.TypeDeclaration tyConDef con) = do
   ty <- getTyConDefinitionType tyConDef
   con' <- traverse convertDataConDefinition con
-  pure $ ANF.TypeDeclaration (C.tyConDefinitionName tyConDef) ty con'
+  pure $ ANF.TypeDeclaration (locatedValue $ C.tyConDefinitionName tyConDef) ty con'
 
 convertDataConDefinition :: C.DataConDefinition -> ANFConvert ANF.DataConDefinition
-convertDataConDefinition (C.DataConDefinition conName mTyArg) = do
+convertDataConDefinition (C.DataConDefinition (Located _ conName) mTyArg) = do
   mTyArg' <- traverse convertType mTyArg
   pure
     ANF.DataConDefinition

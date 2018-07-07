@@ -2,14 +2,22 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Amy.Type
-  ( Type(..)
+  ( -- * Type
+    Type(..)
   , Typed(..)
   , unfoldTyApp
   , unfoldTyFun
+
+    -- * Type Traversals
   , traverseType
   , traverseTypeM
   , removeLocatedType
   , removeTyExistVar
+
+    -- * Type Declarations
+  , TypeDeclaration(..)
+  , TyConDefinition(..)
+  , DataConDefinition(..)
   ) where
 
 import Control.Monad.Identity (Identity(..), runIdentity)
@@ -20,6 +28,10 @@ import Data.Text (pack)
 
 import Amy.Names
 import Amy.Syntax.Located
+
+--
+-- Type
+--
 
 data Type
   = TyCon !TyConName
@@ -49,6 +61,10 @@ unfoldTyFun :: Type -> NonEmpty Type
 unfoldTyFun (TyForall _ t) = unfoldTyFun t
 unfoldTyFun (t1 `TyFun` t2) = NE.cons t1 (unfoldTyFun t2)
 unfoldTyFun ty = ty :| []
+
+--
+-- Type Traversals
+--
 
 traverseType :: (Type -> Type) -> Type -> Type
 traverseType f = runIdentity . traverseTypeM (Identity . f)
@@ -86,3 +102,25 @@ removeTyExistVar = go
  where
   go (TyExistVar (TyExistVarName i)) = TyVar $ TyVarName $ "$t" <> pack (show i)
   go t = traverseType go t
+
+--
+-- Type Declarations
+--
+
+data TypeDeclaration
+  = TypeDeclaration
+  { typeDeclarationTypeName :: !TyConDefinition
+  , typeDeclarationConstructors :: ![DataConDefinition]
+  } deriving (Show, Eq)
+
+data TyConDefinition
+  = TyConDefinition
+  { tyConDefinitionName :: !(Located TyConName)
+  , tyConDefinitionArgs :: ![Located TyVarName]
+  } deriving (Show, Eq)
+
+data DataConDefinition
+  = DataConDefinition
+  { dataConDefinitionName :: !(Located DataConName)
+  , dataConDefinitionArgument :: !(Maybe Type)
+  } deriving (Show, Eq)

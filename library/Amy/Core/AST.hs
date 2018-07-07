@@ -2,10 +2,6 @@ module Amy.Core.AST
   ( Module(..)
   , Binding(..)
   , Extern(..)
-  , TypeDeclaration(..)
-  , TyConDefinition(..)
-  , fromPrimTypeDefinition
-  , DataConDefinition(..)
   , Expr(..)
   , If(..)
   , Case(..)
@@ -28,6 +24,7 @@ module Amy.Core.AST
 
     -- Re-export
   , Literal(..)
+  , Located(..)
   , module Amy.ASTCommon
   , module Amy.Names
   , module Amy.Type
@@ -47,7 +44,6 @@ import Amy.ASTCommon
 import Amy.Literal
 import Amy.Names
 import Amy.Prim
-import qualified Amy.Syntax.AST as S
 import Amy.Syntax.Located
 import Amy.Type
 
@@ -75,35 +71,6 @@ data Extern
   { externName :: !IdentName
   , externType :: !Type
   } deriving (Show, Eq)
-
-data TypeDeclaration
-  = TypeDeclaration
-  { typeDeclarationTypeName :: !TyConDefinition
-  , typeDeclarationConstructors :: ![DataConDefinition]
-  } deriving (Show, Eq, Ord)
-
-data TyConDefinition
-  = TyConDefinition
-  { tyConDefinitionName :: !TyConName
-  , tyConDefinitionArgs :: ![TyVarName]
-  } deriving (Show, Eq, Ord)
-
-fromPrimTyDef :: S.TyConDefinition -> TyConDefinition
-fromPrimTyDef (S.TyConDefinition (Located _ name) args) = TyConDefinition name (locatedValue <$> args)
-
-fromPrimTypeDefinition :: S.TypeDeclaration -> TypeDeclaration
-fromPrimTypeDefinition (S.TypeDeclaration tyConDef dataCons) =
-  TypeDeclaration (fromPrimTyDef tyConDef) (fromPrimDataCon <$> dataCons)
-
-data DataConDefinition
-  = DataConDefinition
-  { dataConDefinitionName :: !DataConName
-  , dataConDefinitionArgument :: !(Maybe Type)
-  } deriving (Show, Eq, Ord)
-
-fromPrimDataCon :: S.DataConDefinition -> DataConDefinition
-fromPrimDataCon (S.DataConDefinition (Located _ name) Nothing) = DataConDefinition name Nothing
-fromPrimDataCon (S.DataConDefinition _ (Just _)) = error "Couldn't convert data con definiton type."
 
 data Expr
   = ELit !Literal

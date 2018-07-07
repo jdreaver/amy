@@ -10,9 +10,6 @@ module Amy.Syntax.AST
   , Binding(..)
   , BindingType(..)
   , Extern(..)
-  , TypeDeclaration(..)
-  , TyConDefinition(..)
-  , DataConDefinition(..)
   , Expr(..)
   , If(..)
   , Case(..)
@@ -97,24 +94,6 @@ data Extern
   = Extern
   { externName :: !(Located IdentName)
   , externType :: !Type
-  } deriving (Show, Eq)
-
-data TypeDeclaration
-  = TypeDeclaration
-  { typeDeclarationTypeName :: !TyConDefinition
-  , typeDeclarationConstructors :: ![DataConDefinition]
-  } deriving (Show, Eq)
-
-data TyConDefinition
-  = TyConDefinition
-  { tyConDefinitionName :: !(Located TyConName)
-  , tyConDefinitionArgs :: ![Located TyVarName]
-  } deriving (Show, Eq)
-
-data DataConDefinition
-  = DataConDefinition
-  { dataConDefinitionName :: !(Located DataConName)
-  , dataConDefinitionArgument :: !(Maybe Type)
   } deriving (Show, Eq)
 
 data Expr

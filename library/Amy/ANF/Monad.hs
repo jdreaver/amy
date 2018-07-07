@@ -47,8 +47,11 @@ data ANFConvertRead
 anfConvertRead :: [(IdentName, ([C.Type], C.Type))] -> [C.TypeDeclaration] -> ANFConvertRead
 anfConvertRead funcs typeDeclarations =
   let
-    allTypeDecls = typeDeclarations ++ (fromPrimTypeDefinition <$> allPrimTypeDefinitions)
-    typeRepMap = Map.fromList $ (\t -> (C.tyConDefinitionName $ C.typeDeclarationTypeName t, typeRep t)) <$> allTypeDecls
+    allTypeDecls = typeDeclarations ++ allPrimTypeDefinitions
+    typeRepMap =
+      Map.fromList
+      $ (\t -> (locatedValue . C.tyConDefinitionName . C.typeDeclarationTypeName $ t, typeRep t))
+      <$> allTypeDecls
     dataConInfos = Map.fromList $ concatMap mkDataConInfo allTypeDecls
   in
     ANFConvertRead
@@ -61,7 +64,7 @@ mkDataConInfo :: C.TypeDeclaration -> [(DataConName, (ANF.Type, ConstructorIndex
 mkDataConInfo decl@(C.TypeDeclaration _ cons) = mkInfo <$> zip cons [0..]
  where
   rep = typeRep decl
-  mkInfo (C.DataConDefinition name _, index) = (name, (rep, ConstructorIndex index))
+  mkInfo (C.DataConDefinition (Located _ name) _, index) = (name, (rep, ConstructorIndex index))
 
 data ANFConvertState
   = ANFConvertState
@@ -83,7 +86,10 @@ freshIdent t = do
   pure $ IdentName (t <> pack (show id'))
 
 getTyConDefinitionType :: C.TyConDefinition -> ANFConvert ANF.Type
-getTyConDefinitionType tyCon = fromMaybe err . Map.lookup (tyConDefinitionName tyCon) <$> asks anfConvertReadTypeReps
+getTyConDefinitionType tyCon =
+  fromMaybe err
+  . Map.lookup (locatedValue $ tyConDefinitionName tyCon)
+  <$> asks anfConvertReadTypeReps
   where
    err = error $ "Couldn't find TypeCompilationMethod of TyConDefinition " ++ show tyCon
 

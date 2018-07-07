@@ -44,7 +44,6 @@ inferModule (S.Module filePath declarations) = do
 
     externs' = convertExtern <$> externs
     allTypeDeclarations = allPrimTypeDefinitions ++ typeDeclarations
-    typeDeclarations' = convertTypeDeclaration <$> typeDeclarations
 
     externTypes = (\(T.Extern name ty) -> (name, ty)) <$> externs'
     primFuncTypes = primitiveFunctionType' <$> allPrimitiveFunctions
@@ -52,13 +51,13 @@ inferModule (S.Module filePath declarations) = do
     dataConstructorTypes = concatMap mkDataConTypes (allPrimTypeDefinitions ++ typeDeclarations)
   runChecker identTypes dataConstructorTypes filePath $ do
     -- Infer type declaration kinds and add to scope
-    for_ allTypeDeclarations $ \decl@(S.TypeDeclaration (S.TyConDefinition tyCon _) _) -> do
-      kind <- inferTypeDeclarationKind (convertTypeDeclaration decl)
+    for_ allTypeDeclarations $ \decl@(TypeDeclaration (TyConDefinition tyCon _) _) -> do
+      kind <- inferTypeDeclarationKind decl
       addTyConKindToScope tyCon kind
 
     -- Infer all bindings
     bindings' <- inferBindings True bindings bindingTypes
-    pure (T.Module bindings' externs' typeDeclarations')
+    pure (T.Module bindings' externs' typeDeclarations)
 
 -- | Compute binding groups and infer each group separately.
 inferBindings :: Bool -> [S.Binding] -> [S.BindingType] -> Checker [NonEmpty T.Binding]
@@ -77,7 +76,7 @@ compareBindingTypeStatus TypedBinding{} UntypedBinding{} = LT
 compareBindingTypeStatus UntypedBinding{} TypedBinding{} = GT
 compareBindingTypeStatus _ _ = EQ
 
-inferBindingGroup :: Bool -> Map IdentName S.Type -> NonEmpty S.Binding -> Checker (NonEmpty T.Binding)
+inferBindingGroup :: Bool -> Map IdentName Type -> NonEmpty S.Binding -> Checker (NonEmpty T.Binding)
 inferBindingGroup isTopLevel bindingTypeMap bindings = do
   -- Add all binding types to context. Also record whether binding is typed or
   -- untyped
@@ -390,21 +389,10 @@ primitiveFunctionType' (PrimitiveFunction _ name ty) =
 convertExtern :: S.Extern -> T.Extern
 convertExtern (S.Extern (Located _ name) ty) = T.Extern name ty
 
-convertTypeDeclaration :: S.TypeDeclaration -> T.TypeDeclaration
-convertTypeDeclaration (S.TypeDeclaration tyName cons) =
-  T.TypeDeclaration (convertTyConDefinition tyName) (convertDataConDefinition <$> cons)
-
-convertDataConDefinition :: S.DataConDefinition -> T.DataConDefinition
-convertDataConDefinition (S.DataConDefinition (Located _ conName) mTyArg) =
-  T.DataConDefinition
-  { T.dataConDefinitionName = conName
-  , T.dataConDefinitionArgument = mTyArg
-  }
-
-mkDataConTypes :: S.TypeDeclaration -> [(Located DataConName, T.Type)]
-mkDataConTypes (S.TypeDeclaration (S.TyConDefinition (Located _ tyConName) tyVars) dataConDefs) = mkDataConPair <$> dataConDefs
+mkDataConTypes :: TypeDeclaration -> [(Located DataConName, T.Type)]
+mkDataConTypes (TypeDeclaration (TyConDefinition (Located _ tyConName) tyVars) dataConDefs) = mkDataConPair <$> dataConDefs
  where
-  mkDataConPair (S.DataConDefinition name mTyArg) =
+  mkDataConPair (DataConDefinition name mTyArg) =
     let
       tyVars' = T.TyVar . locatedValue <$> tyVars
       tyApp = foldl1 T.TyApp (T.TyCon tyConName : tyVars')
@@ -413,9 +401,6 @@ mkDataConTypes (S.TypeDeclaration (S.TyConDefinition (Located _ tyConName) tyVar
       ty = foldl1 T.TyFun (maybeToList mTyArg ++ [tyApp])
       tyForall = maybe ty (\varsNE -> T.TyForall varsNE ty) (NE.nonEmpty $ locatedValue <$> tyVars)
     in (name, tyForall)
-
-convertTyConDefinition :: S.TyConDefinition -> T.TyConDefinition
-convertTyConDefinition (S.TyConDefinition (Located _ name') args) = T.TyConDefinition name' (locatedValue <$> args)
 
 --
 -- Substitution

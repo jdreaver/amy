@@ -49,13 +49,13 @@ prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
 prettyTypeDeclaration' (TypeDeclaration tyName cons) =
    prettyTypeDeclaration (prettyTyConDefinition tyName) (prettyConstructor <$> cons)
  where
-  prettyConstructor (DataConDefinition conName mArg) =
+  prettyConstructor (DataConDefinition (Located _ conName) mArg) =
     prettyDataConstructor (prettyDataConName conName) (prettyType <$> mArg)
 
 prettyTyConDefinition :: TyConDefinition -> Doc ann
-prettyTyConDefinition (TyConDefinition name args) = prettyTyConName name <> args'
+prettyTyConDefinition (TyConDefinition (Located _ name) args) = prettyTyConName name <> args'
  where
-  args' = if null args then mempty else space <> sep (prettyTyVarName <$> args)
+  args' = if null args then mempty else space <> sep (prettyTyVarName . locatedValue <$> args)
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding ident ty args _ body) =

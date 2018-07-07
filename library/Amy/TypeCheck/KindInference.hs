@@ -28,12 +28,12 @@ import Amy.TypeCheck.Monad
 -- same time instead of one by one.
 
 inferTypeDeclarationKind :: TypeDeclaration -> Checker Kind
-inferTypeDeclarationKind (TypeDeclaration (TyConDefinition tyCon tyArgs) constructors) =
+inferTypeDeclarationKind (TypeDeclaration (TyConDefinition (Located _ tyCon) tyArgs) constructors) =
   withNewLexicalScope $ do
     -- Generate unknown kind variables for the type constructor and all type
     -- variables.
     tyConKindVar <- addUnknownTyConKindToScope tyCon
-    tyVarKindVars <- traverse addUnknownTyVarKindToScope tyArgs
+    tyVarKindVars <- traverse (addUnknownTyVarKindToScope . locatedValue) tyArgs
     let
       tyConConstraint = Constraint (KUnknown tyConKindVar, foldr1 KFun $ (KUnknown <$> tyVarKindVars) ++ [KStar])
 
