@@ -26,15 +26,15 @@ desugarModule (T.Module bindings externs typeDeclarations) = do
 desugarExtern :: T.Extern -> C.Extern
 desugarExtern (T.Extern ident ty) = C.Extern ident (desugarType ty)
 
-desugarTypeDeclaration :: T.TypeDeclaration -> C.TypeDeclaration
-desugarTypeDeclaration (T.TypeDeclaration tyName cons) =
-  C.TypeDeclaration tyName (desugarDataConDefinition <$> cons)
+desugarTypeDeclaration :: TypeDeclaration -> TypeDeclaration
+desugarTypeDeclaration (TypeDeclaration tyName cons) =
+  TypeDeclaration tyName (desugarDataConDefinition <$> cons)
 
-desugarDataConDefinition :: T.DataConDefinition -> C.DataConDefinition
-desugarDataConDefinition (T.DataConDefinition conName mTyArg) =
-  C.DataConDefinition
-  { C.dataConDefinitionName = conName
-  , C.dataConDefinitionArgument = desugarType <$> mTyArg
+desugarDataConDefinition :: DataConDefinition -> DataConDefinition
+desugarDataConDefinition (DataConDefinition conName mTyArg) =
+  DataConDefinition
+  { dataConDefinitionName = conName
+  , dataConDefinitionArgument = desugarType <$> mTyArg
   }
 
 desugarBinding :: T.Binding -> Desugar C.Binding
@@ -49,20 +49,20 @@ desugarBinding (T.Binding ident ty args retTy body) =
 desugarExpr :: T.Expr -> Desugar C.Expr
 desugarExpr (T.ELit lit) = pure $ C.ELit lit
 desugarExpr (T.ERecord rows) =
-  C.ERecord <$> traverse (\(T.Typed ty expr) -> C.Typed (desugarType ty) <$> desugarExpr expr) rows
+  C.ERecord <$> traverse (\(Typed ty expr) -> Typed (desugarType ty) <$> desugarExpr expr) rows
 desugarExpr (T.ERecordSelect expr label ty) = do
   expr' <- desugarExpr expr
   let ty' = desugarType ty
   pure $ C.ERecordSelect expr' label ty'
 desugarExpr (T.EVar ident) = pure $ C.EVar $ desugarTypedIdent ident
-desugarExpr (T.ECon (T.Typed ty con)) = pure $ C.ECon $ C.Typed (desugarType ty) con
+desugarExpr (T.ECon (Typed ty con)) = pure $ C.ECon $ Typed (desugarType ty) con
 desugarExpr (T.ECase (T.Case scrutinee matches)) = do
   -- Desugar the case expression
   scrutinee' <- desugarExpr scrutinee
   let scrutineeTy = desugarType $ T.expressionType scrutinee
   scrutineeIdent <- freshIdent "c"
   equations <- NE.toList <$> traverse matchToEquation matches
-  caseExpr <- PC.match [C.Typed scrutineeTy scrutineeIdent] equations
+  caseExpr <- PC.match [Typed scrutineeTy scrutineeIdent] equations
   caseExpr' <- restoreCaseExpr caseExpr
   pure $
     case caseExpr' of
@@ -86,7 +86,7 @@ desugarExpr (T.ELam (T.Lambda args body ty)) = do
   pure $ C.ELam $ C.Lambda args' body' ty'
 desugarExpr (T.EIf (T.If pred' then' else')) =
   let
-    boolTyCon' = T.TyCon boolTyCon
+    boolTyCon' = TyCon boolTyCon
     mkBoolPatCons cons = T.PatCons cons Nothing boolTyCon'
     matches =
       NE.fromList
@@ -105,8 +105,8 @@ desugarExpr (T.EApp (T.App func arg ty)) = do
   pure $ C.EApp (C.App func' arg' (desugarType ty))
 desugarExpr (T.EParens expr) = C.EParens <$> desugarExpr expr
 
-desugarTypedIdent :: T.Typed IdentName -> C.Typed IdentName
-desugarTypedIdent (T.Typed ty ident) = C.Typed (desugarType ty) ident
+desugarTypedIdent :: Typed IdentName -> Typed IdentName
+desugarTypedIdent (Typed ty ident) = Typed (desugarType ty) ident
 
 desugarType :: Type -> Type
 desugarType = removeLocatedType . removeTyExistVar
@@ -135,7 +135,7 @@ convertPattern (T.PCons (T.PatCons con mArg _)) = do
   argPats <- traverse convertPattern $ maybeToList mArg
   let
     argTys = maybeToList $ desugarType . patternType <$> mArg
-    span' = length $ C.typeDeclarationConstructors tyDecl
+    span' = length $ typeDeclarationConstructors tyDecl
   pure $ PC.PCon (PC.Con con argTys span') argPats
 convertPattern (T.PParens pat) = convertPattern pat
 
@@ -157,7 +157,7 @@ restoreClause clause@(PC.Clause (PC.ConLit _) _ _) =
 restoreClause (PC.Clause (PC.Con con _ _) args caseExpr) = do
   (tyDecl, _) <- lookupDataConType con
   let
-    patTy = C.TyCon $ locatedValue $ C.tyConDefinitionName $ C.typeDeclarationTypeName tyDecl
+    patTy = TyCon $ locatedValue $ tyConDefinitionName $ typeDeclarationTypeName tyDecl
     arg =
       case args of
         [] -> Nothing
