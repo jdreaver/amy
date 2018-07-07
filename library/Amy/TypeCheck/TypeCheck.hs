@@ -302,6 +302,7 @@ patternBinderType (T.PParens pat) = patternBinderType pat
 --
 
 checkBinding :: S.Binding -> T.Type -> Checker T.Binding
+checkBinding binding (LocatedType _ ty) = checkBinding binding ty
 checkBinding binding (T.TyForall as t) =
   withContextUntilNE (ContextVar <$> as) $
     checkBinding binding t
@@ -344,6 +345,7 @@ checkExpr :: S.Expr -> T.Type -> Checker T.Expr
 checkExpr e t = withSourceSpan (expressionSpan e) $ checkExpr' e t
 
 checkExpr' :: S.Expr -> T.Type -> Checker T.Expr
+checkExpr' e (LocatedType _ ty) = checkExpr' e ty
 checkExpr' e (T.TyForall as t) =
   withContextUntilNE (ContextVar <$> as) $
     checkExpr e t
