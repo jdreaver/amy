@@ -15,28 +15,6 @@ import Amy.Literal
 import Amy.Pretty
 import Amy.Syntax.AST
 
-prettyType :: Type -> Doc ann
-prettyType (TyFun ty1 ty2) = parensIf (isTyFun ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
-prettyType (TyCon con) = prettyTyConName con
-prettyType (TyExistVar _) = error "Found TyExistVar in Syntax AST"
-prettyType (TyVar var) = prettyTyVarName var
-prettyType (TyRecord rows mVar) = prettyTyRecord (uncurry prettyTyRow <$> Map.toList rows) (prettyType <$> mVar)
-prettyType (TyApp f arg) = prettyType f <+> parensIf (isTyApp arg) (prettyType arg)
-prettyType (TyForall vars ty) = "forall" <+> hcat (punctuate space $ prettyTyVarName <$> toList vars) <> "." <+> prettyType ty
-prettyType (LocatedType _ ty) = prettyType ty
-
-prettyTyRow :: RowLabel -> Type -> Doc ann
-prettyTyRow label ty = prettyRowLabel label <+> "::" <+> prettyType ty
-
-isTyApp :: Type -> Bool
-isTyApp TyApp{} = True
-isTyApp TyFun{} = True -- Technically -> is an infix app
-isTyApp _ = False
-
-isTyFun :: Type -> Bool
-isTyFun TyFun{} = True
-isTyFun _ = False
-
 prettyModule :: Module -> Doc ann
 prettyModule (Module _ decls) = vcatTwoHardLines (prettyDeclaration <$> decls)
 
