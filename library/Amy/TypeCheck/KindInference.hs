@@ -17,7 +17,8 @@ import Data.Traversable (for)
 
 import Amy.Errors
 import Amy.Kind
-import Amy.TypeCheck.AST
+import Amy.Syntax.Located
+import Amy.Type
 import Amy.TypeCheck.Monad
 
 --

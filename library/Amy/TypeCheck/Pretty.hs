@@ -10,12 +10,11 @@ module Amy.TypeCheck.Pretty
 import Data.Foldable (toList)
 import qualified Data.Map.Strict as Map
 
-import Amy.Literal
+import Amy.Syntax.AST
 import Amy.Pretty
-import Amy.TypeCheck.AST
 
 prettyModule :: Module -> Doc ann
-prettyModule (Module bindings externs typeDeclarations) =
+prettyModule (Module _ typeDeclarations externs bindings) =
   vcatTwoHardLines
   $ (prettyExtern' <$> externs)
   ++ (prettyTypeDeclaration' <$> typeDeclarations)
@@ -48,7 +47,7 @@ prettyBindingType' ident ty = prettyBindingType (prettyIdent ident) (prettyType 
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
-prettyExpr (ERecord rows) = bracketed $ uncurry prettyRow <$> Map.toList (Map.mapKeys locatedValue $ typedValue <$> rows)
+prettyExpr (ERecord _ rows) = bracketed $ uncurry prettyRow <$> Map.toList (Map.mapKeys locatedValue $ typedValue <$> rows)
 prettyExpr (ERecordSelect expr (Located _ field) _) = prettyExpr expr <> "." <> prettyRowLabel field
 prettyExpr (EVar (Typed _ (Located _ ident))) = prettyIdent ident
 prettyExpr (ECon (Typed _ (Located _ con))) = prettyDataConName con

@@ -17,10 +17,11 @@ module Amy.Syntax.Parser
   ) where
 
 import qualified Control.Applicative.Combinators.NonEmpty as CNE
+import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, maybeToList)
 import Text.Megaparsec
 import Text.Megaparsec.Expr
 
@@ -66,7 +67,7 @@ declTypeDeclaration :: Declaration -> Maybe TypeDeclaration
 declTypeDeclaration (DeclType x) = Just x
 declTypeDeclaration _ = Nothing
 
-parseDeclarations :: AmyParser Declaration -> AmyParser ([TypeDeclaration], [Extern], [Binding])
+parseDeclarations :: AmyParser Declaration -> AmyParser ([TypeDeclaration], [Extern], [NonEmpty Binding])
 parseDeclarations parser = do
   declarations <- indentedBlock parser
   let
@@ -79,12 +80,13 @@ parseDeclarations parser = do
       fmap
       (\b -> b { bindingType = Map.findWithDefault TyUnknown (locatedValue $ bindingName b) bindingTypeMap })
       bindings
+    bindingsNE = maybeToList $ NE.nonEmpty bindings'
 
     -- TODO: Throw an error if there is a binding type without a binding
 
     -- TODO: Enforce that binding types must be followed by the binding
 
-  pure (typeDecls, externs, bindings')
+  pure (typeDecls, externs, bindingsNE)
 
 externDecl :: AmyParser Extern
 externDecl = do
@@ -101,7 +103,7 @@ externDecl = do
 binding :: AmyParser Binding
 binding = do
   name <- ident
-  args <- many $ assertIndented *> ident
+  args <- fmap (Typed TyUnknown) <$> many (assertIndented *> ident)
   _ <- equals
   body <- expression <?> "expression"
   pure
@@ -197,8 +199,9 @@ expression = makeExprParser term table
  where
   table =
     [ [Postfix parseSelector]
-    , [InfixL (pure EApp)]
+    , [InfixL (pure mkApp)]
     ]
+  mkApp e1 e2 = EApp $ App e1 e2 TyUnknown
   term = assertIndented *> expressionTerm
 
 expressionTerm :: AmyParser Expr
@@ -326,7 +329,7 @@ letExpression' = do
 lambda :: AmyParser Lambda
 lambda = do
   startSpan <- backslash
-  args <- CNE.some $ assertIndented *> ident
+  args <- fmap (Typed TyUnknown) <$> CNE.some (assertIndented *> ident)
   _ <- rArrow
   body <- expression <?> "lambda body"
   pure

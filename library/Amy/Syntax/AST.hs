@@ -1,5 +1,3 @@
--- | AST for the frontend parser.
-
 module Amy.Syntax.AST
   ( Module(..)
   , Binding(..)
@@ -12,45 +10,50 @@ module Amy.Syntax.AST
   , PatCons(..)
   , Let(..)
   , Lambda(..)
+  , App(..)
+
   , expressionSpan
   , matchSpan
   , patternSpan
 
-    -- Re-export
-  , Literal(..)
+  , expressionType
+  , matchType
+  , patternType
+
+  -- Re-export
+  , module Amy.Literal
   , module Amy.Names
   , module Amy.Syntax.Located
   , module Amy.Type
   ) where
 
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 
-import Amy.Literal (Literal(..))
+import Amy.Literal
 import Amy.Names
+import Amy.Prim
 import Amy.Syntax.Located
 import Amy.Type
 
--- | A 'Module' is simply a list of 'Declaration' values.
 data Module
   = Module
   { moduleFile :: !FilePath
   , moduleTypeDeclarations :: ![TypeDeclaration]
   , moduleExterns :: ![Extern]
-  , moduleBindings :: ![Binding]
+  , moduleBindings :: ![NonEmpty Binding]
   } deriving (Show, Eq)
 
 data Binding
   = Binding
   { bindingName :: !(Located IdentName)
   , bindingType :: !Type
-  , bindingArgs :: ![Located IdentName]
+  , bindingArgs :: ![Typed (Located IdentName)]
   , bindingReturnType :: !Type
   , bindingBody :: !Expr
   } deriving (Show, Eq)
 
--- | A 'BindingType' is a top-level declaration of a 'Binding' type, like @x ::
--- Int@ or @f :: Int -> Int@
 data Extern
   = Extern
   { externName :: !(Located IdentName)
@@ -67,7 +70,7 @@ data Expr
   | ECase !Case
   | ELet !Let
   | ELam !Lambda
-  | EApp !Expr !Expr
+  | EApp !App
   | EParens !Expr
   deriving (Show, Eq)
 
@@ -108,17 +111,24 @@ data PatCons
 
 data Let
   = Let
-  { letBindings :: ![Binding]
+  { letBindings :: ![NonEmpty Binding]
   , letExpression :: !Expr
   , letSpan :: !SourceSpan
   } deriving (Show, Eq)
 
 data Lambda
   = Lambda
-  { lambdaArgs :: !(NonEmpty (Located IdentName))
+  { lambdaArgs :: !(NonEmpty (Typed (Located IdentName)))
   , lambdaBody :: !Expr
   , lambdaSpan :: !SourceSpan
   , lambdaType :: !Type
+  } deriving (Show, Eq)
+
+data App
+  = App
+  { appFunction :: !Expr
+  , appArg :: !Expr
+  , appReturnType :: !Type
   } deriving (Show, Eq)
 
 expressionSpan :: Expr -> SourceSpan
@@ -131,7 +141,7 @@ expressionSpan (EIf (If _ _ _ s)) = s
 expressionSpan (ECase (Case _ _ s)) = s
 expressionSpan (ELet (Let _ _ s)) = s
 expressionSpan (ELam (Lambda _ _ s _)) = s
-expressionSpan (EApp e1 e2) = mergeSpans (expressionSpan e1) (expressionSpan e2)
+expressionSpan (EApp (App e1 e2 _)) = mergeSpans (expressionSpan e1) (expressionSpan e2)
 expressionSpan (EParens e) = expressionSpan e
 
 matchSpan :: Match -> SourceSpan
@@ -145,3 +155,25 @@ patternSpan (PCons (PatCons (Located s _) mPat _)) =
     Nothing -> s
     Just pat -> mergeSpans s (patternSpan pat)
 patternSpan (PParens pat) = patternSpan pat
+
+expressionType :: Expr -> Type
+expressionType (ELit (Located _ lit)) = literalType lit
+expressionType (ERecord _ rows) = TyRecord (Map.mapKeys (notLocated . locatedValue) $ typedType <$> rows) Nothing
+expressionType (ERecordSelect _ _ ty) = ty
+expressionType (EVar (Typed ty _)) = ty
+expressionType (ECon (Typed ty _)) = ty
+expressionType (EIf if') = expressionType (ifThen if') -- Checker ensure "then" and "else" types match
+expressionType (ECase (Case _ (match :| _) _)) = matchType match
+expressionType (ELet let') = expressionType (letExpression let')
+expressionType (ELam (Lambda _ _ _ ty)) = ty
+expressionType (EApp app) = appReturnType app
+expressionType (EParens expr) = expressionType expr
+
+matchType :: Match -> Type
+matchType (Match _ expr) = expressionType expr
+
+patternType :: Pattern -> Type
+patternType (PLit (Located _ lit)) = literalType lit
+patternType (PVar (Typed ty _)) = ty
+patternType (PCons (PatCons _ _ ty)) = ty
+patternType (PParens pat) = patternType pat

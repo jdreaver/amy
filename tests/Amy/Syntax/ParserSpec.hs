@@ -173,9 +173,10 @@ spec = do
       parse' expressionParens "(f x)"
         `shouldParse`
         EParens
-          (EApp
+          (EApp $ App
             (EVar (Typed TyUnknown (Located (mkSpan 1 2 1 3) "f")))
             (EVar (Typed TyUnknown (Located (mkSpan 1 4 1 5) "x")))
+            TyUnknown
           )
 
   describe "ifExpression" $ do
@@ -190,9 +191,9 @@ spec = do
       parse' ifExpression "if f x then f y else g 2"
         `shouldParse`
         If
-          (EApp (EVar (Typed TyUnknown (Located (mkSpan 1 4 1 5) "f"))) (EVar (Typed TyUnknown (Located (mkSpan 1 6 1 7) "x"))))
-          (EApp (EVar (Typed TyUnknown (Located (mkSpan 1 13 1 14) "f"))) (EVar (Typed TyUnknown (Located (mkSpan 1 15 1 16) "y"))))
-          (EApp (EVar (Typed TyUnknown (Located (mkSpan 1 22 1 23) "g"))) (ELit (Located (mkSpan 1 24 1 25) (LiteralInt 2))))
+          (EApp $ App (EVar (Typed TyUnknown (Located (mkSpan 1 4 1 5) "f"))) (EVar (Typed TyUnknown (Located (mkSpan 1 6 1 7) "x"))) TyUnknown)
+          (EApp $ App (EVar (Typed TyUnknown (Located (mkSpan 1 13 1 14) "f"))) (EVar (Typed TyUnknown (Located (mkSpan 1 15 1 16) "y"))) TyUnknown)
+          (EApp $ App (EVar (Typed TyUnknown (Located (mkSpan 1 22 1 23) "g"))) (ELit (Located (mkSpan 1 24 1 25) (LiteralInt 2))) TyUnknown)
           (mkSpan 1 1 1 25)
 
   describe "literal" $ do

@@ -40,9 +40,10 @@ makeBindingGroup (CyclicSCC bindings) =
 -- Free variables
 --
 
+-- TODO: Move to Amy.AST
 freeBindingVars :: Binding -> Set IdentName
 freeBindingVars (Binding (Located _ name) _ args _ body) =
-  freeExprVars body `Set.difference` Set.fromList (name : (locatedValue <$> args))
+  freeExprVars body `Set.difference` Set.fromList (name : (locatedValue . typedValue <$> args))
 
 freeExprVars :: Expr -> Set IdentName
 freeExprVars ELit{} = Set.empty
@@ -55,10 +56,10 @@ freeExprVars (ECase (Case scrutinee matches _)) = Set.unions (freeExprVars scrut
  where
   freeMatchVars (Match pat expr) = freeExprVars expr `Set.difference` patternVars pat
 freeExprVars (ELam (Lambda args body _ _)) =
-  freeExprVars body `Set.difference` Set.fromList (toList $ locatedValue <$> args)
+  freeExprVars body `Set.difference` Set.fromList (toList $ locatedValue . typedValue <$> args)
 freeExprVars (ELet (Let bindings expr _)) =
-  Set.unions (freeExprVars expr : (freeBindingVars <$> bindings))
-freeExprVars (EApp f arg) = freeExprVars f `Set.union` freeExprVars arg
+  Set.unions (freeExprVars expr : (freeBindingVars <$> concatMap toList bindings))
+freeExprVars (EApp (App f arg _)) = freeExprVars f `Set.union` freeExprVars arg
 freeExprVars (EParens expr) = freeExprVars expr
 
 patternVars :: Pattern -> Set IdentName

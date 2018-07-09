@@ -10,7 +10,6 @@ module Amy.Syntax.Pretty
 import Data.Foldable (toList)
 import qualified Data.Map.Strict as Map
 
-import Amy.Literal
 import Amy.Pretty
 import Amy.Syntax.AST
 
@@ -19,7 +18,7 @@ prettyModule (Module _ typeDecls externs bindings) =
   vcatTwoHardLines
   $ (prettyTypeDeclaration' <$> typeDecls)
   ++ (prettyExtern' <$> externs)
-  ++ (prettyBinding' <$> bindings)
+  ++ (prettyBinding' <$> concatMap toList bindings)
 
 prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
 prettyTypeDeclaration' (TypeDeclaration info cons) =
@@ -45,7 +44,7 @@ prettyBinding' (Binding (Located _ name) ty args _ body) = tyDoc <> bindingDoc
       TyUnknown -> mempty
       _ -> prettyBindingType (prettyIdent name) (prettyType ty) <> hardline
   bindingDoc =
-    prettyBinding (prettyIdent name) (prettyIdent . locatedValue <$> args) (prettyExpr body)
+    prettyBinding (prettyIdent name) (prettyIdent . locatedValue . typedValue <$> args) (prettyExpr body)
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
@@ -62,9 +61,9 @@ prettyExpr (ECase (Case scrutinee matches _)) =
  where
   mkMatch (Match pat body) = (prettyPattern pat, prettyExpr body)
 prettyExpr (ELet (Let bindings body _)) =
-  prettyLet (prettyBinding' <$> bindings) (prettyExpr body)
-prettyExpr (ELam (Lambda args body _ _)) = prettyLambda (prettyIdent . locatedValue <$> toList args) (prettyExpr body)
-prettyExpr (EApp f arg) = prettyExpr f <+> prettyExpr arg
+  prettyLet (prettyBinding' <$> concatMap toList bindings) (prettyExpr body)
+prettyExpr (ELam (Lambda args body _ _)) = prettyLambda (prettyIdent . locatedValue . typedValue <$> toList args) (prettyExpr body)
+prettyExpr (EApp (App f arg _)) = prettyExpr f <+> prettyExpr arg
 prettyExpr (EParens expr) = parens $ prettyExpr expr
 
 prettyPattern :: Pattern -> Doc ann

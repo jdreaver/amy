@@ -16,7 +16,9 @@ import Data.Maybe (maybeToList)
 import qualified Data.Sequence as Seq
 
 import Amy.Errors
-import Amy.TypeCheck.AST
+import Amy.Names
+import Amy.Syntax.Located
+import Amy.Type
 import Amy.TypeCheck.Monad
 
 --
