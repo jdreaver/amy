@@ -27,9 +27,8 @@ module Amy.Syntax.AST
 
     -- Re-export
   , Literal(..)
-  , Located(..)
-  , SourceSpan(..)
   , module Amy.Names
+  , module Amy.Syntax.Located
   , module Amy.Type
   ) where
 

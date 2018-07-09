@@ -86,7 +86,7 @@ desugarExpr (T.ELam (T.Lambda args body ty)) = do
   pure $ C.ELam $ C.Lambda args' body' ty'
 desugarExpr (T.EIf (T.If pred' then' else')) =
   let
-    boolTyCon' = TyCon boolTyCon
+    boolTyCon' = TyCon (notLocated boolTyCon)
     mkBoolPatCons cons = T.PatCons cons Nothing boolTyCon'
     matches =
       NE.fromList
@@ -109,7 +109,7 @@ desugarTypedIdent :: Typed IdentName -> Typed IdentName
 desugarTypedIdent (Typed ty ident) = Typed (desugarType ty) ident
 
 desugarType :: Type -> Type
-desugarType = removeLocatedType . removeTyExistVar
+desugarType = removeTyExistVar
 
 --
 -- Case Expressions
@@ -157,7 +157,7 @@ restoreClause clause@(PC.Clause (PC.ConLit _) _ _) =
 restoreClause (PC.Clause (PC.Con con _ _) args caseExpr) = do
   (tyDecl, _) <- lookupDataConType con
   let
-    patTy = TyCon $ locatedValue $ tyConDefinitionName $ typeDeclarationTypeName tyDecl
+    patTy = TyCon $ fromLocated $ tyConDefinitionName $ typeDeclarationTypeName tyDecl
     arg =
       case args of
         [] -> Nothing

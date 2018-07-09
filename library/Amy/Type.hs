@@ -11,7 +11,6 @@ module Amy.Type
     -- * Type Traversals
   , traverseType
   , traverseTypeM
-  , removeLocatedType
   , removeTyExistVar
 
     -- * Type Declarations
@@ -34,14 +33,13 @@ import Amy.Syntax.Located
 --
 
 data Type
-  = TyCon !TyConName
-  | TyVar !TyVarName
+  = TyCon !(MaybeLocated TyConName)
+  | TyVar !(MaybeLocated TyVarName)
   | TyExistVar !TyExistVarName
   | TyApp !Type !Type
-  | TyRecord !(Map RowLabel Type) !(Maybe Type)
+  | TyRecord !(Map (MaybeLocated RowLabel) Type) !(Maybe Type)
   | TyFun !Type !Type
-  | TyForall !(NonEmpty TyVarName) !Type
-  | LocatedType !SourceSpan !Type
+  | TyForall !(NonEmpty (MaybeLocated TyVarName)) !Type
   deriving (Show, Eq, Ord)
 
 infixr 0 `TyFun`
@@ -87,20 +85,12 @@ traverseTypeM f = go
   go (TyRecord rows mTail) = TyRecord <$> traverse f rows <*> traverse f mTail
   go (TyFun t1 t2) = TyFun <$> f t1 <*> f t2
   go (TyForall vars ty) = TyForall vars <$> f ty
-  go (LocatedType ss ty) = LocatedType ss <$> f ty
-
--- | Remove any 'LocatedType' nodes from a 'Type'.
-removeLocatedType :: Type -> Type
-removeLocatedType = go
- where
-  go (LocatedType _ ty) = ty
-  go t = traverseType go t
 
 -- | Replace any 'TyExistVar' nodes with 'TyVar' nodes.
 removeTyExistVar :: Type -> Type
 removeTyExistVar = go
  where
-  go (TyExistVar (TyExistVarName i)) = TyVar $ TyVarName $ "$t" <> pack (show i)
+  go (TyExistVar (TyExistVarName i)) = TyVar $ notLocated $ TyVarName $ "$t" <> pack (show i)
   go t = traverseType go t
 
 --

@@ -48,6 +48,7 @@ import qualified Data.Map.Strict as Map
 
 import Amy.Kind
 import Amy.Names
+import Amy.Syntax.Located
 import Amy.Type
 
 --
@@ -136,16 +137,14 @@ isKFun _ = False
 
 prettyType :: Type -> Doc ann
 prettyType (TyFun ty1 ty2) = parensIf (isTyFun ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
-prettyType (TyCon con) = prettyTyConName con
+prettyType (TyCon (MaybeLocated _ con)) = prettyTyConName con
 prettyType (TyExistVar var) = prettyTyExistVarName var
-prettyType (TyVar var) = prettyTyVarName var
+prettyType (TyVar (MaybeLocated _ var)) = prettyTyVarName var
 prettyType (TyRecord rows mVar) = prettyTyRecord (uncurry prettyTyRow <$> Map.toList rows) (prettyType <$> mVar)
+ where
+  prettyTyRow (MaybeLocated _ label) ty = prettyRowLabel label <+> "::" <+> prettyType ty
 prettyType (TyApp f arg) = prettyType f <+> parensIf (isTyApp arg) (prettyType arg)
-prettyType (TyForall vars ty) = "forall" <+> hcat (punctuate space $ prettyTyVarName <$> toList vars) <> "." <+> prettyType ty
-prettyType (LocatedType _ ty) = prettyType ty
-
-prettyTyRow :: RowLabel -> Type -> Doc ann
-prettyTyRow label ty = prettyRowLabel label <+> "::" <+> prettyType ty
+prettyType (TyForall vars ty) = "forall" <+> hcat (punctuate space $ prettyTyVarName . maybeLocatedValue <$> toList vars) <> "." <+> prettyType ty
 
 isTyApp :: Type -> Bool
 isTyApp TyApp{} = True

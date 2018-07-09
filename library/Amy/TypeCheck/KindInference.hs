@@ -60,10 +60,10 @@ inferTypeKind ty = do
   pure $ starIfUnknown $ substituteKind subst kind
 
 inferTypeKind' :: Type -> Checker (Kind, [Constraint])
-inferTypeKind' (TyCon name) = do
+inferTypeKind' (TyCon (MaybeLocated _ name)) = do
   kind <- lookupTyConKind name
   pure (kind, [])
-inferTypeKind' (TyVar name) = do
+inferTypeKind' (TyVar (MaybeLocated _ name)) = do
   kind <- lookupTyVarKind name
   pure (kind, [])
 inferTypeKind' (TyApp t1 t2) = do
@@ -93,9 +93,8 @@ inferTypeKind' (TyRecord fields mTail) = do
   kind <- KUnknown <$> freshId
   pure (kind, concat fieldCons ++ concat varCons ++ [Constraint (kind, KStar)])
 inferTypeKind' (TyForall vars ty) = withNewLexicalScope $ do
-  traverse_ addUnknownTyVarKindToScope vars
+  traverse_ addUnknownTyVarKindToScope (maybeLocatedValue <$> vars)
   inferTypeKind' ty
-inferTypeKind' (LocatedType _ ty) = inferTypeKind' ty
 inferTypeKind' v@(TyExistVar _) = error $ "Found existential variable in kind inference " ++ show v
 
 -- | If we have any unknown kinds left, just call them KStar.

@@ -24,9 +24,9 @@ module Amy.Core.AST
 
     -- Re-export
   , Literal(..)
-  , Located(..)
   , module Amy.ASTCommon
   , module Amy.Names
+  , module Amy.Syntax.Located
   , module Amy.Type
   ) where
 
@@ -155,12 +155,9 @@ foldApp func args =
   mkApp :: Expr -> (Expr, [Type]) -> Expr
   mkApp e (arg, tys') = EApp $ App e arg (foldr1 TyFun tys')
 
-literalType' :: Literal -> Type
-literalType' lit = TyCon $ literalType lit
-
 expressionType :: Expr -> Type
-expressionType (ELit lit) = literalType' lit
-expressionType (ERecord rows) = TyRecord (typedType <$> rows) Nothing
+expressionType (ELit lit) = literalType lit
+expressionType (ERecord rows) = TyRecord (Map.mapKeys notLocated $ typedType <$> rows) Nothing
 expressionType (ERecordSelect _ _ ty) = ty
 expressionType (EVar (Typed ty _)) = ty
 expressionType (ECon (Typed ty _)) = ty

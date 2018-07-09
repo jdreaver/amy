@@ -13,7 +13,6 @@ import Text.Megaparsec
 
 import Amy.Syntax.AST
 import Amy.Syntax.Lexer
-import Amy.Syntax.Located
 import Amy.Syntax.Monad
 import Amy.Syntax.Parser
 
@@ -25,6 +24,9 @@ parse' parser input =
 mkSpan :: Int -> Int -> Int -> Int -> SourceSpan
 mkSpan startLine startCol endLine endCol = SourceSpan (mkSourcePos "" startLine startCol) (mkSourcePos "" endLine endCol)
 
+mkLocated :: Int -> Int -> Int -> Int -> a -> MaybeLocated a
+mkLocated startLine startCol endLine endCol x = MaybeLocated (Just $ mkSpan startLine startCol endLine endCol) x
+
 spec :: Spec
 spec = do
 
@@ -34,14 +36,14 @@ spec = do
         `shouldParse`
         Extern
           (Located (mkSpan 1 8 1 9) "f")
-          (LocatedType (mkSpan 1 13 1 16) (TyCon "Int"))
+          (TyCon (mkLocated 1 13 1 16 "Int"))
       parse' externDecl "extern f :: Int -> Double"
         `shouldParse`
         Extern
           (Located (mkSpan 1 8 1 9) "f")
-          ( LocatedType (mkSpan 1 13 1 16) (TyCon "Int")
+          ( TyCon (mkLocated 1 13 1 16 "Int")
             `TyFun`
-            LocatedType (mkSpan 1 20 1 26) (TyCon "Double")
+            TyCon (mkLocated 1 20 1 26 "Double")
           )
 
   describe "bindingType" $ do
@@ -50,14 +52,14 @@ spec = do
         `shouldParse`
         BindingType
           (Located (mkSpan 1 1 1 2) "f")
-          (LocatedType (mkSpan 1 6 1 9) (TyCon "Int"))
+          (TyCon (mkLocated 1 6 1 9 "Int"))
       parse' bindingType "f :: Int -> Double"
         `shouldParse`
         BindingType
           (Located (mkSpan 1 1 1 2) "f")
-          ( LocatedType (mkSpan 1 6 1 9) (TyCon "Int")
+          ( TyCon (mkLocated 1 6 1 9 "Int")
             `TyFun`
-            LocatedType (mkSpan 1 13 1 19) (TyCon "Double")
+            TyCon (mkLocated 1 13 1 19 "Double")
           )
 
     it "parses polymorphic types" $ do
@@ -65,97 +67,100 @@ spec = do
         `shouldParse`
         BindingType
           (Located (mkSpan 1 1 1 2) "f")
-          (TyForall ["a"] $ LocatedType (mkSpan 1 16 1 17) (TyVar "a"))
+          (TyForall [mkLocated 1 13 1 14 "a"] $ TyVar (mkLocated 1 16 1 17 "a"))
       parse' bindingType "f :: forall a b. a -> b -> a"
         `shouldParse`
         BindingType
           (Located (mkSpan 1 1 1 2) "f")
-          ( TyForall ["a", "b"] $
-              LocatedType (mkSpan 1 18 1 19) (TyVar "a")
+          ( TyForall
+              [ mkLocated 1 13 1 14 "a"
+              , mkLocated 1 15 1 16 "b"
+              ] $
+              TyVar (mkLocated 1 18 1 19 "a")
               `TyFun`
-              LocatedType (mkSpan 1 23 1 24) (TyVar "b")
+              TyVar (mkLocated 1 23 1 24 "b")
               `TyFun`
-              LocatedType (mkSpan 1 28 1 29) (TyVar "a")
+              TyVar (mkLocated 1 28 1 29 "a")
           )
 
   describe "parseType" $ do
     it "handles simple terms" $ do
-      parse' parseType "A" `shouldParse` LocatedType (mkSpan 1 1 1 2) (TyCon "A")
-      parse' parseType "a" `shouldParse` LocatedType (mkSpan 1 1 1 2) (TyVar "a")
+      parse' parseType "A" `shouldParse` TyCon (mkLocated 1 1 1 2 "A")
+      parse' parseType "a" `shouldParse` TyVar (mkLocated 1 1 1 2 "a")
 
     it "handles terms with args" $ do
       parse' parseType "A a" `shouldParse`
-        (LocatedType (mkSpan 1 1 1 2) (TyCon "A") `TyApp` LocatedType (mkSpan 1 3 1 4) (TyVar "a"))
+        (TyCon (mkLocated 1 1 1 2 "A") `TyApp` TyVar (mkLocated 1 3 1 4 "a"))
 
     it "tightly binds constructor applications" $ do
       parse' parseType "A B C" `shouldParse`
         TyApp
           ( TyApp
-            (LocatedType (mkSpan 1 1 1 2) (TyCon "A"))
-            (LocatedType (mkSpan 1 3 1 4) (TyCon "B"))
+            (TyCon (mkLocated 1 1 1 2 "A"))
+            (TyCon (mkLocated 1 3 1 4 "B"))
           )
-          (LocatedType (mkSpan 1 5 1 6) (TyCon "C"))
+          (TyCon (mkLocated 1 5 1 6 "C"))
 
     it "handles terms with args and parens" $ do
       parse' parseType "A (B b) a" `shouldParse`
         TyApp
         ( TyApp
-          (LocatedType (mkSpan 1 1 1 2) (TyCon "A"))
+          (TyCon (mkLocated 1 1 1 2 "A"))
           ( TyApp
-            (LocatedType (mkSpan 1 4 1 5) (TyCon "B"))
-            (LocatedType (mkSpan 1 6 1 7) (TyVar "b"))
+            (TyCon (mkLocated 1 4 1 5 "B"))
+            (TyVar (mkLocated 1 6 1 7 "b"))
           )
         )
-        (LocatedType (mkSpan 1 9 1 10) (TyVar "a"))
+        (TyVar (mkLocated 1 9 1 10 "a"))
 
   describe "parseType" $ do
     it "handles simple types" $ do
-      parse' parseType "A" `shouldParse` LocatedType (mkSpan 1 1 1 2) (TyCon "A")
+      parse' parseType "A" `shouldParse` TyCon (mkLocated 1 1 1 2 "A")
       parse' parseType "A -> B"
         `shouldParse` (
-          LocatedType (mkSpan 1 1 1 2) (TyCon "A")
+          TyCon (mkLocated 1 1 1 2 "A")
           `TyFun`
-          LocatedType (mkSpan 1 6 1 7) (TyCon "B")
+          TyCon (mkLocated 1 6 1 7 "B")
         )
       parse' parseType "A -> B -> C"
         `shouldParse` (
-          LocatedType (mkSpan 1 1 1 2) (TyCon "A")
+          TyCon (mkLocated 1 1 1 2 "A")
           `TyFun`
-          LocatedType (mkSpan 1 6 1 7) (TyCon "B")
+          TyCon (mkLocated 1 6 1 7 "B")
           `TyFun`
-          LocatedType (mkSpan 1 11 1 12) (TyCon "C")
+          TyCon (mkLocated 1 11 1 12 "C")
         )
 
     it "handles parens" $ do
-      parse' parseType "(A)" `shouldParse` LocatedType (mkSpan 1 2 1 3) (TyCon "A")
-      parse' parseType "((X))" `shouldParse` LocatedType (mkSpan 1 3 1 4) (TyCon "X")
+      parse' parseType "(A)" `shouldParse` TyCon (mkLocated 1 2 1 3 "A")
+      parse' parseType "((X))" `shouldParse` TyCon (mkLocated 1 3 1 4 "X")
 
     it "handles parens with functions" $ do
       parse' parseType "((A)) -> ((B))"
         `shouldParse` (
-          LocatedType (mkSpan 1 3 1 4) (TyCon "A")
+          TyCon (mkLocated 1 3 1 4 "A")
           `TyFun`
-          LocatedType (mkSpan 1 12 1 13) (TyCon "B")
+          TyCon (mkLocated 1 12 1 13 "B")
         )
       parse' parseType "(A -> B) -> C"
         `shouldParse` (
-          ( LocatedType (mkSpan 1 2 1 3) (TyCon "A")
+          ( TyCon (mkLocated 1 2 1 3 "A")
             `TyFun`
-            LocatedType (mkSpan 1 7 1 8) (TyCon "B")
+            TyCon (mkLocated 1 7 1 8 "B")
           )
           `TyFun`
-          LocatedType (mkSpan 1 13 1 14) (TyCon "C")
+          TyCon (mkLocated 1 13 1 14 "C")
         )
       parse' parseType "A -> (B -> C) -> D"
         `shouldParse` (
-          LocatedType (mkSpan 1 1 1 2) (TyCon "A")
+          TyCon (mkLocated 1 1 1 2 "A")
           `TyFun`
-          ( LocatedType (mkSpan 1 7 1 8) (TyCon "B")
+          ( TyCon (mkLocated 1 7 1 8 "B")
             `TyFun`
-             LocatedType (mkSpan 1 12 1 13) (TyCon "C")
+             TyCon (mkLocated 1 12 1 13 "C")
           )
           `TyFun`
-          LocatedType (mkSpan 1 18 1 19) (TyCon "D")
+          TyCon (mkLocated 1 18 1 19 "D")
         )
 
     it "should fail gracefully without infinite loops" $ do

@@ -37,7 +37,7 @@ match'
 match' vars eqs = runDesugar [] $ match vars eqs
 
 boolTy :: Type
-boolTy = TyCon "Bool"
+boolTy = TyCon (notLocated "Bool")
 
 mkExpr :: [Typed IdentName] -> Expr
 mkExpr [] = error "empty list"

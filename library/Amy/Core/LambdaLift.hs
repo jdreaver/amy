@@ -255,7 +255,7 @@ makeLiftedAppNode lifted@(LiftedBinding newArgs binding) =
 maybeEtaExpandExpr :: Expr -> [Expr] -> Maybe Type -> Lift Expr
 maybeEtaExpandExpr expr@(EVar (Typed _ func)) args mRetTy =
   etaExpand expr args mRetTy
-  . maybe [] (fmap TyCon . drop (length args) . NE.init . primitiveFunctionType)
+  . maybe [] (fmap (TyCon . notLocated) . drop (length args) . NE.init . primitiveFunctionType)
   $ Map.lookup func primitiveFunctionsByName
 maybeEtaExpandExpr expr@(ECon (Typed ty _)) args mRetTy = do
   let

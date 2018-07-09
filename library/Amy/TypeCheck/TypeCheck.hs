@@ -163,11 +163,11 @@ generalize context ty =
     -- Replace these with nice letters. TODO: Make sure these letters aren't
     -- already in scope.
     varsWithLetters = zip freeVars (TyVarName <$> letters)
-    solutions = uncurry ContextSolved . fmap TyVar <$> varsWithLetters
+    solutions = uncurry ContextSolved . fmap (TyVar . notLocated) <$> varsWithLetters
     context' = context <> (Context $ Seq.fromList solutions)
 
     -- Build the forall type
-    tyVars = snd <$> varsWithLetters
+    tyVars = notLocated . snd <$> varsWithLetters
     ty' = contextSubst context' ty
     tyForall = maybe ty' (\varsNE -> TyForall varsNE ty') $ NE.nonEmpty tyVars
   in (tyForall, context')
@@ -191,7 +191,7 @@ inferExpr' (S.EIf (S.If pred' then' else' _)) = do
   -- and then unify with expected types? I'm thinking instead we should
   -- instantiate a variable for then/else and check both of them against it,
   -- instead of inferring "then" and using that type to check "else".
-  pred'' <- checkExpr pred' (TyCon boolTyCon)
+  pred'' <- checkExpr pred' (TyCon $ notLocated boolTyCon)
   then'' <- inferExpr then'
   else'' <- checkExpr else' (expressionType then'')
   pure $ T.EIf $ T.If pred'' then'' else''
@@ -219,7 +219,7 @@ inferExpr' (S.ERecord _ rows) = do
 inferExpr' (S.ERecordSelect expr (Located _ label)) = do
   retVar <- freshTyExistVar
   polyVar <- freshTyExistVar
-  let exprTy = TyRecord (Map.singleton label $ TyExistVar retVar) (Just $ TyExistVar polyVar)
+  let exprTy = TyRecord (Map.singleton (notLocated label) $ TyExistVar retVar) (Just $ TyExistVar polyVar)
   expr' <- checkExpr expr exprTy
   retTy <- currentContextSubst $ TyExistVar retVar
   pure $ T.ERecordSelect expr' label retTy
@@ -234,7 +234,7 @@ inferExpr' (S.ECase (S.Case scrutinee matches _)) = do
 inferApp :: Type -> S.Expr -> Checker (T.Expr, Type)
 inferApp (TyForall as t) e = do
   as' <- traverse (const freshTyExistVar) as
-  let t' = foldl' (\ty (a, a') -> instantiate a (TyExistVar a') ty) t $ NE.zip as as'
+  let t' = foldl' (\ty (MaybeLocated _ a, a') -> instantiate a (TyExistVar a') ty) t $ NE.zip as as'
   inferApp t' e
 inferApp (TyExistVar a) e = do
   (a1, a2) <- articulateTyFunExist a
@@ -301,9 +301,8 @@ patternBinderType (T.PParens pat) = patternBinderType pat
 --
 
 checkBinding :: S.Binding -> Type -> Checker T.Binding
-checkBinding binding (LocatedType _ ty) = checkBinding binding ty
 checkBinding binding (TyForall as t) =
-  withContextUntilNE (ContextVar <$> as) $
+  withContextUntilNE (ContextVar . maybeLocatedValue <$> as) $
     checkBinding binding t
 checkBinding (S.Binding (Located span' name) args body) t = do
   (args', body', bodyTy, context) <- checkAbs args body t span'
@@ -344,9 +343,8 @@ checkExpr :: S.Expr -> Type -> Checker T.Expr
 checkExpr e t = withSourceSpan (expressionSpan e) $ checkExpr' e t
 
 checkExpr' :: S.Expr -> Type -> Checker T.Expr
-checkExpr' e (LocatedType _ ty) = checkExpr' e ty
 checkExpr' e (TyForall as t) =
-  withContextUntilNE (ContextVar <$> as) $
+  withContextUntilNE (ContextVar . maybeLocatedValue <$> as) $
     checkExpr e t
 checkExpr' (S.ELam (S.Lambda args body span')) t@TyFun{} = do
   (args', body', _, context) <- checkAbs (toList args) body t span'
@@ -383,23 +381,23 @@ checkPattern pat t =
 primitiveFunctionType' :: PrimitiveFunction -> (IdentName, Type)
 primitiveFunctionType' (PrimitiveFunction _ name ty) =
   ( name
-  , foldr1 TyFun $ TyCon <$> ty
+  , foldr1 TyFun $ TyCon . notLocated <$> ty
   )
 
 convertExtern :: S.Extern -> T.Extern
 convertExtern (S.Extern (Located _ name) ty) = T.Extern name ty
 
 mkDataConTypes :: TypeDeclaration -> [(Located DataConName, Type)]
-mkDataConTypes (TypeDeclaration (TyConDefinition (Located _ tyConName) tyVars) dataConDefs) = mkDataConPair <$> dataConDefs
+mkDataConTypes (TypeDeclaration (TyConDefinition tyConName tyVars) dataConDefs) = mkDataConPair <$> dataConDefs
  where
   mkDataConPair (DataConDefinition name mTyArg) =
     let
-      tyVars' = TyVar . locatedValue <$> tyVars
-      tyApp = foldl1 TyApp (TyCon tyConName : tyVars')
+      tyVars' = TyVar . fromLocated <$> tyVars
+      tyApp = foldl1 TyApp (TyCon (fromLocated tyConName) : tyVars')
       -- TODO: Should this be foldr? Probably doesn't matter since there is
       -- only one argument currently, but it would break if we added more.
       ty = foldl1 TyFun (maybeToList mTyArg ++ [tyApp])
-      tyForall = maybe ty (\varsNE -> TyForall varsNE ty) (NE.nonEmpty $ locatedValue <$> tyVars)
+      tyForall = maybe ty (\varsNE -> TyForall varsNE ty) (NE.nonEmpty $ fromLocated <$> tyVars)
     in (name, tyForall)
 
 --

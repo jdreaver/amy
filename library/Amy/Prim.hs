@@ -96,10 +96,13 @@ allPrimTypeDefinitions =
   , boolTypeDefinition
   ]
 
-literalType :: Literal -> TyConName
-literalType (LiteralInt _) = intTyCon
-literalType (LiteralDouble _) = doubleTyCon
-literalType (LiteralText _) = textTyCon
+literalType :: Literal -> Type
+literalType = TyCon . notLocated . literalTyCon
+
+literalTyCon :: Literal -> TyConName
+literalTyCon (LiteralInt _) = intTyCon
+literalTyCon (LiteralDouble _) = doubleTyCon
+literalTyCon (LiteralText _) = textTyCon
 
 --
 -- Primitive Functions

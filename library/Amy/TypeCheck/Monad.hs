@@ -57,7 +57,6 @@ import qualified Data.Sequence as Seq
 import Amy.TypeCheck.AST
 import Amy.Errors
 import Amy.Kind
-import Amy.Syntax.Located
 
 --
 -- Context
@@ -122,7 +121,7 @@ contextUntil member (Context context) = Context $ Seq.takeWhileL (/= member) con
 
 typeWellFormed :: Context -> Type -> Maybe ErrorMessage
 typeWellFormed _ (TyCon _) = Nothing
-typeWellFormed context (TyVar v) = do
+typeWellFormed context (TyVar (MaybeLocated _ v)) = do
   guard $ not $ ContextVar v `contextElem` context
   Just $ UnknownTypeVariable v
 typeWellFormed context (TyExistVar v) = do
@@ -134,8 +133,7 @@ typeWellFormed context (TyExistVar v) = do
 typeWellFormed context (TyApp x y) = typeWellFormed context x >> typeWellFormed context y
 typeWellFormed context (TyFun x y) = typeWellFormed context x >> typeWellFormed context y
 typeWellFormed context (TyRecord rows mTy) = asum (typeWellFormed context <$> rows) >> (mTy >>= typeWellFormed context)
-typeWellFormed context (TyForall vs t) = typeWellFormed (context <> Context (Seq.fromList $ NE.toList $ ContextVar <$> vs)) t
-typeWellFormed context (LocatedType _ t) = typeWellFormed context t
+typeWellFormed context (TyForall vs t) = typeWellFormed (context <> Context (Seq.fromList $ NE.toList $ ContextVar . maybeLocatedValue <$> vs)) t
 
 --
 -- Monad

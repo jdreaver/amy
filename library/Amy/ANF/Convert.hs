@@ -81,23 +81,22 @@ convertType ty = go (typeToNonEmpty ty)
   go :: NonEmpty C.Type -> ANFConvert ANF.Type
   go (ty' :| []) =
     case ty' of
-      C.TyCon con -> getTyConType con
+      C.TyCon (MaybeLocated _ con) -> getTyConType con
       C.TyVar _ -> pure OpaquePointerType
       C.TyExistVar _ -> error "Found TyExistVar in Core"
       app@C.TyApp{} ->
         case unfoldTyApp app of
-          TyCon con :| _ -> getTyConType con
+          TyCon (MaybeLocated _ con) :| _ -> getTyConType con
           _ -> error $ "Can't convert non-TyCon TyApp yet " ++ show ty'
       -- N.B. ANF/LLVM doesn't care about polymorphic records
       C.TyRecord rows _ -> mkRecordType rows
       C.TyFun{} -> pure ClosureType
       C.TyForall _ ty'' -> convertType ty''
-      C.LocatedType _ _ -> error "Found LocatedType in Core"
   go _ = pure ClosureType
 
-mkRecordType :: Map RowLabel C.Type -> ANFConvert ANF.Type
+mkRecordType :: Map (MaybeLocated RowLabel) C.Type -> ANFConvert ANF.Type
 mkRecordType rows = do
-  rows' <- for (Map.toAscList rows) $ \(label, ty) -> do
+  rows' <- for (Map.toAscList rows) $ \(MaybeLocated _ label, ty) -> do
     ty' <- convertType ty
     pure (label, ty')
   pure $ RecordType rows'

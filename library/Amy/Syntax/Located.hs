@@ -4,6 +4,9 @@
 
 module Amy.Syntax.Located
   ( Located(..)
+  , MaybeLocated(..)
+  , fromLocated
+  , notLocated
   , SourceSpan(..)
   , mergeSpans
   , mkSourcePos
@@ -18,6 +21,19 @@ data Located a
   { locatedSpan :: !SourceSpan
   , locatedValue :: !a
   } deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
+
+-- | Possible location of something in source code.
+data MaybeLocated a
+  = MaybeLocated
+  { maybeLocatedSpan :: !(Maybe SourceSpan)
+  , maybeLocatedValue :: !a
+  } deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
+
+fromLocated :: Located a -> MaybeLocated a
+fromLocated (Located span' x) = MaybeLocated (Just span') x
+
+notLocated :: a -> MaybeLocated a
+notLocated = MaybeLocated Nothing
 
 -- | A file path along with a start and end 'SourcePos'.
 data SourceSpan
