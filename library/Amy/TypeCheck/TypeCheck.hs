@@ -148,7 +148,7 @@ generalize context ty =
     -- context then there actually are in the type.
     freeVars = freeTEVars $ contextSubst context ty
 
-    -- Replace these with nice letter TODO: Make sure these letters aren't
+    -- Replace these with nice letters. TODO: Make sure these letters aren't
     -- already in scope.
     varsWithLetters = zip freeVars (TyVarName <$> letters)
     solutions = uncurry ContextSolved . fmap (TyVar . notLocated) <$> varsWithLetters
