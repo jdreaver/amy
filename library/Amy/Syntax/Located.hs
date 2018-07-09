@@ -10,6 +10,7 @@ module Amy.Syntax.Located
   , SourceSpan(..)
   , mergeSpans
   , mkSourcePos
+  , mkSourceSpan
   , module Text.Megaparsec.Pos
   ) where
 
@@ -47,3 +48,6 @@ mergeSpans (SourceSpan start _) (SourceSpan _ end) = SourceSpan start end
 
 mkSourcePos :: FilePath -> Int -> Int -> SourcePos
 mkSourcePos fp line col = SourcePos fp (mkPos line) (mkPos col)
+
+mkSourceSpan :: FilePath -> Int -> Int -> Int -> Int -> SourceSpan
+mkSourceSpan fp startLine startCol endLine endCol = SourceSpan (mkSourcePos fp startLine startCol) (mkSourcePos fp endLine endCol)

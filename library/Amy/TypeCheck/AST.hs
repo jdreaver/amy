@@ -45,10 +45,10 @@ data Module
 -- 'BindingType' after they've been paired together.
 data Binding
   = Binding
-  { bindingName :: !IdentName
+  { bindingName :: !(Located IdentName)
   , bindingType :: !Type
     -- ^ Type for whole function
-  , bindingArgs :: ![Typed IdentName]
+  , bindingArgs :: ![Typed (Located IdentName)]
     -- ^ Argument names and types split out from 'bindingType'
   , bindingReturnType :: !Type
     -- ^ Return type split out from 'bindingType'
@@ -58,17 +58,17 @@ data Binding
 -- | A renamed extern declaration.
 data Extern
   = Extern
-  { externName :: !IdentName
+  { externName :: !(Located IdentName)
   , externType :: !Type
   } deriving (Show, Eq)
 
 -- | A renamed 'Expr'
 data Expr
-  = ELit !Literal
-  | ERecord !(Map RowLabel (Typed Expr))
-  | ERecordSelect !Expr !RowLabel !Type
-  | EVar !(Typed IdentName)
-  | ECon !(Typed DataConName)
+  = ELit !(Located Literal)
+  | ERecord !(Map (Located RowLabel) (Typed Expr))
+  | ERecordSelect !Expr !(Located RowLabel) !Type
+  | EVar !(Typed (Located IdentName))
+  | ECon !(Typed (Located DataConName))
   | EIf !If
   | ECase !Case
   | ELet !Let
@@ -82,12 +82,14 @@ data If
   { ifPredicate :: !Expr
   , ifThen :: !Expr
   , ifElse :: !Expr
+  , ifSpan :: !SourceSpan
   } deriving (Show, Eq)
 
 data Case
   = Case
   { caseScrutinee :: !Expr
   , caseAlternatives :: !(NonEmpty Match)
+  , caseSpan :: !SourceSpan
   } deriving (Show, Eq)
 
 data Match
@@ -97,15 +99,15 @@ data Match
   } deriving (Show, Eq)
 
 data Pattern
-  = PLit !Literal
-  | PVar !(Typed IdentName)
+  = PLit !(Located Literal)
+  | PVar !(Typed (Located IdentName))
   | PCons !PatCons
   | PParens !Pattern
   deriving (Show, Eq)
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataConName
+  { patConsConstructor :: !(Located DataConName)
   , patConsArg :: !(Maybe Pattern)
   , patConsType :: !Type
   } deriving (Show, Eq)
@@ -114,12 +116,14 @@ data Let
   = Let
   { letBindings :: ![NonEmpty Binding]
   , letExpression :: !Expr
+  , letSpan :: !SourceSpan
   } deriving (Show, Eq)
 
 data Lambda
   = Lambda
-  { lambdaArgs :: !(NonEmpty (Typed IdentName))
+  { lambdaArgs :: !(NonEmpty (Typed (Located IdentName)))
   , lambdaBody :: !Expr
+  , lambdaSpan :: !SourceSpan
   , lambdaType :: !Type
   } deriving (Show, Eq)
 
@@ -131,15 +135,15 @@ data App
   } deriving (Show, Eq)
 
 expressionType :: Expr -> Type
-expressionType (ELit lit) = literalType lit
-expressionType (ERecord rows) = TyRecord (Map.mapKeys notLocated $ typedType <$> rows) Nothing
+expressionType (ELit (Located _ lit)) = literalType lit
+expressionType (ERecord rows) = TyRecord (Map.mapKeys (notLocated . locatedValue) $ typedType <$> rows) Nothing
 expressionType (ERecordSelect _ _ ty) = ty
 expressionType (EVar (Typed ty _)) = ty
 expressionType (ECon (Typed ty _)) = ty
 expressionType (EIf if') = expressionType (ifThen if') -- Checker ensure "then" and "else" types match
-expressionType (ECase (Case _ (match :| _))) = matchType match
+expressionType (ECase (Case _ (match :| _) _)) = matchType match
 expressionType (ELet let') = expressionType (letExpression let')
-expressionType (ELam (Lambda _ _ ty)) = ty
+expressionType (ELam (Lambda _ _ _ ty)) = ty
 expressionType (EApp app) = appReturnType app
 expressionType (EParens expr) = expressionType expr
 
@@ -147,7 +151,7 @@ matchType :: Match -> Type
 matchType (Match _ expr) = expressionType expr
 
 patternType :: Pattern -> Type
-patternType (PLit lit) = literalType lit
+patternType (PLit (Located _ lit)) = literalType lit
 patternType (PVar (Typed ty _)) = ty
 patternType (PCons (PatCons _ _ ty)) = ty
 patternType (PParens pat) = patternType pat

@@ -22,7 +22,7 @@ parse' parser input =
   in parse (runAmyParser parser) "" tokens'
 
 mkSpan :: Int -> Int -> Int -> Int -> SourceSpan
-mkSpan startLine startCol endLine endCol = SourceSpan (mkSourcePos "" startLine startCol) (mkSourcePos "" endLine endCol)
+mkSpan = mkSourceSpan ""
 
 mkLocated :: Int -> Int -> Int -> Int -> a -> MaybeLocated a
 mkLocated startLine startCol endLine endCol x = MaybeLocated (Just $ mkSpan startLine startCol endLine endCol) x
