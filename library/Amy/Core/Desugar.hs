@@ -113,7 +113,7 @@ desugarTypedIdent :: Typed IdentName -> Typed IdentName
 desugarTypedIdent (Typed ty ident) = Typed (desugarType ty) ident
 
 desugarType :: Type -> Type
-desugarType = removeTyExistVar
+desugarType = removeTyExistVar . blowUpOnTyUnknown
 
 --
 -- Case Expressions

@@ -12,6 +12,7 @@ module Amy.Type
   , traverseType
   , traverseTypeM
   , removeTyExistVar
+  , blowUpOnTyUnknown
 
     -- * Type Declarations
   , TypeDeclaration(..)
@@ -93,6 +94,14 @@ removeTyExistVar :: Type -> Type
 removeTyExistVar = go
  where
   go (TyExistVar (TyExistVarName i)) = TyVar $ notLocated $ TyVarName $ "$t" <> pack (show i)
+  go t = traverseType go t
+
+-- | Sanity check to run after type checking to make sure all 'TyUnknown'
+-- values are gone.
+blowUpOnTyUnknown :: Type -> Type
+blowUpOnTyUnknown = go
+ where
+  go TyUnknown = error "TyUnknowns still exist!"
   go t = traverseType go t
 
 --
