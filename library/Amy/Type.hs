@@ -12,6 +12,7 @@ module Amy.Type
   , traverseType
   , traverseTypeM
   , removeTyExistVar
+  , blowUpOnTyUnknown
 
     -- * Type Declarations
   , TypeDeclaration(..)
@@ -33,7 +34,8 @@ import Amy.Syntax.Located
 --
 
 data Type
-  = TyCon !(MaybeLocated TyConName)
+  = TyUnknown
+  | TyCon !(MaybeLocated TyConName)
   | TyVar !(MaybeLocated TyVarName)
   | TyExistVar !TyExistVarName
   | TyApp !Type !Type
@@ -78,6 +80,7 @@ traverseType f = runIdentity . traverseTypeM (Identity . f)
 traverseTypeM :: (Monad m) => (Type -> m Type) -> Type -> m Type
 traverseTypeM f = go
  where
+  go t@TyUnknown{} = pure t
   go t@TyCon{} = pure t
   go t@TyVar{} = pure t
   go t@TyExistVar{} = pure t
@@ -91,6 +94,14 @@ removeTyExistVar :: Type -> Type
 removeTyExistVar = go
  where
   go (TyExistVar (TyExistVarName i)) = TyVar $ notLocated $ TyVarName $ "$t" <> pack (show i)
+  go t = traverseType go t
+
+-- | Sanity check to run after type checking to make sure all 'TyUnknown'
+-- values are gone.
+blowUpOnTyUnknown :: Type -> Type
+blowUpOnTyUnknown = go
+ where
+  go TyUnknown = error "TyUnknowns still exist!"
   go t = traverseType go t
 
 --

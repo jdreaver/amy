@@ -48,40 +48,38 @@ spec = do
 
   describe "bindingType" $ do
     it "parses binding types" $ do
-      parse' bindingType "f :: Int"
+      parse' parseBindingType "f :: Int"
         `shouldParse`
-        BindingType
-          (Located (mkSpan 1 1 1 2) "f")
-          (TyCon (mkLocated 1 6 1 9 "Int"))
-      parse' bindingType "f :: Int -> Double"
+          ( Located (mkSpan 1 1 1 2) "f"
+          , TyCon (mkLocated 1 6 1 9 "Int")
+          )
+      parse' parseBindingType "f :: Int -> Double"
         `shouldParse`
-        BindingType
-          (Located (mkSpan 1 1 1 2) "f")
-          ( TyCon (mkLocated 1 6 1 9 "Int")
+          ( Located (mkSpan 1 1 1 2) "f"
+          , TyCon (mkLocated 1 6 1 9 "Int")
             `TyFun`
             TyCon (mkLocated 1 13 1 19 "Double")
           )
 
     it "parses polymorphic types" $ do
-      parse' bindingType "f :: forall a. a"
+      parse' parseBindingType "f :: forall a. a"
         `shouldParse`
-        BindingType
-          (Located (mkSpan 1 1 1 2) "f")
-          (TyForall [mkLocated 1 13 1 14 "a"] $ TyVar (mkLocated 1 16 1 17 "a"))
-      parse' bindingType "f :: forall a b. a -> b -> a"
+         ( Located (mkSpan 1 1 1 2) "f"
+         , TyForall [mkLocated 1 13 1 14 "a"] $ TyVar (mkLocated 1 16 1 17 "a")
+         )
+      parse' parseBindingType "f :: forall a b. a -> b -> a"
         `shouldParse`
-        BindingType
-          (Located (mkSpan 1 1 1 2) "f")
-          ( TyForall
-              [ mkLocated 1 13 1 14 "a"
-              , mkLocated 1 15 1 16 "b"
-              ] $
-              TyVar (mkLocated 1 18 1 19 "a")
-              `TyFun`
-              TyVar (mkLocated 1 23 1 24 "b")
-              `TyFun`
-              TyVar (mkLocated 1 28 1 29 "a")
-          )
+        ( Located (mkSpan 1 1 1 2) "f"
+        , TyForall
+            [ mkLocated 1 13 1 14 "a"
+            , mkLocated 1 15 1 16 "b"
+            ] $
+            TyVar (mkLocated 1 18 1 19 "a")
+            `TyFun`
+            TyVar (mkLocated 1 23 1 24 "b")
+            `TyFun`
+            TyVar (mkLocated 1 28 1 29 "a")
+        )
 
   describe "parseType" $ do
     it "handles simple terms" $ do
@@ -171,13 +169,14 @@ spec = do
 
   describe "expressionParens" $ do
     it "parses expressions in parens" $ do
-      parse' expressionParens "(x)" `shouldParse` EParens (EVar (Located (mkSpan 1 2 1 3) "x"))
+      parse' expressionParens "(x)" `shouldParse` EParens (EVar (Typed TyUnknown (Located (mkSpan 1 2 1 3) "x")))
       parse' expressionParens "(f x)"
         `shouldParse`
         EParens
-          (EApp
-            (EVar (Located (mkSpan 1 2 1 3) "f"))
-            (EVar (Located (mkSpan 1 4 1 5) "x"))
+          (EApp $ App
+            (EVar (Typed TyUnknown (Located (mkSpan 1 2 1 3) "f")))
+            (EVar (Typed TyUnknown (Located (mkSpan 1 4 1 5) "x")))
+            TyUnknown
           )
 
   describe "ifExpression" $ do
@@ -185,16 +184,16 @@ spec = do
       parse' ifExpression "if True then 1 else 2"
         `shouldParse`
         If
-          (ECon (Located (mkSpan 1 4 1 8) "True"))
+          (ECon (Typed TyUnknown (Located (mkSpan 1 4 1 8) "True")))
           (ELit (Located (mkSpan 1 14 1 15) (LiteralInt 1)))
           (ELit (Located (mkSpan 1 21 1 22) (LiteralInt 2)))
           (mkSpan 1 1 1 22)
       parse' ifExpression "if f x then f y else g 2"
         `shouldParse`
         If
-          (EApp (EVar (Located (mkSpan 1 4 1 5) "f")) (EVar (Located (mkSpan 1 6 1 7) "x")))
-          (EApp (EVar (Located (mkSpan 1 13 1 14) "f")) (EVar (Located (mkSpan 1 15 1 16) "y")))
-          (EApp (EVar (Located (mkSpan 1 22 1 23) "g")) (ELit (Located (mkSpan 1 24 1 25) (LiteralInt 2))))
+          (EApp $ App (EVar (Typed TyUnknown (Located (mkSpan 1 4 1 5) "f"))) (EVar (Typed TyUnknown (Located (mkSpan 1 6 1 7) "x"))) TyUnknown)
+          (EApp $ App (EVar (Typed TyUnknown (Located (mkSpan 1 13 1 14) "f"))) (EVar (Typed TyUnknown (Located (mkSpan 1 15 1 16) "y"))) TyUnknown)
+          (EApp $ App (EVar (Typed TyUnknown (Located (mkSpan 1 22 1 23) "g"))) (ELit (Located (mkSpan 1 24 1 25) (LiteralInt 2))) TyUnknown)
           (mkSpan 1 1 1 25)
 
   describe "literal" $ do

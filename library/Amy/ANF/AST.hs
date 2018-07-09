@@ -11,6 +11,7 @@ module Amy.ANF.AST
   , Literal(..)
   , TextPointer(..)
   , DataCon(..)
+  , ConstructorIndex(..)
   , Expr(..)
   , LetVal(..)
   , LetValBinding(..)
@@ -27,7 +28,6 @@ module Amy.ANF.AST
   , Type(..)
   , Typed(..)
 
-  , module Amy.ASTCommon
   , module Amy.Names
   ) where
 
@@ -35,7 +35,6 @@ import GHC.Word (Word32)
 import Data.Map.Strict (Map)
 import Data.Text (Text)
 
-import Amy.ASTCommon
 import Amy.Names
 import Amy.Prim
 
@@ -108,6 +107,13 @@ data DataCon
   , dataConType :: !Type
   , dataConIndex :: !ConstructorIndex
   } deriving (Show, Eq, Ord)
+
+-- | The index of a data constructor is the position of a constructor within
+-- the declaration. For @Bool = False | True@, @False@ has position 0 and
+-- @True@ has position 1. The constructor in types with only one constructor
+-- have position 0 of course.
+newtype ConstructorIndex = ConstructorIndex { unConstructorIndex :: Int }
+  deriving (Show, Eq, Ord)
 
 data Expr
   = EVal !Val

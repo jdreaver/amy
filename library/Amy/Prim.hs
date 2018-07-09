@@ -39,7 +39,8 @@ import Text.Megaparsec.Pos
 
 import Amy.Literal
 import Amy.Names
-import Amy.Syntax.AST
+import Amy.Type
+import Amy.Syntax.Located
 
 --
 -- Wired-in Type Definitions

@@ -17,7 +17,8 @@ import Data.Traversable (for)
 
 import Amy.Errors
 import Amy.Kind
-import Amy.TypeCheck.AST
+import Amy.Syntax.Located
+import Amy.Type
 import Amy.TypeCheck.Monad
 
 --
@@ -60,6 +61,7 @@ inferTypeKind ty = do
   pure $ starIfUnknown $ substituteKind subst kind
 
 inferTypeKind' :: Type -> Checker (Kind, [Constraint])
+inferTypeKind' TyUnknown = error "Encountered TyUnknown in inferTypeKind"
 inferTypeKind' (TyCon (MaybeLocated _ name)) = do
   kind <- lookupTyConKind name
   pure (kind, [])

@@ -24,7 +24,6 @@ module Amy.Core.AST
 
     -- Re-export
   , Literal(..)
-  , module Amy.ASTCommon
   , module Amy.Names
   , module Amy.Syntax.Located
   , module Amy.Type
@@ -40,7 +39,6 @@ import Data.Maybe (maybeToList)
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import Amy.ASTCommon
 import Amy.Literal
 import Amy.Names
 import Amy.Prim

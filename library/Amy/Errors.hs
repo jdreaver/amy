@@ -14,7 +14,7 @@ import Text.Megaparsec.Pos
 
 import Amy.Kind
 import Amy.Pretty
-import Amy.Syntax.AST as S
+import Amy.Syntax.AST
 
 data Error
   = Error

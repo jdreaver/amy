@@ -1,14 +1,6 @@
--- | AST for the frontend parser.
-
 module Amy.Syntax.AST
   ( Module(..)
-  , Declaration(..)
-  , declBinding
-  , declBindingType
-  , declExtern
-  , declType
   , Binding(..)
-  , BindingType(..)
   , Extern(..)
   , Expr(..)
   , If(..)
@@ -18,77 +10,56 @@ module Amy.Syntax.AST
   , PatCons(..)
   , Let(..)
   , Lambda(..)
-  , letBinding
-  , letBindingType
+  , App(..)
+
   , expressionSpan
   , matchSpan
   , patternSpan
-  , LetBinding(..)
 
-    -- Re-export
-  , Literal(..)
+  , expressionType
+  , matchType
+  , patternType
+
+  , freeBindingVars
+  , freeExprVars
+
+  -- Re-export
+  , module Amy.Literal
   , module Amy.Names
   , module Amy.Syntax.Located
   , module Amy.Type
   ) where
 
-import Data.List.NonEmpty (NonEmpty)
+import Data.Foldable (toList)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 
-import Amy.Literal (Literal(..))
+import Amy.Literal
 import Amy.Names
+import Amy.Prim
 import Amy.Syntax.Located
 import Amy.Type
 
--- | A 'Module' is simply a list of 'Declaration' values.
 data Module
   = Module
   { moduleFile :: !FilePath
-  , moduleDeclarations :: [Declaration]
+  , moduleTypeDeclarations :: ![TypeDeclaration]
+  , moduleExterns :: ![Extern]
+  , moduleBindings :: ![NonEmpty Binding]
   } deriving (Show, Eq)
 
-data Declaration
-  = DeclBinding !Binding
-  | DeclBindingType !BindingType
-  | DeclExtern !Extern
-  | DeclType !TypeDeclaration
-  deriving (Show, Eq)
-
-declBinding :: Declaration -> Maybe Binding
-declBinding (DeclBinding x) = Just x
-declBinding _ = Nothing
-
-declBindingType :: Declaration -> Maybe BindingType
-declBindingType (DeclBindingType x) = Just x
-declBindingType _ = Nothing
-
-declExtern :: Declaration -> Maybe Extern
-declExtern (DeclExtern x) = Just x
-declExtern _ = Nothing
-
-declType :: Declaration -> Maybe TypeDeclaration
-declType (DeclType x) = Just x
-declType _ = Nothing
-
--- | A 'Binding' is a top-level definition of a binding, like @x = 1@ or @f x =
--- x@
 data Binding
   = Binding
   { bindingName :: !(Located IdentName)
-  , bindingArgs :: ![Located IdentName]
+  , bindingType :: !Type
+  , bindingArgs :: ![Typed (Located IdentName)]
+  , bindingReturnType :: !Type
   , bindingBody :: !Expr
   } deriving (Show, Eq)
 
--- | A 'BindingType' is a top-level declaration of a 'Binding' type, like @x ::
--- Int@ or @f :: Int -> Int@
-data BindingType
-  = BindingType
-  { bindingTypeName :: !(Located IdentName)
-  , bindingTypeType :: !Type
-  } deriving (Show, Eq)
-
--- | A 'BindingType' is a top-level declaration of a 'Binding' type, like @x ::
--- Int@ or @f :: Int -> Int@
 data Extern
   = Extern
   { externName :: !(Located IdentName)
@@ -97,15 +68,15 @@ data Extern
 
 data Expr
   = ELit !(Located Literal)
-  | ERecord !SourceSpan !(Map (Located RowLabel) Expr)
-  | ERecordSelect !Expr !(Located RowLabel)
-  | EVar !(Located IdentName)
-  | ECon !(Located DataConName)
+  | ERecord !SourceSpan !(Map (Located RowLabel) (Typed Expr))
+  | ERecordSelect !Expr !(Located RowLabel) !Type
+  | EVar !(Typed (Located IdentName))
+  | ECon !(Typed (Located DataConName))
   | EIf !If
   | ECase !Case
   | ELet !Let
   | ELam !Lambda
-  | EApp !Expr !Expr
+  | EApp !App
   | EParens !Expr
   deriving (Show, Eq)
 
@@ -132,7 +103,7 @@ data Match
 
 data Pattern
   = PLit !(Located Literal)
-  | PVar !(Located IdentName)
+  | PVar !(Typed (Located IdentName))
   | PCons !PatCons
   | PParens !Pattern
   deriving (Show, Eq)
@@ -141,46 +112,42 @@ data PatCons
   = PatCons
   { patConsConstructor :: !(Located DataConName)
   , patConsArg :: !(Maybe Pattern)
+  , patConsType :: !Type
   } deriving (Show, Eq)
 
 data Let
   = Let
-  { letBindings :: ![LetBinding]
+  { letBindings :: ![NonEmpty Binding]
   , letExpression :: !Expr
   , letSpan :: !SourceSpan
   } deriving (Show, Eq)
 
 data Lambda
   = Lambda
-  { lambdaArgs :: !(NonEmpty (Located IdentName))
+  { lambdaArgs :: !(NonEmpty (Typed (Located IdentName)))
   , lambdaBody :: !Expr
   , lambdaSpan :: !SourceSpan
+  , lambdaType :: !Type
   } deriving (Show, Eq)
 
-data LetBinding
-  = LetBinding !Binding
-  | LetBindingType !BindingType
-  deriving (Show, Eq)
-
-letBinding :: LetBinding -> Maybe Binding
-letBinding (LetBinding x) = Just x
-letBinding _ = Nothing
-
-letBindingType :: LetBinding -> Maybe BindingType
-letBindingType (LetBindingType x) = Just x
-letBindingType _ = Nothing
+data App
+  = App
+  { appFunction :: !Expr
+  , appArg :: !Expr
+  , appReturnType :: !Type
+  } deriving (Show, Eq)
 
 expressionSpan :: Expr -> SourceSpan
 expressionSpan (ELit (Located s _)) = s
 expressionSpan (ERecord s _) = s
-expressionSpan (ERecordSelect expr (Located end _)) = mergeSpans (expressionSpan expr) end
-expressionSpan (EVar (Located s _)) = s
-expressionSpan (ECon (Located s _)) = s
+expressionSpan (ERecordSelect expr (Located end _) _) = mergeSpans (expressionSpan expr) end
+expressionSpan (EVar (Typed _ (Located s _))) = s
+expressionSpan (ECon (Typed _ (Located s _))) = s
 expressionSpan (EIf (If _ _ _ s)) = s
 expressionSpan (ECase (Case _ _ s)) = s
 expressionSpan (ELet (Let _ _ s)) = s
-expressionSpan (ELam (Lambda _ _ s)) = s
-expressionSpan (EApp e1 e2) = mergeSpans (expressionSpan e1) (expressionSpan e2)
+expressionSpan (ELam (Lambda _ _ s _)) = s
+expressionSpan (EApp (App e1 e2 _)) = mergeSpans (expressionSpan e1) (expressionSpan e2)
 expressionSpan (EParens e) = expressionSpan e
 
 matchSpan :: Match -> SourceSpan
@@ -188,9 +155,58 @@ matchSpan (Match pat expr) = mergeSpans (patternSpan pat) (expressionSpan expr)
 
 patternSpan :: Pattern -> SourceSpan
 patternSpan (PLit (Located s _)) = s
-patternSpan (PVar (Located s _)) = s
-patternSpan (PCons (PatCons (Located s _) mPat)) =
+patternSpan (PVar (Typed _ (Located s _))) = s
+patternSpan (PCons (PatCons (Located s _) mPat _)) =
   case mPat of
     Nothing -> s
     Just pat -> mergeSpans s (patternSpan pat)
 patternSpan (PParens pat) = patternSpan pat
+
+expressionType :: Expr -> Type
+expressionType (ELit (Located _ lit)) = literalType lit
+expressionType (ERecord _ rows) = TyRecord (Map.mapKeys (notLocated . locatedValue) $ typedType <$> rows) Nothing
+expressionType (ERecordSelect _ _ ty) = ty
+expressionType (EVar (Typed ty _)) = ty
+expressionType (ECon (Typed ty _)) = ty
+expressionType (EIf if') = expressionType (ifThen if') -- Checker ensure "then" and "else" types match
+expressionType (ECase (Case _ (match :| _) _)) = matchType match
+expressionType (ELet let') = expressionType (letExpression let')
+expressionType (ELam (Lambda _ _ _ ty)) = ty
+expressionType (EApp app) = appReturnType app
+expressionType (EParens expr) = expressionType expr
+
+matchType :: Match -> Type
+matchType (Match _ expr) = expressionType expr
+
+patternType :: Pattern -> Type
+patternType (PLit (Located _ lit)) = literalType lit
+patternType (PVar (Typed ty _)) = ty
+patternType (PCons (PatCons _ _ ty)) = ty
+patternType (PParens pat) = patternType pat
+
+freeBindingVars :: Binding -> Set IdentName
+freeBindingVars (Binding (Located _ name) _ args _ body) =
+  freeExprVars body `Set.difference` Set.fromList (name : (locatedValue . typedValue <$> args))
+
+freeExprVars :: Expr -> Set IdentName
+freeExprVars ELit{} = Set.empty
+freeExprVars (ERecord _ rows) = Set.unions $ freeExprVars . typedValue <$> Map.elems rows
+freeExprVars (ERecordSelect expr _ _) = freeExprVars expr
+freeExprVars (EVar (Typed _ (Located _ ident))) = Set.singleton ident
+freeExprVars ECon{} = Set.empty
+freeExprVars (EIf (If pred' then' else' _)) = freeExprVars pred' `Set.union` freeExprVars then' `Set.union` freeExprVars else'
+freeExprVars (ECase (Case scrutinee matches _)) = Set.unions (freeExprVars scrutinee : toList (freeMatchVars <$> matches))
+ where
+  freeMatchVars (Match pat expr) = freeExprVars expr `Set.difference` patternVars pat
+freeExprVars (ELam (Lambda args body _ _)) =
+  freeExprVars body `Set.difference` Set.fromList (toList $ locatedValue . typedValue <$> args)
+freeExprVars (ELet (Let bindings expr _)) =
+  Set.unions (freeExprVars expr : (freeBindingVars <$> concatMap toList bindings))
+freeExprVars (EApp (App f arg _)) = freeExprVars f `Set.union` freeExprVars arg
+freeExprVars (EParens expr) = freeExprVars expr
+
+patternVars :: Pattern -> Set IdentName
+patternVars PLit{} = Set.empty
+patternVars (PVar (Typed _ (Located _ ident))) = Set.singleton ident
+patternVars (PCons (PatCons _ mPat _)) = maybe Set.empty patternVars mPat
+patternVars (PParens pat) = patternVars pat

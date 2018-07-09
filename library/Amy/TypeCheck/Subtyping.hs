@@ -16,7 +16,9 @@ import Data.Maybe (maybeToList)
 import qualified Data.Sequence as Seq
 
 import Amy.Errors
-import Amy.TypeCheck.AST
+import Amy.Names
+import Amy.Syntax.Located
+import Amy.Type
 import Amy.TypeCheck.Monad
 
 --
@@ -24,6 +26,8 @@ import Amy.TypeCheck.Monad
 --
 
 subtype :: Type -> Type -> Checker ()
+subtype TyUnknown _ = error "Encountered TyUnknown in subtype"
+subtype _ TyUnknown = error "Encountered TyUnknown in subtype"
 subtype (TyCon (MaybeLocated _ a)) (TyCon (MaybeLocated _ b)) | a == b = pure ()
 subtype (TyVar (MaybeLocated _ a)) (TyVar (MaybeLocated _ b)) | a == b = pure ()
 subtype (TyExistVar a) (TyExistVar b) | a == b = pure ()
@@ -103,6 +107,7 @@ freeTEVars :: Type -> [TyExistVarName]
 freeTEVars = nub . freeTEVars'
 
 freeTEVars' :: Type -> [TyExistVarName]
+freeTEVars' TyUnknown = error "Encountered TyUnknown in freeTEVars"
 freeTEVars' (TyCon _) = []
 freeTEVars' (TyVar _) = []
 freeTEVars' (TyExistVar v) = [v]

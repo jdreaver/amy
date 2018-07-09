@@ -54,9 +54,9 @@ import Data.Sequence (Seq)
 import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
 
-import Amy.TypeCheck.AST
 import Amy.Errors
 import Amy.Kind
+import Amy.Syntax.AST
 
 --
 -- Context
@@ -120,6 +120,7 @@ contextUntil :: ContextMember -> Context -> Context
 contextUntil member (Context context) = Context $ Seq.takeWhileL (/= member) context
 
 typeWellFormed :: Context -> Type -> Maybe ErrorMessage
+typeWellFormed _ TyUnknown = error "Encountered TyUnknown in typeWellFormed"
 typeWellFormed _ (TyCon _) = Nothing
 typeWellFormed context (TyVar (MaybeLocated _ v)) = do
   guard $ not $ ContextVar v `contextElem` context
@@ -160,7 +161,7 @@ runChecker
   -> [(Located DataConName, Type)]
   -> FilePath
   -> Checker a -> Either Error a
-runChecker identTypes dataConTypes moduleFile (Checker action) = do
+runChecker identTypes dataConTypes fp (Checker action) = do
   -- Check for duplicate data con names
   for_ groupedConNames $ \nameGroup ->
     case NE.tail nameGroup of
@@ -172,7 +173,7 @@ runChecker identTypes dataConTypes moduleFile (Checker action) = do
  where
   dataConNames = fst <$> dataConTypes
   groupedConNames = NE.groupAllWith locatedValue . sort $ dataConNames
-  pos = SourcePos moduleFile pos1 pos1
+  pos = SourcePos fp pos1 pos1
   checkState =
     CheckState
     { latestId = 0

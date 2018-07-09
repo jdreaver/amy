@@ -3,9 +3,8 @@
 module Amy.Syntax.Parser
   ( parseModule
 
-  , declaration
   , externDecl
-  , bindingType
+  , parseBindingType
   , parseType
   , typeTerm
   , binding
@@ -18,9 +17,11 @@ module Amy.Syntax.Parser
   ) where
 
 import qualified Control.Applicative.Combinators.NonEmpty as CNE
+import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (mapMaybe, maybeToList)
 import Text.Megaparsec
 import Text.Megaparsec.Expr
 
@@ -30,18 +31,62 @@ import Amy.Syntax.Monad
 
 parseModule :: AmyParser Module
 parseModule = do
-  declarations <- noIndent (indentedBlock declaration) <* eof
+  (typeDecls, externs, bindings) <- noIndent (parseDeclarations moduleDeclaration) <* eof
   fileName <- sourceName <$> getPosition
-  pure $ Module fileName declarations
+  pure $ Module fileName typeDecls externs bindings
 
-declaration :: AmyParser Declaration
-declaration =
+moduleDeclaration :: AmyParser Declaration
+moduleDeclaration =
   choice
   [ DeclExtern <$> externDecl <?> "extern"
-  , try (DeclBindingType <$> bindingType <?> "binding type")
+  , try (DeclBindingType <$> parseBindingType <?> "binding type")
   , DeclBinding <$> binding <?> "binding"
   , DeclType <$> typeDeclaration <?> "type declaration"
   ]
+
+data Declaration
+  = DeclBinding !Binding
+  | DeclBindingType !(Located IdentName, Type)
+  | DeclExtern !Extern
+  | DeclType !TypeDeclaration
+  deriving (Show, Eq)
+
+declBinding :: Declaration -> Maybe Binding
+declBinding (DeclBinding x) = Just x
+declBinding _ = Nothing
+
+declBindingType :: Declaration -> Maybe (Located IdentName, Type)
+declBindingType (DeclBindingType x) = Just x
+declBindingType _ = Nothing
+
+declExtern :: Declaration -> Maybe Extern
+declExtern (DeclExtern x) = Just x
+declExtern _ = Nothing
+
+declTypeDeclaration :: Declaration -> Maybe TypeDeclaration
+declTypeDeclaration (DeclType x) = Just x
+declTypeDeclaration _ = Nothing
+
+parseDeclarations :: AmyParser Declaration -> AmyParser ([TypeDeclaration], [Extern], [NonEmpty Binding])
+parseDeclarations parser = do
+  declarations <- indentedBlock parser
+  let
+    typeDecls = mapMaybe declTypeDeclaration declarations
+    externs = mapMaybe declExtern declarations
+    bindings = mapMaybe declBinding declarations
+    bindingTypes = mapMaybe declBindingType declarations
+    bindingTypeMap = Map.fromList $ (\(Located _ ident', ty) -> (ident', ty)) <$> bindingTypes
+    bindings' =
+      fmap
+      (\b -> b { bindingType = Map.findWithDefault TyUnknown (locatedValue $ bindingName b) bindingTypeMap })
+      bindings
+    bindingsNE = maybeToList $ NE.nonEmpty bindings'
+
+    -- TODO: Throw an error if there is a binding type without a binding
+
+    -- TODO: Enforce that binding types must be followed by the binding
+
+  pure (typeDecls, externs, bindingsNE)
 
 externDecl :: AmyParser Extern
 externDecl = do
@@ -55,16 +100,27 @@ externDecl = do
     , externType = ty
     }
 
-bindingType :: AmyParser BindingType
-bindingType = do
+binding :: AmyParser Binding
+binding = do
+  name <- ident
+  args <- fmap (Typed TyUnknown) <$> many (assertIndented *> ident)
+  _ <- equals
+  body <- expression <?> "expression"
+  pure
+    Binding
+    { bindingName = name
+    , bindingType = TyUnknown
+    , bindingArgs = args
+    , bindingReturnType = TyUnknown
+    , bindingBody = body
+    }
+
+parseBindingType :: AmyParser (Located IdentName, Type)
+parseBindingType = do
   name <- ident
   _ <- doubleColon
   ty <- parseType <?> "binding type"
-  pure
-    BindingType
-    { bindingTypeName = name
-    , bindingTypeType = ty
-    }
+  pure (name, ty)
 
 parseType :: AmyParser Type
 parseType = makeExprParser term table
@@ -103,19 +159,6 @@ tyRecord =
       pure (label', ty)
     mTyVar <- optional $ assertIndented *> pipe *> assertIndented *> parseType
     pure (Map.fromList fields, mTyVar)
-
-binding :: AmyParser Binding
-binding = do
-  name <- ident
-  args <- many $ assertIndented *> ident
-  _ <- equals
-  body <- expression <?> "expression"
-  pure
-    Binding
-    { bindingName = name
-    , bindingArgs = args
-    , bindingBody = body
-    }
 
 typeDeclaration :: AmyParser TypeDeclaration
 typeDeclaration = do
@@ -156,8 +199,9 @@ expression = makeExprParser term table
  where
   table =
     [ [Postfix parseSelector]
-    , [InfixL (pure EApp)]
+    , [InfixL (pure mkApp)]
     ]
+  mkApp e1 e2 = EApp $ App e1 e2 TyUnknown
   term = assertIndented *> expressionTerm
 
 expressionTerm :: AmyParser Expr
@@ -170,8 +214,8 @@ expressionTerm =
   , ECase <$> caseExpression <?> "case expression"
   , ELet <$> letExpression' <?> "let expression"
   , ELam <$> lambda <?> "lambda"
-  , EVar <$> ident <?> "identifier"
-  , ECon <$> dataCon <?> "data constructor"
+  , EVar . Typed TyUnknown <$> ident <?> "identifier"
+  , ECon . Typed TyUnknown <$> dataCon <?> "data constructor"
   ]
 
 expressionParens :: AmyParser Expr
@@ -180,7 +224,7 @@ expressionParens = EParens <$> parens expression
 parseSelector :: AmyParser (Expr -> Expr)
 parseSelector = do
   label' <- recordSelector
-  pure $ \expr -> ERecordSelect expr label'
+  pure $ \expr -> ERecordSelect expr label' TyUnknown
 
 literal :: AmyParser (Located Literal)
 literal =
@@ -197,7 +241,7 @@ record = do
     label' <- assertIndented *> L.rowLabel
     _ <- assertIndented *> colon
     expr <- expression
-    pure (label', expr)
+    pure (label', Typed TyUnknown expr)
   endSpan <- assertIndented *> rBrace
   pure $ ERecord (mergeSpans startSpan endSpan) rows
 
@@ -247,7 +291,7 @@ parsePattern :: AmyParser Pattern
 parsePattern =
   choice
   [ PLit <$> literal <?> "pattern literal"
-  , PVar <$> ident <?> "pattern variable"
+  , PVar . Typed TyUnknown <$> ident <?> "pattern variable"
   , PCons <$> patCons <?> "pattern constructor"
   , PParens <$> parens parsePattern <?> "parentheses"
   ]
@@ -260,6 +304,7 @@ patCons = do
     PatCons
     { patConsConstructor = constructor
     , patConsArg = mArg
+    , patConsType = TyUnknown
     }
 
 letExpression' :: AmyParser Let
@@ -268,10 +313,10 @@ letExpression' = do
   let
     parser =
       choice
-      [ try (LetBinding <$> binding)
-      , LetBindingType <$> bindingType
+      [ try (DeclBindingType <$> parseBindingType) <?> "let binding type"
+      , DeclBinding <$> binding <?> "let binding"
       ]
-  bindings <- indentedBlock parser
+  (_, _, bindings) <- parseDeclarations parser
   _ <- in'
   expr <- expression
   pure
@@ -284,7 +329,7 @@ letExpression' = do
 lambda :: AmyParser Lambda
 lambda = do
   startSpan <- backslash
-  args <- CNE.some $ assertIndented *> ident
+  args <- fmap (Typed TyUnknown) <$> CNE.some (assertIndented *> ident)
   _ <- rArrow
   body <- expression <?> "lambda body"
   pure
@@ -292,4 +337,5 @@ lambda = do
     { lambdaArgs = args
     , lambdaBody = body
     , lambdaSpan = mergeSpans startSpan (expressionSpan body)
+    , lambdaType = TyUnknown
     }
