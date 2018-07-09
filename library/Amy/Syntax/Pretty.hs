@@ -20,7 +20,6 @@ prettyModule (Module _ decls) = vcatTwoHardLines (prettyDeclaration <$> decls)
 
 prettyDeclaration :: Declaration -> Doc ann
 prettyDeclaration (DeclBinding binding) = prettyBinding' binding
-prettyDeclaration (DeclBindingType bindingTy) = prettyBindingType' bindingTy
 prettyDeclaration (DeclExtern (Extern (Located _ name) ty)) =
   prettyExtern (prettyIdent name) (prettyType ty)
 prettyDeclaration (DeclType (TypeDeclaration info cons)) =
@@ -35,12 +34,14 @@ prettyTyConDefinition (TyConDefinition (Located _ name) args) = prettyTyConName 
   args' = if null args then mempty else space <> sep (prettyTyVarName . locatedValue <$> args)
 
 prettyBinding' :: Binding -> Doc ann
-prettyBinding' (Binding (Located _ name) args body) =
-  prettyBinding (prettyIdent name) (prettyIdent . locatedValue <$> args) (prettyExpr body)
-
-prettyBindingType' :: BindingType -> Doc ann
-prettyBindingType' (BindingType (Located _ name) ty) =
-  prettyBindingType (prettyIdent name) (prettyType ty)
+prettyBinding' (Binding (Located _ name) ty args _ body) = tyDoc <> bindingDoc
+ where
+  tyDoc =
+    case ty of
+      TyUnknown -> mempty
+      _ -> prettyBindingType (prettyIdent name) (prettyType ty) <> hardline
+  bindingDoc =
+    prettyBinding (prettyIdent name) (prettyIdent . locatedValue <$> args) (prettyExpr body)
 
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
@@ -57,10 +58,7 @@ prettyExpr (ECase (Case scrutinee matches _)) =
  where
   mkMatch (Match pat body) = (prettyPattern pat, prettyExpr body)
 prettyExpr (ELet (Let bindings body _)) =
-  prettyLet (prettyLetBinding <$> bindings) (prettyExpr body)
- where
-  prettyLetBinding (LetBinding binding) = prettyBinding' binding
-  prettyLetBinding (LetBindingType bindingTy) = prettyBindingType' bindingTy
+  prettyLet (prettyBinding' <$> bindings) (prettyExpr body)
 prettyExpr (ELam (Lambda args body _ _)) = prettyLambda (prettyIdent . locatedValue <$> toList args) (prettyExpr body)
 prettyExpr (EApp f arg) = prettyExpr f <+> prettyExpr arg
 prettyExpr (EParens expr) = parens $ prettyExpr expr

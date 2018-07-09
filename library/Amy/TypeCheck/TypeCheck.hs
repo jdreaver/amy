@@ -14,7 +14,6 @@ import Data.Foldable (for_, traverse_, toList)
 import Data.List (foldl')
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
-import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe, maybeToList)
 import qualified Data.Sequence as Seq
@@ -40,7 +39,6 @@ inferModule (S.Module filePath declarations) = do
     typeDeclarations = mapMaybe declType declarations
     externs = mapMaybe declExtern declarations
     bindings = mapMaybe declBinding declarations
-    bindingTypes = mapMaybe declBindingType declarations
 
     externs' = convertExtern <$> externs
     allTypeDeclarations = allPrimTypeDefinitions ++ typeDeclarations
@@ -56,15 +54,13 @@ inferModule (S.Module filePath declarations) = do
       addTyConKindToScope tyCon kind
 
     -- Infer all bindings
-    bindings' <- inferBindings True bindings bindingTypes
+    bindings' <- inferBindings True bindings
     pure (T.Module bindings' externs' typeDeclarations)
 
 -- | Compute binding groups and infer each group separately.
-inferBindings :: Bool -> [S.Binding] -> [S.BindingType] -> Checker [NonEmpty T.Binding]
-inferBindings isTopLevel bindings bindingTypes =
-  traverse (inferBindingGroup isTopLevel bindingTypeMap) (bindingGroups bindings)
- where
-  bindingTypeMap = Map.fromList $ (\(BindingType (Located _ name) ty) -> (name, ty)) <$> bindingTypes
+inferBindings :: Bool -> [S.Binding] -> Checker [NonEmpty T.Binding]
+inferBindings isTopLevel bindings =
+  traverse (inferBindingGroup isTopLevel) (bindingGroups bindings)
 
 data BindingTypeStatus
   = TypedBinding !S.Binding !Type
@@ -76,20 +72,20 @@ compareBindingTypeStatus TypedBinding{} UntypedBinding{} = LT
 compareBindingTypeStatus UntypedBinding{} TypedBinding{} = GT
 compareBindingTypeStatus _ _ = EQ
 
-inferBindingGroup :: Bool -> Map IdentName Type -> NonEmpty S.Binding -> Checker (NonEmpty T.Binding)
-inferBindingGroup isTopLevel bindingTypeMap bindings = do
+inferBindingGroup :: Bool -> NonEmpty S.Binding -> Checker (NonEmpty T.Binding)
+inferBindingGroup isTopLevel bindings = do
   -- Add all binding types to context. Also record whether binding is typed or
   -- untyped
-  bindings' <- for bindings $ \binding@(S.Binding lname@(Located _ name) _ _) ->
-    case Map.lookup name bindingTypeMap of
-      Just ty -> do
+  bindings' <- for bindings $ \binding@(S.Binding name ty _ _ _) ->
+    case ty of
+      TyUnknown -> do
+        ty' <- TyExistVar <$> freshTyExistVar
+        addValueTypeToScope name ty'
+        pure $ UntypedBinding binding ty'
+      _ -> do
         checkTypeKind ty
-        addValueTypeToScope lname ty
+        addValueTypeToScope name ty
         pure $ TypedBinding binding ty
-      Nothing -> do
-        ty <- TyExistVar <$> freshTyExistVar
-        addValueTypeToScope lname ty
-        pure $ UntypedBinding binding ty
 
   -- Check/infer each binding. We sort to make sure typed bindings are checked first
   bindings'' <- for (NE.sortBy compareBindingTypeStatus bindings') $ \bindingAndTy ->
@@ -117,7 +113,7 @@ inferBindingGroup isTopLevel bindingTypeMap bindings = do
       contextSubstBinding context' $ binding { T.bindingType = ty' }
 
 inferBinding :: S.Binding -> Checker T.Binding
-inferBinding (S.Binding name@(Located nameSpan _) args body) = do
+inferBinding (S.Binding name@(Located nameSpan _) _ args _ body) = do
   (args', body', ty, retTy, context) <- inferAbs args body nameSpan
   pure $ contextSubstBinding context $ T.Binding name ty args' retTy body'
 
@@ -195,12 +191,9 @@ inferExpr' (S.EIf (S.If pred' then' else' span')) = do
   then'' <- inferExpr then'
   else'' <- checkExpr else' (expressionType then'')
   pure $ T.EIf $ T.If pred'' then'' else'' span'
-inferExpr' (S.ELet (S.Let bindings expression span')) = do
-  let
-    bindings' = mapMaybe letBinding bindings
-    bindingTypes = mapMaybe letBindingType bindings
+inferExpr' (S.ELet (S.Let bindings expression span')) =
   withNewLexicalScope $ do
-    bindings'' <- inferBindings False bindings' bindingTypes
+    bindings'' <- inferBindings False bindings
     expression' <- inferExpr expression
     pure $ T.ELet (T.Let bindings'' expression' span')
 inferExpr' (S.ELam (S.Lambda args body span' _)) = do
@@ -297,7 +290,7 @@ checkBinding :: S.Binding -> Type -> Checker T.Binding
 checkBinding binding (TyForall as t) =
   withContextUntilNE (ContextVar . maybeLocatedValue <$> as) $
     checkBinding binding t
-checkBinding (S.Binding name@(Located span' _) args body) t = do
+checkBinding (S.Binding name@(Located span' _) _ args _ body) t = do
   (args', body', bodyTy, context) <- checkAbs args body t span'
   pure $ contextSubstBinding context $ T.Binding name t args' bodyTy body'
 

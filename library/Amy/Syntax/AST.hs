@@ -4,11 +4,9 @@ module Amy.Syntax.AST
   ( Module(..)
   , Declaration(..)
   , declBinding
-  , declBindingType
   , declExtern
   , declType
   , Binding(..)
-  , BindingType(..)
   , Extern(..)
   , Expr(..)
   , If(..)
@@ -18,12 +16,9 @@ module Amy.Syntax.AST
   , PatCons(..)
   , Let(..)
   , Lambda(..)
-  , letBinding
-  , letBindingType
   , expressionSpan
   , matchSpan
   , patternSpan
-  , LetBinding(..)
 
     -- Re-export
   , Literal(..)
@@ -49,7 +44,6 @@ data Module
 
 data Declaration
   = DeclBinding !Binding
-  | DeclBindingType !BindingType
   | DeclExtern !Extern
   | DeclType !TypeDeclaration
   deriving (Show, Eq)
@@ -57,10 +51,6 @@ data Declaration
 declBinding :: Declaration -> Maybe Binding
 declBinding (DeclBinding x) = Just x
 declBinding _ = Nothing
-
-declBindingType :: Declaration -> Maybe BindingType
-declBindingType (DeclBindingType x) = Just x
-declBindingType _ = Nothing
 
 declExtern :: Declaration -> Maybe Extern
 declExtern (DeclExtern x) = Just x
@@ -70,21 +60,13 @@ declType :: Declaration -> Maybe TypeDeclaration
 declType (DeclType x) = Just x
 declType _ = Nothing
 
--- | A 'Binding' is a top-level definition of a binding, like @x = 1@ or @f x =
--- x@
 data Binding
   = Binding
   { bindingName :: !(Located IdentName)
+  , bindingType :: !Type
   , bindingArgs :: ![Located IdentName]
+  , bindingReturnType :: !Type
   , bindingBody :: !Expr
-  } deriving (Show, Eq)
-
--- | A 'BindingType' is a top-level declaration of a 'Binding' type, like @x ::
--- Int@ or @f :: Int -> Int@
-data BindingType
-  = BindingType
-  { bindingTypeName :: !(Located IdentName)
-  , bindingTypeType :: !Type
   } deriving (Show, Eq)
 
 -- | A 'BindingType' is a top-level declaration of a 'Binding' type, like @x ::
@@ -146,7 +128,7 @@ data PatCons
 
 data Let
   = Let
-  { letBindings :: ![LetBinding]
+  { letBindings :: ![Binding]
   , letExpression :: !Expr
   , letSpan :: !SourceSpan
   } deriving (Show, Eq)
@@ -158,19 +140,6 @@ data Lambda
   , lambdaSpan :: !SourceSpan
   , lambdaType :: !Type
   } deriving (Show, Eq)
-
-data LetBinding
-  = LetBinding !Binding
-  | LetBindingType !BindingType
-  deriving (Show, Eq)
-
-letBinding :: LetBinding -> Maybe Binding
-letBinding (LetBinding x) = Just x
-letBinding _ = Nothing
-
-letBindingType :: LetBinding -> Maybe BindingType
-letBindingType (LetBindingType x) = Just x
-letBindingType _ = Nothing
 
 expressionSpan :: Expr -> SourceSpan
 expressionSpan (ELit (Located s _)) = s

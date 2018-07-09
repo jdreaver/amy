@@ -5,7 +5,7 @@ module Amy.Syntax.Parser
 
   , declaration
   , externDecl
-  , bindingType
+  , parseBindingType
   , parseType
   , typeTerm
   , binding
@@ -21,6 +21,7 @@ import qualified Control.Applicative.Combinators.NonEmpty as CNE
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Text (unpack)
 import Text.Megaparsec
 import Text.Megaparsec.Expr
 
@@ -38,7 +39,6 @@ declaration :: AmyParser Declaration
 declaration =
   choice
   [ DeclExtern <$> externDecl <?> "extern"
-  , try (DeclBindingType <$> bindingType <?> "binding type")
   , DeclBinding <$> binding <?> "binding"
   , DeclType <$> typeDeclaration <?> "type declaration"
   ]
@@ -55,16 +55,35 @@ externDecl = do
     , externType = ty
     }
 
-bindingType :: AmyParser BindingType
-bindingType = do
+binding :: AmyParser Binding
+binding = do
+  mBindingType <- optional (try parseBindingType)
+  name <- ident
+  args <- many $ assertIndented *> ident
+  _ <- equals
+  body <- expression <?> "expression"
+  ty <-
+    case mBindingType of
+      Nothing -> pure TyUnknown
+      Just (Located _ tyName, ty) ->
+        if tyName == locatedValue name
+        then pure ty
+        else fail $ "Expected binding for " ++ unpack (unIdentName tyName) ++ ", but found binding for " ++ unpack (unIdentName $ locatedValue name)
+  pure
+    Binding
+    { bindingName = name
+    , bindingType = ty
+    , bindingArgs = args
+    , bindingReturnType = TyUnknown
+    , bindingBody = body
+    }
+
+parseBindingType :: AmyParser (Located IdentName, Type)
+parseBindingType = do
   name <- ident
   _ <- doubleColon
   ty <- parseType <?> "binding type"
-  pure
-    BindingType
-    { bindingTypeName = name
-    , bindingTypeType = ty
-    }
+  pure (name, ty)
 
 parseType :: AmyParser Type
 parseType = makeExprParser term table
@@ -103,19 +122,6 @@ tyRecord =
       pure (label', ty)
     mTyVar <- optional $ assertIndented *> pipe *> assertIndented *> parseType
     pure (Map.fromList fields, mTyVar)
-
-binding :: AmyParser Binding
-binding = do
-  name <- ident
-  args <- many $ assertIndented *> ident
-  _ <- equals
-  body <- expression <?> "expression"
-  pure
-    Binding
-    { bindingName = name
-    , bindingArgs = args
-    , bindingBody = body
-    }
 
 typeDeclaration :: AmyParser TypeDeclaration
 typeDeclaration = do
@@ -266,13 +272,7 @@ patCons = do
 letExpression' :: AmyParser Let
 letExpression' = do
   startSpan <- let'
-  let
-    parser =
-      choice
-      [ try (LetBinding <$> binding)
-      , LetBindingType <$> bindingType
-      ]
-  bindings <- indentedBlock parser
+  bindings <- indentedBlock binding
   _ <- in'
   expr <- expression
   pure

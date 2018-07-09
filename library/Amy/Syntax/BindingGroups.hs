@@ -7,7 +7,7 @@ import Data.Graph
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 
@@ -41,7 +41,7 @@ makeBindingGroup (CyclicSCC bindings) =
 --
 
 freeBindingVars :: Binding -> Set IdentName
-freeBindingVars (Binding (Located _ name) args body) =
+freeBindingVars (Binding (Located _ name) _ args _ body) =
   freeExprVars body `Set.difference` Set.fromList (name : (locatedValue <$> args))
 
 freeExprVars :: Expr -> Set IdentName
@@ -57,8 +57,7 @@ freeExprVars (ECase (Case scrutinee matches _)) = Set.unions (freeExprVars scrut
 freeExprVars (ELam (Lambda args body _ _)) =
   freeExprVars body `Set.difference` Set.fromList (toList $ locatedValue <$> args)
 freeExprVars (ELet (Let bindings expr _)) =
-  let bindings' = mapMaybe letBinding bindings
-  in Set.unions (freeExprVars expr : (freeBindingVars <$> bindings'))
+  Set.unions (freeExprVars expr : (freeBindingVars <$> bindings))
 freeExprVars (EApp f arg) = freeExprVars f `Set.union` freeExprVars arg
 freeExprVars (EParens expr) = freeExprVars expr
 

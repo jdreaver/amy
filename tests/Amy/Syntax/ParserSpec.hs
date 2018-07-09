@@ -48,40 +48,38 @@ spec = do
 
   describe "bindingType" $ do
     it "parses binding types" $ do
-      parse' bindingType "f :: Int"
+      parse' parseBindingType "f :: Int"
         `shouldParse`
-        BindingType
-          (Located (mkSpan 1 1 1 2) "f")
-          (TyCon (mkLocated 1 6 1 9 "Int"))
-      parse' bindingType "f :: Int -> Double"
+          ( Located (mkSpan 1 1 1 2) "f"
+          , TyCon (mkLocated 1 6 1 9 "Int")
+          )
+      parse' parseBindingType "f :: Int -> Double"
         `shouldParse`
-        BindingType
-          (Located (mkSpan 1 1 1 2) "f")
-          ( TyCon (mkLocated 1 6 1 9 "Int")
+          ( Located (mkSpan 1 1 1 2) "f"
+          , TyCon (mkLocated 1 6 1 9 "Int")
             `TyFun`
             TyCon (mkLocated 1 13 1 19 "Double")
           )
 
     it "parses polymorphic types" $ do
-      parse' bindingType "f :: forall a. a"
+      parse' parseBindingType "f :: forall a. a"
         `shouldParse`
-        BindingType
-          (Located (mkSpan 1 1 1 2) "f")
-          (TyForall [mkLocated 1 13 1 14 "a"] $ TyVar (mkLocated 1 16 1 17 "a"))
-      parse' bindingType "f :: forall a b. a -> b -> a"
+         ( Located (mkSpan 1 1 1 2) "f"
+         , TyForall [mkLocated 1 13 1 14 "a"] $ TyVar (mkLocated 1 16 1 17 "a")
+         )
+      parse' parseBindingType "f :: forall a b. a -> b -> a"
         `shouldParse`
-        BindingType
-          (Located (mkSpan 1 1 1 2) "f")
-          ( TyForall
-              [ mkLocated 1 13 1 14 "a"
-              , mkLocated 1 15 1 16 "b"
-              ] $
-              TyVar (mkLocated 1 18 1 19 "a")
-              `TyFun`
-              TyVar (mkLocated 1 23 1 24 "b")
-              `TyFun`
-              TyVar (mkLocated 1 28 1 29 "a")
-          )
+        ( Located (mkSpan 1 1 1 2) "f"
+        , TyForall
+            [ mkLocated 1 13 1 14 "a"
+            , mkLocated 1 15 1 16 "b"
+            ] $
+            TyVar (mkLocated 1 18 1 19 "a")
+            `TyFun`
+            TyVar (mkLocated 1 23 1 24 "b")
+            `TyFun`
+            TyVar (mkLocated 1 28 1 29 "a")
+        )
 
   describe "parseType" $ do
     it "handles simple terms" $ do
