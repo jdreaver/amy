@@ -59,8 +59,8 @@ inferBindings isTopLevel bindings =
   traverse (inferBindingGroup isTopLevel) (bindingGroups bindings)
 
 data BindingTypeStatus
-  = TypedBinding !S.Binding !Type
-  | UntypedBinding !S.Binding !Type
+  = TypedBinding !S.Binding
+  | UntypedBinding !S.Binding
   deriving (Show, Eq)
 
 compareBindingTypeStatus :: BindingTypeStatus -> BindingTypeStatus -> Ordering
@@ -77,21 +77,19 @@ inferBindingGroup isTopLevel bindings = do
       TyUnknown -> do
         ty' <- TyExistVar <$> freshTyExistVar
         addValueTypeToScope name ty'
-        pure $ UntypedBinding binding ty'
+        pure $ UntypedBinding binding { S.bindingType = ty' }
       _ -> do
         checkTypeKind ty
         addValueTypeToScope name ty
-        pure $ TypedBinding binding ty
+        pure $ TypedBinding binding
 
   -- Check/infer each binding. We sort to make sure typed bindings are checked first
   bindings'' <- for (NE.sortBy compareBindingTypeStatus bindings') $ \bindingAndTy ->
     case bindingAndTy of
-      TypedBinding binding ty -> do
-        binding' <- checkBinding binding ty
-        pure $ binding' { T.bindingType = ty }
-      UntypedBinding binding ty -> do
+      TypedBinding binding -> checkBinding binding (S.bindingType binding)
+      UntypedBinding binding -> do
         binding' <- inferBinding binding
-        tySub <- currentContextSubst ty
+        tySub <- currentContextSubst (S.bindingType binding)
         subtype (T.bindingType binding') tySub
         pure binding'
 
