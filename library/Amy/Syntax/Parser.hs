@@ -170,8 +170,8 @@ expressionTerm =
   , ECase <$> caseExpression <?> "case expression"
   , ELet <$> letExpression' <?> "let expression"
   , ELam <$> lambda <?> "lambda"
-  , EVar <$> ident <?> "identifier"
-  , ECon <$> dataCon <?> "data constructor"
+  , EVar . Typed TyUnknown <$> ident <?> "identifier"
+  , ECon . Typed TyUnknown <$> dataCon <?> "data constructor"
   ]
 
 expressionParens :: AmyParser Expr
@@ -180,7 +180,7 @@ expressionParens = EParens <$> parens expression
 parseSelector :: AmyParser (Expr -> Expr)
 parseSelector = do
   label' <- recordSelector
-  pure $ \expr -> ERecordSelect expr label'
+  pure $ \expr -> ERecordSelect expr label' TyUnknown
 
 literal :: AmyParser (Located Literal)
 literal =
@@ -197,7 +197,7 @@ record = do
     label' <- assertIndented *> L.rowLabel
     _ <- assertIndented *> colon
     expr <- expression
-    pure (label', expr)
+    pure (label', Typed TyUnknown expr)
   endSpan <- assertIndented *> rBrace
   pure $ ERecord (mergeSpans startSpan endSpan) rows
 
@@ -247,7 +247,7 @@ parsePattern :: AmyParser Pattern
 parsePattern =
   choice
   [ PLit <$> literal <?> "pattern literal"
-  , PVar <$> ident <?> "pattern variable"
+  , PVar . Typed TyUnknown <$> ident <?> "pattern variable"
   , PCons <$> patCons <?> "pattern constructor"
   , PParens <$> parens parsePattern <?> "parentheses"
   ]
@@ -260,6 +260,7 @@ patCons = do
     PatCons
     { patConsConstructor = constructor
     , patConsArg = mArg
+    , patConsType = TyUnknown
     }
 
 letExpression' :: AmyParser Let
@@ -292,4 +293,5 @@ lambda = do
     { lambdaArgs = args
     , lambdaBody = body
     , lambdaSpan = mergeSpans startSpan (expressionSpan body)
+    , lambdaType = TyUnknown
     }

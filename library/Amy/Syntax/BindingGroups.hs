@@ -46,15 +46,15 @@ freeBindingVars (Binding (Located _ name) args body) =
 
 freeExprVars :: Expr -> Set IdentName
 freeExprVars ELit{} = Set.empty
-freeExprVars (ERecord _ rows) = Set.unions $ freeExprVars <$> Map.elems rows
-freeExprVars (ERecordSelect expr _) = freeExprVars expr
-freeExprVars (EVar (Located _ ident)) = Set.singleton ident
+freeExprVars (ERecord _ rows) = Set.unions $ freeExprVars . typedValue <$> Map.elems rows
+freeExprVars (ERecordSelect expr _ _) = freeExprVars expr
+freeExprVars (EVar (Typed _ (Located _ ident))) = Set.singleton ident
 freeExprVars ECon{} = Set.empty
 freeExprVars (EIf (If pred' then' else' _)) = freeExprVars pred' `Set.union` freeExprVars then' `Set.union` freeExprVars else'
 freeExprVars (ECase (Case scrutinee matches _)) = Set.unions (freeExprVars scrutinee : toList (freeMatchVars <$> matches))
  where
   freeMatchVars (Match pat expr) = freeExprVars expr `Set.difference` patternVars pat
-freeExprVars (ELam (Lambda args body _)) =
+freeExprVars (ELam (Lambda args body _ _)) =
   freeExprVars body `Set.difference` Set.fromList (toList $ locatedValue <$> args)
 freeExprVars (ELet (Let bindings expr _)) =
   let bindings' = mapMaybe letBinding bindings
@@ -64,6 +64,6 @@ freeExprVars (EParens expr) = freeExprVars expr
 
 patternVars :: Pattern -> Set IdentName
 patternVars PLit{} = Set.empty
-patternVars (PVar (Located _ ident)) = Set.singleton ident
-patternVars (PCons (PatCons _ mPat)) = maybe Set.empty patternVars mPat
+patternVars (PVar (Typed _ (Located _ ident))) = Set.singleton ident
+patternVars (PCons (PatCons _ mPat _)) = maybe Set.empty patternVars mPat
 patternVars (PParens pat) = patternVars pat

@@ -97,10 +97,10 @@ data Extern
 
 data Expr
   = ELit !(Located Literal)
-  | ERecord !SourceSpan !(Map (Located RowLabel) Expr)
-  | ERecordSelect !Expr !(Located RowLabel)
-  | EVar !(Located IdentName)
-  | ECon !(Located DataConName)
+  | ERecord !SourceSpan !(Map (Located RowLabel) (Typed Expr))
+  | ERecordSelect !Expr !(Located RowLabel) !Type
+  | EVar !(Typed (Located IdentName))
+  | ECon !(Typed (Located DataConName))
   | EIf !If
   | ECase !Case
   | ELet !Let
@@ -132,7 +132,7 @@ data Match
 
 data Pattern
   = PLit !(Located Literal)
-  | PVar !(Located IdentName)
+  | PVar !(Typed (Located IdentName))
   | PCons !PatCons
   | PParens !Pattern
   deriving (Show, Eq)
@@ -141,6 +141,7 @@ data PatCons
   = PatCons
   { patConsConstructor :: !(Located DataConName)
   , patConsArg :: !(Maybe Pattern)
+  , patConsType :: !Type
   } deriving (Show, Eq)
 
 data Let
@@ -155,6 +156,7 @@ data Lambda
   { lambdaArgs :: !(NonEmpty (Located IdentName))
   , lambdaBody :: !Expr
   , lambdaSpan :: !SourceSpan
+  , lambdaType :: !Type
   } deriving (Show, Eq)
 
 data LetBinding
@@ -173,13 +175,13 @@ letBindingType _ = Nothing
 expressionSpan :: Expr -> SourceSpan
 expressionSpan (ELit (Located s _)) = s
 expressionSpan (ERecord s _) = s
-expressionSpan (ERecordSelect expr (Located end _)) = mergeSpans (expressionSpan expr) end
-expressionSpan (EVar (Located s _)) = s
-expressionSpan (ECon (Located s _)) = s
+expressionSpan (ERecordSelect expr (Located end _) _) = mergeSpans (expressionSpan expr) end
+expressionSpan (EVar (Typed _ (Located s _))) = s
+expressionSpan (ECon (Typed _ (Located s _))) = s
 expressionSpan (EIf (If _ _ _ s)) = s
 expressionSpan (ECase (Case _ _ s)) = s
 expressionSpan (ELet (Let _ _ s)) = s
-expressionSpan (ELam (Lambda _ _ s)) = s
+expressionSpan (ELam (Lambda _ _ s _)) = s
 expressionSpan (EApp e1 e2) = mergeSpans (expressionSpan e1) (expressionSpan e2)
 expressionSpan (EParens e) = expressionSpan e
 
@@ -188,8 +190,8 @@ matchSpan (Match pat expr) = mergeSpans (patternSpan pat) (expressionSpan expr)
 
 patternSpan :: Pattern -> SourceSpan
 patternSpan (PLit (Located s _)) = s
-patternSpan (PVar (Located s _)) = s
-patternSpan (PCons (PatCons (Located s _) mPat)) =
+patternSpan (PVar (Typed _ (Located s _))) = s
+patternSpan (PCons (PatCons (Located s _) mPat _)) =
   case mPat of
     Nothing -> s
     Just pat -> mergeSpans s (patternSpan pat)

@@ -45,9 +45,11 @@ prettyBindingType' (BindingType (Located _ name) ty) =
 prettyExpr :: Expr -> Doc ann
 prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
 prettyExpr (ERecord _ rows) = bracketed $ uncurry prettyRow <$> Map.toList rows
-prettyExpr (ERecordSelect expr field) = prettyExpr expr <> "." <> prettyRowLabel (locatedValue field)
-prettyExpr (EVar (Located _ ident)) = prettyIdent ident
-prettyExpr (ECon (Located _ dataCon)) = prettyDataConName dataCon
+ where
+  prettyRow (Located _ label) (Typed _ expr) = prettyRowLabel label <> ":" <+> prettyExpr expr
+prettyExpr (ERecordSelect expr field _) = prettyExpr expr <> "." <> prettyRowLabel (locatedValue field)
+prettyExpr (EVar (Typed _ (Located _ ident))) = prettyIdent ident
+prettyExpr (ECon (Typed _ (Located _ dataCon))) = prettyDataConName dataCon
 prettyExpr (EIf (If pred' then' else' _)) =
   prettyIf (prettyExpr pred') (prettyExpr then') (prettyExpr else')
 prettyExpr (ECase (Case scrutinee matches _)) =
@@ -59,18 +61,15 @@ prettyExpr (ELet (Let bindings body _)) =
  where
   prettyLetBinding (LetBinding binding) = prettyBinding' binding
   prettyLetBinding (LetBindingType bindingTy) = prettyBindingType' bindingTy
-prettyExpr (ELam (Lambda args body _)) = prettyLambda (prettyIdent . locatedValue <$> toList args) (prettyExpr body)
+prettyExpr (ELam (Lambda args body _ _)) = prettyLambda (prettyIdent . locatedValue <$> toList args) (prettyExpr body)
 prettyExpr (EApp f arg) = prettyExpr f <+> prettyExpr arg
 prettyExpr (EParens expr) = parens $ prettyExpr expr
 
-prettyRow :: Located RowLabel -> Expr -> Doc ann
-prettyRow (Located _ label) expr = prettyRowLabel label <> ":" <+> prettyExpr expr
-
 prettyPattern :: Pattern -> Doc ann
 prettyPattern (PLit (Located _ lit)) = pretty $ showLiteral lit
-prettyPattern (PVar (Located _ var)) = prettyIdent var
+prettyPattern (PVar (Typed _ (Located _ var))) = prettyIdent var
 prettyPattern (PParens pat) = parens (prettyPattern pat)
-prettyPattern (PCons (PatCons (Located _ con) mArg)) =
+prettyPattern (PCons (PatCons (Located _ con) mArg _)) =
   prettyDataConName con <> maybe mempty prettyArg mArg
  where
   prettyArg = (space <>) . prettyArg'

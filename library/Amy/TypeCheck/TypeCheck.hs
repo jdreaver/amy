@@ -180,10 +180,10 @@ inferExpr expr = withSourceSpan (expressionSpan expr) $ inferExpr' expr
 
 inferExpr' :: S.Expr -> Checker T.Expr
 inferExpr' (S.ELit lit) = pure $ T.ELit lit
-inferExpr' (S.EVar var) = do
+inferExpr' (S.EVar (Typed _ var)) = do
     t <- currentContextSubst =<< lookupValueType var
     pure $ T.EVar $ Typed t var
-inferExpr' (S.ECon con) = do
+inferExpr' (S.ECon (Typed _ con)) = do
     t <- currentContextSubst =<< lookupDataConType con
     pure $ T.ECon $ Typed t con
 inferExpr' (S.EIf (S.If pred' then' else' span')) = do
@@ -203,7 +203,7 @@ inferExpr' (S.ELet (S.Let bindings expression span')) = do
     bindings'' <- inferBindings False bindings' bindingTypes
     expression' <- inferExpr expression
     pure $ T.ELet (T.Let bindings'' expression' span')
-inferExpr' (S.ELam (S.Lambda args body span')) = do
+inferExpr' (S.ELam (S.Lambda args body span' _)) = do
   (args', body', ty, _, context) <- inferAbs args body span'
   pure $ contextSubstExpr context $ T.ELam $ T.Lambda args' body' span' ty
 inferExpr' (S.EApp f e) = do
@@ -212,11 +212,11 @@ inferExpr' (S.EApp f e) = do
   (e', retTy) <- inferApp tfSub e
   pure (T.EApp $ T.App f' e' retTy)
 inferExpr' (S.ERecord _ rows) = do
-  rows' <- fmap Map.fromList $ for (Map.toList rows) $ \(label, expr) -> do
+  rows' <- fmap Map.fromList $ for (Map.toList rows) $ \(label, Typed _ expr) -> do
     expr' <- inferExpr expr
     pure (label, Typed (expressionType expr') expr')
   pure $ T.ERecord rows'
-inferExpr' (S.ERecordSelect expr label) = do
+inferExpr' (S.ERecordSelect expr label _) = do
   retVar <- freshTyExistVar
   polyVar <- freshTyExistVar
   let exprTy = TyRecord (Map.singleton (notLocated $ locatedValue label) $ TyExistVar retVar) (Just $ TyExistVar polyVar)
@@ -254,8 +254,7 @@ inferMatch scrutineeTy match@(S.Match pat body) =
     body' <- withNewLexicalScope $ do
       let
         mBinderNameAndTy = do
-          ident <- patternBinderIdent pat
-          ty <- patternBinderType pat'
+          Typed ty ident <- patternBinderIdent pat'
           pure (ident, ty)
       traverse_ (uncurry addValueTypeToScope) mBinderNameAndTy
       inferExpr body
@@ -266,10 +265,10 @@ inferPattern pat = withSourceSpan (patternSpan pat) $ inferPattern' pat
 
 inferPattern' :: S.Pattern -> Checker T.Pattern
 inferPattern' (S.PLit lit) = pure $ T.PLit lit
-inferPattern' (S.PVar ident) = do
+inferPattern' (S.PVar (Typed _ ident)) = do
   tvar <- freshTyExistVar
   pure $ T.PVar $ Typed (TyExistVar tvar) ident
-inferPattern' (S.PCons (S.PatCons con mArg)) = do
+inferPattern' (S.PCons (S.PatCons con mArg _)) = do
   conTy <- currentContextSubst =<< lookupDataConType con
   case mArg of
     -- Convert argument and add a constraint on argument plus constructor
@@ -284,17 +283,11 @@ inferPattern' (S.PCons (S.PatCons con mArg)) = do
       pure $ T.PCons $ T.PatCons con Nothing conTy
 inferPattern' (S.PParens pat) = T.PParens <$> inferPattern pat
 
-patternBinderIdent :: S.Pattern -> Maybe (Located IdentName)
-patternBinderIdent (S.PLit _) = Nothing
-patternBinderIdent (S.PVar ident) = Just ident
-patternBinderIdent (S.PCons (S.PatCons _ mArg)) = patternBinderIdent =<< mArg
-patternBinderIdent (S.PParens pat) = patternBinderIdent pat
-
-patternBinderType :: T.Pattern -> Maybe Type
-patternBinderType (T.PLit _) = Nothing
-patternBinderType (T.PVar (Typed ty _)) = Just ty
-patternBinderType (T.PCons (T.PatCons _ mArg _)) = patternBinderType =<< mArg
-patternBinderType (T.PParens pat) = patternBinderType pat
+patternBinderIdent :: T.Pattern -> Maybe (Typed (Located IdentName))
+patternBinderIdent (T.PLit _) = Nothing
+patternBinderIdent (T.PVar ident) = Just ident
+patternBinderIdent (T.PCons (T.PatCons _ mArg _)) = patternBinderIdent =<< mArg
+patternBinderIdent (T.PParens pat) = patternBinderIdent pat
 
 --
 -- Checking
@@ -346,7 +339,7 @@ checkExpr' :: S.Expr -> Type -> Checker T.Expr
 checkExpr' e (TyForall as t) =
   withContextUntilNE (ContextVar . maybeLocatedValue <$> as) $
     checkExpr e t
-checkExpr' (S.ELam (S.Lambda args body span')) t@TyFun{} = do
+checkExpr' (S.ELam (S.Lambda args body span' _)) t@TyFun{} = do
   (args', body', _, context) <- checkAbs (toList args) body t span'
   pure $ contextSubstExpr context $ T.ELam $ T.Lambda (NE.fromList args') body' span' t
 checkExpr' e t = do

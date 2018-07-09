@@ -171,13 +171,13 @@ spec = do
 
   describe "expressionParens" $ do
     it "parses expressions in parens" $ do
-      parse' expressionParens "(x)" `shouldParse` EParens (EVar (Located (mkSpan 1 2 1 3) "x"))
+      parse' expressionParens "(x)" `shouldParse` EParens (EVar (Typed TyUnknown (Located (mkSpan 1 2 1 3) "x")))
       parse' expressionParens "(f x)"
         `shouldParse`
         EParens
           (EApp
-            (EVar (Located (mkSpan 1 2 1 3) "f"))
-            (EVar (Located (mkSpan 1 4 1 5) "x"))
+            (EVar (Typed TyUnknown (Located (mkSpan 1 2 1 3) "f")))
+            (EVar (Typed TyUnknown (Located (mkSpan 1 4 1 5) "x")))
           )
 
   describe "ifExpression" $ do
@@ -185,16 +185,16 @@ spec = do
       parse' ifExpression "if True then 1 else 2"
         `shouldParse`
         If
-          (ECon (Located (mkSpan 1 4 1 8) "True"))
+          (ECon (Typed TyUnknown (Located (mkSpan 1 4 1 8) "True")))
           (ELit (Located (mkSpan 1 14 1 15) (LiteralInt 1)))
           (ELit (Located (mkSpan 1 21 1 22) (LiteralInt 2)))
           (mkSpan 1 1 1 22)
       parse' ifExpression "if f x then f y else g 2"
         `shouldParse`
         If
-          (EApp (EVar (Located (mkSpan 1 4 1 5) "f")) (EVar (Located (mkSpan 1 6 1 7) "x")))
-          (EApp (EVar (Located (mkSpan 1 13 1 14) "f")) (EVar (Located (mkSpan 1 15 1 16) "y")))
-          (EApp (EVar (Located (mkSpan 1 22 1 23) "g")) (ELit (Located (mkSpan 1 24 1 25) (LiteralInt 2))))
+          (EApp (EVar (Typed TyUnknown (Located (mkSpan 1 4 1 5) "f"))) (EVar (Typed TyUnknown (Located (mkSpan 1 6 1 7) "x"))))
+          (EApp (EVar (Typed TyUnknown (Located (mkSpan 1 13 1 14) "f"))) (EVar (Typed TyUnknown (Located (mkSpan 1 15 1 16) "y"))))
+          (EApp (EVar (Typed TyUnknown (Located (mkSpan 1 22 1 23) "g"))) (ELit (Located (mkSpan 1 24 1 25) (LiteralInt 2))))
           (mkSpan 1 1 1 25)
 
   describe "literal" $ do
