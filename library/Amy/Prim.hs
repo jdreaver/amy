@@ -35,6 +35,7 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import Text.Megaparsec.Pos
 
 import Amy.Literal
 import Amy.Names
@@ -47,7 +48,8 @@ import Amy.Syntax.AST
 mkPrimTypeDef :: TyConName -> [DataConName] -> TypeDeclaration
 mkPrimTypeDef tyConName dataConNames =
   let
-    span' = SourceSpan "<prim>" 1 1 1 1
+    pos = SourcePos "<prim>" (mkPos 1) (mkPos 1)
+    span' = SourceSpan pos pos
     tyConDef = TyConDefinition (Located span' tyConName) []
     mkDataConDef con = DataConDefinition (Located span' con) Nothing
     dataCons = mkDataConDef <$> dataConNames
@@ -94,10 +96,13 @@ allPrimTypeDefinitions =
   , boolTypeDefinition
   ]
 
-literalType :: Literal -> TyConName
-literalType (LiteralInt _) = intTyCon
-literalType (LiteralDouble _) = doubleTyCon
-literalType (LiteralText _) = textTyCon
+literalType :: Literal -> Type
+literalType = TyCon . notLocated . literalTyCon
+
+literalTyCon :: Literal -> TyConName
+literalTyCon (LiteralInt _) = intTyCon
+literalTyCon (LiteralDouble _) = doubleTyCon
+literalTyCon (LiteralText _) = textTyCon
 
 --
 -- Primitive Functions

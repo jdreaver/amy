@@ -1,13 +1,7 @@
-{-# LANGUAGE DeriveFunctor #-}
-
 module Amy.Core.AST
   ( Module(..)
   , Binding(..)
   , Extern(..)
-  , TypeDeclaration(..)
-  , TyConDefinition(..)
-  , fromPrimTypeDefinition
-  , DataConDefinition(..)
   , Expr(..)
   , If(..)
   , Case(..)
@@ -28,15 +22,12 @@ module Amy.Core.AST
   , freeBindingVars
   , freeExprVars
 
-  , Type(..)
-  , unfoldTyApp
-  , unfoldTyFun
-  , Typed(..)
-
     -- Re-export
   , Literal(..)
   , module Amy.ASTCommon
   , module Amy.Names
+  , module Amy.Syntax.Located
+  , module Amy.Type
   ) where
 
 import Control.Monad.Identity (Identity(..), runIdentity)
@@ -53,8 +44,8 @@ import Amy.ASTCommon
 import Amy.Literal
 import Amy.Names
 import Amy.Prim
-import qualified Amy.Syntax.AST as S
 import Amy.Syntax.Located
+import Amy.Type
 
 data Module
   = Module
@@ -80,35 +71,6 @@ data Extern
   { externName :: !IdentName
   , externType :: !Type
   } deriving (Show, Eq)
-
-data TypeDeclaration
-  = TypeDeclaration
-  { typeDeclarationTypeName :: !TyConDefinition
-  , typeDeclarationConstructors :: ![DataConDefinition]
-  } deriving (Show, Eq, Ord)
-
-data TyConDefinition
-  = TyConDefinition
-  { tyConDefinitionName :: !TyConName
-  , tyConDefinitionArgs :: ![TyVarName]
-  } deriving (Show, Eq, Ord)
-
-fromPrimTyDef :: S.TyConDefinition -> TyConDefinition
-fromPrimTyDef (S.TyConDefinition (Located _ name) args) = TyConDefinition name (locatedValue <$> args)
-
-fromPrimTypeDefinition :: S.TypeDeclaration -> TypeDeclaration
-fromPrimTypeDefinition (S.TypeDeclaration tyConDef dataCons) =
-  TypeDeclaration (fromPrimTyDef tyConDef) (fromPrimDataCon <$> dataCons)
-
-data DataConDefinition
-  = DataConDefinition
-  { dataConDefinitionName :: !DataConName
-  , dataConDefinitionArgument :: !(Maybe Type)
-  } deriving (Show, Eq, Ord)
-
-fromPrimDataCon :: S.DataConDefinition -> DataConDefinition
-fromPrimDataCon (S.DataConDefinition (Located _ name) Nothing) = DataConDefinition name Nothing
-fromPrimDataCon (S.DataConDefinition _ (Just _)) = error "Couldn't convert data con definiton type."
 
 data Expr
   = ELit !Literal
@@ -193,12 +155,9 @@ foldApp func args =
   mkApp :: Expr -> (Expr, [Type]) -> Expr
   mkApp e (arg, tys') = EApp $ App e arg (foldr1 TyFun tys')
 
-literalType' :: Literal -> Type
-literalType' lit = TyCon $ literalType lit
-
 expressionType :: Expr -> Type
-expressionType (ELit lit) = literalType' lit
-expressionType (ERecord rows) = TyRecord (typedType <$> rows) Nothing
+expressionType (ELit lit) = literalType lit
+expressionType (ERecord rows) = TyRecord (Map.mapKeys notLocated $ typedType <$> rows) Nothing
 expressionType (ERecordSelect _ _ ty) = ty
 expressionType (EVar (Typed ty _)) = ty
 expressionType (ECon (Typed ty _)) = ty
@@ -315,30 +274,3 @@ freeExprVars (ELam (Lambda args body _)) =
   freeExprVars body `Set.difference` Set.fromList (NE.toList args)
 freeExprVars (EApp (App f arg _)) = freeExprVars f `Set.union` freeExprVars arg
 freeExprVars (EParens expr) = freeExprVars expr
-
-data Type
-  = TyCon !TyConName
-  | TyVar !TyVarName
-  | TyApp !Type !Type
-  | TyRecord !(Map RowLabel Type) !(Maybe Type)
-  | TyFun !Type !Type
-  | TyForall !(NonEmpty TyVarName) !Type
-  deriving (Show, Eq, Ord)
-
-infixr 0 `TyFun`
-
-unfoldTyApp :: Type -> NonEmpty Type
-unfoldTyApp (TyApp app@(TyApp _ _) arg) = unfoldTyApp app <> (arg :| [])
-unfoldTyApp (TyApp f arg) = f :| [arg]
-unfoldTyApp t = t :| []
-
-unfoldTyFun :: Type -> NonEmpty Type
-unfoldTyFun (TyForall _ t) = unfoldTyFun t
-unfoldTyFun (t1 `TyFun` t2) = NE.cons t1 (unfoldTyFun t2)
-unfoldTyFun ty = ty :| []
-
-data Typed a
-  = Typed
-  { typedType :: !Type
-  , typedValue :: !a
-  } deriving (Show, Eq, Ord, Functor)

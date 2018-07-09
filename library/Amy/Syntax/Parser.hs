@@ -26,7 +26,6 @@ import Text.Megaparsec.Expr
 
 import Amy.Syntax.AST as S
 import Amy.Syntax.Lexer as L
-import Amy.Syntax.Located
 import Amy.Syntax.Monad
 
 parseModule :: AmyParser Module
@@ -81,28 +80,28 @@ typeTerm =
   choice
   [ parens parseType <?> "type parens"
   , tyForall <?> "forall type"
-  , TyVar <$> tyVar <?> "type variable"
-  , TyCon <$> tyCon <?> "type constructor"
+  , TyVar . fromLocated <$> tyVar <?> "type variable"
+  , TyCon . fromLocated <$> tyCon <?> "type constructor"
   , uncurry TyRecord <$> tyRecord <?> "record"
   ]
 
 tyForall :: AmyParser Type
 tyForall = do
   _ <- forall
-  vars <- CNE.some (assertIndented *> tyVar)
+  vars <- fmap fromLocated <$> CNE.some (assertIndented *> tyVar)
   _ <- assertIndented *> dot
   ty <- parseType <?> "type"
   pure $ TyForall vars ty
 
-tyRecord :: AmyParser (Map (Located RowLabel) Type, Maybe (Located TyVarName))
+tyRecord :: AmyParser (Map (MaybeLocated RowLabel) Type, Maybe Type)
 tyRecord =
   between lBrace rBrace $ do
     fields <- (`sepBy` comma) $ do
-      label' <- assertIndented *> L.rowLabel
+      label' <- fromLocated <$> (assertIndented *> L.rowLabel)
       _ <- assertIndented *> doubleColon
       ty <- parseType
       pure (label', ty)
-    mTyVar <- optional $ assertIndented *> pipe *> assertIndented *> tyVar
+    mTyVar <- optional $ assertIndented *> pipe *> assertIndented *> parseType
     pure (Map.fromList fields, mTyVar)
 
 binding :: AmyParser Binding

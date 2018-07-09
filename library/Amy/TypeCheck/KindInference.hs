@@ -28,12 +28,12 @@ import Amy.TypeCheck.Monad
 -- same time instead of one by one.
 
 inferTypeDeclarationKind :: TypeDeclaration -> Checker Kind
-inferTypeDeclarationKind (TypeDeclaration (TyConDefinition tyCon tyArgs) constructors) =
+inferTypeDeclarationKind (TypeDeclaration (TyConDefinition (Located _ tyCon) tyArgs) constructors) =
   withNewLexicalScope $ do
     -- Generate unknown kind variables for the type constructor and all type
     -- variables.
     tyConKindVar <- addUnknownTyConKindToScope tyCon
-    tyVarKindVars <- traverse addUnknownTyVarKindToScope tyArgs
+    tyVarKindVars <- traverse (addUnknownTyVarKindToScope . locatedValue) tyArgs
     let
       tyConConstraint = Constraint (KUnknown tyConKindVar, foldr1 KFun $ (KUnknown <$> tyVarKindVars) ++ [KStar])
 
@@ -60,10 +60,10 @@ inferTypeKind ty = do
   pure $ starIfUnknown $ substituteKind subst kind
 
 inferTypeKind' :: Type -> Checker (Kind, [Constraint])
-inferTypeKind' (TyCon name) = do
+inferTypeKind' (TyCon (MaybeLocated _ name)) = do
   kind <- lookupTyConKind name
   pure (kind, [])
-inferTypeKind' (TyVar name) = do
+inferTypeKind' (TyVar (MaybeLocated _ name)) = do
   kind <- lookupTyVarKind name
   pure (kind, [])
 inferTypeKind' (TyApp t1 t2) = do
@@ -93,7 +93,7 @@ inferTypeKind' (TyRecord fields mTail) = do
   kind <- KUnknown <$> freshId
   pure (kind, concat fieldCons ++ concat varCons ++ [Constraint (kind, KStar)])
 inferTypeKind' (TyForall vars ty) = withNewLexicalScope $ do
-  traverse_ addUnknownTyVarKindToScope vars
+  traverse_ addUnknownTyVarKindToScope (maybeLocatedValue <$> vars)
   inferTypeKind' ty
 inferTypeKind' v@(TyExistVar _) = error $ "Found existential variable in kind inference " ++ show v
 

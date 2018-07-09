@@ -32,7 +32,7 @@ typeRep (C.TypeDeclaration tyName constructors) =
       if all (isNothing . C.dataConDefinitionArgument) constructors
       then EnumType wordSize
       -- Can't do an enum. We'll have to use tagged pairs.
-      else TaggedUnionType (tyConDefinitionName tyName) wordSize
+      else TaggedUnionType (locatedValue $ tyConDefinitionName tyName) wordSize
  where
   -- Pick a proper integer size
   wordSize :: Word32
@@ -42,7 +42,7 @@ typeRep (C.TypeDeclaration tyName constructors) =
       | otherwise -> 32
 
 maybePrimitiveType :: C.TyConDefinition -> Maybe ANF.Type
-maybePrimitiveType (C.TyConDefinition name _)
+maybePrimitiveType (C.TyConDefinition (Located _ name) _)
   -- TODO: Something more robust here besides text name matching.
   | name == "Int" = Just PrimIntType
   | name == "Double" = Just PrimDoubleType

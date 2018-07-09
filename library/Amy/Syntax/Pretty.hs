@@ -15,26 +15,6 @@ import Amy.Literal
 import Amy.Pretty
 import Amy.Syntax.AST
 
-prettyType :: Type -> Doc ann
-prettyType (TyFun ty1 ty2) = parensIf (isTyFun ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
-prettyType (TyCon con) = prettyTyConName (locatedValue con)
-prettyType (TyVar var) = prettyTyVarName (locatedValue var)
-prettyType (TyRecord rows mVar) = prettyTyRecord (uncurry prettyTyRow <$> Map.toList rows) (prettyTyVarName . locatedValue <$> mVar)
-prettyType (TyApp f arg) = prettyType f <+> parensIf (isTyApp arg) (prettyType arg)
-prettyType (TyForall vars ty) = "forall" <+> hcat (punctuate space $ prettyTyVarName . locatedValue <$> toList vars) <> "." <+> prettyType ty
-
-prettyTyRow :: Located RowLabel -> Type -> Doc ann
-prettyTyRow (Located _ label) ty = prettyRowLabel label <+> "::" <+> prettyType ty
-
-isTyApp :: Type -> Bool
-isTyApp TyApp{} = True
-isTyApp TyFun{} = True -- Technically -> is an infix app
-isTyApp _ = False
-
-isTyFun :: Type -> Bool
-isTyFun TyFun{} = True
-isTyFun _ = False
-
 prettyModule :: Module -> Doc ann
 prettyModule (Module _ decls) = vcatTwoHardLines (prettyDeclaration <$> decls)
 

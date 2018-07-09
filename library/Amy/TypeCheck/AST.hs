@@ -1,12 +1,7 @@
-{-# LANGUAGE DeriveFunctor #-}
-
 module Amy.TypeCheck.AST
   ( Module(..)
   , Binding(..)
   , Extern(..)
-  , TypeDeclaration(..)
-  , TyConDefinition(..)
-  , DataConDefinition(..)
   , Expr(..)
   , If(..)
   , Case(..)
@@ -20,24 +15,24 @@ module Amy.TypeCheck.AST
   , matchType
   , patternType
 
-  , Type(..)
-  , unfoldTyFun
-  , Typed(..)
-
     -- Re-export
   , Literal(..)
   , module Amy.ASTCommon
   , module Amy.Names
+  , module Amy.Syntax.Located
+  , module Amy.Type
   ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 
 import Amy.ASTCommon
 import Amy.Literal
 import Amy.Names
 import Amy.Prim
+import Amy.Syntax.Located
+import Amy.Type
 
 data Module
   = Module
@@ -50,10 +45,10 @@ data Module
 -- 'BindingType' after they've been paired together.
 data Binding
   = Binding
-  { bindingName :: !IdentName
+  { bindingName :: !(Located IdentName)
   , bindingType :: !Type
     -- ^ Type for whole function
-  , bindingArgs :: ![Typed IdentName]
+  , bindingArgs :: ![Typed (Located IdentName)]
     -- ^ Argument names and types split out from 'bindingType'
   , bindingReturnType :: !Type
     -- ^ Return type split out from 'bindingType'
@@ -63,35 +58,17 @@ data Binding
 -- | A renamed extern declaration.
 data Extern
   = Extern
-  { externName :: !IdentName
+  { externName :: !(Located IdentName)
   , externType :: !Type
   } deriving (Show, Eq)
 
-data TypeDeclaration
-  = TypeDeclaration
-  { typeDeclarationTypeName :: !TyConDefinition
-  , typeDeclarationConstructors :: ![DataConDefinition]
-  } deriving (Show, Eq, Ord)
-
-data TyConDefinition
-  = TyConDefinition
-  { tyConDefinitionName :: !TyConName
-  , tyConDefinitionArgs :: ![TyVarName]
-  } deriving (Show, Eq, Ord)
-
-data DataConDefinition
-  = DataConDefinition
-  { dataConDefinitionName :: !DataConName
-  , dataConDefinitionArgument :: !(Maybe Type)
-  } deriving (Show, Eq, Ord)
-
 -- | A renamed 'Expr'
 data Expr
-  = ELit !Literal
-  | ERecord !(Map RowLabel (Typed Expr))
-  | ERecordSelect !Expr !RowLabel !Type
-  | EVar !(Typed IdentName)
-  | ECon !(Typed DataConName)
+  = ELit !(Located Literal)
+  | ERecord !(Map (Located RowLabel) (Typed Expr))
+  | ERecordSelect !Expr !(Located RowLabel) !Type
+  | EVar !(Typed (Located IdentName))
+  | ECon !(Typed (Located DataConName))
   | EIf !If
   | ECase !Case
   | ELet !Let
@@ -105,12 +82,14 @@ data If
   { ifPredicate :: !Expr
   , ifThen :: !Expr
   , ifElse :: !Expr
+  , ifSpan :: !SourceSpan
   } deriving (Show, Eq)
 
 data Case
   = Case
   { caseScrutinee :: !Expr
   , caseAlternatives :: !(NonEmpty Match)
+  , caseSpan :: !SourceSpan
   } deriving (Show, Eq)
 
 data Match
@@ -120,15 +99,15 @@ data Match
   } deriving (Show, Eq)
 
 data Pattern
-  = PLit !Literal
-  | PVar !(Typed IdentName)
+  = PLit !(Located Literal)
+  | PVar !(Typed (Located IdentName))
   | PCons !PatCons
   | PParens !Pattern
   deriving (Show, Eq)
 
 data PatCons
   = PatCons
-  { patConsConstructor :: !DataConName
+  { patConsConstructor :: !(Located DataConName)
   , patConsArg :: !(Maybe Pattern)
   , patConsType :: !Type
   } deriving (Show, Eq)
@@ -137,12 +116,14 @@ data Let
   = Let
   { letBindings :: ![NonEmpty Binding]
   , letExpression :: !Expr
+  , letSpan :: !SourceSpan
   } deriving (Show, Eq)
 
 data Lambda
   = Lambda
-  { lambdaArgs :: !(NonEmpty (Typed IdentName))
+  { lambdaArgs :: !(NonEmpty (Typed (Located IdentName)))
   , lambdaBody :: !Expr
+  , lambdaSpan :: !SourceSpan
   , lambdaType :: !Type
   } deriving (Show, Eq)
 
@@ -153,19 +134,16 @@ data App
   , appReturnType :: !Type
   } deriving (Show, Eq)
 
-literalType' :: Literal -> Type
-literalType' lit = TyCon $ literalType lit
-
 expressionType :: Expr -> Type
-expressionType (ELit lit) = literalType' lit
-expressionType (ERecord rows) = TyRecord (typedType <$> rows) Nothing
+expressionType (ELit (Located _ lit)) = literalType lit
+expressionType (ERecord rows) = TyRecord (Map.mapKeys (notLocated . locatedValue) $ typedType <$> rows) Nothing
 expressionType (ERecordSelect _ _ ty) = ty
 expressionType (EVar (Typed ty _)) = ty
 expressionType (ECon (Typed ty _)) = ty
 expressionType (EIf if') = expressionType (ifThen if') -- Checker ensure "then" and "else" types match
-expressionType (ECase (Case _ (match :| _))) = matchType match
+expressionType (ECase (Case _ (match :| _) _)) = matchType match
 expressionType (ELet let') = expressionType (letExpression let')
-expressionType (ELam (Lambda _ _ ty)) = ty
+expressionType (ELam (Lambda _ _ _ ty)) = ty
 expressionType (EApp app) = appReturnType app
 expressionType (EParens expr) = expressionType expr
 
@@ -173,29 +151,7 @@ matchType :: Match -> Type
 matchType (Match _ expr) = expressionType expr
 
 patternType :: Pattern -> Type
-patternType (PLit lit) = literalType' lit
+patternType (PLit (Located _ lit)) = literalType lit
 patternType (PVar (Typed ty _)) = ty
 patternType (PCons (PatCons _ _ ty)) = ty
 patternType (PParens pat) = patternType pat
-
-data Type
-  = TyCon !TyConName
-  | TyVar !TyVarName
-  | TyExistVar !TyExistVarName
-  | TyApp !Type !Type
-  | TyRecord !(Map RowLabel Type) !(Maybe Type)
-  | TyFun !Type !Type
-  | TyForall !(NonEmpty TyVarName) !Type
-  deriving (Show, Eq, Ord)
-
-infixr 0 `TyFun`
-
-unfoldTyFun :: Type -> NonEmpty Type
-unfoldTyFun (t1 `TyFun` t2) = NE.cons t1 (unfoldTyFun t2)
-unfoldTyFun ty = ty :| []
-
-data Typed a
-  = Typed
-  { typedType :: !Type
-  , typedValue :: !a
-  } deriving (Show, Eq, Ord, Functor)

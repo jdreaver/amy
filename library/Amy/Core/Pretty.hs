@@ -12,26 +12,6 @@ import Amy.Core.AST
 import Amy.Literal
 import Amy.Pretty
 
-prettyType :: Type -> Doc ann
-prettyType (TyFun ty1 ty2) = parensIf (isTyFun ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
-prettyType (TyCon con) = prettyTyConName con
-prettyType (TyVar var) = prettyTyVarName var
-prettyType (TyRecord rows mVar) = prettyTyRecord (uncurry prettyTyRow <$> Map.toList rows) (prettyType <$> mVar)
-prettyType (TyApp f arg) = prettyType f <+> parensIf (isTyApp arg) (prettyType arg)
-prettyType (TyForall vars ty) = "forall" <+> hcat (punctuate space $ prettyTyVarName <$> toList vars) <> "." <+> prettyType ty
-
-prettyTyRow :: RowLabel -> Type -> Doc ann
-prettyTyRow label ty = prettyRowLabel label <+> "::" <+> prettyType ty
-
-isTyApp :: Type -> Bool
-isTyApp TyApp{} = True
-isTyApp TyFun{} = True
-isTyApp _ = False
-
-isTyFun :: Type -> Bool
-isTyFun TyFun{} = True
-isTyFun _ = False
-
 prettyModule :: Module -> Doc ann
 prettyModule (Module bindings externs typeDeclarations) =
   vcatTwoHardLines
@@ -47,13 +27,13 @@ prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
 prettyTypeDeclaration' (TypeDeclaration tyName cons) =
    prettyTypeDeclaration (prettyTyConDefinition tyName) (prettyConstructor <$> cons)
  where
-  prettyConstructor (DataConDefinition conName mArg) =
+  prettyConstructor (DataConDefinition (Located _ conName) mArg) =
     prettyDataConstructor (prettyDataConName conName) (prettyType <$> mArg)
 
 prettyTyConDefinition :: TyConDefinition -> Doc ann
-prettyTyConDefinition (TyConDefinition name args) = prettyTyConName name <> args'
+prettyTyConDefinition (TyConDefinition (Located _ name) args) = prettyTyConName name <> args'
  where
-  args' = if null args then mempty else space <> sep (prettyTyVarName <$> args)
+  args' = if null args then mempty else space <> sep (prettyTyVarName . locatedValue <$> args)
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding ident ty args _ body) =

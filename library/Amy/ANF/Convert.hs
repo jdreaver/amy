@@ -54,10 +54,10 @@ convertTypeDeclaration :: C.TypeDeclaration -> ANFConvert ANF.TypeDeclaration
 convertTypeDeclaration (C.TypeDeclaration tyConDef con) = do
   ty <- getTyConDefinitionType tyConDef
   con' <- traverse convertDataConDefinition con
-  pure $ ANF.TypeDeclaration (C.tyConDefinitionName tyConDef) ty con'
+  pure $ ANF.TypeDeclaration (locatedValue $ C.tyConDefinitionName tyConDef) ty con'
 
 convertDataConDefinition :: C.DataConDefinition -> ANFConvert ANF.DataConDefinition
-convertDataConDefinition (C.DataConDefinition conName mTyArg) = do
+convertDataConDefinition (C.DataConDefinition (Located _ conName) mTyArg) = do
   mTyArg' <- traverse convertType mTyArg
   pure
     ANF.DataConDefinition
@@ -81,11 +81,12 @@ convertType ty = go (typeToNonEmpty ty)
   go :: NonEmpty C.Type -> ANFConvert ANF.Type
   go (ty' :| []) =
     case ty' of
-      C.TyCon con -> getTyConType con
+      C.TyCon (MaybeLocated _ con) -> getTyConType con
       C.TyVar _ -> pure OpaquePointerType
+      C.TyExistVar _ -> error "Found TyExistVar in Core"
       app@C.TyApp{} ->
         case unfoldTyApp app of
-          TyCon con :| _ -> getTyConType con
+          TyCon (MaybeLocated _ con) :| _ -> getTyConType con
           _ -> error $ "Can't convert non-TyCon TyApp yet " ++ show ty'
       -- N.B. ANF/LLVM doesn't care about polymorphic records
       C.TyRecord rows _ -> mkRecordType rows
@@ -93,9 +94,9 @@ convertType ty = go (typeToNonEmpty ty)
       C.TyForall _ ty'' -> convertType ty''
   go _ = pure ClosureType
 
-mkRecordType :: Map RowLabel C.Type -> ANFConvert ANF.Type
+mkRecordType :: Map (MaybeLocated RowLabel) C.Type -> ANFConvert ANF.Type
 mkRecordType rows = do
-  rows' <- for (Map.toAscList rows) $ \(label, ty) -> do
+  rows' <- for (Map.toAscList rows) $ \(MaybeLocated _ label, ty) -> do
     ty' <- convertType ty
     pure (label, ty')
   pure $ RecordType rows'

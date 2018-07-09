@@ -10,12 +10,11 @@ module Amy.Errors
   ) where
 
 import Data.Text.Prettyprint.Doc.Render.String (renderString)
+import Text.Megaparsec.Pos
 
 import Amy.Kind
 import Amy.Pretty
 import Amy.Syntax.AST as S
-import Amy.TypeCheck.AST as T
-import Amy.TypeCheck.Pretty as T
 
 data Error
   = Error
@@ -24,9 +23,9 @@ data Error
   } deriving (Show, Eq)
 
 showError :: Error -> String
-showError (Error message (SourceSpan fileName lineNo col _ _)) =
+showError (Error message (SourceSpan start _)) =
   renderString . layoutPretty defaultLayoutOptions $
-    pretty fileName <> ":" <> pretty lineNo <> ":" <> pretty col <> ":" <> groupOrHang (prettyErrorMessage message)
+    pretty (sourcePosPretty start) <> ":" <> groupOrHang (prettyErrorMessage message)
 
 data ErrorMessage
   = UnknownVariable !IdentName
@@ -36,9 +35,9 @@ data ErrorMessage
   | VariableShadowed !IdentName
   | DuplicateDataConstructor !DataConName
   | DuplicateTypeConstructor !TyConName
-  | UnificationFail !T.Type !T.Type
+  | UnificationFail !Type !Type
   | KindUnificationFail !Kind ! Kind
-  | InfiniteType !TyExistVarName !T.Type
+  | InfiniteType !TyExistVarName !Type
   | InfiniteKind !Int !Kind
   | TooManyBindingArguments !Int !Int
   deriving (Show, Eq)
@@ -53,10 +52,10 @@ prettyErrorMessage = \case
   DuplicateDataConstructor con -> "Data constructor already exists:" <+> prettyDataConName con
   DuplicateTypeConstructor con -> "Type constructor already exists:" <+> prettyTyConName con
   UnificationFail t1 t2 ->
-    "Could not match type" <> hardline <> indent 2 (T.prettyType t1) <> hardline <> "with type" <> hardline <> indent 2 (T.prettyType t2)
+    "Could not match type" <> hardline <> indent 2 (prettyType t1) <> hardline <> "with type" <> hardline <> indent 2 (prettyType t2)
   KindUnificationFail k1 k2 ->
     "Could not match kind" <> hardline <> indent 2 (prettyKind k1) <> hardline <> "with kind" <> hardline <> indent 2 (prettyKind k2)
-  InfiniteType _ t -> "Cannot infer infinite type:" <> T.prettyType t
+  InfiniteType _ t -> "Cannot infer infinite type:" <> prettyType t
   InfiniteKind _ k -> "Cannot infer infinite kind:" <> prettyKind k
   TooManyBindingArguments expected actual ->
     "Too many arguments to binding. Declared type implies a maximum of" <+> pretty expected <+>

@@ -57,7 +57,6 @@ import qualified Data.Sequence as Seq
 import Amy.TypeCheck.AST
 import Amy.Errors
 import Amy.Kind
-import Amy.Syntax.Located
 
 --
 -- Context
@@ -82,23 +81,21 @@ contextElem :: ContextMember -> Context -> Bool
 contextElem member (Context context) = member `elem` context
 
 contextSubst :: Context -> Type -> Type
-contextSubst _ t@(TyCon _) = t
-contextSubst _ t@(TyVar _) = t
-contextSubst ctx t@(TyExistVar v) = maybe t (contextSubst ctx) (contextSolution ctx v)
-contextSubst ctx (TyApp a b) = TyApp (contextSubst ctx a) (contextSubst ctx b)
-contextSubst ctx record@(TyRecord rows mTail) =
-  let rows' = contextSubst ctx <$> rows
-  in case contextSubst ctx <$> mTail of
-    Nothing -> TyRecord rows' mTail
-    Just record'@(TyRecord newRows mTail') ->
-      -- Ensure no overlap in rows. If there was overlap then unification
-      -- shouldn't have allowed i
-      if null $ Set.intersection (Map.keysSet rows') (Map.keysSet newRows)
-      then TyRecord (Map.union rows' newRows) mTail'
-      else error $ "Found duplicate keys in record substitution: " ++ show (record, record')
-    Just t -> TyRecord rows' (Just t)
-contextSubst ctx (TyFun a b) = TyFun (contextSubst ctx a) (contextSubst ctx b)
-contextSubst ctx (TyForall vs t) = TyForall vs (contextSubst ctx t)
+contextSubst ctx = go
+ where
+  go t@(TyExistVar v) = maybe t go (contextSolution ctx v)
+  go record@(TyRecord rows mTail) =
+    let rows' = go <$> rows
+    in case go <$> mTail of
+      Nothing -> TyRecord rows' mTail
+      Just record'@(TyRecord newRows mTail') ->
+        -- Ensure no overlap in rows. If there was overlap then unification
+        -- shouldn't have allowed i
+        if null $ Set.intersection (Map.keysSet rows') (Map.keysSet newRows)
+        then TyRecord (Map.union rows' newRows) mTail'
+        else error $ "Found duplicate keys in record substitution: " ++ show (record, record')
+      Just t -> TyRecord rows' (Just t)
+  go t = traverseType go t
 
 -- | Γ = Γ0[Θ] means Γ has the form (ΓL, Θ,ΓR)
 contextHole :: ContextMember -> Context -> Maybe (Context, Context)
@@ -124,7 +121,7 @@ contextUntil member (Context context) = Context $ Seq.takeWhileL (/= member) con
 
 typeWellFormed :: Context -> Type -> Maybe ErrorMessage
 typeWellFormed _ (TyCon _) = Nothing
-typeWellFormed context (TyVar v) = do
+typeWellFormed context (TyVar (MaybeLocated _ v)) = do
   guard $ not $ ContextVar v `contextElem` context
   Just $ UnknownTypeVariable v
 typeWellFormed context (TyExistVar v) = do
@@ -136,7 +133,7 @@ typeWellFormed context (TyExistVar v) = do
 typeWellFormed context (TyApp x y) = typeWellFormed context x >> typeWellFormed context y
 typeWellFormed context (TyFun x y) = typeWellFormed context x >> typeWellFormed context y
 typeWellFormed context (TyRecord rows mTy) = asum (typeWellFormed context <$> rows) >> (mTy >>= typeWellFormed context)
-typeWellFormed context (TyForall vs t) = typeWellFormed (context <> Context (Seq.fromList $ NE.toList $ ContextVar <$> vs)) t
+typeWellFormed context (TyForall vs t) = typeWellFormed (context <> Context (Seq.fromList $ NE.toList $ ContextVar . maybeLocatedValue <$> vs)) t
 
 --
 -- Monad
@@ -175,6 +172,7 @@ runChecker identTypes dataConTypes moduleFile (Checker action) = do
  where
   dataConNames = fst <$> dataConTypes
   groupedConNames = NE.groupAllWith locatedValue . sort $ dataConNames
+  pos = SourcePos moduleFile pos1 pos1
   checkState =
     CheckState
     { latestId = 0
@@ -183,7 +181,7 @@ runChecker identTypes dataConTypes moduleFile (Checker action) = do
     , dataConstructorTypes = Map.fromList (first locatedValue <$> dataConTypes)
     , tyVarKinds = Map.empty
     , tyConKinds = Map.empty
-    , sourceSpan = SourceSpan moduleFile 1 1 1 1
+    , sourceSpan = SourceSpan pos pos
     }
 
 freshId :: Checker Int

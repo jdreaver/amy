@@ -7,9 +7,8 @@ module Amy.Core.Desugar
 import Data.List (foldl')
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
+import qualified Data.Map.Strict as Map
 import Data.Maybe (maybeToList)
-import Data.Monoid ((<>))
-import Data.Text (pack)
 
 import Amy.Core.AST as C
 import Amy.Core.Monad
@@ -26,45 +25,47 @@ desugarModule (T.Module bindings externs typeDeclarations) = do
     pure $ C.Module bindings' externs' typeDeclarations'
 
 desugarExtern :: T.Extern -> C.Extern
-desugarExtern (T.Extern ident ty) = C.Extern ident (desugarType ty)
+desugarExtern (T.Extern (Located _ ident) ty) = C.Extern ident (desugarType ty)
 
-desugarTypeDeclaration :: T.TypeDeclaration -> C.TypeDeclaration
-desugarTypeDeclaration (T.TypeDeclaration tyName cons) =
-  C.TypeDeclaration (desugarTyConDefinition tyName) (desugarDataConDefinition <$> cons)
+desugarTypeDeclaration :: TypeDeclaration -> TypeDeclaration
+desugarTypeDeclaration (TypeDeclaration tyName cons) =
+  TypeDeclaration tyName (desugarDataConDefinition <$> cons)
 
-desugarDataConDefinition :: T.DataConDefinition -> C.DataConDefinition
-desugarDataConDefinition (T.DataConDefinition conName mTyArg) =
-  C.DataConDefinition
-  { C.dataConDefinitionName = conName
-  , C.dataConDefinitionArgument = desugarType <$> mTyArg
+desugarDataConDefinition :: DataConDefinition -> DataConDefinition
+desugarDataConDefinition (DataConDefinition conName mTyArg) =
+  DataConDefinition
+  { dataConDefinitionName = conName
+  , dataConDefinitionArgument = desugarType <$> mTyArg
   }
 
 desugarBinding :: T.Binding -> Desugar C.Binding
-desugarBinding (T.Binding ident ty args retTy body) =
+desugarBinding (T.Binding (Located _ ident) ty args retTy body) =
   C.Binding
     ident
     (desugarType ty)
-    (desugarTypedIdent <$> args)
+    (desugarTypedIdent . fmap locatedValue <$> args)
     (desugarType retTy)
     <$> desugarExpr body
 
 desugarExpr :: T.Expr -> Desugar C.Expr
-desugarExpr (T.ELit lit) = pure $ C.ELit lit
+desugarExpr (T.ELit (Located _ lit)) = pure $ C.ELit lit
 desugarExpr (T.ERecord rows) =
-  C.ERecord <$> traverse (\(T.Typed ty expr) -> C.Typed (desugarType ty) <$> desugarExpr expr) rows
-desugarExpr (T.ERecordSelect expr label ty) = do
+  C.ERecord
+  . Map.mapKeys locatedValue
+  <$> traverse (\(Typed ty expr) -> Typed (desugarType ty) <$> desugarExpr expr) rows
+desugarExpr (T.ERecordSelect expr (Located _ label) ty) = do
   expr' <- desugarExpr expr
   let ty' = desugarType ty
   pure $ C.ERecordSelect expr' label ty'
-desugarExpr (T.EVar ident) = pure $ C.EVar $ desugarTypedIdent ident
-desugarExpr (T.ECon (T.Typed ty con)) = pure $ C.ECon $ C.Typed (desugarType ty) con
-desugarExpr (T.ECase (T.Case scrutinee matches)) = do
+desugarExpr (T.EVar ident) = pure $ C.EVar $ desugarTypedIdent $ locatedValue <$> ident
+desugarExpr (T.ECon (Typed ty (Located _ con))) = pure $ C.ECon $ Typed (desugarType ty) con
+desugarExpr (T.ECase (T.Case scrutinee matches _x)) = do
   -- Desugar the case expression
   scrutinee' <- desugarExpr scrutinee
   let scrutineeTy = desugarType $ T.expressionType scrutinee
   scrutineeIdent <- freshIdent "c"
   equations <- NE.toList <$> traverse matchToEquation matches
-  caseExpr <- PC.match [C.Typed scrutineeTy scrutineeIdent] equations
+  caseExpr <- PC.match [Typed scrutineeTy scrutineeIdent] equations
   caseExpr' <- restoreCaseExpr caseExpr
   pure $
     case caseExpr' of
@@ -81,22 +82,23 @@ desugarExpr (T.ECase (T.Case scrutinee matches)) = do
             , C.bindingBody = scrutinee'
             }
         in C.ELet $ C.Let (scrutineeBinding :| []) e
-desugarExpr (T.ELam (T.Lambda args body ty)) = do
-  let args' = desugarTypedIdent <$> args
+desugarExpr (T.ELam (T.Lambda args body _ ty)) = do
+  let args' = desugarTypedIdent . fmap locatedValue <$> args
   body' <- desugarExpr body
   let ty' = desugarType ty
   pure $ C.ELam $ C.Lambda args' body' ty'
-desugarExpr (T.EIf (T.If pred' then' else')) =
+desugarExpr (T.EIf (T.If pred' then' else' _)) =
   let
-    boolTyCon' = T.TyCon boolTyCon
-    mkBoolPatCons cons = T.PatCons cons Nothing boolTyCon'
+    boolTyCon' = TyCon (notLocated boolTyCon)
+    loc = mkSourceSpan "<generated>" 1 1 1 1
+    mkBoolPatCons cons = T.PatCons (Located loc cons) Nothing boolTyCon'
     matches =
       NE.fromList
       [ T.Match (T.PCons $ mkBoolPatCons trueDataCon) then'
       , T.Match (T.PCons $ mkBoolPatCons falseDataCon) else'
       ]
-  in desugarExpr (T.ECase (T.Case pred' matches))
-desugarExpr (T.ELet (T.Let bindings body)) = do
+  in desugarExpr (T.ECase (T.Case pred' matches loc))
+desugarExpr (T.ELet (T.Let bindings body _)) = do
   bindings' <- traverse (traverse desugarBinding) bindings
   body' <- desugarExpr body
   -- N.B. Core only allows on binding group per let expression.
@@ -107,20 +109,11 @@ desugarExpr (T.EApp (T.App func arg ty)) = do
   pure $ C.EApp (C.App func' arg' (desugarType ty))
 desugarExpr (T.EParens expr) = C.EParens <$> desugarExpr expr
 
-desugarTypedIdent :: T.Typed IdentName -> C.Typed IdentName
-desugarTypedIdent (T.Typed ty ident) = C.Typed (desugarType ty) ident
+desugarTypedIdent :: Typed IdentName -> Typed IdentName
+desugarTypedIdent (Typed ty ident) = Typed (desugarType ty) ident
 
-desugarType :: T.Type -> C.Type
-desugarType (T.TyCon con) = C.TyCon con
-desugarType (T.TyRecord rows mTail) = C.TyRecord (desugarType <$> rows) (desugarType <$> mTail)
-desugarType (T.TyVar var) = C.TyVar var
-desugarType (T.TyExistVar (TyExistVarName i)) = C.TyVar $ TyVarName $ "$t" <> pack (show i)
-desugarType (T.TyApp f arg) = C.TyApp (desugarType f) (desugarType arg)
-desugarType (T.TyFun ty1 ty2) = C.TyFun (desugarType ty1) (desugarType ty2)
-desugarType (T.TyForall vars ty) = C.TyForall vars (desugarType ty)
-
-desugarTyConDefinition :: T.TyConDefinition -> C.TyConDefinition
-desugarTyConDefinition (T.TyConDefinition name args) = C.TyConDefinition name args
+desugarType :: Type -> Type
+desugarType = removeTyExistVar
 
 --
 -- Case Expressions
@@ -139,14 +132,14 @@ matchToEquation (T.Match pat body) = do
   pure ([pat'], body')
 
 convertPattern :: T.Pattern -> Desugar PC.InputPattern
-convertPattern (T.PLit lit) = pure $ PC.PCon (PC.ConLit lit) []
-convertPattern (T.PVar ident) = pure $ PC.PVar $ desugarTypedIdent ident
-convertPattern (T.PCons (T.PatCons con mArg _)) = do
+convertPattern (T.PLit (Located _ lit)) = pure $ PC.PCon (PC.ConLit lit) []
+convertPattern (T.PVar ident) = pure $ PC.PVar $ desugarTypedIdent (locatedValue <$> ident)
+convertPattern (T.PCons (T.PatCons (Located _ con) mArg _)) = do
   (tyDecl, _) <- lookupDataConType con
   argPats <- traverse convertPattern $ maybeToList mArg
   let
     argTys = maybeToList $ desugarType . patternType <$> mArg
-    span' = length $ C.typeDeclarationConstructors tyDecl
+    span' = length $ typeDeclarationConstructors tyDecl
   pure $ PC.PCon (PC.Con con argTys span') argPats
 convertPattern (T.PParens pat) = convertPattern pat
 
@@ -168,7 +161,7 @@ restoreClause clause@(PC.Clause (PC.ConLit _) _ _) =
 restoreClause (PC.Clause (PC.Con con _ _) args caseExpr) = do
   (tyDecl, _) <- lookupDataConType con
   let
-    patTy = C.TyCon $ C.tyConDefinitionName $ C.typeDeclarationTypeName tyDecl
+    patTy = TyCon $ fromLocated $ tyConDefinitionName $ typeDeclarationTypeName tyDecl
     arg =
       case args of
         [] -> Nothing

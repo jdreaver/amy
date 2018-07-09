@@ -24,6 +24,9 @@ module Amy.Pretty
     -- Kinds
   , prettyKind
 
+    -- Types
+  , prettyType
+
     -- General AST
   , prettyIf
   , prettyCase
@@ -38,11 +41,15 @@ module Amy.Pretty
   , prettyTyRecord
   ) where
 
+import Data.Foldable (toList)
 import Data.Maybe (fromMaybe)
 import Data.Text.Prettyprint.Doc as X hiding (list)
+import qualified Data.Map.Strict as Map
 
 import Amy.Kind
 import Amy.Names
+import Amy.Syntax.Located
+import Amy.Type
 
 --
 -- General helpers
@@ -123,6 +130,30 @@ prettyKind (KFun k1 k2) = parensIf (isKFun k1) (prettyKind k1) <+> "->" <+> pret
 isKFun :: Kind -> Bool
 isKFun KFun{} = True
 isKFun _ = False
+
+--
+-- Types
+--
+
+prettyType :: Type -> Doc ann
+prettyType (TyFun ty1 ty2) = parensIf (isTyFun ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
+prettyType (TyCon (MaybeLocated _ con)) = prettyTyConName con
+prettyType (TyExistVar var) = prettyTyExistVarName var
+prettyType (TyVar (MaybeLocated _ var)) = prettyTyVarName var
+prettyType (TyRecord rows mVar) = prettyTyRecord (uncurry prettyTyRow <$> Map.toList rows) (prettyType <$> mVar)
+ where
+  prettyTyRow (MaybeLocated _ label) ty = prettyRowLabel label <+> "::" <+> prettyType ty
+prettyType (TyApp f arg) = prettyType f <+> parensIf (isTyApp arg) (prettyType arg)
+prettyType (TyForall vars ty) = "forall" <+> hcat (punctuate space $ prettyTyVarName . maybeLocatedValue <$> toList vars) <> "." <+> prettyType ty
+
+isTyApp :: Type -> Bool
+isTyApp TyApp{} = True
+isTyApp TyFun{} = True
+isTyApp _ = False
+
+isTyFun :: Type -> Bool
+isTyFun TyFun{} = True
+isTyFun _ = False
 
 --
 -- General AST Helpers

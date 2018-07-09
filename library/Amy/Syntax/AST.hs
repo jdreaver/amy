@@ -10,9 +10,6 @@ module Amy.Syntax.AST
   , Binding(..)
   , BindingType(..)
   , Extern(..)
-  , TypeDeclaration(..)
-  , TyConDefinition(..)
-  , DataConDefinition(..)
   , Expr(..)
   , If(..)
   , Case(..)
@@ -27,13 +24,12 @@ module Amy.Syntax.AST
   , matchSpan
   , patternSpan
   , LetBinding(..)
-  , Type(..)
 
     -- Re-export
   , Literal(..)
-  , Located(..)
-  , SourceSpan(..)
   , module Amy.Names
+  , module Amy.Syntax.Located
+  , module Amy.Type
   ) where
 
 import Data.List.NonEmpty (NonEmpty)
@@ -42,6 +38,7 @@ import Data.Map.Strict (Map)
 import Amy.Literal (Literal(..))
 import Amy.Names
 import Amy.Syntax.Located
+import Amy.Type
 
 -- | A 'Module' is simply a list of 'Declaration' values.
 data Module
@@ -96,24 +93,6 @@ data Extern
   = Extern
   { externName :: !(Located IdentName)
   , externType :: !Type
-  } deriving (Show, Eq)
-
-data TypeDeclaration
-  = TypeDeclaration
-  { typeDeclarationTypeName :: !TyConDefinition
-  , typeDeclarationConstructors :: ![DataConDefinition]
-  } deriving (Show, Eq)
-
-data TyConDefinition
-  = TyConDefinition
-  { tyConDefinitionName :: !(Located TyConName)
-  , tyConDefinitionArgs :: ![Located TyVarName]
-  } deriving (Show, Eq)
-
-data DataConDefinition
-  = DataConDefinition
-  { dataConDefinitionName :: !(Located DataConName)
-  , dataConDefinitionArgument :: !(Maybe Type)
   } deriving (Show, Eq)
 
 data Expr
@@ -215,14 +194,3 @@ patternSpan (PCons (PatCons (Located s _) mPat)) =
     Nothing -> s
     Just pat -> mergeSpans s (patternSpan pat)
 patternSpan (PParens pat) = patternSpan pat
-
-data Type
-  = TyCon !(Located TyConName)
-  | TyVar !(Located TyVarName)
-  | TyApp !Type !Type
-  | TyRecord !(Map (Located RowLabel) Type) !(Maybe (Located TyVarName))
-  | TyFun !Type !Type
-  | TyForall !(NonEmpty (Located TyVarName)) !Type
-  deriving (Show, Eq)
-
-infixr 0 `TyFun`

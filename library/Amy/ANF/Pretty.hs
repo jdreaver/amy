@@ -10,7 +10,7 @@ import Data.Maybe (maybeToList)
 import qualified Data.Map.Strict as Map
 
 import Amy.ANF.AST
-import Amy.Pretty
+import Amy.Pretty hiding (prettyType)
 import Amy.Prim
 
 prettyType :: Type -> Doc ann
