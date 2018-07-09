@@ -15,7 +15,7 @@ import Data.List (foldl')
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
-import Data.Maybe (mapMaybe, maybeToList)
+import Data.Maybe (maybeToList)
 import qualified Data.Sequence as Seq
 import Data.Text (Text, pack)
 import Data.Traversable (for, traverse)
@@ -34,12 +34,8 @@ import Amy.TypeCheck.Subtyping
 --
 
 inferModule :: S.Module -> Either Error T.Module
-inferModule (S.Module filePath declarations) = do
+inferModule (S.Module filePath typeDeclarations externs bindings) = do
   let
-    typeDeclarations = mapMaybe declType declarations
-    externs = mapMaybe declExtern declarations
-    bindings = mapMaybe declBinding declarations
-
     externs' = convertExtern <$> externs
     allTypeDeclarations = allPrimTypeDefinitions ++ typeDeclarations
 

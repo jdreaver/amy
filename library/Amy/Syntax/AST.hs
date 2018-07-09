@@ -2,10 +2,6 @@
 
 module Amy.Syntax.AST
   ( Module(..)
-  , Declaration(..)
-  , declBinding
-  , declExtern
-  , declType
   , Binding(..)
   , Extern(..)
   , Expr(..)
@@ -39,26 +35,10 @@ import Amy.Type
 data Module
   = Module
   { moduleFile :: !FilePath
-  , moduleDeclarations :: [Declaration]
+  , moduleTypeDeclarations :: ![TypeDeclaration]
+  , moduleExterns :: ![Extern]
+  , moduleBindings :: ![Binding]
   } deriving (Show, Eq)
-
-data Declaration
-  = DeclBinding !Binding
-  | DeclExtern !Extern
-  | DeclType !TypeDeclaration
-  deriving (Show, Eq)
-
-declBinding :: Declaration -> Maybe Binding
-declBinding (DeclBinding x) = Just x
-declBinding _ = Nothing
-
-declExtern :: Declaration -> Maybe Extern
-declExtern (DeclExtern x) = Just x
-declExtern _ = Nothing
-
-declType :: Declaration -> Maybe TypeDeclaration
-declType (DeclType x) = Just x
-declType _ = Nothing
 
 data Binding
   = Binding

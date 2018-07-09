@@ -2,7 +2,6 @@
 
 module Amy.Syntax.Pretty
   ( prettyModule
-  , prettyDeclaration
   , prettyTypeDeclaration
   , prettyExpr
   , prettyType
@@ -16,13 +15,14 @@ import Amy.Pretty
 import Amy.Syntax.AST
 
 prettyModule :: Module -> Doc ann
-prettyModule (Module _ decls) = vcatTwoHardLines (prettyDeclaration <$> decls)
+prettyModule (Module _ typeDecls externs bindings) =
+  vcatTwoHardLines
+  $ (prettyTypeDeclaration' <$> typeDecls)
+  ++ (prettyExtern' <$> externs)
+  ++ (prettyBinding' <$> bindings)
 
-prettyDeclaration :: Declaration -> Doc ann
-prettyDeclaration (DeclBinding binding) = prettyBinding' binding
-prettyDeclaration (DeclExtern (Extern (Located _ name) ty)) =
-  prettyExtern (prettyIdent name) (prettyType ty)
-prettyDeclaration (DeclType (TypeDeclaration info cons)) =
+prettyTypeDeclaration' :: TypeDeclaration -> Doc ann
+prettyTypeDeclaration' (TypeDeclaration info cons) =
   prettyTypeDeclaration (prettyTyConDefinition info) (prettyConstructor <$> cons)
  where
   prettyConstructor (DataConDefinition (Located _ conName) mArg) =
@@ -32,6 +32,10 @@ prettyTyConDefinition :: TyConDefinition -> Doc ann
 prettyTyConDefinition (TyConDefinition (Located _ name) args) = prettyTyConName name <> args'
  where
   args' = if null args then mempty else space <> sep (prettyTyVarName . locatedValue <$> args)
+
+prettyExtern' :: Extern -> Doc ann
+prettyExtern' (Extern (Located _ name) ty) =
+  prettyExtern (prettyIdent name) (prettyType ty)
 
 prettyBinding' :: Binding -> Doc ann
 prettyBinding' (Binding (Located _ name) ty args _ body) = tyDoc <> bindingDoc
