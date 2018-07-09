@@ -174,6 +174,7 @@ runChecker identTypes dataConTypes moduleFile (Checker action) = do
  where
   dataConNames = fst <$> dataConTypes
   groupedConNames = NE.groupAllWith locatedValue . sort $ dataConNames
+  pos = SourcePos moduleFile pos1 pos1
   checkState =
     CheckState
     { latestId = 0
@@ -182,7 +183,7 @@ runChecker identTypes dataConTypes moduleFile (Checker action) = do
     , dataConstructorTypes = Map.fromList (first locatedValue <$> dataConTypes)
     , tyVarKinds = Map.empty
     , tyConKinds = Map.empty
-    , sourceSpan = SourceSpan moduleFile 1 1 1 1
+    , sourceSpan = SourceSpan pos pos
     }
 
 freshId :: Checker Int

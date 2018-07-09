@@ -13,6 +13,7 @@ import Text.Megaparsec
 
 import Amy.Syntax.AST
 import Amy.Syntax.Lexer
+import Amy.Syntax.Located
 import Amy.Syntax.Monad
 import Amy.Syntax.Parser
 
@@ -20,6 +21,9 @@ parse' :: AmyParser a -> Text -> Either (ParseError (Located AmyToken) Void) a
 parse' parser input =
   let (Right tokens') = lexer "" input
   in parse (runAmyParser parser) "" tokens'
+
+mkSpan :: Int -> Int -> Int -> Int -> SourceSpan
+mkSpan startLine startCol endLine endCol = SourceSpan (mkSourcePos "" startLine startCol) (mkSourcePos "" endLine endCol)
 
 spec :: Spec
 spec = do
@@ -29,15 +33,15 @@ spec = do
       parse' externDecl "extern f :: Int"
         `shouldParse`
         Extern
-          (Located (SourceSpan "" 1 8 1 8) "f")
-          (LocatedType (SourceSpan "" 1 13 1 15) (TyCon "Int"))
+          (Located (mkSpan 1 8 1 9) "f")
+          (LocatedType (mkSpan 1 13 1 16) (TyCon "Int"))
       parse' externDecl "extern f :: Int -> Double"
         `shouldParse`
         Extern
-          (Located (SourceSpan "" 1 8 1 8) "f")
-          ( LocatedType (SourceSpan "" 1 13 1 15) (TyCon "Int")
+          (Located (mkSpan 1 8 1 9) "f")
+          ( LocatedType (mkSpan 1 13 1 16) (TyCon "Int")
             `TyFun`
-            LocatedType (SourceSpan "" 1 20 1 25) (TyCon "Double")
+            LocatedType (mkSpan 1 20 1 26) (TyCon "Double")
           )
 
   describe "bindingType" $ do
@@ -45,113 +49,113 @@ spec = do
       parse' bindingType "f :: Int"
         `shouldParse`
         BindingType
-          (Located (SourceSpan "" 1 1 1 1) "f")
-          (LocatedType (SourceSpan "" 1 6 1 8) (TyCon "Int"))
+          (Located (mkSpan 1 1 1 2) "f")
+          (LocatedType (mkSpan 1 6 1 9) (TyCon "Int"))
       parse' bindingType "f :: Int -> Double"
         `shouldParse`
         BindingType
-          (Located (SourceSpan "" 1 1 1 1) "f")
-          ( LocatedType (SourceSpan "" 1 6 1 8) (TyCon "Int")
+          (Located (mkSpan 1 1 1 2) "f")
+          ( LocatedType (mkSpan 1 6 1 9) (TyCon "Int")
             `TyFun`
-            LocatedType (SourceSpan "" 1 13 1 18) (TyCon "Double")
+            LocatedType (mkSpan 1 13 1 19) (TyCon "Double")
           )
 
     it "parses polymorphic types" $ do
       parse' bindingType "f :: forall a. a"
         `shouldParse`
         BindingType
-          (Located (SourceSpan "" 1 1 1 1) "f")
-          (TyForall ["a"] $ LocatedType (SourceSpan "" 1 16 1 16) (TyVar "a"))
+          (Located (mkSpan 1 1 1 2) "f")
+          (TyForall ["a"] $ LocatedType (mkSpan 1 16 1 17) (TyVar "a"))
       parse' bindingType "f :: forall a b. a -> b -> a"
         `shouldParse`
         BindingType
-          (Located (SourceSpan "" 1 1 1 1) "f")
+          (Located (mkSpan 1 1 1 2) "f")
           ( TyForall ["a", "b"] $
-              LocatedType (SourceSpan "" 1 18 1 18) (TyVar "a")
+              LocatedType (mkSpan 1 18 1 19) (TyVar "a")
               `TyFun`
-              LocatedType (SourceSpan "" 1 23 1 23) (TyVar "b")
+              LocatedType (mkSpan 1 23 1 24) (TyVar "b")
               `TyFun`
-              LocatedType (SourceSpan "" 1 28 1 28) (TyVar "a")
+              LocatedType (mkSpan 1 28 1 29) (TyVar "a")
           )
 
   describe "parseType" $ do
     it "handles simple terms" $ do
-      parse' parseType "A" `shouldParse` LocatedType (SourceSpan "" 1 1 1 1) (TyCon "A")
-      parse' parseType "a" `shouldParse` LocatedType (SourceSpan "" 1 1 1 1) (TyVar "a")
+      parse' parseType "A" `shouldParse` LocatedType (mkSpan 1 1 1 2) (TyCon "A")
+      parse' parseType "a" `shouldParse` LocatedType (mkSpan 1 1 1 2) (TyVar "a")
 
     it "handles terms with args" $ do
       parse' parseType "A a" `shouldParse`
-        (LocatedType (SourceSpan "" 1 1 1 1) (TyCon "A") `TyApp` LocatedType (SourceSpan "" 1 3 1 3) (TyVar "a"))
+        (LocatedType (mkSpan 1 1 1 2) (TyCon "A") `TyApp` LocatedType (mkSpan 1 3 1 4) (TyVar "a"))
 
     it "tightly binds constructor applications" $ do
       parse' parseType "A B C" `shouldParse`
         TyApp
           ( TyApp
-            (LocatedType (SourceSpan "" 1 1 1 1) (TyCon "A"))
-            (LocatedType (SourceSpan "" 1 3 1 3) (TyCon "B"))
+            (LocatedType (mkSpan 1 1 1 2) (TyCon "A"))
+            (LocatedType (mkSpan 1 3 1 4) (TyCon "B"))
           )
-          (LocatedType (SourceSpan "" 1 5 1 5) (TyCon "C"))
+          (LocatedType (mkSpan 1 5 1 6) (TyCon "C"))
 
     it "handles terms with args and parens" $ do
       parse' parseType "A (B b) a" `shouldParse`
         TyApp
         ( TyApp
-          (LocatedType (SourceSpan "" 1 1 1 1) (TyCon "A"))
+          (LocatedType (mkSpan 1 1 1 2) (TyCon "A"))
           ( TyApp
-            (LocatedType (SourceSpan "" 1 4 1 4) (TyCon "B"))
-            (LocatedType (SourceSpan "" 1 6 1 6) (TyVar "b"))
+            (LocatedType (mkSpan 1 4 1 5) (TyCon "B"))
+            (LocatedType (mkSpan 1 6 1 7) (TyVar "b"))
           )
         )
-        (LocatedType (SourceSpan "" 1 9 1 9) (TyVar "a"))
+        (LocatedType (mkSpan 1 9 1 10) (TyVar "a"))
 
   describe "parseType" $ do
     it "handles simple types" $ do
-      parse' parseType "A" `shouldParse` LocatedType (SourceSpan "" 1 1 1 1) (TyCon "A")
+      parse' parseType "A" `shouldParse` LocatedType (mkSpan 1 1 1 2) (TyCon "A")
       parse' parseType "A -> B"
         `shouldParse` (
-          LocatedType (SourceSpan "" 1 1 1 1) (TyCon "A")
+          LocatedType (mkSpan 1 1 1 2) (TyCon "A")
           `TyFun`
-          LocatedType (SourceSpan "" 1 6 1 6) (TyCon "B")
+          LocatedType (mkSpan 1 6 1 7) (TyCon "B")
         )
       parse' parseType "A -> B -> C"
         `shouldParse` (
-          LocatedType (SourceSpan "" 1 1 1 1) (TyCon "A")
+          LocatedType (mkSpan 1 1 1 2) (TyCon "A")
           `TyFun`
-          LocatedType (SourceSpan "" 1 6 1 6) (TyCon "B")
+          LocatedType (mkSpan 1 6 1 7) (TyCon "B")
           `TyFun`
-          LocatedType (SourceSpan "" 1 11 1 11) (TyCon "C")
+          LocatedType (mkSpan 1 11 1 12) (TyCon "C")
         )
 
     it "handles parens" $ do
-      parse' parseType "(A)" `shouldParse` LocatedType (SourceSpan "" 1 2 1 2) (TyCon "A")
-      parse' parseType "((X))" `shouldParse` LocatedType (SourceSpan "" 1 3 1 3) (TyCon "X")
+      parse' parseType "(A)" `shouldParse` LocatedType (mkSpan 1 2 1 3) (TyCon "A")
+      parse' parseType "((X))" `shouldParse` LocatedType (mkSpan 1 3 1 4) (TyCon "X")
 
     it "handles parens with functions" $ do
       parse' parseType "((A)) -> ((B))"
         `shouldParse` (
-          LocatedType (SourceSpan "" 1 3 1 3) (TyCon "A")
+          LocatedType (mkSpan 1 3 1 4) (TyCon "A")
           `TyFun`
-          LocatedType (SourceSpan "" 1 12 1 12) (TyCon "B")
+          LocatedType (mkSpan 1 12 1 13) (TyCon "B")
         )
       parse' parseType "(A -> B) -> C"
         `shouldParse` (
-          ( LocatedType (SourceSpan "" 1 2 1 2) (TyCon "A")
+          ( LocatedType (mkSpan 1 2 1 3) (TyCon "A")
             `TyFun`
-            LocatedType (SourceSpan "" 1 7 1 7) (TyCon "B")
+            LocatedType (mkSpan 1 7 1 8) (TyCon "B")
           )
           `TyFun`
-          LocatedType (SourceSpan "" 1 13 1 13) (TyCon "C")
+          LocatedType (mkSpan 1 13 1 14) (TyCon "C")
         )
       parse' parseType "A -> (B -> C) -> D"
         `shouldParse` (
-          LocatedType (SourceSpan "" 1 1 1 1) (TyCon "A")
+          LocatedType (mkSpan 1 1 1 2) (TyCon "A")
           `TyFun`
-          ( LocatedType (SourceSpan "" 1 7 1 7) (TyCon "B")
+          ( LocatedType (mkSpan 1 7 1 8) (TyCon "B")
             `TyFun`
-             LocatedType (SourceSpan "" 1 12 1 12) (TyCon "C")
+             LocatedType (mkSpan 1 12 1 13) (TyCon "C")
           )
           `TyFun`
-          LocatedType (SourceSpan "" 1 18 1 18) (TyCon "D")
+          LocatedType (mkSpan 1 18 1 19) (TyCon "D")
         )
 
     it "should fail gracefully without infinite loops" $ do
@@ -162,13 +166,13 @@ spec = do
 
   describe "expressionParens" $ do
     it "parses expressions in parens" $ do
-      parse' expressionParens "(x)" `shouldParse` EParens (EVar (Located (SourceSpan "" 1 2 1 2) "x"))
+      parse' expressionParens "(x)" `shouldParse` EParens (EVar (Located (mkSpan 1 2 1 3) "x"))
       parse' expressionParens "(f x)"
         `shouldParse`
         EParens
           (EApp
-            (EVar (Located (SourceSpan "" 1 2 1 2) "f"))
-            (EVar (Located (SourceSpan "" 1 4 1 4) "x"))
+            (EVar (Located (mkSpan 1 2 1 3) "f"))
+            (EVar (Located (mkSpan 1 4 1 5) "x"))
           )
 
   describe "ifExpression" $ do
@@ -176,21 +180,21 @@ spec = do
       parse' ifExpression "if True then 1 else 2"
         `shouldParse`
         If
-          (ECon (Located (SourceSpan "" 1 4 1 7) "True"))
-          (ELit (Located (SourceSpan "" 1 14 1 14) (LiteralInt 1)))
-          (ELit (Located (SourceSpan "" 1 21 1 21) (LiteralInt 2)))
-          (SourceSpan "" 1 1 1 21)
+          (ECon (Located (mkSpan 1 4 1 8) "True"))
+          (ELit (Located (mkSpan 1 14 1 15) (LiteralInt 1)))
+          (ELit (Located (mkSpan 1 21 1 22) (LiteralInt 2)))
+          (mkSpan 1 1 1 22)
       parse' ifExpression "if f x then f y else g 2"
         `shouldParse`
         If
-          (EApp (EVar (Located (SourceSpan "" 1 4 1 4) "f")) (EVar (Located (SourceSpan "" 1 6 1 6) "x")))
-          (EApp (EVar (Located (SourceSpan "" 1 13 1 13) "f")) (EVar (Located (SourceSpan "" 1 15 1 15) "y")))
-          (EApp (EVar (Located (SourceSpan "" 1 22 1 22) "g")) (ELit (Located (SourceSpan "" 1 24 1 24) (LiteralInt 2))))
-          (SourceSpan "" 1 1 1 24)
+          (EApp (EVar (Located (mkSpan 1 4 1 5) "f")) (EVar (Located (mkSpan 1 6 1 7) "x")))
+          (EApp (EVar (Located (mkSpan 1 13 1 14) "f")) (EVar (Located (mkSpan 1 15 1 16) "y")))
+          (EApp (EVar (Located (mkSpan 1 22 1 23) "g")) (ELit (Located (mkSpan 1 24 1 25) (LiteralInt 2))))
+          (mkSpan 1 1 1 25)
 
   describe "literal" $ do
     it "can discriminate between integer and double" $ do
-      parse' literal "1" `shouldParse` Located (SourceSpan "" 1 1 1 1) (LiteralInt 1)
+      parse' literal "1" `shouldParse` Located (mkSpan 1 1 1 2) (LiteralInt 1)
       -- TODO: Trailing decimals?
-      -- parse (literal <* eof) "" "2." `shouldParse` Located (SourceSpan "" 1 1 1 2) (LiteralInt 2)
-      parse' literal "1.5" `shouldParse` Located (SourceSpan "" 1 1 1 3) (LiteralDouble 1.5)
+      -- parse (literal <* eof) "" "2." `shouldParse` Located (mkSpan 1 1 1 2) (LiteralInt 2)
+      parse' literal "1.5" `shouldParse` Located (mkSpan 1 1 1 4) (LiteralDouble 1.5)

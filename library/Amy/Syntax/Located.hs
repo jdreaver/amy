@@ -6,7 +6,11 @@ module Amy.Syntax.Located
   ( Located(..)
   , SourceSpan(..)
   , mergeSpans
+  , mkSourcePos
+  , module Text.Megaparsec.Pos
   ) where
+
+import Text.Megaparsec.Pos
 
 -- | Location of something in source code.
 data Located a
@@ -18,13 +22,12 @@ data Located a
 -- | A file path along with a start and end 'SourcePos'.
 data SourceSpan
   = SourceSpan
-  { sourceSpanFile :: !FilePath
-  , sourceSpanStartLine :: !Int
-  , sourceSpanStartColumn :: !Int
-  , sourceSpanEndLine :: !Int
-  , sourceSpanEndColumn :: !Int
+  { sourceSpanStart :: !SourcePos
+  , sourceSpanEnd :: !SourcePos
   } deriving (Show, Eq, Ord)
 
 mergeSpans :: SourceSpan -> SourceSpan -> SourceSpan
-mergeSpans (SourceSpan file startLine startCol _ _) (SourceSpan _ _ _ endLine endCol) =
-  SourceSpan file startLine startCol endLine endCol
+mergeSpans (SourceSpan start _) (SourceSpan _ end) = SourceSpan start end
+
+mkSourcePos :: FilePath -> Int -> Int -> SourcePos
+mkSourcePos fp line col = SourcePos fp (mkPos line) (mkPos col)

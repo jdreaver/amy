@@ -10,6 +10,7 @@ module Amy.Errors
   ) where
 
 import Data.Text.Prettyprint.Doc.Render.String (renderString)
+import Text.Megaparsec.Pos
 
 import Amy.Kind
 import Amy.Pretty
@@ -22,9 +23,9 @@ data Error
   } deriving (Show, Eq)
 
 showError :: Error -> String
-showError (Error message (SourceSpan fileName lineNo col _ _)) =
+showError (Error message (SourceSpan start _)) =
   renderString . layoutPretty defaultLayoutOptions $
-    pretty fileName <> ":" <> pretty lineNo <> ":" <> pretty col <> ":" <> groupOrHang (prettyErrorMessage message)
+    pretty (sourcePosPretty start) <> ":" <> groupOrHang (prettyErrorMessage message)
 
 data ErrorMessage
   = UnknownVariable !IdentName

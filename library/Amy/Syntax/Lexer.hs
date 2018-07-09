@@ -145,12 +145,12 @@ instance Stream AmyTokens where
   chunkToTokens Proxy = unAmyTokens
   chunkLength Proxy = length . unAmyTokens
   chunkEmpty Proxy = null . unAmyTokens
-  positionAt1 Proxy _ = mkStartPos
+  positionAt1 Proxy _ = startPos
   positionAtN Proxy pos (AmyTokens []) = pos
-  positionAtN Proxy _ (AmyTokens (loc : _)) = mkStartPos loc
-  advance1 Proxy _ _ = mkEndPos
+  positionAtN Proxy _ (AmyTokens (loc : _)) = startPos loc
+  advance1 Proxy _ _ = endPos
   advanceN Proxy _ pos (AmyTokens []) = pos
-  advanceN Proxy _ _ (AmyTokens ts) = mkEndPos $ last ts
+  advanceN Proxy _ _ (AmyTokens ts) = endPos $ last ts
   take1_ (AmyTokens []) = Nothing
   take1_ (AmyTokens (t:ts)) = Just (t, AmyTokens ts)
   takeN_ n (AmyTokens s)
@@ -162,11 +162,11 @@ instance Stream AmyTokens where
 instance ShowToken (Located AmyToken) where
   showTokens = unwords . fmap (unpack . prettyToken . locatedValue) . NE.toList
 
-mkStartPos :: Located a -> SourcePos
-mkStartPos (Located (SourceSpan fp l c _ _) _) = SourcePos fp (mkPos l) (mkPos c)
+startPos :: Located a -> SourcePos
+startPos (Located (SourceSpan start _) _) = start
 
-mkEndPos :: Located a -> SourcePos
-mkEndPos (Located (SourceSpan fp _ _ l c) _) = SourcePos fp (mkPos l) (mkPos c)
+endPos :: Located a -> SourcePos
+endPos (Located (SourceSpan _ end) _) = end
 
 --
 -- Lexer
@@ -199,19 +199,11 @@ blockComment = empty
 
 lexeme :: Lexer a -> Lexer (Located a)
 lexeme p = do
-  (SourcePos fp startLine startCol) <- getPosition
+  start <- getPosition
   val <- p
-  (SourcePos _ endLine endCol) <- getPosition
+  end <- getPosition
   spaceConsumerNewlines
-  let
-    sourceSpan =
-      SourceSpan
-      fp
-      (unPos startLine)
-      (unPos startCol)
-      (unPos endLine)
-      (unPos endCol - 1)
-  pure (Located sourceSpan val)
+  pure (Located (SourceSpan start end) val)
 
 lexToken :: Lexer (Located AmyToken)
 lexToken = lexeme lexToken'
