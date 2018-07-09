@@ -28,7 +28,7 @@ import Amy.Codegen
 import Amy.Core as C
 import Amy.Errors
 import Amy.Syntax as S
-import Amy.TypeCheck as T
+import Amy.TypeCheck as TC
 
 main :: IO ()
 main =
@@ -50,9 +50,9 @@ process filePath DumpFlags{..} input = do
       lift $ writeFile (filePath `replaceExtension` ".amy-parsed") (show $ S.prettyModule parsed)
 
     -- Type checking
-    typeChecked <- liftEither $ first ((:[]) . showError) $ T.inferModule parsed
+    typeChecked <- liftEither $ first ((:[]) . showError) $ TC.inferModule parsed
     when dfDumpTypeChecked $
-      lift $ writeFile (filePath `replaceExtension` ".amy-typechecked") (show $ T.prettyModule typeChecked)
+      lift $ writeFile (filePath `replaceExtension` ".amy-typechecked") (show $ S.prettyModule typeChecked)
 
     -- Desugar to Core
     let core = desugarModule typeChecked

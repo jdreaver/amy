@@ -51,7 +51,7 @@ prettyExpr (ELit (Located _ lit)) = pretty $ showLiteral lit
 prettyExpr (ERecord _ rows) = bracketed $ uncurry prettyRow <$> Map.toList rows
  where
   prettyRow (Located _ label) (Typed _ expr) = prettyRowLabel label <> ":" <+> prettyExpr expr
-prettyExpr (ERecordSelect expr field _) = prettyExpr expr <> "." <> prettyRowLabel (locatedValue field)
+prettyExpr (ERecordSelect expr (Located _ field) _) = prettyExpr expr <> "." <> prettyRowLabel field
 prettyExpr (EVar (Typed _ (Located _ ident))) = prettyIdent ident
 prettyExpr (ECon (Typed _ (Located _ dataCon))) = prettyDataConName dataCon
 prettyExpr (EIf (If pred' then' else' _)) =
