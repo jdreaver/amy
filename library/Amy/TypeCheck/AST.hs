@@ -17,7 +17,6 @@ module Amy.TypeCheck.AST
 
     -- Re-export
   , Literal(..)
-  , module Amy.ASTCommon
   , module Amy.Names
   , module Amy.Syntax.Located
   , module Amy.Type
@@ -27,7 +26,6 @@ import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
-import Amy.ASTCommon
 import Amy.Literal
 import Amy.Names
 import Amy.Prim
