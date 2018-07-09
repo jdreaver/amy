@@ -128,7 +128,7 @@ inferAbs args body span' = withSourceSpan span' $ withNewLexicalScope $ do
   body' <- checkExpr body (TyExistVar bodyVar)
 
   -- Construct the type from arg/body variables
-  let ty = foldr1 TyFun $ TyExistVar <$> (toList (snd <$> argsAndVars) ++ [bodyVar])
+  let ty = foldTyFun $ NE.fromList $ TyExistVar <$> (toList (snd <$> argsAndVars) ++ [bodyVar])
 
   -- Convert binding
   args' <- for argsAndVars $ \(arg, var) -> do
@@ -303,7 +303,7 @@ checkAbs args body t span' =
       throwAmyError $ TooManyBindingArguments (length unfoldedTy - 1) numArgs
     let
       (argTys, bodyTys) = NE.splitAt numArgs unfoldedTy
-      bodyTy = foldr1 TyFun bodyTys
+      bodyTy = foldTyFun $ NE.fromList bodyTys
 
     withNewLexicalScope $ withNewContextScope $ do
       -- Add argument types to scope
@@ -359,7 +359,7 @@ checkPattern pat t =
 primitiveFunctionType' :: PrimitiveFunction -> (IdentName, Type)
 primitiveFunctionType' (PrimitiveFunction _ name ty) =
   ( name
-  , foldr1 TyFun $ TyCon . notLocated <$> ty
+  , foldTyFun $ TyCon . notLocated <$> ty
   )
 
 mkDataConTypes :: TypeDeclaration -> [(Located DataConName, Type)]

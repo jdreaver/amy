@@ -151,7 +151,7 @@ foldApp func args =
   in foldl' mkApp func varsAndTys
  where
   mkApp :: Expr -> (Expr, [Type]) -> Expr
-  mkApp e (arg, tys') = EApp $ App e arg (foldr1 TyFun tys')
+  mkApp e (arg, tys') = EApp $ App e arg (foldTyFun $ NE.fromList tys')
 
 expressionType :: Expr -> Type
 expressionType (ELit lit) = literalType lit

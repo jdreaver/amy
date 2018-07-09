@@ -82,7 +82,7 @@ liftedBinding lifted@(LiftedBinding newArgs (Binding name _ oldArgs retTy body))
 
 liftedBindingType :: LiftedBinding -> Type
 liftedBindingType (LiftedBinding newArgs (Binding _ oldTy _ _ _)) =
-  foldr1 TyFun $ (typedType <$> newArgs) ++ [oldTy]
+  foldTyFun $ NE.fromList $ (typedType <$> newArgs) ++ [oldTy]
 
 freshId :: Lift Int
 freshId = do
@@ -276,7 +276,7 @@ etaExpand func args mRetTy newArgTypes =
         Typed argType . IdentName . ("_x" <>) . pack . show <$> freshId
       let
         app = foldAppSetReturnType func args (EVar <$> NE.toList newArgs) mRetTy
-        lambdaTy = foldr1 TyFun $ newArgTypes ++ [expressionType app]
+        lambdaTy = foldTyFun $ NE.fromList $ newArgTypes ++ [expressionType app]
       liftExprBindings $ ELam $ Lambda newArgs app lambdaTy
 
 -- | Calls 'foldApp' and sets return type.
@@ -297,6 +297,6 @@ foldAppSetReturnType func args newArgs mRetTy =
       -- Drop new args from old return type since arguments have been added,
       -- and the old return type assumes they haven't (i.e. we aren't partially
       -- applying anymore).
-      let retTy' = foldr1 TyFun $ NE.drop (length newArgs) $ unfoldTyFun retTy
+      let retTy' = foldTyFun $ NE.fromList $ NE.drop (length newArgs) $ unfoldTyFun retTy
       in EApp app' { appReturnType = retTy' }
     (e, _) -> e

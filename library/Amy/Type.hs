@@ -6,7 +6,9 @@ module Amy.Type
     Type(..)
   , Typed(..)
   , unfoldTyApp
+  , foldTyApp
   , unfoldTyFun
+  , foldTyFun
 
     -- * Type Traversals
   , traverseType
@@ -18,12 +20,14 @@ module Amy.Type
   , TypeDeclaration(..)
   , TyConDefinition(..)
   , DataConDefinition(..)
+  , dataConTypes
   ) where
 
 import Control.Monad.Identity (Identity(..), runIdentity)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
+import Data.Maybe (maybeToList)
 import Data.Text (pack)
 
 import Amy.Names
@@ -57,10 +61,16 @@ unfoldTyApp (TyApp app@(TyApp _ _) arg) = unfoldTyApp app <> (arg :| [])
 unfoldTyApp (TyApp f arg) = f :| [arg]
 unfoldTyApp t = t :| []
 
+foldTyApp :: NonEmpty Type -> Type
+foldTyApp = foldl1 TyApp
+
 unfoldTyFun :: Type -> NonEmpty Type
 unfoldTyFun (TyForall _ t) = unfoldTyFun t
 unfoldTyFun (t1 `TyFun` t2) = NE.cons t1 (unfoldTyFun t2)
 unfoldTyFun ty = ty :| []
+
+foldTyFun :: NonEmpty Type -> Type
+foldTyFun = foldr1 TyFun
 
 --
 -- Type Traversals
