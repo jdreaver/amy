@@ -15,7 +15,6 @@ import Data.List (foldl')
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
-import Data.Maybe (maybeToList)
 import qualified Data.Sequence as Seq
 import Data.Text (Text, pack)
 import Data.Traversable (for, traverse)
@@ -40,7 +39,7 @@ inferModule (Module filePath typeDeclarations externs bindings) = do
     externTypes = (\(Extern (Located _ name) ty) -> (name, ty)) <$> externs
     primFuncTypes = primitiveFunctionType' <$> allPrimitiveFunctions
     identTypes = externTypes ++ primFuncTypes
-    dataConstructorTypes = concatMap mkDataConTypes (allPrimTypeDefinitions ++ typeDeclarations)
+    dataConstructorTypes = concatMap dataConTypes (allPrimTypeDefinitions ++ typeDeclarations)
   runChecker identTypes dataConstructorTypes filePath $ do
     -- Infer type declaration kinds and add to scope
     for_ allTypeDeclarations $ \decl@(TypeDeclaration (TyConDefinition tyCon _) _) -> do
@@ -361,19 +360,6 @@ primitiveFunctionType' (PrimitiveFunction _ name ty) =
   ( name
   , foldTyFun $ TyCon . notLocated <$> ty
   )
-
-mkDataConTypes :: TypeDeclaration -> [(Located DataConName, Type)]
-mkDataConTypes (TypeDeclaration (TyConDefinition tyConName tyVars) dataConDefs) = mkDataConPair <$> dataConDefs
- where
-  mkDataConPair (DataConDefinition name mTyArg) =
-    let
-      tyVars' = TyVar . fromLocated <$> tyVars
-      tyApp = foldl1 TyApp (TyCon (fromLocated tyConName) : tyVars')
-      -- TODO: Should this be foldr? Probably doesn't matter since there is
-      -- only one argument currently, but it would break if we added more.
-      ty = foldl1 TyFun (maybeToList mTyArg ++ [tyApp])
-      tyForall = maybe ty (\varsNE -> TyForall varsNE ty) (NE.nonEmpty $ fromLocated <$> tyVars)
-    in (name, tyForall)
 
 --
 -- Substitution

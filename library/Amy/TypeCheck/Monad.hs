@@ -161,7 +161,7 @@ runChecker
   -> [(Located DataConName, Type)]
   -> FilePath
   -> Checker a -> Either Error a
-runChecker identTypes dataConTypes fp (Checker action) = do
+runChecker identTypes dataConTys fp (Checker action) = do
   -- Check for duplicate data con names
   for_ groupedConNames $ \nameGroup ->
     case NE.tail nameGroup of
@@ -171,7 +171,7 @@ runChecker identTypes dataConTypes fp (Checker action) = do
   -- Run action
   evalState (runExceptT action) checkState
  where
-  dataConNames = fst <$> dataConTypes
+  dataConNames = fst <$> dataConTys
   groupedConNames = NE.groupAllWith locatedValue . sort $ dataConNames
   pos = SourcePos fp pos1 pos1
   checkState =
@@ -179,7 +179,7 @@ runChecker identTypes dataConTypes fp (Checker action) = do
     { latestId = 0
     , stateContext = Context Seq.empty
     , valueTypes = Map.fromList identTypes
-    , dataConstructorTypes = Map.fromList (first locatedValue <$> dataConTypes)
+    , dataConstructorTypes = Map.fromList (first locatedValue <$> dataConTys)
     , tyVarKinds = Map.empty
     , tyConKinds = Map.empty
     , sourceSpan = SourceSpan pos pos
