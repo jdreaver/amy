@@ -120,6 +120,7 @@ contextUntil :: ContextMember -> Context -> Context
 contextUntil member (Context context) = Context $ Seq.takeWhileL (/= member) context
 
 typeWellFormed :: Context -> Type -> Maybe ErrorMessage
+typeWellFormed _ TyUnknown = error "Encountered TyUnknown in typeWellFormed"
 typeWellFormed _ (TyCon _) = Nothing
 typeWellFormed context (TyVar (MaybeLocated _ v)) = do
   guard $ not $ ContextVar v `contextElem` context

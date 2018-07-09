@@ -136,6 +136,7 @@ isKFun _ = False
 --
 
 prettyType :: Type -> Doc ann
+prettyType TyUnknown = "TyUnknown"
 prettyType (TyFun ty1 ty2) = parensIf (isTyFun ty1) (prettyType ty1) <+> "->" <+> prettyType ty2
 prettyType (TyCon (MaybeLocated _ con)) = prettyTyConName con
 prettyType (TyExistVar var) = prettyTyExistVarName var

@@ -33,7 +33,8 @@ import Amy.Syntax.Located
 --
 
 data Type
-  = TyCon !(MaybeLocated TyConName)
+  = TyUnknown
+  | TyCon !(MaybeLocated TyConName)
   | TyVar !(MaybeLocated TyVarName)
   | TyExistVar !TyExistVarName
   | TyApp !Type !Type
@@ -78,6 +79,7 @@ traverseType f = runIdentity . traverseTypeM (Identity . f)
 traverseTypeM :: (Monad m) => (Type -> m Type) -> Type -> m Type
 traverseTypeM f = go
  where
+  go t@TyUnknown{} = pure t
   go t@TyCon{} = pure t
   go t@TyVar{} = pure t
   go t@TyExistVar{} = pure t

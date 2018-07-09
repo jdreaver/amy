@@ -81,6 +81,7 @@ convertType ty = go (typeToNonEmpty ty)
   go :: NonEmpty C.Type -> ANFConvert ANF.Type
   go (ty' :| []) =
     case ty' of
+      C.TyUnknown -> error "Encountered TyUnknown in convertType"
       C.TyCon (MaybeLocated _ con) -> getTyConType con
       C.TyVar _ -> pure OpaquePointerType
       C.TyExistVar _ -> error "Found TyExistVar in Core"
