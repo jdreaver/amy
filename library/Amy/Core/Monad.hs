@@ -24,7 +24,7 @@ newtype Desugar a = Desugar (ReaderT (Map DataConName (TypeDeclaration, DataConD
 runDesugar :: [TypeDeclaration] -> Desugar a -> a
 runDesugar decls (Desugar action) = evalState (runReaderT action dataConMap) 0
  where
-  allTypeDecls = decls ++ allPrimTypeDefinitions
+  allTypeDecls = decls ++ (fst <$> allPrimTypeDefinitions)
   dataConMap = Map.fromList $ concatMap mkDataConTypes allTypeDecls
 
 freshId :: Desugar Int

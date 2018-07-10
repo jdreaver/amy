@@ -32,6 +32,7 @@ module Amy.TypeCheck.Monad
   , withNewLexicalScope
   , addValueTypeToScope
   , lookupValueType
+  , addDataConTypeToScope
   , lookupDataConType
   , addUnknownTyVarKindToScope
   , lookupTyVarKind
@@ -42,9 +43,8 @@ module Amy.TypeCheck.Monad
 
 import Control.Monad.Except
 import Control.Monad.State.Strict
-import Data.Bifunctor (first)
-import Data.Foldable (asum, for_, toList)
-import Data.List (lookup, sort)
+import Data.Foldable (asum, toList)
+import Data.List (lookup)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
@@ -54,6 +54,7 @@ import Data.Sequence (Seq)
 import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
 
+import Amy.Environment
 import Amy.Errors
 import Amy.Kind
 import Amy.Syntax.AST
@@ -149,39 +150,24 @@ data CheckState
   = CheckState
   { latestId :: !Int
   , stateContext :: !Context
-  , valueTypes :: !(Map IdentName Type)
-  , dataConstructorTypes :: !(Map DataConName Type)
+  , stateEnvironment :: !Environment
   , tyVarKinds :: !(Map TyVarName Kind)
-  , tyConKinds :: !(Map TyConName Kind)
   , sourceSpan :: !SourceSpan
   } deriving (Show, Eq)
 
 runChecker
-  :: [(IdentName, Type)]
-  -> [(Located DataConName, Type)]
+  :: Environment
   -> FilePath
   -> Checker a -> Either Error a
-runChecker identTypes dataConTys fp (Checker action) = do
-  -- Check for duplicate data con names
-  for_ groupedConNames $ \nameGroup ->
-    case NE.tail nameGroup of
-      [] -> Right ()
-      (Located span' name : _) -> Left $ Error (DuplicateDataConstructor name) span'
-
-  -- Run action
-  evalState (runExceptT action) checkState
+runChecker env fp (Checker action) = evalState (runExceptT action) checkState
  where
-  dataConNames = fst <$> dataConTys
-  groupedConNames = NE.groupAllWith locatedValue . sort $ dataConNames
   pos = SourcePos fp pos1 pos1
   checkState =
     CheckState
     { latestId = 0
     , stateContext = Context Seq.empty
-    , valueTypes = Map.fromList identTypes
-    , dataConstructorTypes = Map.fromList (first locatedValue <$> dataConTys)
+    , stateEnvironment = env
     , tyVarKinds = Map.empty
-    , tyConKinds = Map.empty
     , sourceSpan = SourceSpan pos pos
     }
 
@@ -273,8 +259,11 @@ withNewLexicalScope action = do
   result <- action
   modify' $ \s ->
     s
-    { valueTypes = valueTypes orig
-    , tyConKinds = tyConKinds orig
+    { stateEnvironment =
+      (stateEnvironment s)
+      { environmentIdentTypes = environmentIdentTypes $ stateEnvironment orig
+      , environmentTyConKinds = environmentTyConKinds $ stateEnvironment orig
+      }
     , tyVarKinds = tyVarKinds orig
     }
   pure result
@@ -296,16 +285,37 @@ insertMapDuplicateError getMap putMap name value mkError = do
 addValueTypeToScope :: Located IdentName -> Type -> Checker ()
 addValueTypeToScope (Located span' name) ty =
   withSourceSpan span' $
-    insertMapDuplicateError valueTypes (\s m -> s { valueTypes = m }) name ty VariableShadowed
+    insertMapDuplicateError (environmentIdentTypes . stateEnvironment) doInsert name ty VariableShadowed
+ where
+  doInsert s m =
+    s
+    { stateEnvironment =
+      (stateEnvironment s)
+      { environmentIdentTypes = m
+      }
+    }
 
 lookupValueType :: Located IdentName -> Checker Type
 lookupValueType (Located span' name) = do
-  mTy <- Map.lookup name <$> gets valueTypes
+  mTy <- Map.lookup name <$> gets (environmentIdentTypes . stateEnvironment)
   maybe (throwError $ Error (UnknownVariable name) span') pure mTy
+
+addDataConTypeToScope :: Located DataConName -> Type -> Checker ()
+addDataConTypeToScope (Located span' name) ty =
+  withSourceSpan span' $
+    insertMapDuplicateError (environmentDataConTypes . stateEnvironment) doInsert name ty DuplicateDataConstructor
+ where
+  doInsert s m =
+    s
+    { stateEnvironment =
+      (stateEnvironment s)
+      { environmentDataConTypes = m
+      }
+    }
 
 lookupDataConType :: Located DataConName -> Checker Type
 lookupDataConType (Located span' con) = do
-  mTy <- Map.lookup con <$> gets dataConstructorTypes
+  mTy <- Map.lookup con <$> gets (environmentDataConTypes . stateEnvironment)
   maybe (throwError $ Error (UnknownDataCon con) span') pure mTy
 
 addUnknownTyVarKindToScope :: TyVarName -> Checker Int
@@ -321,11 +331,19 @@ lookupTyVarKind name = do
 
 addTyConKindToScope :: Located TyConName -> Kind -> Checker ()
 addTyConKindToScope (Located span' name) kind =
-  withSourceSpan span' $
-    insertMapDuplicateError tyConKinds (\s m -> s { tyConKinds = m }) name kind DuplicateTypeConstructor
+  withSourceSpan span' $ addTyConKindToScope' name kind
 
 addTyConKindToScope' :: TyConName -> Kind -> Checker ()
-addTyConKindToScope' name kind = insertMapDuplicateError tyConKinds (\s m -> s { tyConKinds = m }) name kind DuplicateTypeConstructor
+addTyConKindToScope' name kind =
+  insertMapDuplicateError (environmentTyConKinds . stateEnvironment) doInsert name kind DuplicateTypeConstructor
+ where
+  doInsert s m =
+    s
+    { stateEnvironment =
+      (stateEnvironment s)
+      { environmentTyConKinds = m
+      }
+    }
 
 addUnknownTyConKindToScope :: TyConName -> Checker Int
 addUnknownTyConKindToScope name = do
@@ -335,5 +353,5 @@ addUnknownTyConKindToScope name = do
 
 lookupTyConKind :: TyConName -> Checker Kind
 lookupTyConKind name = do
-  mKind <- Map.lookup name <$> gets tyConKinds
+  mKind <- Map.lookup name <$> gets (environmentTyConKinds . stateEnvironment)
   maybe (throwAmyError $ UnknownTypeConstructor name) pure mKind

@@ -26,6 +26,7 @@ import Text.Megaparsec
 import Amy.ANF as ANF
 import Amy.Codegen
 import Amy.Core as C
+import Amy.Environment
 import Amy.Errors
 import Amy.Syntax as S
 import Amy.TypeCheck as TC
@@ -50,7 +51,7 @@ process filePath DumpFlags{..} input = do
       lift $ writeFile (filePath `replaceExtension` ".amy-parsed") (show $ S.prettyModule parsed)
 
     -- Type checking
-    typeChecked <- liftEither $ first ((:[]) . showError) $ TC.inferModule parsed
+    typeChecked <- liftEither $ first ((:[]) . showError) $ TC.inferModule primEnvironment parsed
     when dfDumpTypeChecked $
       lift $ writeFile (filePath `replaceExtension` ".amy-typechecked") (show $ S.prettyModule typeChecked)
 

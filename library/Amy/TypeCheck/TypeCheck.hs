@@ -19,9 +19,10 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text, pack)
 import Data.Traversable (for, traverse)
 
-import Amy.Syntax.AST
+import Amy.Environment
 import Amy.Errors
 import Amy.Prim
+import Amy.Syntax.AST
 import Amy.Syntax.BindingGroups
 import Amy.TypeCheck.KindInference
 import Amy.TypeCheck.Monad
@@ -31,20 +32,22 @@ import Amy.TypeCheck.Subtyping
 -- Infer
 --
 
-inferModule :: Module -> Either Error Module
-inferModule (Module filePath typeDeclarations externs bindings) = do
-  let
-    allTypeDeclarations = allPrimTypeDefinitions ++ typeDeclarations
+inferModule :: Environment -> Module -> Either Error Module
+inferModule env (Module filePath typeDeclarations externs bindings) =
+  runChecker env filePath $ do
+    -- Add data constructor types to scope
+    let
+      dataConstructorTypes = concatMap dataConTypes typeDeclarations
+    for_ dataConstructorTypes $ uncurry addDataConTypeToScope
 
-    externTypes = (\(Extern (Located _ name) ty) -> (name, ty)) <$> externs
-    primFuncTypes = primitiveFunctionType' <$> allPrimitiveFunctions
-    identTypes = externTypes ++ primFuncTypes
-    dataConstructorTypes = concatMap dataConTypes (allPrimTypeDefinitions ++ typeDeclarations)
-  runChecker identTypes dataConstructorTypes filePath $ do
     -- Infer type declaration kinds and add to scope
-    for_ allTypeDeclarations $ \decl@(TypeDeclaration (TyConDefinition tyCon _) _) -> do
+    for_ typeDeclarations $ \decl@(TypeDeclaration (TyConDefinition tyCon _) _) -> do
       kind <- inferTypeDeclarationKind decl
       addTyConKindToScope tyCon kind
+
+    -- Add extern types to scope
+    for_ externs $ \(Extern name ty) ->
+      addValueTypeToScope name ty
 
     -- Infer all bindings
     bindings' <- inferBindings True (concatMap toList bindings)
@@ -350,16 +353,6 @@ checkPattern pat t =
     patTy' <- currentContextSubst $ patternType pat'
     subtype patTy' tSub
     pure pat'
-
---
--- Converting types
---
-
-primitiveFunctionType' :: PrimitiveFunction -> (IdentName, Type)
-primitiveFunctionType' (PrimitiveFunction _ name ty) =
-  ( name
-  , foldTyFun $ TyCon . notLocated <$> ty
-  )
 
 --
 -- Substitution

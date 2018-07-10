@@ -47,7 +47,7 @@ data ANFConvertRead
 anfConvertRead :: [(IdentName, ([C.Type], C.Type))] -> [C.TypeDeclaration] -> ANFConvertRead
 anfConvertRead funcs typeDeclarations =
   let
-    allTypeDecls = typeDeclarations ++ allPrimTypeDefinitions
+    allTypeDecls = typeDeclarations ++ (fst <$> allPrimTypeDefinitions)
     typeRepMap =
       Map.fromList
       $ (\t -> (locatedValue . C.tyConDefinitionName . C.typeDeclarationTypeName $ t, typeRep t))

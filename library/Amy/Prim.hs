@@ -38,6 +38,7 @@ import Data.Text (Text)
 import Text.Megaparsec.Pos
 
 import Amy.Literal
+import Amy.Kind
 import Amy.Names
 import Amy.Type
 import Amy.Syntax.Located
@@ -89,12 +90,12 @@ falseDataCon, trueDataCon :: DataConName
 falseDataCon = "False"
 trueDataCon = "True"
 
-allPrimTypeDefinitions :: [TypeDeclaration]
+allPrimTypeDefinitions :: [(TypeDeclaration, Kind)]
 allPrimTypeDefinitions =
-  [ intTypeDefinition
-  , doubleTypeDefinition
-  , textTypeDefinition
-  , boolTypeDefinition
+  [ (intTypeDefinition, KStar)
+  , (doubleTypeDefinition, KStar)
+  , (textTypeDefinition, KStar)
+  , (boolTypeDefinition, KStar)
   ]
 
 literalType :: Literal -> Type
