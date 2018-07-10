@@ -51,12 +51,14 @@ process filePath DumpFlags{..} input = do
       lift $ writeFile (filePath `replaceExtension` ".amy-parsed") (show $ S.prettyModule parsed)
 
     -- Type checking
-    typeChecked <- liftEither $ first ((:[]) . showError) $ TC.inferModule primEnvironment parsed
+    (typeChecked, typeCheckedEnv) <- liftEither $ first ((:[]) . showError) $ TC.inferModule primEnvironment parsed
     when dfDumpTypeChecked $
       lift $ writeFile (filePath `replaceExtension` ".amy-typechecked") (show $ S.prettyModule typeChecked)
 
     -- Desugar to Core
-    let core = desugarModule primEnvironment typeChecked
+    let
+      coreEnv = mergeEnvironments primEnvironment typeCheckedEnv
+      core = desugarModule coreEnv typeChecked
     when dfDumpCore $
       lift $ writeFile (filePath `replaceExtension` ".amy-core") (show $ C.prettyModule core)
 

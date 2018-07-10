@@ -32,7 +32,7 @@ import Amy.TypeCheck.Subtyping
 -- Infer
 --
 
-inferModule :: Environment -> Module -> Either Error Module
+inferModule :: Environment -> Module -> Either Error (Module, Environment)
 inferModule env (Module filePath typeDeclarations externs bindings) =
   runChecker env filePath $ do
     -- Add data constructor types to scope
@@ -40,9 +40,10 @@ inferModule env (Module filePath typeDeclarations externs bindings) =
     for_ dataConstructorInfos $ uncurry addDataConInfoToScope
 
     -- Infer type declaration kinds and add to scope
-    for_ typeDeclarations $ \decl@(TypeDeclaration (TyConDefinition tyCon _) _) -> do
+    kinds <- for typeDeclarations $ \decl@(TypeDeclaration (TyConDefinition tyCon _) _) -> do
       kind <- inferTypeDeclarationKind decl
       addTyConKindToScope tyCon kind
+      pure (locatedValue tyCon, kind)
 
     -- Add extern types to scope
     for_ externs $ \(Extern name ty) ->
@@ -50,7 +51,19 @@ inferModule env (Module filePath typeDeclarations externs bindings) =
 
     -- Infer all bindings
     bindings' <- inferBindings True (concatMap toList bindings)
-    pure (Module filePath typeDeclarations externs bindings')
+
+    let
+      module' = Module filePath typeDeclarations externs bindings'
+      identTypes =
+        ((\binding -> (locatedValue $ bindingName binding, bindingType binding)) <$> concatMap toList bindings')
+        ++ ((\extern -> (locatedValue $ externName extern, externType extern)) <$> externs)
+      moduleEnv =
+        emptyEnvironment
+        { environmentIdentTypes = Map.fromList identTypes
+        , environmentDataConInfos = Map.mapKeys locatedValue $ Map.fromList dataConstructorInfos
+        , environmentTyConKinds = Map.fromList kinds
+        }
+    pure (module', moduleEnv)
 
 -- | Compute binding groups and infer each group separately.
 inferBindings :: Bool -> [Binding] -> Checker [NonEmpty Binding]

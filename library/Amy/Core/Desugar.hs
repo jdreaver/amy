@@ -18,11 +18,12 @@ import Amy.Prim
 import Amy.Syntax.AST as S
 
 desugarModule :: Environment -> S.Module -> C.Module
-desugarModule env (S.Module _ typeDeclarations externs bindings) = do
-  let typeDeclarations' = desugarTypeDeclaration <$> typeDeclarations
-  runDesugar env typeDeclarations' $ do
+desugarModule env (S.Module _ typeDeclarations externs bindings) =
+  runDesugar env $ do
+    let
+      typeDeclarations' = desugarTypeDeclaration <$> typeDeclarations
+      externs' = desugarExtern <$> externs
     bindings' <- traverse (traverse desugarBinding) bindings
-    let externs' = desugarExtern <$> externs
     pure $ C.Module bindings' externs' typeDeclarations'
 
 desugarExtern :: S.Extern -> C.Extern
