@@ -18,8 +18,8 @@ import Data.Text (Text, pack)
 import Amy.Core.AST as C
 import Amy.Prim
 
-newtype Desugar a = Desugar (ReaderT (Map DataConName (TypeDeclaration, DataConDefinition)) (State Int) a)
-  deriving (Functor, Applicative, Monad, MonadReader (Map DataConName (TypeDeclaration, DataConDefinition)), MonadState Int)
+newtype Desugar a = Desugar (ReaderT (Map DataConName TypeDeclaration) (State Int) a)
+  deriving (Functor, Applicative, Monad, MonadReader (Map DataConName TypeDeclaration), MonadState Int)
 
 runDesugar :: [TypeDeclaration] -> Desugar a -> a
 runDesugar decls (Desugar action) = evalState (runReaderT action dataConMap) 0
@@ -39,12 +39,12 @@ freshIdent t = do
 
 -- TODO: Compute this in the Renamer so we don't have to keep recomputing it
 -- here
-mkDataConTypes :: TypeDeclaration -> [(DataConName, (TypeDeclaration, DataConDefinition))]
+mkDataConTypes :: TypeDeclaration -> [(DataConName, TypeDeclaration)]
 mkDataConTypes tyDecl@(TypeDeclaration _ dataConDefs) = mkDataConPair <$> dataConDefs
  where
-  mkDataConPair def@(DataConDefinition (Located _ name) _) = (name, (tyDecl, def))
+  mkDataConPair (DataConDefinition (Located _ name) _) = (name, tyDecl)
 
-lookupDataConType :: DataConName -> Desugar (TypeDeclaration, DataConDefinition)
+lookupDataConType :: DataConName -> Desugar TypeDeclaration
 lookupDataConType con =
   asks
   $ fromMaybe (error $ "No type definition for " ++ show con)
