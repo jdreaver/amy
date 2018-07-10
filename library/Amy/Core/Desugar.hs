@@ -13,13 +13,14 @@ import Data.Maybe (maybeToList)
 import Amy.Core.AST as C
 import Amy.Core.Monad
 import Amy.Core.PatternCompiler as PC
+import Amy.Environment
 import Amy.Prim
 import Amy.Syntax.AST as S
 
-desugarModule :: S.Module -> C.Module
-desugarModule (S.Module _ typeDeclarations externs bindings) = do
+desugarModule :: Environment -> S.Module -> C.Module
+desugarModule env (S.Module _ typeDeclarations externs bindings) = do
   let typeDeclarations' = desugarTypeDeclaration <$> typeDeclarations
-  runDesugar typeDeclarations' $ do
+  runDesugar env typeDeclarations' $ do
     bindings' <- traverse (traverse desugarBinding) bindings
     let externs' = desugarExtern <$> externs
     pure $ C.Module bindings' externs' typeDeclarations'

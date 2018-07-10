@@ -36,9 +36,8 @@ inferModule :: Environment -> Module -> Either Error Module
 inferModule env (Module filePath typeDeclarations externs bindings) =
   runChecker env filePath $ do
     -- Add data constructor types to scope
-    let
-      dataConstructorTypes = concatMap dataConTypes typeDeclarations
-    for_ dataConstructorTypes $ uncurry addDataConTypeToScope
+    let dataConstructorInfos = concatMap dataConInfos typeDeclarations
+    for_ dataConstructorInfos $ uncurry addDataConInfoToScope
 
     -- Infer type declaration kinds and add to scope
     for_ typeDeclarations $ \decl@(TypeDeclaration (TyConDefinition tyCon _) _) -> do

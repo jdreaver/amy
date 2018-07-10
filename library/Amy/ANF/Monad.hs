@@ -52,11 +52,11 @@ anfConvertRead funcs typeDeclarations =
       Map.fromList
       $ (\t -> (locatedValue . C.tyConDefinitionName . C.typeDeclarationTypeName $ t, typeRep t))
       <$> allTypeDecls
-    dataConInfos = Map.fromList $ concatMap mkDataConInfo allTypeDecls
+    dataConInfos' = Map.fromList $ concatMap mkDataConInfo allTypeDecls
   in
     ANFConvertRead
     { anfConvertReadTypeReps = typeRepMap
-    , anfConvertReadDataConInfos = dataConInfos
+    , anfConvertReadDataConInfos = dataConInfos'
     , anfConvertReadFuncTypes = Map.fromList funcs
     }
 

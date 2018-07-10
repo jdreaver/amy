@@ -32,7 +32,7 @@ module Amy.TypeCheck.Monad
   , withNewLexicalScope
   , addValueTypeToScope
   , lookupValueType
-  , addDataConTypeToScope
+  , addDataConInfoToScope
   , lookupDataConType
   , addUnknownTyVarKindToScope
   , lookupTyVarKind
@@ -300,23 +300,23 @@ lookupValueType (Located span' name) = do
   mTy <- Map.lookup name <$> gets (environmentIdentTypes . stateEnvironment)
   maybe (throwError $ Error (UnknownVariable name) span') pure mTy
 
-addDataConTypeToScope :: Located DataConName -> Type -> Checker ()
-addDataConTypeToScope (Located span' name) ty =
+addDataConInfoToScope :: Located DataConName -> DataConInfo -> Checker ()
+addDataConInfoToScope (Located span' name) info =
   withSourceSpan span' $
-    insertMapDuplicateError (environmentDataConTypes . stateEnvironment) doInsert name ty DuplicateDataConstructor
+    insertMapDuplicateError (environmentDataConInfos . stateEnvironment) doInsert name info DuplicateDataConstructor
  where
   doInsert s m =
     s
     { stateEnvironment =
       (stateEnvironment s)
-      { environmentDataConTypes = m
+      { environmentDataConInfos = m
       }
     }
 
 lookupDataConType :: Located DataConName -> Checker Type
 lookupDataConType (Located span' con) = do
-  mTy <- Map.lookup con <$> gets (environmentDataConTypes . stateEnvironment)
-  maybe (throwError $ Error (UnknownDataCon con) span') pure mTy
+  mInfo <- Map.lookup con <$> gets (environmentDataConInfos . stateEnvironment)
+  maybe (throwError $ Error (UnknownDataCon con) span') (pure . dataConInfoType) mInfo
 
 addUnknownTyVarKindToScope :: TyVarName -> Checker Int
 addUnknownTyVarKindToScope name = do

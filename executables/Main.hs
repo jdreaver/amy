@@ -56,7 +56,7 @@ process filePath DumpFlags{..} input = do
       lift $ writeFile (filePath `replaceExtension` ".amy-typechecked") (show $ S.prettyModule typeChecked)
 
     -- Desugar to Core
-    let core = desugarModule typeChecked
+    let core = desugarModule primEnvironment typeChecked
     when dfDumpCore $
       lift $ writeFile (filePath `replaceExtension` ".amy-core") (show $ C.prettyModule core)
 

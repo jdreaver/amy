@@ -10,22 +10,27 @@ module Amy.Core.Monad
 
 import Control.Monad.Reader
 import Control.Monad.State.Strict
-import Data.Map.Strict (Map)
+import Data.Bifunctor (first)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text, pack)
 
 import Amy.Core.AST as C
-import Amy.Prim
+import Amy.Environment
 
-newtype Desugar a = Desugar (ReaderT (Map DataConName TypeDeclaration) (State Int) a)
-  deriving (Functor, Applicative, Monad, MonadReader (Map DataConName TypeDeclaration), MonadState Int)
+newtype Desugar a = Desugar (ReaderT Environment (State Int) a)
+  deriving (Functor, Applicative, Monad, MonadReader Environment, MonadState Int)
 
-runDesugar :: [TypeDeclaration] -> Desugar a -> a
-runDesugar decls (Desugar action) = evalState (runReaderT action dataConMap) 0
+runDesugar :: Environment -> [TypeDeclaration] -> Desugar a -> a
+runDesugar env decls (Desugar action) = evalState (runReaderT action env') 0
  where
-  allTypeDecls = decls ++ (fst <$> allPrimTypeDefinitions)
-  dataConMap = Map.fromList $ concatMap mkDataConTypes allTypeDecls
+  -- TODO: Compute all DataConInfos for a module once and use in type checking,
+  -- Core, ANF, etc.
+  declInfos = Map.fromList $ first locatedValue <$> concatMap dataConInfos decls
+  env' =
+    env
+    { environmentDataConInfos = environmentDataConInfos env <> declInfos
+    }
 
 freshId :: Desugar Int
 freshId = do
@@ -37,15 +42,10 @@ freshIdent t = do
   id' <- freshId
   pure $ IdentName (t <> pack (show id'))
 
--- TODO: Compute this in the Renamer so we don't have to keep recomputing it
--- here
-mkDataConTypes :: TypeDeclaration -> [(DataConName, TypeDeclaration)]
-mkDataConTypes tyDecl@(TypeDeclaration _ dataConDefs) = mkDataConPair <$> dataConDefs
- where
-  mkDataConPair (DataConDefinition (Located _ name) _) = (name, tyDecl)
-
 lookupDataConType :: DataConName -> Desugar TypeDeclaration
 lookupDataConType con =
   asks
-  $ fromMaybe (error $ "No type definition for " ++ show con)
+  $ dataConInfoTypeDeclaration
+  . fromMaybe (error $ "No type definition for " ++ show con)
   . Map.lookup con
+  . environmentDataConInfos
