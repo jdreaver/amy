@@ -40,7 +40,9 @@ mergeEnvironments env1 env2 =
 primEnvironment :: Environment
 primEnvironment =
   let
-    primFuncTypes = convertPrimitiveFunctionType <$> allPrimitiveFunctions
+    primFuncTypes =
+      (\(PrimitiveFunction _ name ty) -> (name, foldTyFun $ TyCon . notLocated <$> ty))
+      <$> allPrimitiveFunctions
     primDataConInfos = concatMap dataConInfos (fst <$> allPrimTypeDefinitions)
     primTyConKinds =
       (\(decl, kind) -> (locatedValue . tyConDefinitionName . typeDeclarationTypeName $ decl, kind))
@@ -52,8 +54,3 @@ primEnvironment =
     , environmentTyConKinds = Map.fromList primTyConKinds
     }
 
-convertPrimitiveFunctionType :: PrimitiveFunction -> (IdentName, Type)
-convertPrimitiveFunctionType (PrimitiveFunction _ name ty) =
-  ( name
-  , foldTyFun $ TyCon . notLocated <$> ty
-  )
