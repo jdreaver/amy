@@ -10,7 +10,7 @@ import Data.Text (Text)
 import GHC.Word (Word32)
 
 import Amy.ANF.AST as ANF
-import Amy.Core.AST as C
+import Amy.Syntax.AST as S
 
 -- | Describes how an Amy type is represented in LLVM.
 data TypeRep
@@ -22,14 +22,14 @@ data TypeRep
   deriving (Show, Eq, Ord)
 
 -- | Decide how we are going to compile a type declaration.
-typeRep :: C.TypeDeclaration -> ANF.Type
-typeRep (C.TypeDeclaration tyName constructors) =
+typeRep :: S.TypeDeclaration -> ANF.Type
+typeRep (S.TypeDeclaration tyName constructors) =
   case maybePrimitiveType tyName of
     Just prim -> prim
     Nothing ->
       -- Check if we can do an enum. This is when all constructors have no
       -- arguments.
-      if all (isNothing . C.dataConDefinitionArgument) constructors
+      if all (isNothing . S.dataConDefinitionArgument) constructors
       then EnumType wordSize
       -- Can't do an enum. We'll have to use tagged pairs.
       else TaggedUnionType (locatedValue $ tyConDefinitionName tyName) wordSize
@@ -41,8 +41,8 @@ typeRep (C.TypeDeclaration tyName constructors) =
       | length constructors < (2 :: Int) ^ (8 :: Int) -> 8
       | otherwise -> 32
 
-maybePrimitiveType :: C.TyConDefinition -> Maybe ANF.Type
-maybePrimitiveType (C.TyConDefinition (Located _ name) _)
+maybePrimitiveType :: S.TyConDefinition -> Maybe ANF.Type
+maybePrimitiveType (S.TyConDefinition (Located _ name) _)
   -- TODO: Something more robust here besides text name matching.
   | name == "Int" = Just PrimIntType
   | name == "Double" = Just PrimDoubleType
