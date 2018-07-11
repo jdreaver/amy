@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Amy.ANF.Convert
   ( normalizeModule
@@ -79,7 +79,7 @@ convertDataConDefinition (C.DataConDefinition (Located _ conName) mTyArg) = do
 
 convertDataCon :: DataConName -> ANFConvert ANF.DataCon
 convertDataCon con = do
-  DataConInfo{..} <- getDataConInfo con
+  DataConInfo{dataConInfoANFType, dataConInfoConstructorIndex} <- getDataConInfo con
   pure
     ANF.DataCon
     { ANF.dataConName = con
