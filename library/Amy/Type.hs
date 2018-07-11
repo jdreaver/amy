@@ -20,15 +20,12 @@ module Amy.Type
   , TypeDeclaration(..)
   , TyConDefinition(..)
   , DataConDefinition(..)
-  , DataConInfo(..)
-  , dataConInfos
   ) where
 
 import Control.Monad.Identity (Identity(..), runIdentity)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
-import Data.Maybe (maybeToList)
 import Data.Text (pack)
 
 import Amy.Names
@@ -136,21 +133,3 @@ data DataConDefinition
   { dataConDefinitionName :: !(Located DataConName)
   , dataConDefinitionArgument :: !(Maybe Type)
   } deriving (Show, Eq)
-
-data DataConInfo
-  = DataConInfo
-  { dataConInfoTypeDeclaration :: !TypeDeclaration
-  , dataConInfoDataConDefinition :: !DataConDefinition
-  , dataConInfoType :: !Type
-  } deriving (Show, Eq)
-
-dataConInfos :: TypeDeclaration -> [(Located DataConName, DataConInfo)]
-dataConInfos tyDecl@(TypeDeclaration (TyConDefinition tyConName tyVars) dataConDefs) = mkDataConPair <$> dataConDefs
- where
-  mkDataConPair dataDef@(DataConDefinition name mTyArg) =
-    let
-      tyVars' = TyVar . fromLocated <$> tyVars
-      tyApp = foldTyApp $ NE.fromList $ TyCon (fromLocated tyConName) : tyVars'
-      ty = foldTyFun (NE.fromList $ maybeToList mTyArg ++ [tyApp])
-      tyForall = maybe ty (\varsNE -> TyForall varsNE ty) (NE.nonEmpty $ fromLocated <$> tyVars)
-    in (name, DataConInfo tyDecl dataDef tyForall)

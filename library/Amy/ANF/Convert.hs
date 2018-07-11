@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Amy.ANF.Convert
   ( normalizeModule
@@ -7,19 +8,18 @@ module Amy.ANF.Convert
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
-import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
-import Data.Traversable (for)
 
 import Amy.ANF.AST as ANF
 import Amy.ANF.Monad
 import Amy.Core.AST as C
+import Amy.Environment
 import Amy.Prim
 
-normalizeModule :: C.Module -> ANF.Module
-normalizeModule (C.Module bindingGroups externs typeDeclarations) =
+normalizeModule :: C.Module -> Environment -> ANF.Module
+normalizeModule (C.Module bindingGroups externs typeDeclarations) env =
   let
     bindings = concatMap NE.toList bindingGroups
 
@@ -29,7 +29,7 @@ normalizeModule (C.Module bindingGroups externs typeDeclarations) =
     topLevelTys = bindingTys ++ externTys
 
     -- Actual conversion
-    convertRead = anfConvertRead topLevelTys typeDeclarations
+    convertRead = anfConvertRead topLevelTys typeDeclarations env
   in runANFConvert convertRead $ do
     typeDeclarations' <- traverse convertTypeDeclaration typeDeclarations
     externs' <- traverse convertExtern externs
@@ -67,40 +67,13 @@ convertDataConDefinition (C.DataConDefinition (Located _ conName) mTyArg) = do
 
 convertDataCon :: DataConName -> ANFConvert ANF.DataCon
 convertDataCon con = do
-  (ty, index) <- getDataConInfo con
+  DataConInfo{..} <- getDataConInfo con
   pure
     ANF.DataCon
     { ANF.dataConName = con
-    , ANF.dataConType = ty
-    , ANF.dataConIndex = index
+    , ANF.dataConType = dataConInfoANFType
+    , ANF.dataConIndex = ConstructorIndex dataConInfoConstructorIndex
     }
-
-convertType :: C.Type -> ANFConvert ANF.Type
-convertType ty = go (unfoldTyFun ty)
- where
-  go :: NonEmpty C.Type -> ANFConvert ANF.Type
-  go (ty' :| []) =
-    case ty' of
-      C.TyUnknown -> error "Encountered TyUnknown in convertType"
-      C.TyCon (MaybeLocated _ con) -> getTyConType con
-      C.TyVar _ -> pure OpaquePointerType
-      C.TyExistVar _ -> error "Found TyExistVar in Core"
-      app@C.TyApp{} ->
-        case unfoldTyApp app of
-          TyCon (MaybeLocated _ con) :| _ -> getTyConType con
-          _ -> error $ "Can't convert non-TyCon TyApp yet " ++ show ty'
-      -- N.B. ANF/LLVM doesn't care about polymorphic records
-      C.TyRecord rows _ -> mkRecordType rows
-      C.TyFun{} -> pure ClosureType
-      C.TyForall _ ty'' -> convertType ty''
-  go _ = pure ClosureType
-
-mkRecordType :: Map (MaybeLocated RowLabel) C.Type -> ANFConvert ANF.Type
-mkRecordType rows = do
-  rows' <- for (Map.toAscList rows) $ \(MaybeLocated _ label, ty) -> do
-    ty' <- convertType ty
-    pure (label, ty')
-  pure $ RecordType rows'
 
 convertTypedIdent :: C.Typed IdentName -> ANFConvert (ANF.Typed IdentName)
 convertTypedIdent (C.Typed ty ident) = do
