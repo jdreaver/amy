@@ -48,7 +48,7 @@ normalizeModule (C.Module bindingGroups externs typeDeclarations) env =
     env' =
       env
       { environmentANFTypeReps = allTypeReps
-      , environmentFunctionTypes = Map.fromList anfFuncTys
+      , environmentANFFunctionTypes = Map.fromList anfFuncTys
       }
 
   in runANFConvert env' $ do

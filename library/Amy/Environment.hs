@@ -26,7 +26,7 @@ data Environment
   , environmentDataConInfos :: !(Map DataConName DataConInfo)
   , environmentTyConKinds :: !(Map TyConName Kind)
   , environmentANFTypeReps :: !(Map TyConName ANF.Type)
-  , environmentFunctionTypes :: !(Map IdentName ([ANF.Type], ANF.Type))
+  , environmentANFFunctionTypes :: !(Map IdentName ([ANF.Type], ANF.Type))
   } deriving (Show, Eq)
 
 emptyEnvironment :: Environment
@@ -36,7 +36,7 @@ emptyEnvironment =
   , environmentDataConInfos = Map.empty
   , environmentTyConKinds = Map.empty
   , environmentANFTypeReps = Map.empty
-  , environmentFunctionTypes = Map.empty
+  , environmentANFFunctionTypes = Map.empty
   }
 
 mergeEnvironments :: Environment -> Environment -> Environment
@@ -46,7 +46,7 @@ mergeEnvironments env1 env2 =
   , environmentDataConInfos = environmentDataConInfos env1 <> environmentDataConInfos env2
   , environmentTyConKinds = environmentTyConKinds env1 <> environmentTyConKinds env2
   , environmentANFTypeReps = environmentANFTypeReps env1 <> environmentANFTypeReps env2
-  , environmentFunctionTypes = environmentFunctionTypes env1 <> environmentFunctionTypes env2
+  , environmentANFFunctionTypes = environmentANFFunctionTypes env1 <> environmentANFFunctionTypes env2
   }
 
 primEnvironment :: Environment
@@ -69,7 +69,7 @@ primEnvironment =
     , environmentDataConInfos = Map.fromList $ first locatedValue <$> primDataConInfos
     , environmentTyConKinds = Map.fromList primTyConKinds
     , environmentANFTypeReps = Map.fromList primTypeReps
-    , environmentFunctionTypes = Map.empty
+    , environmentANFFunctionTypes = Map.empty
     }
 
 data DataConInfo
