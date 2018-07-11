@@ -31,6 +31,7 @@ normalizeModule (C.Module bindingGroups externs typeDeclarations) env =
       $ (\t -> (locatedValue . C.tyConDefinitionName . C.typeDeclarationTypeName $ t, typeRep t))
       <$> typeDeclarations
     allTypeReps = environmentANFTypeReps env <> typeRepMap
+    mkANFTy = convertANFType allTypeReps
 
     -- Convert externs
     convertExtern (C.Extern name ty) =
@@ -39,7 +40,6 @@ normalizeModule (C.Module bindingGroups externs typeDeclarations) env =
     externs' = convertExtern <$> externs
 
     -- Record function types
-    mkANFTy = convertANFType allTypeReps
     bindingTys = (\b -> (C.bindingName b, (mkANFTy . C.typedType <$> C.bindingArgs b, mkANFTy $ C.bindingReturnType b))) <$> bindings
     externTys = (\(ANF.Extern name argTys retTy) -> (name, (argTys, retTy))) <$> externs'
     anfFuncTys = bindingTys ++ externTys
