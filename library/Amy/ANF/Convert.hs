@@ -20,7 +20,7 @@ import Amy.Core.AST as C
 import Amy.Environment
 import Amy.Prim
 
-normalizeModule :: C.Module -> Environment -> ANF.Module
+normalizeModule :: C.Module -> Environment -> (ANF.Module, Environment)
 normalizeModule (C.Module bindingGroups externs typeDeclarations) env =
   let
     bindings = concatMap NE.toList bindingGroups
@@ -45,18 +45,19 @@ normalizeModule (C.Module bindingGroups externs typeDeclarations) env =
     anfFuncTys = bindingTys ++ externTys
 
     -- Compute new environment
-    env' =
-      env
+    moduleEnv =
+      emptyEnvironment
       { environmentANFTypeReps = allTypeReps
       , environmentANFFunctionTypes = Map.fromList anfFuncTys
       }
 
-  in runANFConvert env' $ do
+  in runANFConvert (env `mergeEnvironments` moduleEnv) $ do
     typeDeclarations' <- traverse convertTypeDeclaration typeDeclarations
     bindings' <- traverse (normalizeBinding (Just "res")) bindings
     textPointers <- getTextPointers
     closureWrappers <- getClosureWrappers
-    pure $ ANF.Module bindings' externs' typeDeclarations' textPointers closureWrappers
+    let module' = ANF.Module bindings' externs' typeDeclarations' textPointers closureWrappers
+    pure (module', moduleEnv)
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANFConvert ANF.TypeDeclaration
 convertTypeDeclaration (C.TypeDeclaration tyConDef con) = do

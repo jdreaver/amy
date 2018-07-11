@@ -70,7 +70,7 @@ process filePath DumpFlags{..} input = do
     -- Normalize to ANF
     let
       anfEnv = coreEnv
-      anf = normalizeModule lifted anfEnv
+      (anf, _) = normalizeModule lifted anfEnv
     when dfDumpANF $
       lift $ writeFile (filePath `replaceExtension` ".amy-anf") (show $ ANF.prettyModule anf)
 
