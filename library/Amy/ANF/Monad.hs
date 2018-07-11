@@ -70,7 +70,7 @@ getDataConInfo con = fromMaybe err . Map.lookup con <$> asks environmentDataConI
   where
    err = error $ "Couldn't find TypeCompilationMethod of TyConDefinition " ++ show con
 
-getKnownFuncType :: IdentName -> ANFConvert (Maybe ([C.Type], C.Type))
+getKnownFuncType :: IdentName -> ANFConvert (Maybe ([ANF.Type], ANF.Type))
 getKnownFuncType ident = Map.lookup ident <$> asks environmentFunctionTypes
 
 makeTextPointer :: Text -> ANFConvert ANF.TextPointer

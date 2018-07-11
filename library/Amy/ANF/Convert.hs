@@ -13,6 +13,7 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 
 import Amy.ANF.AST as ANF
+import Amy.ANF.ConvertType
 import Amy.ANF.Monad
 import Amy.ANF.TypeRep
 import Amy.Core.AST as C
@@ -29,38 +30,33 @@ normalizeModule (C.Module bindingGroups externs typeDeclarations) env =
       Map.fromList
       $ (\t -> (locatedValue . C.tyConDefinitionName . C.typeDeclarationTypeName $ t, typeRep t))
       <$> typeDeclarations
+    allTypeReps = environmentANFTypeReps env <> typeRepMap
+
+    -- Convert externs
+    convertExtern (C.Extern name ty) =
+      let tyNE = unfoldTyFun ty
+      in ANF.Extern name (mkANFTy <$> NE.init tyNE) (mkANFTy $ NE.last tyNE)
+    externs' = convertExtern <$> externs
 
     -- Record function types
-    bindingTys = (\b -> (C.bindingName b, (C.typedType <$> C.bindingArgs b, C.bindingReturnType b))) <$> bindings
-    externTys = (\e -> (C.externName e, mkExternType (C.externType e))) <$> externs
-    topLevelTys = bindingTys ++ externTys
+    mkANFTy = convertANFType allTypeReps
+    bindingTys = (\b -> (C.bindingName b, (mkANFTy . C.typedType <$> C.bindingArgs b, mkANFTy $ C.bindingReturnType b))) <$> bindings
+    externTys = (\(ANF.Extern name argTys retTy) -> (name, (argTys, retTy))) <$> externs'
+    anfFuncTys = bindingTys ++ externTys
 
     -- Compute new environment
     env' =
       env
-      { environmentANFTypeReps = environmentANFTypeReps env <> typeRepMap
-      , environmentFunctionTypes = Map.fromList topLevelTys
+      { environmentANFTypeReps = allTypeReps
+      , environmentFunctionTypes = Map.fromList anfFuncTys
       }
 
   in runANFConvert env' $ do
     typeDeclarations' <- traverse convertTypeDeclaration typeDeclarations
-    externs' <- traverse convertExtern externs
     bindings' <- traverse (normalizeBinding (Just "res")) bindings
     textPointers <- getTextPointers
     closureWrappers <- getClosureWrappers
     pure $ ANF.Module bindings' externs' typeDeclarations' textPointers closureWrappers
-
-convertExtern :: C.Extern -> ANFConvert ANF.Extern
-convertExtern (C.Extern name ty) = do
-  let (argTys, retTy) = mkExternType ty
-  argTys' <- traverse convertType argTys
-  retTy' <- convertType retTy
-  pure $ ANF.Extern name argTys' retTy'
-
-mkExternType :: C.Type -> ([C.Type], C.Type)
-mkExternType ty =
-  let tyNE = unfoldTyFun ty
-  in (NE.init tyNE, NE.last tyNE)
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANFConvert ANF.TypeDeclaration
 convertTypeDeclaration (C.TypeDeclaration tyConDef con) = do
@@ -131,10 +127,8 @@ normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
           (_, Just (funcArgTys, funcRetTy)) ->
             if length argVals == length funcArgTys
             -- Known function call
-            then do
-              funcArgTys' <- traverse convertType funcArgTys
-              funcRetTy' <- convertType funcRetTy
-              pure $ ANF.EKnownFuncApp $ KnownFuncApp ident argVals funcArgTys' retTy' funcRetTy'
+            then
+              pure $ ANF.EKnownFuncApp $ KnownFuncApp ident argVals funcArgTys retTy' funcRetTy
             -- Too few or too many args, fall back to using a closure and call it
             else
               createClosure ident funcArgTys funcRetTy $ \closureVal ->
@@ -195,11 +189,9 @@ mkNormalizeLet name expr exprType c = do
   body <- c $ ANF.Var (ANF.Typed exprType newIdent)
   pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal [ANF.LetValBinding newIdent exprType expr] body
 
-createClosure :: ANF.IdentName -> [C.Type] -> C.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
+createClosure :: ANF.IdentName -> [ANF.Type] -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 createClosure ident argTys retTy c = do
-  argTys' <- traverse convertType argTys
-  retTy' <- convertType retTy
-  wrapperName <- putClosureWrapper ident argTys' retTy'
+  wrapperName <- putClosureWrapper ident argTys retTy
   let arity = length argTys
   mkNormalizeLet (unIdentName ident <> "_closure") (ECreateClosure $ CreateClosure wrapperName arity) ClosureType c
 

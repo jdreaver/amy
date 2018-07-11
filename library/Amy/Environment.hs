@@ -15,7 +15,6 @@ import Data.Maybe (maybeToList)
 
 import qualified Amy.ANF.AST as ANF
 import Amy.ANF.TypeRep
-import qualified Amy.Core.AST as C
 import Amy.Kind
 import Amy.Names
 import Amy.Prim
@@ -27,7 +26,7 @@ data Environment
   , environmentDataConInfos :: !(Map DataConName DataConInfo)
   , environmentTyConKinds :: !(Map TyConName Kind)
   , environmentANFTypeReps :: !(Map TyConName ANF.Type)
-  , environmentFunctionTypes :: !(Map IdentName ([C.Type], C.Type)) -- TODO: Use ANF.Type here
+  , environmentFunctionTypes :: !(Map IdentName ([ANF.Type], ANF.Type))
   } deriving (Show, Eq)
 
 emptyEnvironment :: Environment
