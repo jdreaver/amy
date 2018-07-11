@@ -14,6 +14,7 @@ import Data.Text (Text)
 
 import Amy.ANF.AST as ANF
 import Amy.ANF.Monad
+import Amy.ANF.TypeRep
 import Amy.Core.AST as C
 import Amy.Environment
 import Amy.Prim
@@ -23,14 +24,25 @@ normalizeModule (C.Module bindingGroups externs typeDeclarations) env =
   let
     bindings = concatMap NE.toList bindingGroups
 
-    -- Record top-level names
+    -- Compute type reps
+    typeRepMap =
+      Map.fromList
+      $ (\t -> (locatedValue . C.tyConDefinitionName . C.typeDeclarationTypeName $ t, typeRep t))
+      <$> typeDeclarations
+
+    -- Record function types
     bindingTys = (\b -> (C.bindingName b, (C.typedType <$> C.bindingArgs b, C.bindingReturnType b))) <$> bindings
     externTys = (\e -> (C.externName e, mkExternType (C.externType e))) <$> externs
     topLevelTys = bindingTys ++ externTys
 
-    -- Actual conversion
-    convertRead = anfConvertRead topLevelTys typeDeclarations env
-  in runANFConvert convertRead $ do
+    -- Compute new environment
+    env' =
+      env
+      { environmentANFTypeReps = environmentANFTypeReps env <> typeRepMap
+      , environmentFunctionTypes = Map.fromList topLevelTys
+      }
+
+  in runANFConvert env' $ do
     typeDeclarations' <- traverse convertTypeDeclaration typeDeclarations
     externs' <- traverse convertExtern externs
     bindings' <- traverse (normalizeBinding (Just "res")) bindings

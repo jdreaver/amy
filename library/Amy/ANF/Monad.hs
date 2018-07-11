@@ -4,8 +4,6 @@
 module Amy.ANF.Monad
   ( ANFConvert
   , runANFConvert
-  , ANFConvertRead
-  , anfConvertRead
   , ANFConvertState
   , freshId
   , freshIdent
@@ -28,40 +26,14 @@ import Data.Text (Text, pack)
 
 import Amy.ANF.AST as ANF
 import Amy.ANF.ConvertType
-import Amy.ANF.TypeRep
 import Amy.Core.AST as C
 import Amy.Environment
 
-newtype ANFConvert a = ANFConvert (ReaderT ANFConvertRead (State ANFConvertState) a)
-  deriving (Functor, Applicative, Monad, MonadReader ANFConvertRead, MonadState ANFConvertState)
+newtype ANFConvert a = ANFConvert (ReaderT Environment (State ANFConvertState) a)
+  deriving (Functor, Applicative, Monad, MonadReader Environment, MonadState ANFConvertState)
 
-runANFConvert :: ANFConvertRead -> ANFConvert a -> a
+runANFConvert :: Environment -> ANFConvert a -> a
 runANFConvert read' (ANFConvert action) = evalState (runReaderT action read') (ANFConvertState 0 [] Map.empty)
-
-data ANFConvertRead
-  = ANFConvertRead
-  { anfConvertReadEnvironment :: !Environment
-  , anfConvertReadFuncTypes :: !(Map IdentName ([C.Type], C.Type))
-  } deriving (Show, Eq)
-
-anfConvertRead :: [(IdentName, ([C.Type], C.Type))] -> [C.TypeDeclaration] -> Environment -> ANFConvertRead
-anfConvertRead funcs typeDeclarations env =
-  let
-    typeRepMap =
-      Map.fromList
-      $ (\t -> (locatedValue . C.tyConDefinitionName . C.typeDeclarationTypeName $ t, typeRep t))
-      <$> typeDeclarations
-    env' =
-      env
-      `mergeEnvironments`
-      emptyEnvironment
-      { environmentANFTypeReps = typeRepMap
-      }
-  in
-    ANFConvertRead
-    { anfConvertReadEnvironment = env'
-    , anfConvertReadFuncTypes = Map.fromList funcs
-    }
 
 data ANFConvertState
   = ANFConvertState
@@ -83,24 +55,23 @@ freshIdent t = do
   pure $ IdentName (t <> pack (show id'))
 
 convertType :: C.Type -> ANFConvert ANF.Type
-convertType ty = (\tyMap -> convertANFType tyMap ty) . environmentANFTypeReps <$> asks anfConvertReadEnvironment
+convertType ty = (\tyMap -> convertANFType tyMap ty) <$> asks environmentANFTypeReps
 
 getTyConDefinitionType :: C.TyConDefinition -> ANFConvert ANF.Type
 getTyConDefinitionType tyCon =
   fromMaybe err
   . Map.lookup (locatedValue $ tyConDefinitionName tyCon)
-  . environmentANFTypeReps
-  <$> asks anfConvertReadEnvironment
+  <$> asks environmentANFTypeReps
   where
    err = error $ "Couldn't find TypeCompilationMethod of TyConDefinition " ++ show tyCon
 
 getDataConInfo :: DataConName -> ANFConvert DataConInfo
-getDataConInfo con = fromMaybe err . Map.lookup con . environmentDataConInfos <$> asks anfConvertReadEnvironment
+getDataConInfo con = fromMaybe err . Map.lookup con <$> asks environmentDataConInfos
   where
    err = error $ "Couldn't find TypeCompilationMethod of TyConDefinition " ++ show con
 
 getKnownFuncType :: IdentName -> ANFConvert (Maybe ([C.Type], C.Type))
-getKnownFuncType ident = Map.lookup ident <$> asks anfConvertReadFuncTypes
+getKnownFuncType ident = Map.lookup ident <$> asks environmentFunctionTypes
 
 makeTextPointer :: Text -> ANFConvert ANF.TextPointer
 makeTextPointer text = do
