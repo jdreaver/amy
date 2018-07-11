@@ -47,7 +47,7 @@ convertExtern (C.Extern name ty) = do
 
 mkExternType :: C.Type -> ([C.Type], C.Type)
 mkExternType ty =
-  let tyNE = typeToNonEmpty ty
+  let tyNE = unfoldTyFun ty
   in (NE.init tyNE, NE.last tyNE)
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANFConvert ANF.TypeDeclaration
@@ -76,7 +76,7 @@ convertDataCon con = do
     }
 
 convertType :: C.Type -> ANFConvert ANF.Type
-convertType ty = go (typeToNonEmpty ty)
+convertType ty = go (unfoldTyFun ty)
  where
   go :: NonEmpty C.Type -> ANFConvert ANF.Type
   go (ty' :| []) =
@@ -101,10 +101,6 @@ mkRecordType rows = do
     ty' <- convertType ty
     pure (label, ty')
   pure $ RecordType rows'
-
-typeToNonEmpty :: C.Type -> NonEmpty C.Type
-typeToNonEmpty (t1 `C.TyFun` t2) = NE.cons t1 (typeToNonEmpty t2)
-typeToNonEmpty ty = ty :| []
 
 convertTypedIdent :: C.Typed IdentName -> ANFConvert (ANF.Typed IdentName)
 convertTypedIdent (C.Typed ty ident) = do
