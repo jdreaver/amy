@@ -2,13 +2,16 @@
 
 module Amy.Compile
   ( compileModule
+  , linkModules
   , DumpFlags(..)
+  , CompiledModule(..)
   ) where
 
 import Control.Monad (when)
 import Control.Monad.Except
 import Data.Bifunctor (first)
 import qualified Data.ByteString.Char8 as BS8
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text.Lazy.IO as TL
@@ -33,8 +36,8 @@ compileModule
      -- ^ Flags to control intermediate output
   -> Text
      -- ^ Module source code
-  -> IO (Either [String] ())
-     -- ^ Return any possible errors
+  -> IO (Either [String] CompiledModule)
+     -- ^ Return any possible errors or a compiled module
 compileModule filePath DumpFlags{..} input = runExceptT $ do
   -- Parse
   tokens' <- liftEither $ first ((:[]) . parseErrorPretty) $ lexer filePath input
@@ -43,13 +46,13 @@ compileModule filePath DumpFlags{..} input = runExceptT $ do
     lift $ writeFile (filePath `replaceExtension` ".amy-parsed") (show $ S.prettyModule parsed)
 
   -- Type checking
-  (typeChecked, typeCheckedEnv) <- liftEither $ first ((:[]) . showError) $ TC.inferModule primEnvironment parsed
+  (typeChecked, typeCheckedModuleEnv) <- liftEither $ first ((:[]) . showError) $ TC.inferModule primEnvironment parsed
   when dfDumpTypeChecked $
     lift $ writeFile (filePath `replaceExtension` ".amy-typechecked") (show $ S.prettyModule typeChecked)
 
   -- Desugar to Core
   let
-    coreEnv = mergeEnvironments primEnvironment typeCheckedEnv
+    coreEnv = mergeEnvironments primEnvironment typeCheckedModuleEnv
     core = desugarModule coreEnv typeChecked
   when dfDumpCore $
     lift $ writeFile (filePath `replaceExtension` ".amy-core") (show $ C.prettyModule core)
@@ -62,7 +65,7 @@ compileModule filePath DumpFlags{..} input = runExceptT $ do
   -- Normalize to ANF
   let
     anfEnv = coreEnv
-    (anf, _) = normalizeModule lifted anfEnv
+    (anf, anfModuleEnv) = normalizeModule lifted anfEnv
   when dfDumpANF $
     lift $ writeFile (filePath `replaceExtension` ".amy-anf") (show $ ANF.prettyModule anf)
 
@@ -76,11 +79,23 @@ compileModule filePath DumpFlags{..} input = runExceptT $ do
   llvm <- lift $ generateLLVMIR llvmAST
   lift $ BS8.writeFile llvmFile llvm
 
-  -- Link RTS
-  let linkedLL = dropExtension filePath ++ "-rts-linked.ll"
-  rtsLL <- fromMaybe "rts/rts.ll" <$> lift (lookupEnv "RTS_LL_LOCATION")
-  linked <- lift $ linkRTS rtsLL llvmFile
-  lift $ BS8.writeFile linkedLL linked
+  -- Construct CompiledModule
+  let
+    moduleEnv = typeCheckedModuleEnv `mergeEnvironments` anfModuleEnv
+    compiledModule = CompiledModule moduleEnv llvmFile
+  pure compiledModule
+
+linkModules :: [CompiledModule] -> CompiledModule -> IO ()
+linkModules depModules module' = do
+  let
+    depFiles = compiledModuleLLVM <$> depModules
+    moduleFile = compiledModuleLLVM module'
+
+  -- Link dependencies
+  let linkedLL = dropExtension moduleFile ++ "-rts-linked.ll"
+  rtsLL <- fromMaybe "rts/rts.ll" <$> lookupEnv "RTS_LL_LOCATION"
+  linked <- linkModuleIRs (moduleFile :| rtsLL : depFiles)
+  BS8.writeFile linkedLL linked
 
   -- Optimize LLVM
   -- TODO: This breaks some examples
@@ -89,8 +104,8 @@ compileModule filePath DumpFlags{..} input = runExceptT $ do
   -- lift $ BS8.writeFile optLL opt
 
   -- Compile with clang
-  let exeFile = takeDirectory filePath </> "a.out"
-  lift $ callProcess "clang" ["-lgc", "-o", exeFile, linkedLL]
+  let exeFile = takeDirectory moduleFile </> "a.out"
+  callProcess "clang" ["-lgc", "-o", exeFile, linkedLL]
 
 data DumpFlags
   = DumpFlags
@@ -100,4 +115,10 @@ data DumpFlags
   , dfDumpCoreLifted :: !Bool
   , dfDumpANF :: !Bool
   , dfDumpLLVMPretty :: !Bool
+  } deriving (Show, Eq)
+
+data CompiledModule
+  = CompiledModule
+  { compiledModuleEnvironment :: !Environment
+  , compiledModuleLLVM :: !FilePath
   } deriving (Show, Eq)

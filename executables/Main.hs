@@ -26,8 +26,8 @@ compileFile CompileFileOptions{..} = T.readFile cfoFilePath >>= process cfoFileP
 
 process :: FilePath -> DumpFlags -> Text -> IO ()
 process filePath dumpFlags input = do
-  eResult <- compileModule filePath dumpFlags input
-  either (die . intercalate "\n") pure eResult
+  eCompiledModule <- compileModule filePath dumpFlags input
+  either (die . intercalate "\n") (linkModules []) eCompiledModule
 
 -- runRepl :: IO ()
 -- runRepl = runInputT defaultSettings loop
