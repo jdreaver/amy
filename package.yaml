@@ -8,13 +8,16 @@ library:
     - base
     - bytestring
     - containers
+    - filepath
     - groom
     - llvm-hs
+    - llvm-hs-pretty
     - llvm-hs-pure
     - megaparsec
     - mtl
     - parser-combinators
     - prettyprinter
+    - process
     - scientific
     - text
     - transformers
@@ -41,11 +44,8 @@ executables:
       - amy
       - base
       - bytestring
-      - filepath
       - haskeline
-      - llvm-hs-pretty
       - megaparsec
       - mtl
       - optparse-applicative
-      - process
       - text
