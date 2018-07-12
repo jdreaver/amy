@@ -3,7 +3,7 @@ source_filename = "<string>"
 
 declare i8* @GC_malloc(i64)
 
-define private i64* @id(i64* %x) {
+define i64* @id(i64* %x) {
 entry:
   %0 = alloca i64*
   store i64* %x, i64** %0
@@ -11,7 +11,7 @@ entry:
   ret i64* %ret
 }
 
-define private i64* @const(i64* %x, i64* %y) {
+define i64* @const(i64* %x, i64* %y) {
 entry:
   %0 = alloca i64*
   store i64* %x, i64** %0

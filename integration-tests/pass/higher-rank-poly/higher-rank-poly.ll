@@ -19,7 +19,7 @@ entry:
   ret %struct.Closure* %4
 }
 
-define private i64* @idFancy(%struct.Closure* %f, i64* %x) {
+define i64* @idFancy(%struct.Closure* %f, i64* %x) {
 entry:
   %0 = call i8* @GC_malloc(i64 64)
   %1 = bitcast i8* %0 to i64*
@@ -31,7 +31,7 @@ entry:
   ret i64* %ret
 }
 
-define private i64* @id(i64* %x) {
+define i64* @id(i64* %x) {
 entry:
   %0 = alloca i64*
   store i64* %x, i64** %0

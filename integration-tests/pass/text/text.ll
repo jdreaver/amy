@@ -5,7 +5,7 @@ source_filename = "<string>"
 
 declare i64 @puts(i8*)
 
-define private i8* @hello() {
+define i8* @hello() {
 entry:
   %0 = alloca i8*
   store i8* getelementptr inbounds ([21 x i8], [21 x i8]* @"$str.1", i32 0, i32 0), i8** %0

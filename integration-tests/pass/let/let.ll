@@ -3,7 +3,7 @@ source_filename = "<string>"
 
 declare i64 @abs(i64)
 
-define private i64 @threeHundred() {
+define i64 @threeHundred() {
 entry:
   %0 = alloca i64
   store i64 300, i64* %0
@@ -11,7 +11,7 @@ entry:
   ret i64 %ret
 }
 
-define private i64 @f(i64 %x) {
+define i64 @f(i64 %x) {
 entry:
   switch i1 true, label %case.0.ret [
     i1 true, label %case.0.ret

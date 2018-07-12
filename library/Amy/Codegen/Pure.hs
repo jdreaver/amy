@@ -104,10 +104,6 @@ codegenTopLevelBinding binding = do
     , parameters = (params, False)
     , LLVM.returnType = returnType'
     , basicBlocks = blocks
-    , linkage =
-        if ANF.bindingName binding == "main"
-          then L.External
-          else L.Private
     }
 
 codegenExpr :: ANF.Expr -> CodeGen [BasicBlock]

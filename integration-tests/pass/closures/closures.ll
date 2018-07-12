@@ -47,7 +47,7 @@ entry:
   ret %struct.Closure* %6
 }
 
-define private %struct.Closure* @myAddDouble(double %x) {
+define %struct.Closure* @myAddDouble(double %x) {
 entry:
   %"lambda1_$2_closure1" = call %struct.Closure* @create_closure(i8 2, %struct.Closure* (i64*)* @"lambda1_$2_closure_wrapper")
   %0 = call i8* @GC_malloc(i64 64)
@@ -62,20 +62,20 @@ entry:
   ret %struct.Closure* %ret
 }
 
-define private i64 @myAdd(i64 %x, double %y) {
+define i64 @myAdd(i64 %x, double %y) {
 entry:
   %res2 = fptoui double %y to i64
   %ret = add i64 %x, %res2
   ret i64 %ret
 }
 
-define private %struct.Closure* @incDouble() {
+define %struct.Closure* @incDouble() {
 entry:
   %ret = call %struct.Closure* @myAddDouble(double 1.010000e+00)
   ret %struct.Closure* %ret
 }
 
-define private %struct.Closure* @inc() {
+define %struct.Closure* @inc() {
 entry:
   %myAdd_closure3 = call %struct.Closure* @create_closure(i8 2, %struct.Closure* (i64*)* @myAdd_closure_wrapper)
   %0 = call i8* @GC_malloc(i64 64)
@@ -111,7 +111,7 @@ entry:
   ret i64 %ret
 }
 
-define private double @"lambda1_$2"(double %x, double %y) {
+define double @"lambda1_$2"(double %x, double %y) {
 entry:
   %ret = fadd double %x, %y
   ret double %ret

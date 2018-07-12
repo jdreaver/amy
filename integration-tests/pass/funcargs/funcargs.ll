@@ -20,7 +20,7 @@ entry:
   ret %struct.Closure* %5
 }
 
-define private i64 @apply(%struct.Closure* %f) {
+define i64 @apply(%struct.Closure* %f) {
 entry:
   %0 = call i8* @GC_malloc(i64 128)
   %1 = bitcast i8* %0 to i64*
@@ -40,7 +40,7 @@ entry:
   ret i64 %ret
 }
 
-define private i64 @"lambda3_$4"(i64 %_x1, i64 %_x2) {
+define i64 @"lambda3_$4"(i64 %_x1, i64 %_x2) {
 entry:
   %ret = add i64 %_x1, %_x2
   ret i64 %ret

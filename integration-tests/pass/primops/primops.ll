@@ -1,7 +1,7 @@
 ; ModuleID = 'amy-module'
 source_filename = "<string>"
 
-define private i64 @f(i64 %x) {
+define i64 @f(i64 %x) {
 entry:
   %y = add i64 %x, -1
   %res2 = sub i64 3, %y

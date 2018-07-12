@@ -5,7 +5,7 @@ source_filename = "<string>"
 
 declare i8* @GC_malloc(i64)
 
-define private { i64*, i64*, i64* }* @q({ i64*, i64*, i64* }* %r) {
+define { i64*, i64*, i64* }* @q({ i64*, i64*, i64* }* %r) {
 entry:
   %0 = getelementptr { i64*, i64*, i64* }, { i64*, i64*, i64* }* %r, i32 0, i32 0
   %x1 = load i64*, i64** %0
@@ -24,7 +24,7 @@ entry:
   ret { i64*, i64*, i64* }* %ret
 }
 
-define private %List* @h(i64* %x) {
+define %List* @h(i64* %x) {
 entry:
   %0 = call i8* @GC_malloc(i64 ptrtoint (%List* getelementptr (%List, %List* null, i32 1) to i64))
   %cdr4 = bitcast i8* %0 to %List*
@@ -62,7 +62,7 @@ entry:
   ret %List* %ret3
 }
 
-define private { i64*, i64 }* @g(i64* %x) {
+define { i64*, i64 }* @g(i64* %x) {
 entry:
   %0 = call i8* @GC_malloc(i64 ptrtoint ({ i64*, i64 }* getelementptr ({ i64*, i64 }, { i64*, i64 }* null, i32 1) to i64))
   %ret = bitcast i8* %0 to { i64*, i64 }*
@@ -73,7 +73,7 @@ entry:
   ret { i64*, i64 }* %ret
 }
 
-define private i64 @addXY({ i64, i64 }* %r) {
+define i64 @addXY({ i64, i64 }* %r) {
 entry:
   %0 = getelementptr { i64, i64 }, { i64, i64 }* %r, i32 0, i32 0
   %res8 = load i64, i64* %0
@@ -95,7 +95,7 @@ entry:
   ret i64 %ret
 }
 
-define private { i64, i1 }* @a() {
+define { i64, i1 }* @a() {
 entry:
   switch i1 true, label %case.0.ret [
     i1 true, label %case.0.ret
