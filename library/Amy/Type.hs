@@ -13,6 +13,9 @@ module Amy.Type
     -- * Type Traversals
   , traverseType
   , traverseTypeM
+  , everywhereOnType
+  , everywhereOnTypeM
+  , typeTyCons
   , removeTyExistVar
   , blowUpOnTyUnknown
 
@@ -26,6 +29,10 @@ import Control.Monad.Identity (Identity(..), runIdentity)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import Data.Maybe (fromMaybe)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (pack)
 
 import Amy.Names
@@ -96,6 +103,41 @@ traverseTypeM f = go
   go (TyRecord rows mTail) = TyRecord <$> traverse f rows <*> traverse f mTail
   go (TyFun t1 t2) = TyFun <$> f t1 <*> f t2
   go (TyForall vars ty) = TyForall vars <$> f ty
+
+everywhereOnType :: (Monoid a) => (Type -> a) -> Type -> a
+everywhereOnType f = runIdentity . everywhereOnTypeM (Identity . f)
+
+-- | Computes a 'Monoid'al value from a 'Type'.
+--
+-- This function traverses the 'Type' without modifying it, and accumulates
+-- results using 'mappend' from the 'Monoid' type class.
+--
+everywhereOnTypeM :: (Monad m, Monoid a) => (Type -> m a) -> Type -> m a
+everywhereOnTypeM f = go
+ where
+  go t@TyUnknown{} = f t
+  go t@TyCon{} = f t
+  go t@TyVar{} = f t
+  go t@TyExistVar{} = f t
+  go (TyApp t1 t2) = go2 t1 t2
+  go (TyRecord rows mTail) = do
+    xRows <- traverse go (Map.elems rows)
+    xTail <- traverse go mTail
+    pure $ mconcat xRows <> fromMaybe mempty xTail
+  go (TyFun t1 t2) = go2 t1 t2
+  go (TyForall _ ty) = go ty
+
+  go2 t1 t2 = do
+    x1 <- go t1
+    x2 <- go t2
+    pure $ x1 <> x2
+
+-- | Compute all 'TyConName's in a 'Type'
+typeTyCons :: Type -> Set TyConName
+typeTyCons = everywhereOnType go
+ where
+  go (TyCon (MaybeLocated _ con)) = Set.singleton con
+  go _ = Set.empty
 
 -- | Replace any 'TyExistVar' nodes with 'TyVar' nodes.
 removeTyExistVar :: Type -> Type
