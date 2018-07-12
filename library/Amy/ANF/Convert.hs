@@ -47,16 +47,18 @@ normalizeModule (C.Module bindingGroups externs typeDeclarations) env =
     -- Compute new environment
     moduleEnv =
       emptyEnvironment
-      { environmentANFTypeReps = allTypeReps
+      { environmentANFTypeReps = typeRepMap
       , environmentANFFunctionTypes = Map.fromList anfFuncTys
       }
 
-  in runANFConvert (env `mergeEnvironments` moduleEnv) $ do
+  in runANFConvert env moduleEnv $ do
     typeDeclarations' <- traverse convertTypeDeclaration typeDeclarations
     bindings' <- traverse (normalizeBinding (Just "res")) bindings
+    envExterns <- getExternFunctions
+    envTypes <- getExternTypes
     textPointers <- getTextPointers
     closureWrappers <- getClosureWrappers
-    let module' = ANF.Module bindings' externs' typeDeclarations' textPointers closureWrappers
+    let module' = ANF.Module bindings' (externs' ++ envExterns) typeDeclarations' envTypes textPointers closureWrappers
     pure (module', moduleEnv)
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANFConvert ANF.TypeDeclaration

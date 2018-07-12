@@ -43,6 +43,7 @@ data Module
   { moduleBindings :: ![Binding]
   , moduleExterns :: ![Extern]
   , moduleTypeDeclarations :: ![TypeDeclaration]
+  , moduleExternTypes :: ![Type]
   , moduleTextPointers :: ![TextPointer]
   , moduleClosureWrappers :: ![ClosureWrapper]
   } deriving (Show, Eq)
