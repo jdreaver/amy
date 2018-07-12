@@ -12,11 +12,9 @@ import Control.Monad.Except
 import Data.Bifunctor (first)
 import qualified Data.ByteString.Char8 as BS8
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text.Lazy.IO as TL
 import LLVM.Pretty (ppllvm)
-import System.Environment (lookupEnv)
 import System.FilePath.Posix ((</>), dropExtension, replaceExtension, takeDirectory)
 import System.Process (callProcess)
 import Text.Megaparsec
@@ -30,7 +28,9 @@ import Amy.Syntax as S
 import Amy.TypeCheck as TC
 
 compileModule
-  :: FilePath
+  :: Environment
+     -- ^ 'Environment' for any dependencies
+  -> FilePath
      -- ^ Original module file path
   -> DumpFlags
      -- ^ Flags to control intermediate output
@@ -38,7 +38,7 @@ compileModule
      -- ^ Module source code
   -> IO (Either [String] CompiledModule)
      -- ^ Return any possible errors or a compiled module
-compileModule filePath DumpFlags{..} input = runExceptT $ do
+compileModule depsEnv filePath DumpFlags{..} input = runExceptT $ do
   -- Parse
   tokens' <- liftEither $ first ((:[]) . parseErrorPretty) $ lexer filePath input
   parsed <- liftEither $ first ((:[]) . parseErrorPretty) $ parse (runAmyParser parseModule) filePath tokens'
@@ -46,13 +46,13 @@ compileModule filePath DumpFlags{..} input = runExceptT $ do
     lift $ writeFile (filePath `replaceExtension` ".amy-parsed") (show $ S.prettyModule parsed)
 
   -- Type checking
-  (typeChecked, typeCheckedModuleEnv) <- liftEither $ first ((:[]) . showError) $ TC.inferModule primEnvironment parsed
+  (typeChecked, typeCheckedModuleEnv) <- liftEither $ first ((:[]) . showError) $ TC.inferModule depsEnv parsed
   when dfDumpTypeChecked $
     lift $ writeFile (filePath `replaceExtension` ".amy-typechecked") (show $ S.prettyModule typeChecked)
 
   -- Desugar to Core
   let
-    coreEnv = mergeEnvironments primEnvironment typeCheckedModuleEnv
+    coreEnv = mergeEnvironments depsEnv typeCheckedModuleEnv
     core = desugarModule coreEnv typeChecked
   when dfDumpCore $
     lift $ writeFile (filePath `replaceExtension` ".amy-core") (show $ C.prettyModule core)
@@ -85,15 +85,14 @@ compileModule filePath DumpFlags{..} input = runExceptT $ do
     compiledModule = CompiledModule moduleEnv llvmFile
   pure compiledModule
 
-linkModules :: [CompiledModule] -> CompiledModule -> IO ()
-linkModules depModules module' = do
+linkModules :: [CompiledModule] -> CompiledModule -> FilePath -> IO ()
+linkModules depModules module' rtsLL = do
   let
     depFiles = compiledModuleLLVM <$> depModules
     moduleFile = compiledModuleLLVM module'
 
   -- Link dependencies
   let linkedLL = dropExtension moduleFile ++ "-rts-linked.ll"
-  rtsLL <- fromMaybe "rts/rts.ll" <$> lookupEnv "RTS_LL_LOCATION"
   linked <- linkModuleIRs (moduleFile :| rtsLL : depFiles)
   BS8.writeFile linkedLL linked
 

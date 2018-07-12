@@ -1,7 +1,5 @@
 # Demonstrate lambda lifting
 
-Maybe a = Nothing | Just a
-
 main :: Int
 main =
   let

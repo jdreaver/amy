@@ -12,7 +12,7 @@ build: $(RTS_LL)
 test: $(RTS_LL)
 	stack test --pedantic amy
 	stack test --pedantic amy-integration-tests
-	(cd integration-tests && RTS_LL_LOCATION=../rts/rts.ll stack exec amy-integration-tests)
+	(cd integration-tests && PRELUDE_LOCATION=../stdlib/prelude.amy RTS_LL_LOCATION=../rts/rts.ll stack exec amy-integration-tests)
 
 .PHONY: watch
 watch:
