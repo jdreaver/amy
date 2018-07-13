@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Amy.ANF.Convert
   ( normalizeModule
@@ -7,48 +8,58 @@ module Amy.ANF.Convert
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
-import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
-import Data.Traversable (for)
 
 import Amy.ANF.AST as ANF
+import Amy.ANF.ConvertType
 import Amy.ANF.Monad
+import Amy.ANF.TypeRep
 import Amy.Core.AST as C
+import Amy.Environment
 import Amy.Prim
 
-normalizeModule :: C.Module -> ANF.Module
-normalizeModule (C.Module bindingGroups externs typeDeclarations) =
+normalizeModule :: C.Module -> Environment -> (ANF.Module, Environment)
+normalizeModule (C.Module bindingGroups externs typeDeclarations) env =
   let
     bindings = concatMap NE.toList bindingGroups
 
-    -- Record top-level names
-    bindingTys = (\b -> (C.bindingName b, (C.typedType <$> C.bindingArgs b, C.bindingReturnType b))) <$> bindings
-    externTys = (\e -> (C.externName e, mkExternType (C.externType e))) <$> externs
-    topLevelTys = bindingTys ++ externTys
+    -- Compute type reps
+    typeRepMap =
+      Map.fromList
+      $ (\t -> (locatedValue . C.tyConDefinitionName . C.typeDeclarationTypeName $ t, typeRep t))
+      <$> typeDeclarations
+    allTypeReps = environmentANFTypeReps env <> typeRepMap
+    mkANFTy = convertANFType allTypeReps
 
-    -- Actual conversion
-    convertRead = anfConvertRead topLevelTys typeDeclarations
-  in runANFConvert convertRead $ do
+    -- Convert externs
+    convertExtern (C.Extern name ty) =
+      let tyNE = unfoldTyFun ty
+      in ANF.Extern name (mkANFTy <$> NE.init tyNE) (mkANFTy $ NE.last tyNE)
+    externs' = convertExtern <$> externs
+
+    -- Record function types
+    bindingTys = (\b -> (C.bindingName b, (mkANFTy . C.typedType <$> C.bindingArgs b, mkANFTy $ C.bindingReturnType b))) <$> bindings
+    externTys = (\(ANF.Extern name argTys retTy) -> (name, (argTys, retTy))) <$> externs'
+    anfFuncTys = bindingTys ++ externTys
+
+    -- Compute new environment
+    moduleEnv =
+      emptyEnvironment
+      { environmentANFTypeReps = typeRepMap
+      , environmentANFFunctionTypes = Map.fromList anfFuncTys
+      }
+
+  in runANFConvert env moduleEnv $ do
     typeDeclarations' <- traverse convertTypeDeclaration typeDeclarations
-    externs' <- traverse convertExtern externs
     bindings' <- traverse (normalizeBinding (Just "res")) bindings
+    envExterns <- getExternFunctions
+    envTypes <- getExternTypes
     textPointers <- getTextPointers
     closureWrappers <- getClosureWrappers
-    pure $ ANF.Module bindings' externs' typeDeclarations' textPointers closureWrappers
-
-convertExtern :: C.Extern -> ANFConvert ANF.Extern
-convertExtern (C.Extern name ty) = do
-  let (argTys, retTy) = mkExternType ty
-  argTys' <- traverse convertType argTys
-  retTy' <- convertType retTy
-  pure $ ANF.Extern name argTys' retTy'
-
-mkExternType :: C.Type -> ([C.Type], C.Type)
-mkExternType ty =
-  let tyNE = typeToNonEmpty ty
-  in (NE.init tyNE, NE.last tyNE)
+    let module' = ANF.Module bindings' (externs' ++ envExterns) typeDeclarations' envTypes textPointers closureWrappers
+    pure (module', moduleEnv)
 
 convertTypeDeclaration :: C.TypeDeclaration -> ANFConvert ANF.TypeDeclaration
 convertTypeDeclaration (C.TypeDeclaration tyConDef con) = do
@@ -67,44 +78,13 @@ convertDataConDefinition (C.DataConDefinition (Located _ conName) mTyArg) = do
 
 convertDataCon :: DataConName -> ANFConvert ANF.DataCon
 convertDataCon con = do
-  (ty, index) <- getDataConInfo con
+  DataConInfo{dataConInfoANFType, dataConInfoConstructorIndex} <- getDataConInfo con
   pure
     ANF.DataCon
     { ANF.dataConName = con
-    , ANF.dataConType = ty
-    , ANF.dataConIndex = index
+    , ANF.dataConType = dataConInfoANFType
+    , ANF.dataConIndex = ConstructorIndex dataConInfoConstructorIndex
     }
-
-convertType :: C.Type -> ANFConvert ANF.Type
-convertType ty = go (typeToNonEmpty ty)
- where
-  go :: NonEmpty C.Type -> ANFConvert ANF.Type
-  go (ty' :| []) =
-    case ty' of
-      C.TyUnknown -> error "Encountered TyUnknown in convertType"
-      C.TyCon (MaybeLocated _ con) -> getTyConType con
-      C.TyVar _ -> pure OpaquePointerType
-      C.TyExistVar _ -> error "Found TyExistVar in Core"
-      app@C.TyApp{} ->
-        case unfoldTyApp app of
-          TyCon (MaybeLocated _ con) :| _ -> getTyConType con
-          _ -> error $ "Can't convert non-TyCon TyApp yet " ++ show ty'
-      -- N.B. ANF/LLVM doesn't care about polymorphic records
-      C.TyRecord rows _ -> mkRecordType rows
-      C.TyFun{} -> pure ClosureType
-      C.TyForall _ ty'' -> convertType ty''
-  go _ = pure ClosureType
-
-mkRecordType :: Map (MaybeLocated RowLabel) C.Type -> ANFConvert ANF.Type
-mkRecordType rows = do
-  rows' <- for (Map.toAscList rows) $ \(MaybeLocated _ label, ty) -> do
-    ty' <- convertType ty
-    pure (label, ty')
-  pure $ RecordType rows'
-
-typeToNonEmpty :: C.Type -> NonEmpty C.Type
-typeToNonEmpty (t1 `C.TyFun` t2) = NE.cons t1 (typeToNonEmpty t2)
-typeToNonEmpty ty = ty :| []
 
 convertTypedIdent :: C.Typed IdentName -> ANFConvert (ANF.Typed IdentName)
 convertTypedIdent (C.Typed ty ident) = do
@@ -150,10 +130,8 @@ normalizeExpr name (C.EApp app@(C.App _ _ retTy)) = do
           (_, Just (funcArgTys, funcRetTy)) ->
             if length argVals == length funcArgTys
             -- Known function call
-            then do
-              funcArgTys' <- traverse convertType funcArgTys
-              funcRetTy' <- convertType funcRetTy
-              pure $ ANF.EKnownFuncApp $ KnownFuncApp ident argVals funcArgTys' retTy' funcRetTy'
+            then
+              pure $ ANF.EKnownFuncApp $ KnownFuncApp ident argVals funcArgTys retTy' funcRetTy
             -- Too few or too many args, fall back to using a closure and call it
             else
               createClosure ident funcArgTys funcRetTy $ \closureVal ->
@@ -214,11 +192,9 @@ mkNormalizeLet name expr exprType c = do
   body <- c $ ANF.Var (ANF.Typed exprType newIdent)
   pure $ ANF.ELetVal $ collapseLetVals $ ANF.LetVal [ANF.LetValBinding newIdent exprType expr] body
 
-createClosure :: ANF.IdentName -> [C.Type] -> C.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
+createClosure :: ANF.IdentName -> [ANF.Type] -> ANF.Type -> (ANF.Val -> ANFConvert ANF.Expr) -> ANFConvert ANF.Expr
 createClosure ident argTys retTy c = do
-  argTys' <- traverse convertType argTys
-  retTy' <- convertType retTy
-  wrapperName <- putClosureWrapper ident argTys' retTy'
+  wrapperName <- putClosureWrapper ident argTys retTy
   let arity = length argTys
   mkNormalizeLet (unIdentName ident <> "_closure") (ECreateClosure $ CreateClosure wrapperName arity) ClosureType c
 

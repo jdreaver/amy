@@ -19,9 +19,10 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text, pack)
 import Data.Traversable (for, traverse)
 
-import Amy.Syntax.AST
+import Amy.Environment
 import Amy.Errors
 import Amy.Prim
+import Amy.Syntax.AST
 import Amy.Syntax.BindingGroups
 import Amy.TypeCheck.KindInference
 import Amy.TypeCheck.Monad
@@ -31,24 +32,38 @@ import Amy.TypeCheck.Subtyping
 -- Infer
 --
 
-inferModule :: Module -> Either Error Module
-inferModule (Module filePath typeDeclarations externs bindings) = do
-  let
-    allTypeDeclarations = allPrimTypeDefinitions ++ typeDeclarations
+inferModule :: Environment -> Module -> Either Error (Module, Environment)
+inferModule env (Module filePath typeDeclarations externs bindings) =
+  runChecker env filePath $ do
+    -- Add data constructor types to scope
+    let dataConstructorInfos = concatMap dataConInfos typeDeclarations
+    for_ dataConstructorInfos $ uncurry addDataConInfoToScope
 
-    externTypes = (\(Extern (Located _ name) ty) -> (name, ty)) <$> externs
-    primFuncTypes = primitiveFunctionType' <$> allPrimitiveFunctions
-    identTypes = externTypes ++ primFuncTypes
-    dataConstructorTypes = concatMap dataConTypes (allPrimTypeDefinitions ++ typeDeclarations)
-  runChecker identTypes dataConstructorTypes filePath $ do
     -- Infer type declaration kinds and add to scope
-    for_ allTypeDeclarations $ \decl@(TypeDeclaration (TyConDefinition tyCon _) _) -> do
+    kinds <- for typeDeclarations $ \decl@(TypeDeclaration (TyConDefinition tyCon _) _) -> do
       kind <- inferTypeDeclarationKind decl
       addTyConKindToScope tyCon kind
+      pure (locatedValue tyCon, kind)
+
+    -- Add extern types to scope
+    for_ externs $ \(Extern name ty) ->
+      addValueTypeToScope name ty
 
     -- Infer all bindings
     bindings' <- inferBindings True (concatMap toList bindings)
-    pure (Module filePath typeDeclarations externs bindings')
+
+    let
+      module' = Module filePath typeDeclarations externs bindings'
+      identTypes =
+        ((\binding -> (locatedValue $ bindingName binding, bindingType binding)) <$> concatMap toList bindings')
+        ++ ((\extern -> (locatedValue $ externName extern, externType extern)) <$> externs)
+      moduleEnv =
+        emptyEnvironment
+        { environmentIdentTypes = Map.fromList identTypes
+        , environmentDataConInfos = Map.mapKeys locatedValue $ Map.fromList dataConstructorInfos
+        , environmentTyConKinds = Map.fromList kinds
+        }
+    pure (module', moduleEnv)
 
 -- | Compute binding groups and infer each group separately.
 inferBindings :: Bool -> [Binding] -> Checker [NonEmpty Binding]
@@ -83,25 +98,27 @@ inferBindingGroup isTopLevel bindings = do
   -- Check/infer each binding. We sort to make sure typed bindings are checked first
   bindings'' <- for (NE.sortBy compareBindingTypeStatus bindings') $ \bindingAndTy ->
     case bindingAndTy of
-      TypedBinding binding -> checkBinding binding (bindingType binding)
+      TypedBinding binding -> TypedBinding <$> checkBinding binding (bindingType binding)
       UntypedBinding binding -> do
         binding' <- inferBinding binding
         tySub <- currentContextSubst (bindingType binding)
         subtype (bindingType binding') tySub
-        pure binding'
+        pure $ UntypedBinding binding'
 
-  -- Generalize and apply substitutions to binding N.B. we only generalize
-  -- top-level bindings, not let binding
+  -- Generalize inferred binding and apply substitutions to all bindings. N.B.
+  -- we only generalize top-level bindings, not let binding.
   context <- getContext
   pure $ flip fmap bindings'' $ \binding ->
-    let
-      ty = bindingType binding
-      (ty', context') =
-        if isTopLevel
-        then generalize context ty
-        else (ty, context)
-    in
-      contextSubstBinding context' $ binding { bindingType = ty' }
+    case binding of
+      TypedBinding binding' -> contextSubstBinding context binding'
+      UntypedBinding binding' ->
+        let
+          (ty', context') =
+            if isTopLevel
+            then generalize context (bindingType binding')
+            else (bindingType binding', context)
+        in
+          contextSubstBinding context' $ binding' { bindingType = ty' }
 
 inferBinding :: Binding -> Checker Binding
 inferBinding (Binding name@(Located nameSpan _) _ args _ body) = do
@@ -278,9 +295,10 @@ patternBinderIdent (PParens pat) = patternBinderIdent pat
 --
 
 checkBinding :: Binding -> Type -> Checker Binding
-checkBinding binding (TyForall as t) =
-  withContextUntilNE (ContextVar . maybeLocatedValue <$> as) $
-    checkBinding binding t
+checkBinding binding t@(TyForall as t') =
+  withContextUntilNE (ContextVar . maybeLocatedValue <$> as) $ do
+    binding' <- checkBinding binding t'
+    pure binding' { bindingType = t }
 checkBinding (Binding name@(Located span' _) _ args _ body) t = do
   (args', body', bodyTy, context) <- checkAbs args body t span'
   pure $ contextSubstBinding context $ Binding name t args' bodyTy body'
@@ -350,16 +368,6 @@ checkPattern pat t =
     patTy' <- currentContextSubst $ patternType pat'
     subtype patTy' tSub
     pure pat'
-
---
--- Converting types
---
-
-primitiveFunctionType' :: PrimitiveFunction -> (IdentName, Type)
-primitiveFunctionType' (PrimitiveFunction _ name ty) =
-  ( name
-  , foldTyFun $ TyCon . notLocated <$> ty
-  )
 
 --
 -- Substitution

@@ -29,7 +29,7 @@ prettyFunctionType :: [Type] -> Type -> Doc ann
 prettyFunctionType args retTy = "Func" <> groupOrHang (tupled (prettyType <$> args) <+> "=>" <+> prettyType retTy)
 
 prettyModule :: Module -> Doc ann
-prettyModule (Module bindings externs typeDeclarations _ closureWrappers) =
+prettyModule (Module bindings externs typeDeclarations _ _ closureWrappers) =
   vcatTwoHardLines
   $ (prettyExtern' <$> externs)
   ++ (prettyTypeDeclaration' <$> typeDeclarations)

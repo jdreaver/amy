@@ -1,8 +1,5 @@
 main :: Int
 main = idFancy id 1
 
-id :: forall a. a -> a
-id x = x
-
 idFancy :: forall a. (forall b. b -> b) -> a -> a
 idFancy f x = f x

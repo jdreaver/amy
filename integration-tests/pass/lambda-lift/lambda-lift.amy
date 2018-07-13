@@ -1,18 +1,16 @@
 # Demonstrate lambda lifting
 
-Maybe a = Nothing | Just a
-
 main :: Int
 main =
   let
     # Nested lift
-    id x =
+    id' x =
       let
-        id' y = x
-      in id' x
+        id'' y = x
+      in id'' x
 
-    # Depends on id
-    const x y = id y
+    # Depends on id'
+    const' x y = id' y
 
     # Needs closing
     z = 2
@@ -22,7 +20,7 @@ main =
     a = 1
     g x = if iLessThan# x 0 then 100 else g' (iSub# x z)
     g' x = g ((\y -> iAdd# x y) a)
-  in g (f (const 2 1))
+  in g (f (const' 2 1))
 
 mkJust :: forall a. a -> Maybe a
 mkJust = Just

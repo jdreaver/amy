@@ -1,0 +1,19 @@
+Maybe a
+  = Nothing
+  | Just a
+
+Either a b
+  = Left a
+  | Right b
+
+maybe :: forall a b. b -> (a -> b) -> Maybe a -> b
+maybe default f mValue =
+  case mValue of
+    Nothing -> default
+    Just a -> f a
+
+id :: forall a. a -> a
+id x = x
+
+const :: forall a b. a -> b -> a
+const x y = x

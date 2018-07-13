@@ -1,5 +1,3 @@
-Either a b = Left a | Right b
-
 main :: Int
 main =
   case f of

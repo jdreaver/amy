@@ -13,15 +13,17 @@ import Data.Maybe (maybeToList)
 import Amy.Core.AST as C
 import Amy.Core.Monad
 import Amy.Core.PatternCompiler as PC
+import Amy.Environment
 import Amy.Prim
 import Amy.Syntax.AST as S
 
-desugarModule :: S.Module -> C.Module
-desugarModule (S.Module _ typeDeclarations externs bindings) = do
-  let typeDeclarations' = desugarTypeDeclaration <$> typeDeclarations
-  runDesugar typeDeclarations' $ do
+desugarModule :: Environment -> S.Module -> C.Module
+desugarModule env (S.Module _ typeDeclarations externs bindings) =
+  runDesugar env $ do
+    let
+      typeDeclarations' = desugarTypeDeclaration <$> typeDeclarations
+      externs' = desugarExtern <$> externs
     bindings' <- traverse (traverse desugarBinding) bindings
-    let externs' = desugarExtern <$> externs
     pure $ C.Module bindings' externs' typeDeclarations'
 
 desugarExtern :: S.Extern -> C.Extern
@@ -135,7 +137,7 @@ convertPattern :: S.Pattern -> Desugar PC.InputPattern
 convertPattern (S.PLit (Located _ lit)) = pure $ PC.PCon (PC.ConLit lit) []
 convertPattern (S.PVar ident) = pure $ PC.PVar $ desugarTypedIdent (locatedValue <$> ident)
 convertPattern (S.PCons (S.PatCons (Located _ con) mArg _)) = do
-  (tyDecl, _) <- lookupDataConType con
+  tyDecl <- lookupDataConType con
   argPats <- traverse convertPattern $ maybeToList mArg
   let
     argTys = maybeToList $ desugarType . patternType <$> mArg
@@ -159,7 +161,7 @@ restoreClause (PC.Clause (PC.ConLit lit) [] caseExpr) =
 restoreClause clause@(PC.Clause (PC.ConLit _) _ _) =
   error $ "Encountered literal clause with arguments! " ++ show clause
 restoreClause (PC.Clause (PC.Con con _ _) args caseExpr) = do
-  (tyDecl, _) <- lookupDataConType con
+  tyDecl <- lookupDataConType con
   let
     patTy = TyCon $ fromLocated $ tyConDefinitionName $ typeDeclarationTypeName tyDecl
     arg =

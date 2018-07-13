@@ -42,7 +42,7 @@ entry:
   ret %struct.Closure* %5
 }
 
-define private %struct.Closure* @mkJust() {
+define %struct.Closure* @mkJust() {
 entry:
   %"lambda2_$3_closure1" = call %struct.Closure* @create_closure(i8 1, %struct.Closure* (i64*)* @"lambda2_$3_closure_wrapper")
   %0 = alloca %struct.Closure*
@@ -68,7 +68,7 @@ entry:
   %6 = alloca i64
   store i64 1, i64* %6
   %a = load i64, i64* %6
-  %res3 = call i64 @"const_$9"(i64 2, i64 1)
+  %res3 = call i64 @"const'_$9"(i64 2, i64 1)
   %7 = call i8* @GC_malloc(i64 64)
   %8 = bitcast i8* %7 to i64*
   %9 = getelementptr i64, i64* %8, i32 0
@@ -79,7 +79,7 @@ entry:
   ret i64 %ret
 }
 
-define private %Maybe* @"lambda2_$3"(i64* %_x1) {
+define %Maybe* @"lambda2_$3"(i64* %_x1) {
 entry:
   %0 = call i8* @GC_malloc(i64 ptrtoint (%Maybe* getelementptr (%Maybe, %Maybe* null, i32 1) to i64))
   %ret = bitcast i8* %0 to %Maybe*
@@ -91,7 +91,7 @@ entry:
   ret %Maybe* %ret1
 }
 
-define private i64 @"id'_$5"(i64 %x, i64 %y) {
+define i64 @"id''_$5"(i64 %x, i64 %y) {
 entry:
   %0 = alloca i64
   store i64 %x, i64* %0
@@ -99,31 +99,31 @@ entry:
   ret i64 %ret
 }
 
-define private i64 @"id_$4"(i64 %x) {
+define i64 @"id'_$4"(i64 %x) {
 entry:
-  %ret = call i64 @"id'_$5"(i64 %x, i64 %x)
+  %ret = call i64 @"id''_$5"(i64 %x, i64 %x)
   ret i64 %ret
 }
 
-define private i64 @"lambda7_$8"(i64 %z, i64 %_x6) {
+define i64 @"lambda7_$8"(i64 %z, i64 %_x6) {
 entry:
   %ret = add i64 %z, %_x6
   ret i64 %ret
 }
 
-define private i64 @"const_$9"(i64 %x, i64 %y) {
+define i64 @"const'_$9"(i64 %x, i64 %y) {
 entry:
-  %ret = call i64 @"id_$4"(i64 %y)
+  %ret = call i64 @"id'_$4"(i64 %y)
   ret i64 %ret
 }
 
-define private i64 @"lambda12_$13"(i64 %x, i64 %y) {
+define i64 @"lambda12_$13"(i64 %x, i64 %y) {
 entry:
   %ret = add i64 %x, %y
   ret i64 %ret
 }
 
-define private i64 @"g'_$10"(i64 %a, i64 %z, i64 %x) {
+define i64 @"g'_$10"(i64 %a, i64 %z, i64 %x) {
 entry:
   %"lambda12_$13_closure5" = call %struct.Closure* @create_closure(i8 2, %struct.Closure* (i64*)* @"lambda12_$13_closure_wrapper")
   %0 = call i8* @GC_malloc(i64 64)
@@ -144,7 +144,7 @@ entry:
   ret i64 %ret
 }
 
-define private i64 @"g_$11"(i64 %a, i64 %z, i64 %x) {
+define i64 @"g_$11"(i64 %a, i64 %z, i64 %x) {
 entry:
   %res8 = icmp slt i64 %x, 0
   switch i1 %res8, label %case.0.ret [

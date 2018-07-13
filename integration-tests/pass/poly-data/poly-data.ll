@@ -5,7 +5,7 @@ source_filename = "<string>"
 
 declare i8* @GC_malloc(i64)
 
-define private %Either* @h() {
+define %Either* @h() {
 entry:
   %0 = call i8* @GC_malloc(i64 ptrtoint (%Either* getelementptr (%Either, %Either* null, i32 1) to i64))
   %res1 = bitcast i8* %0 to %Either*
@@ -28,7 +28,7 @@ entry:
   ret %Either* %ret2
 }
 
-define private %Either* @f() {
+define %Either* @f() {
 entry:
   %0 = call i8* @GC_malloc(i64 ptrtoint (%Either* getelementptr (%Either, %Either* null, i32 1) to i64))
   %res2 = bitcast i8* %0 to %Either*

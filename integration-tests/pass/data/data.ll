@@ -6,7 +6,7 @@ source_filename = "<string>"
 
 declare i8* @GC_malloc(i64)
 
-define private i64 @f(double %x, i8 %enum) {
+define i64 @f(double %x, i8 %enum) {
 entry:
   switch i8 %enum, label %case.0.ret [
     i8 0, label %case.0.ret
@@ -35,7 +35,7 @@ case.end.ret:                                     ; preds = %case.2.ret, %case.1
   ret i64 %ret
 }
 
-define private i64 @countNat(%Nat* %n) {
+define i64 @countNat(%Nat* %n) {
 entry:
   %0 = getelementptr %Nat, %Nat* %n, i32 0, i32 0
   %1 = load i1, i1* %0

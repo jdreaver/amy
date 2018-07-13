@@ -30,12 +30,14 @@ import Amy.Codegen.Utils
 import Amy.Prim
 
 codegenModule :: ANF.Module -> LLVM.Module
-codegenModule (ANF.Module bindings externs typeDeclarations textPointers closureWrappers) =
+codegenModule (ANF.Module bindings externs typeDeclarations externTypes textPointers closureWrappers) =
   let
     definitions = runCodeGen $ do
       let
         externs' = codegenExtern <$> externs
-        typeDefs = mapMaybe codegenTypeDeclaration typeDeclarations
+        typeDefs =
+          mapMaybe codegenTypeDeclaration
+          $ (typeDeclarationType <$> typeDeclarations) ++ externTypes
         textPointers' = codegenTextPointer <$> textPointers
       bindings' <- traverse codegenTopLevelBinding bindings
       closureWrappers' <- traverse codegenClosureWrapper closureWrappers
@@ -60,8 +62,8 @@ codegenExtern (ANF.Extern name' argTys retTy) =
     , LLVM.returnType = retTy'
     }
 
-codegenTypeDeclaration :: ANF.TypeDeclaration -> Maybe Definition
-codegenTypeDeclaration (ANF.TypeDeclaration _ ty _) =
+codegenTypeDeclaration :: ANF.Type -> Maybe Definition
+codegenTypeDeclaration ty =
   case ty of
     TaggedUnionType name' intBits ->
       Just $
@@ -104,10 +106,6 @@ codegenTopLevelBinding binding = do
     , parameters = (params, False)
     , LLVM.returnType = returnType'
     , basicBlocks = blocks
-    , linkage =
-        if ANF.bindingName binding == "main"
-          then L.External
-          else L.Private
     }
 
 codegenExpr :: ANF.Expr -> CodeGen [BasicBlock]

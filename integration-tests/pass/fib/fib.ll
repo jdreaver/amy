@@ -1,7 +1,7 @@
 ; ModuleID = 'amy-module'
 source_filename = "<string>"
 
-define private i64 @fib(i64 %x) {
+define i64 @fib(i64 %x) {
 entry:
   switch i64 %x, label %case.default.ret [
     i64 0, label %case.0.ret

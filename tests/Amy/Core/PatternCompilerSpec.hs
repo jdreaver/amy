@@ -11,6 +11,7 @@ import Test.Hspec
 import Amy.Core.AST
 import Amy.Core.Monad
 import Amy.Core.PatternCompiler
+import Amy.Environment
 
 -- Utils
 mkId :: Int -> Typed IdentName
@@ -34,7 +35,7 @@ match'
   :: [Typed IdentName]
   -> [Equation]
   -> CaseExpr
-match' vars eqs = runDesugar [] $ match vars eqs
+match' vars eqs = runDesugar emptyEnvironment $ match vars eqs
 
 boolTy :: Type
 boolTy = TyCon (notLocated "Bool")
