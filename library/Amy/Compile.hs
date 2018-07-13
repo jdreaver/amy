@@ -98,9 +98,9 @@ linkModules depModules module' rtsLL = do
 
   -- Optimize LLVM
   -- TODO: This breaks some examples
-  -- let optLL = dropExtension filePath ++ "-rts-opt.ll"
-  -- opt <- lift $ optimizeLLVM linkedLL
-  -- lift $ BS8.writeFile optLL opt
+  -- let optLL = dropExtension moduleFile ++ "-rts-opt.ll"
+  -- opt <- optimizeLLVM linkedLL
+  -- BS8.writeFile optLL opt
 
   -- Compile with clang
   let exeFile = takeDirectory moduleFile </> "a.out"
