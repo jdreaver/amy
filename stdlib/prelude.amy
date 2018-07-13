@@ -11,3 +11,9 @@ maybe default f mValue =
   case mValue of
     Nothing -> default
     Just a -> f a
+
+id :: forall a. a -> a
+id x = x
+
+const :: forall a b. a -> b -> a
+const x y = x

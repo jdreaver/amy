@@ -1,12 +1,6 @@
 main :: Int
 main = doubleToInt# (const (id 3.1) 5.1)
 
-id :: forall a. a -> a
-id x = x
-
-const :: forall a b. a -> b -> a
-const x y = x
-
 # TODO: Use this once we have lambda lifting and test tyvar scoping rules
 # const :: forall a b. a -> b -> a
 # const x y =

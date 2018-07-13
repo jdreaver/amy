@@ -9,6 +9,8 @@ declare %struct.Closure* @call_closure(%struct.Closure*, i8, i64*)
 
 declare %struct.Closure* @create_closure(i8, %struct.Closure* (i64*)*)
 
+declare i64* @id(i64*)
+
 define private %struct.Closure* @id_closure_wrapper(i64* %env) {
 entry:
   %0 = getelementptr i64, i64* %env, i32 0
@@ -28,14 +30,6 @@ entry:
   store i64* %x, i64** %3
   %4 = call %struct.Closure* @call_closure(%struct.Closure* %f, i8 1, i64* %1)
   %ret = bitcast %struct.Closure* %4 to i64*
-  ret i64* %ret
-}
-
-define i64* @id(i64* %x) {
-entry:
-  %0 = alloca i64*
-  store i64* %x, i64** %0
-  %ret = load i64*, i64** %0
   ret i64* %ret
 }
 
