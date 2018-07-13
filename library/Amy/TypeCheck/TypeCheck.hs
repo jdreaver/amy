@@ -98,28 +98,27 @@ inferBindingGroup isTopLevel bindings = do
   -- Check/infer each binding. We sort to make sure typed bindings are checked first
   bindings'' <- for (NE.sortBy compareBindingTypeStatus bindings') $ \bindingAndTy ->
     case bindingAndTy of
-      TypedBinding binding -> checkBinding binding (bindingType binding)
+      TypedBinding binding -> TypedBinding <$> checkBinding binding (bindingType binding)
       UntypedBinding binding -> do
         binding' <- inferBinding binding
         tySub <- currentContextSubst (bindingType binding)
         subtype (bindingType binding') tySub
-        pure binding'
+        pure $ UntypedBinding binding'
 
-  -- Generalize and apply substitutions to binding N.B. we only generalize
-  -- top-level bindings, not let binding
+  -- Generalize inferred binding and apply substitutions to all bindings. N.B.
+  -- we only generalize top-level bindings, not let binding.
   context <- getContext
   pure $ flip fmap bindings'' $ \binding ->
-    let
-      ty = bindingType binding
-      -- TODO: Only try to generalize untyped bindings. We can keep them in
-      -- their BindingTypeStatus after inference/checking and use that to
-      -- decide to generalize.
-      (ty', context') =
-        if isTopLevel
-        then generalize context ty
-        else (ty, context)
-    in
-      contextSubstBinding context' $ binding { bindingType = ty' }
+    case binding of
+      TypedBinding binding' -> contextSubstBinding context binding'
+      UntypedBinding binding' ->
+        let
+          (ty', context') =
+            if isTopLevel
+            then generalize context (bindingType binding')
+            else (bindingType binding', context)
+        in
+          contextSubstBinding context' $ binding' { bindingType = ty' }
 
 inferBinding :: Binding -> Checker Binding
 inferBinding (Binding name@(Located nameSpan _) _ args _ body) = do
