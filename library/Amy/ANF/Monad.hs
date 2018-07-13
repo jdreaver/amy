@@ -83,7 +83,7 @@ convertType ty = do
     combinedTyMap = environmentANFTypeReps $ combinedEnvironment read'
     ty' = convertANFType combinedTyMap ty
 
-  -- Figure out any external types
+  -- Record any types from outside the current module
   let
     tyCons = typeTyCons ty
     externalTyCons = tyCons `Set.difference` moduleTyCons read'
@@ -112,14 +112,14 @@ getKnownFuncType :: IdentName -> ANFConvert (Maybe ([ANF.Type], ANF.Type))
 getKnownFuncType ident = do
   read' <- ask
 
-  -- Look up known type from current module
+  -- Look up known function type from current module
   let
     moduleFuncs = environmentANFFunctionTypes $ moduleEnvironment read'
     mFunc = Map.lookup ident moduleFuncs
   case mFunc of
     Just f -> pure (Just f)
     Nothing -> do
-      -- Look up known type from external module
+      -- Look up known function type from external module
       let
         combinedFuncs = environmentANFFunctionTypes $ combinedEnvironment read'
         mExternalFunc = Map.lookup ident combinedFuncs
