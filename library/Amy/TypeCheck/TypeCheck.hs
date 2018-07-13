@@ -111,6 +111,9 @@ inferBindingGroup isTopLevel bindings = do
   pure $ flip fmap bindings'' $ \binding ->
     let
       ty = bindingType binding
+      -- TODO: Only try to generalize untyped bindings. We can keep them in
+      -- their BindingTypeStatus after inference/checking and use that to
+      -- decide to generalize.
       (ty', context') =
         if isTopLevel
         then generalize context ty
@@ -293,9 +296,10 @@ patternBinderIdent (PParens pat) = patternBinderIdent pat
 --
 
 checkBinding :: Binding -> Type -> Checker Binding
-checkBinding binding (TyForall as t) =
-  withContextUntilNE (ContextVar . maybeLocatedValue <$> as) $
-    checkBinding binding t
+checkBinding binding t@(TyForall as t') =
+  withContextUntilNE (ContextVar . maybeLocatedValue <$> as) $ do
+    binding' <- checkBinding binding t'
+    pure binding' { bindingType = t }
 checkBinding (Binding name@(Located span' _) _ args _ body) t = do
   (args', body', bodyTy, context) <- checkAbs args body t span'
   pure $ contextSubstBinding context $ Binding name t args' bodyTy body'
