@@ -295,13 +295,12 @@ patternBinderIdent (PParens pat) = patternBinderIdent pat
 --
 
 checkBinding :: Binding -> Type -> Checker Binding
-checkBinding binding t@(TyForall as t') =
-  withContextUntilNE (ContextVar . maybeLocatedValue <$> as) $ do
-    binding' <- checkBinding binding t'
-    pure binding' { bindingType = t }
-checkBinding (Binding name@(Located span' _) _ args _ body) t = do
+checkBinding binding (TyForall as t') =
+  withContextUntilNE (ContextVar . maybeLocatedValue <$> as) $
+    checkBinding binding t'
+checkBinding (Binding name@(Located span' _) ty args _ body) t = do
   (args', body', bodyTy, context) <- checkAbs args body t span'
-  pure $ contextSubstBinding context $ Binding name t args' bodyTy body'
+  pure $ contextSubstBinding context $ Binding name ty args' bodyTy body'
 
 -- | Helper to check bindings and lambdas
 checkAbs
