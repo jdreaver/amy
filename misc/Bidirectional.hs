@@ -375,8 +375,6 @@ inferBindingGroup bindings = do
   for bindings $ \binding@(Binding name _ _) -> do
     ty <- inferBinding binding
     -- Update type of binding name in State
-    -- TODO: Proper binding dependency analysis so this is done in the proper
-    -- order
     addTypeToScope name ty
     pure (binding, ty)
 

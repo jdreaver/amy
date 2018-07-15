@@ -320,8 +320,8 @@ primitiveFunctionInstruction
 primitiveFunctionInstruction (PrimitiveFunction primFuncName _ _) argumentOperands =
   let
     -- TODO: Better error checking here if number of operands doesn't match
-    -- expected number. However, this should be type checked, so a simple panic
-    -- should suffice.
+    -- expected number. That shouldn't ever happen because of type checking and
+    -- eta expansion of primops, but a better error would be nice.
     [op] = argumentOperands
     [op0, op1] = argumentOperands
     instruction =

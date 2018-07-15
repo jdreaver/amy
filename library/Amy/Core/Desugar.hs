@@ -121,12 +121,6 @@ desugarType = removeTyExistVar . blowUpOnTyUnknown
 -- Case Expressions
 --
 
--- TODO: Just use the Core AST in the pattern compiler so we don't have to have
--- all this silly conversion logic. Then again, maybe we don't want to do this
--- so we can keep it general, which could be useful with row types in the
--- future. However, I'm sure row types will be different enough that we might
--- need the pattern compiler to specifically know about them.
-
 matchToEquation :: S.Match -> Desugar PC.Equation
 matchToEquation (S.Match pat body) = do
   pat' <- convertPattern pat

@@ -164,8 +164,9 @@ generalize context ty =
     -- context then there actually are in the type.
     freeVars = freeTEVars $ contextSubst context ty
 
-    -- Replace these with nice letters. TODO: Make sure these letters aren't
-    -- already in scope.
+    -- Replace these with nice letters. We only generalize at the top-level, so
+    -- we shouldn't have to worry about name conflicts since no type variables
+    -- are in scope already at the top-level.
     varsWithLetters = zip freeVars (TyVarName <$> letters)
     solutions = uncurry ContextSolved . fmap (TyVar . notLocated) <$> varsWithLetters
     context' = context <> (Context $ Seq.fromList solutions)
@@ -191,10 +192,6 @@ inferExpr' (ECon (Typed _ con)) = do
     t <- currentContextSubst =<< lookupDataConType con
     pure $ ECon $ Typed t con
 inferExpr' (EIf (If pred' then' else' span')) = do
-  -- TODO: Is this the right way to do this? Should we actually infer the types
-  -- and then unify with expected types? I'm thinking instead we should
-  -- instantiate a variable for then/else and check both of them against it,
-  -- instead of inferring "then" and using that type to check "else".
   pred'' <- checkExpr pred' (TyCon $ notLocated boolTyCon)
   then'' <- inferExpr then'
   else'' <- checkExpr else' (expressionType then'')

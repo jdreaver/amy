@@ -70,8 +70,6 @@ data ContextMember
   | ContextMarker TyExistVarName
   deriving (Show, Eq, Ord)
 
--- TODO: Could this just be a stack (reversed List) instead of a Seq? I don't
--- think that would be more efficient when dealing with holes.
 newtype Context = Context (Seq ContextMember)
   deriving (Show, Eq, Ord, Semigroup)
 
@@ -140,8 +138,6 @@ typeWellFormed context (TyForall vs t) = typeWellFormed (context <> Context (Seq
 --
 -- Monad
 --
-
--- TODO: Use Validation instead of ExceptT
 
 newtype Checker a = Checker (ExceptT Error (State CheckState) a)
   deriving (Functor, Applicative, Monad, MonadState CheckState, MonadError Error)
