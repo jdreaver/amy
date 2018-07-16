@@ -64,21 +64,27 @@ Closure* eval_closure(Closure* closure) {
   int8_t arity = closure->arity;
   int8_t numargs = closure->numargs;
   Closure* (*f)(int64_t* env) = closure->func_ptr;
-  int64_t* env = closure -> env;
+  int64_t* env = closure->env;
   Closure* result;
 
   int8_t arity_diff = arity - numargs;
   if (arity_diff < 0) {
-    /* Too many arguments, call then call again with extra arguments tacked on.
+    /* Too many arguments. Call, then call result with remaining arguments.
 
-       N.B.: This relies on f returning a closure. Any time a function is
+       N.B. This relies on f returning a closure. Any time a function is
        returned from another function, it must be a closure, even if it isn't
        partially applied. */
+
     result = f(env); // f shouldn't use extra arguments, so we just leave them on
-    return eval_closure(extend_closure(result, -arity_diff, env + (int64_t)arity)); // TODO: Is "env + arity" the correct offset?
+
+	/* N.B. we offset the environment by the arity because that is how many
+	   arguments the previous function call used. */
+    return eval_closure(extend_closure(result, -arity_diff, env + arity));
+
   } else if (arity_diff == 0) {
     /* Proper number of args, just call the function and return the result. */
     return f(env);
+
   } else {
     /* Not enough arguments. This is a partial application, and we just return
        the result. */
