@@ -81,13 +81,15 @@ entry:
 
 define %Maybe* @"lambda2_$3"(i64* %_x1) {
 entry:
-  %0 = call i8* @GC_malloc(i64 ptrtoint (%Maybe* getelementptr (%Maybe, %Maybe* null, i32 1) to i64))
-  %ret = bitcast i8* %0 to %Maybe*
+  %0 = getelementptr %Maybe, %Maybe* null, i32 1
+  %1 = ptrtoint %Maybe* %0 to i64
+  %2 = call i8* @GC_malloc(i64 %1)
+  %ret = bitcast i8* %2 to %Maybe*
   %ret1 = alloca %Maybe
-  %1 = getelementptr %Maybe, %Maybe* %ret1, i32 0, i32 0
-  store i1 true, i1* %1
-  %2 = getelementptr %Maybe, %Maybe* %ret1, i32 0, i32 1
-  store i64* %_x1, i64** %2
+  %3 = getelementptr %Maybe, %Maybe* %ret1, i32 0, i32 0
+  store i1 true, i1* %3
+  %4 = getelementptr %Maybe, %Maybe* %ret1, i32 0, i32 1
+  store i64* %_x1, i64** %4
   ret %Maybe* %ret1
 }
 

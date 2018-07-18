@@ -3,7 +3,8 @@ source_filename = "<string>"
 
 define i64 @f(i64 %x) {
 entry:
-  %y = add i64 %x, -1
+  %y1 = sub i64 4, 5
+  %y = add i64 %x, %y1
   %res2 = sub i64 3, %y
   %res3 = icmp slt i64 5, %res2
   switch i1 %res3, label %case.0.ret [

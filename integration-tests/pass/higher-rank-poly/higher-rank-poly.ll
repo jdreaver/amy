@@ -36,10 +36,12 @@ entry:
 define i64 @main() {
 entry:
   %id_closure1 = call %struct.Closure* @create_closure(i8 1, %struct.Closure* (i64*)* @id_closure_wrapper)
-  %0 = call i8* @GC_malloc(i64 ptrtoint (i64* getelementptr (i64, i64* null, i32 1) to i64))
-  %1 = bitcast i8* %0 to i64*
-  store i64 1, i64* %1
-  %2 = call i64* @idFancy(%struct.Closure* %id_closure1, i64* %1)
-  %ret = load i64, i64* %2
+  %0 = getelementptr i64, i64* null, i32 1
+  %1 = ptrtoint i64* %0 to i64
+  %2 = call i8* @GC_malloc(i64 %1)
+  %3 = bitcast i8* %2 to i64*
+  store i64 1, i64* %3
+  %4 = call i64* @idFancy(%struct.Closure* %id_closure1, i64* %3)
+  %ret = load i64, i64* %4
   ret i64 %ret
 }
