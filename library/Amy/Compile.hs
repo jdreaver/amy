@@ -12,6 +12,7 @@ import Control.Monad.Except
 import Data.Bifunctor (first)
 import qualified Data.ByteString.Char8 as BS8
 import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import qualified Data.Text.Lazy.IO as TL
 import LLVM.Pretty (ppllvm)
@@ -85,9 +86,11 @@ compileModule depsEnv filePath DumpFlags{..} input = runExceptT $ do
     compiledModule = CompiledModule moduleEnv llvmFile
   pure compiledModule
 
-linkModules :: [CompiledModule] -> CompiledModule -> FilePath -> IO ()
-linkModules depModules module' rtsLL = do
+linkModules :: NonEmpty CompiledModule -> FilePath -> IO ()
+linkModules modules rtsLL = do
   let
+    depModules = NE.init modules
+    module' = NE.last modules
     depFiles = compiledModuleLLVM <$> depModules
     moduleFile = compiledModuleLLVM module'
 

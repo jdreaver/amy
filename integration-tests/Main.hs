@@ -11,11 +11,12 @@ import Control.Monad (unless, when)
 import Control.Monad.Except
 import Data.Either (isRight)
 import Data.Foldable (for_)
-import Data.Maybe (isJust)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text, unpack)
 import Data.Traversable (traverse)
 import Data.Yaml
 import System.Directory (doesFileExist)
+import System.Environment (lookupEnv)
 import System.Exit (ExitCode(..), exitFailure)
 import System.Process
 
@@ -43,9 +44,12 @@ runTest' TestDefinition{..} = do
   unless exists $
     throwError $ "File doesn't exist! " ++ sourcePath
 
+  -- Get Prelude
+  preludePath <- liftIO $ fromMaybe "stdlib/prelude.amy" <$> lookupEnv "PRELUDE_LOCATION"
+
   -- Compile program
   (compilerExitCode, compilerStdout, compilerStderr) <-
-    liftIO $ readProcessWithExitCode "amy" ["compile", sourcePath] ""
+    liftIO $ readProcessWithExitCode "amy" ["compile", preludePath, sourcePath] ""
   let compilerExpectedExitCode = if isJust testCompilerStderr then ExitFailure 1 else ExitSuccess
   when (compilerExitCode /= compilerExpectedExitCode) $
     throwError $

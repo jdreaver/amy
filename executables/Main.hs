@@ -8,8 +8,8 @@ module Main
 
 import Control.Monad.Except
 import Data.List (intercalate)
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
-import Data.Text (Text)
 import qualified Data.Text.IO as T
 import Options.Applicative
 import System.Environment (lookupEnv)
@@ -22,26 +22,26 @@ main :: IO ()
 main =
   getCommand >>=
     \case
-      CompileFile opts -> compileFile opts
+      CompileFiles opts -> compileFiles opts
       Repl -> error "TODO: Fix REPL"
 
-compileFile :: CompileFileOptions -> IO ()
-compileFile CompileFileOptions{..} = T.readFile cfoFilePath >>= process cfoFilePath cfoDumpFlags
-
-process :: FilePath -> DumpFlags -> Text -> IO ()
-process filePath dumpFlags input = do
-  preludePath <- fromMaybe "stdlib/prelude.amy" <$> lookupEnv "PRELUDE_LOCATION"
-  preludeText <- T.readFile preludePath
-
+compileFiles :: CompileFilesOptions -> IO ()
+compileFiles CompileFilesOptions{..} = do
   eFailure <- runExceptT $ do
-    prelude@(CompiledModule preludeEnv _) <- ExceptT $ compileModule primEnvironment preludePath dumpFlags preludeText
-    let preludeEnv' = preludeEnv `mergeEnvironments` primEnvironment
-    compiledModule <- ExceptT $ compileModule preludeEnv' filePath dumpFlags input
+    modules <- foldM (processFile cfoDumpFlags) [] cfoFilePaths
+    modulesNE <- maybe (throwError ["Empty list of modules!"]) pure $ NE.nonEmpty modules
 
     rtsLL <- fromMaybe "rts/rts.ll" <$> lift (lookupEnv "RTS_LL_LOCATION")
-    liftIO $ linkModules [prelude] compiledModule rtsLL
+    liftIO $ linkModules modulesNE rtsLL
 
-  either (die . intercalate "\n") pure eFailure
+  either (die . intercalate "\n") (\_ -> pure ()) eFailure
+
+processFile :: DumpFlags -> [CompiledModule] -> FilePath -> ExceptT [String] IO [CompiledModule]
+processFile flags importModules filePath = do
+  fileText <- lift $ T.readFile filePath
+  let env = foldl1 mergeEnvironments $ primEnvironment : (compiledModuleEnvironment <$> importModules)
+  compiled <- ExceptT $ compileModule env filePath flags fileText
+  pure $ importModules ++ [compiled]
 
 -- runRepl :: IO ()
 -- runRepl = runInputT defaultSettings loop
@@ -59,7 +59,7 @@ process filePath dumpFlags input = do
 --
 
 data Command
-  = CompileFile !CompileFileOptions
+  = CompileFiles !CompileFilesOptions
   | Repl
   deriving (Show, Eq)
 
@@ -71,24 +71,24 @@ commandParser :: Parser Command
 commandParser =
   subparser (
     command "compile"
-      (info (helper <*> fmap CompileFile parseCompileFile) (progDesc "Compile a file")) <>
+      (info (helper <*> fmap CompileFiles parseCompileFiles) (progDesc "Compile a file")) <>
     command "repl"
       (info (helper <*> pure Repl) (progDesc "Run the repl"))
   )
 
-data CompileFileOptions
-  = CompileFileOptions
-  { cfoFilePath :: !FilePath
+data CompileFilesOptions
+  = CompileFilesOptions
+  { cfoFilePaths :: ![FilePath]
   , cfoDumpFlags :: !DumpFlags
   } deriving (Show, Eq)
 
-parseCompileFile :: Parser CompileFileOptions
-parseCompileFile =
-  CompileFileOptions
-  <$> argument str (
+parseCompileFiles :: Parser CompileFilesOptions
+parseCompileFiles =
+  CompileFilesOptions
+  <$> some (argument str (
         metavar "FILE" <>
         helpDoc (Just "File to compile")
-      )
+      ))
   <*> parseDumpFlags
 
 parseDumpFlags :: Parser DumpFlags
