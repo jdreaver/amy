@@ -1,55 +1,55 @@
 ---
 
 # Passing tests
-- name: closures
+- name: Closures
   source: pass/closures
   program_exit_code: 4
 
-- name: data
+- name: Data
   source: pass/data
   program_exit_code: 7
 
-- name: fib
+- name: Fib
   source: pass/fib
   program_exit_code: 55
 
-- name: funcargs
-  source: pass/funcargs
+- name: FuncArgs
+  source: pass/func-args
   program_exit_code: 3
 
-- name: higher-rank-poly
+- name: HigherRankPoly
   source: pass/higher-rank-poly
   program_exit_code: 1
 
-- name: lambda-lift
+- name: LambdaLift
   source: pass/lambda-lift
   program_exit_code: 100
 
-- name: let
+- name: Let
   source: pass/let
   program_exit_code: 200
 
-- name: poly-data
+- name: PolyData
   source: pass/poly-data
   program_exit_code: 42
 
-- name: poly
+- name: Poly
   source: pass/poly
   program_exit_code: 3
 
-- name: primops
+- name: Primops
   source: pass/primops
   program_exit_code: 200
 
-- name: records
+- name: Records
   source: pass/records
   program_exit_code: 3
 
-- name: semicolons
+- name: Semicolons
   source: pass/semicolons
   program_exit_code: 1
 
-- name: text
+- name: Text
   source: pass/text
   program_exit_code: 0
   program_stdout: |
@@ -57,10 +57,10 @@
     with	"escapes"
 
 # Failing tests
-- name: record-poly
+- name: RecordPoly
   source: fail
   compiler_stderr: |
-    fail/record-poly.amy:2:7:
+    fail/RecordPoly.amy:2:7:
       Could not match type
         a
       with type

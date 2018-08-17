@@ -45,7 +45,7 @@ runTest' TestDefinition{..} = do
     throwError $ "File doesn't exist! " ++ sourcePath
 
   -- Get Prelude
-  preludePath <- liftIO $ fromMaybe "stdlib/prelude.amy" <$> lookupEnv "PRELUDE_LOCATION"
+  preludePath <- liftIO $ fromMaybe "stdlib/Prelude.amy" <$> lookupEnv "PRELUDE_LOCATION"
 
   -- Compile program
   (compilerExitCode, compilerStdout, compilerStderr) <-
