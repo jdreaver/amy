@@ -7,6 +7,7 @@ module Amy.Names
   , TyVarName(..)
   , TyExistVarName(..)
   , RowLabel(..)
+  , ModuleName(..)
   ) where
 
 import Data.Text (Text)
@@ -28,4 +29,7 @@ newtype TyExistVarName = TyExistVarName { unTyExistVarName :: Int }
   deriving (Show, Eq, Ord)
 
 newtype RowLabel = RowLabel { unRowLabel :: Text }
+  deriving (Show, Eq, Ord, IsString)
+
+newtype ModuleName = ModuleName { unModuleName :: Text }
   deriving (Show, Eq, Ord, IsString)

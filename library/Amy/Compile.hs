@@ -13,10 +13,10 @@ import Data.Bifunctor (first)
 import qualified Data.ByteString.Char8 as BS8
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import qualified Data.Text.Lazy.IO as TL
 import LLVM.Pretty (ppllvm)
-import System.FilePath.Posix ((</>), dropExtension, replaceExtension, takeDirectory)
+import System.FilePath.Posix ((</>), dropExtension, replaceExtension, takeDirectory, takeFileName)
 import System.Process (callProcess)
 import Text.Megaparsec
 
@@ -82,8 +82,9 @@ compileModule depsEnv filePath DumpFlags{..} input = runExceptT $ do
 
   -- Construct CompiledModule
   let
+    moduleName = ModuleName . pack . dropExtension . takeFileName $ filePath
     moduleEnv = typeCheckedModuleEnv `mergeEnvironments` anfModuleEnv
-    compiledModule = CompiledModule moduleEnv llvmFile
+    compiledModule = CompiledModule moduleName moduleEnv llvmFile
   pure compiledModule
 
 linkModules :: NonEmpty CompiledModule -> FilePath -> IO ()
@@ -121,6 +122,7 @@ data DumpFlags
 
 data CompiledModule
   = CompiledModule
-  { compiledModuleEnvironment :: !Environment
+  { compiledModuleName :: !ModuleName
+  , compiledModuleEnvironment :: !Environment
   , compiledModuleLLVM :: !FilePath
   } deriving (Show, Eq)
