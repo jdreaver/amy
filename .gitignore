@@ -3,3 +3,4 @@
 a.out
 *-rts-linked.ll
 *-rts-opt.ll
+dist-newstyle/

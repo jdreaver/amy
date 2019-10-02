@@ -145,12 +145,12 @@ instance Stream AmyTokens where
   chunkToTokens Proxy = unAmyTokens
   chunkLength Proxy = length . unAmyTokens
   chunkEmpty Proxy = null . unAmyTokens
-  positionAt1 Proxy _ = startPos
-  positionAtN Proxy pos (AmyTokens []) = pos
-  positionAtN Proxy _ (AmyTokens (loc : _)) = startPos loc
-  advance1 Proxy _ _ = endPos
-  advanceN Proxy _ pos (AmyTokens []) = pos
-  advanceN Proxy _ _ (AmyTokens ts) = endPos $ last ts
+  -- positionAt1 Proxy _ = startPos
+  -- positionAtN Proxy pos (AmyTokens []) = pos
+  -- positionAtN Proxy _ (AmyTokens (loc : _)) = startPos loc
+  -- advance1 Proxy _ _ = endPos
+  -- advanceN Proxy _ pos (AmyTokens []) = pos
+  -- advanceN Proxy _ _ (AmyTokens ts) = endPos $ last ts
   take1_ (AmyTokens []) = Nothing
   take1_ (AmyTokens (t:ts)) = Just (t, AmyTokens ts)
   takeN_ n (AmyTokens s)
@@ -158,9 +158,6 @@ instance Stream AmyTokens where
     | null s    = Nothing
     | otherwise = Just ((\(t1, t2) -> (AmyTokens t1, AmyTokens t2)) $ splitAt n s)
   takeWhile_ f (AmyTokens ts) = (\(t1, t2) -> (AmyTokens t1, AmyTokens t2)) $ span f ts
-
-instance ShowToken (Located AmyToken) where
-  showTokens = unwords . fmap (unpack . prettyToken . locatedValue) . NE.toList
 
 startPos :: Located a -> SourcePos
 startPos (Located (SourceSpan start _) _) = start

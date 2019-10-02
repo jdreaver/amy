@@ -1,0 +1,8 @@
+# https://docs.haskellstack.org/en/stable/custom_snapshot/
+
+name: amy
+resolver: lts-14.7
+
+packages:
+  - llvm-hs-pretty-0.6.2.0
+  - prettyprinter-1.3.0
