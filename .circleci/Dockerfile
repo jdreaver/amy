@@ -22,13 +22,13 @@ RUN \
 # Install LLVM
 RUN \
   curl https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
-  echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-8 main" > /etc/apt/sources.list.d/llvm.list && \
-  echo "deb-src http://apt.llvm.org/bionic/ llvm-toolchain-bionic-8 main" >> /etc/apt/sources.list.d/llvm.list && \
+  echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-9 main" > /etc/apt/sources.list.d/llvm.list && \
+  echo "deb-src http://apt.llvm.org/bionic/ llvm-toolchain-bionic-9 main" >> /etc/apt/sources.list.d/llvm.list && \
   apt-get update && \
   apt-get install -y --allow-unauthenticated \
-    clang-8 \
-    llvm-8-dev && \
-  ln -s /usr/bin/clang-8 /usr/bin/clang && \
+    clang-9 \
+    llvm-9-dev && \
+  ln -s /usr/bin/clang-9 /usr/bin/clang && \
   rm -rf /var/lib/apt/lists/*
 
 # Install Boehm garbage collector

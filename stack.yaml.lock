@@ -11,16 +11,9 @@ packages:
       sha256: dbad27efec25efc9bb739682f0770953086119bdb85b84c09ce103ddde1b5343
   original:
     hackage: llvm-hs-pretty-0.6.2.0
-- completed:
-    hackage: prettyprinter-1.3.0@sha256:83336d853f38e72f9213a3051de11dcb3c948eb09903a34f312e4fef00d79f10,5537
-    pantry-tree:
-      size: 2105
-      sha256: 033fd060e1eea501feffcc385a1704613abed265b593c07d058d0e5e4f88096c
-  original:
-    hackage: prettyprinter-1.3.0
 snapshots:
 - completed:
-    size: 523700
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/14/7.yaml
-    sha256: 8e3f3c894be74d71fa4bf085e0a8baae7e4d7622d07ea31a52736b80f8b9bb1a
-  original: lts-14.7
+    size: 395366
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2019/10/7.yaml
+    sha256: a8acf906381460fbeed9cb422352c74aa9062f95ebe79b9ab98c5116f15330e8
+  original: nightly-2019-10-07
