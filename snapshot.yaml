@@ -1,0 +1,7 @@
+# https://docs.haskellstack.org/en/stable/custom_snapshot/
+
+name: amy
+resolver: nightly-2019-10-07
+
+packages:
+  - llvm-hs-pretty-0.6.2.0
