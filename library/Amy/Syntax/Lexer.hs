@@ -51,8 +51,6 @@ module Amy.Syntax.Lexer
   ) where
 
 import Data.Functor (($>))
-import qualified Data.List.NonEmpty as NE
-import Data.List.NonEmpty (NonEmpty(..))
 import Data.Proxy (Proxy(..))
 import Data.Scientific (floatingOrInteger)
 import qualified Data.Set as Set
@@ -145,12 +143,7 @@ instance Stream AmyTokens where
   chunkToTokens Proxy = unAmyTokens
   chunkLength Proxy = length . unAmyTokens
   chunkEmpty Proxy = null . unAmyTokens
-  -- positionAt1 Proxy _ = startPos
-  -- positionAtN Proxy pos (AmyTokens []) = pos
-  -- positionAtN Proxy _ (AmyTokens (loc : _)) = startPos loc
-  -- advance1 Proxy _ _ = endPos
-  -- advanceN Proxy _ pos (AmyTokens []) = pos
-  -- advanceN Proxy _ _ (AmyTokens ts) = endPos $ last ts
+  showTokens _ = show
   take1_ (AmyTokens []) = Nothing
   take1_ (AmyTokens (t:ts)) = Just (t, AmyTokens ts)
   takeN_ n (AmyTokens s)
@@ -158,12 +151,7 @@ instance Stream AmyTokens where
     | null s    = Nothing
     | otherwise = Just ((\(t1, t2) -> (AmyTokens t1, AmyTokens t2)) $ splitAt n s)
   takeWhile_ f (AmyTokens ts) = (\(t1, t2) -> (AmyTokens t1, AmyTokens t2)) $ span f ts
-
-startPos :: Located a -> SourcePos
-startPos (Located (SourceSpan start _) _) = start
-
-endPos :: Located a -> SourcePos
-endPos (Located (SourceSpan _ end) _) = end
+  reachOffset = undefined -- TODO
 
 --
 -- Lexer
@@ -171,7 +159,7 @@ endPos (Located (SourceSpan _ end) _) = end
 
 type Lexer a = Parsec Void Text a
 
-lexer :: FilePath -> Text -> Either (ParseError Char Void) AmyTokens
+lexer :: FilePath -> Text -> Either (ParseErrorBundle Text Void) AmyTokens
 lexer = parse lexer'
 
 lexer' :: Lexer AmyTokens
@@ -196,9 +184,11 @@ blockComment = empty
 
 lexeme :: Lexer a -> Lexer (Located a)
 lexeme p = do
-  start <- getPosition
+  -- TODO: Starting in megaparsec 7, apparently getSourcePos is super expensive
+  -- now. We may need a better method to get the source position.
+  start <- getSourcePos
   val <- p
-  end <- getPosition
+  end <- getSourcePos
   spaceConsumerNewlines
   pure (Located (SourceSpan start end) val)
 
@@ -278,13 +268,10 @@ lexTypeIdentifier = pack <$> ((:) <$> upperChar <*> many alphaNumChar) <?> "type
 --
 
 testToken :: (MonadParsec e AmyTokens m) => (AmyToken -> Maybe a) -> m (Located a)
-testToken f = token testToken' Nothing
+testToken f = token testToken' Set.empty
  where
-  mkTokens x = Tokens (x:|[])
   testToken' x =
-    case f (locatedValue x) of
-      Just x' -> Right (Located (locatedSpan x) x')
-      Nothing -> Left (pure (mkTokens x), Set.empty)
+    (\x' -> Located (locatedSpan x) x') <$> f (locatedValue x)
 
 matchToken :: (MonadParsec e AmyTokens m) => AmyToken -> m SourceSpan
 matchToken t = fmap locatedSpan (testToken (\t' -> if t == t' then Just () else Nothing)) <?> unpack (prettyToken t)
